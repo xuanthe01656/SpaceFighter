@@ -4,7 +4,7 @@ import toast, { Toaster } from 'react-hot-toast';
 import { db, auth, googleProvider } from './firebase';
 import { collection, addDoc, query, where, orderBy, limit, getDocs, doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged,signInWithCredential, GoogleAuthProvider, } from 'firebase/auth';
-import { AdMob, RewardAdPluginEvents } from '@capacitor-community/admob';
+import { AdMob, RewardAdPluginEvents, BannerAdSize, BannerAdPosition } from '@capacitor-community/admob';
 import { Capacitor } from '@capacitor/core';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { Device } from '@capacitor/device';
@@ -86,6 +86,7 @@ export default function Game() {
   const [userRankData, setUserRankData] = useState(null);
   const [isWatchingAd, setIsWatchingAd] = useState(false);
   const [webAd, setWebAd] = useState({ isPlaying: false, type: null });
+  const [isAdInitialized, setIsAdInitialized] = useState(false);
   const toggleLanguage = () => {
     const newLang = lang === 'vi' ? 'en' : 'vi';
     setLang(newLang);
@@ -147,7 +148,7 @@ export default function Game() {
     powerUps: [],
     particles: [],
     stars: [],
-    background: { stars: [] },
+    background: { particles: [] },
     pools: { particles: [], pipes: [], powerUps: [] }
   });
   const getRealTime = () => Date.now() + (gsRef.current.timeOffset || 0);
@@ -785,7 +786,7 @@ useEffect(() => {
 
   const selectBg = (bgId) => {
     gsRef.current.userSettings.bg = bgId;
-    gsRef.current.background.stars = []; 
+    gsRef.current.background.particles = []; 
     setUIUpdates(prev => ({ ...prev, selectedBg: bgId }));
   };
 
@@ -812,15 +813,31 @@ useEffect(() => {
     gs.pipes.items = [];
 
     const bg = BACKGROUNDS.find(b => b.id === gs.userSettings.bg) || BACKGROUNDS[0];
-    gs.background.stars = [];
-    if (bg.stars) {
+    gs.background.particles = [];
+    
+    if (bg.type === 'stars') {
       for (let i = 0; i < 100; i++) {
-        gs.background.stars.push({
-          x: Math.random() * gs.canvas.width,
-          y: Math.random() * gs.canvas.height,
-          size: Math.random() * 2,
-          speed: Math.random() * 2 + 0.5
-        });
+        gs.background.particles.push({ x: Math.random() * gs.canvas.width, y: Math.random() * gs.canvas.height, size: Math.random() * 2, speed: Math.random() * 2 + 0.5 });
+      }
+    } else if (bg.type === 'aurora') {
+      for (let i = 0; i < 8; i++) {
+        gs.background.particles.push({ x: Math.random() * gs.canvas.width, y: Math.random() * gs.canvas.height, w: Math.random() * 100 + 50, h: gs.canvas.height, opacity: Math.random() * 0.3, speed: Math.random() * 0.5 + 0.2 });
+      }
+    } else if (bg.type === 'bubbles') {
+      for (let i = 0; i < 30; i++) {
+        gs.background.particles.push({ x: Math.random() * gs.canvas.width, y: Math.random() * gs.canvas.height, size: Math.random() * 15 + 5, speed: Math.random() * 1 + 0.5, floatOffset: Math.random() * Math.PI * 2 });
+      }
+    } else if (bg.type === 'fireflies') {
+      for (let i = 0; i < 50; i++) {
+        gs.background.particles.push({ x: Math.random() * gs.canvas.width, y: Math.random() * gs.canvas.height, size: Math.random() * 3 + 1, speed: Math.random() * 1.5 + 0.5, flicker: Math.random() * 0.1 });
+      }
+    } else if (bg.type === 'meteors') {
+      for (let i = 0; i < 25; i++) {
+        gs.background.particles.push({ x: Math.random() * gs.canvas.width, y: Math.random() * gs.canvas.height, size: Math.random() * 8 + 3, speedX: Math.random() * 3 + 2, speedY: Math.random() * 2 + 1 });
+      }
+    } else if (bg.type === 'hyperspace') {
+      for (let i = 0; i < 50; i++) {
+        gs.background.particles.push({ x: Math.random() * gs.canvas.width, y: Math.random() * gs.canvas.height, length: Math.random() * 40 + 10, speed: Math.random() * 8 + 5 });
       }
     }
 
@@ -1201,15 +1218,53 @@ useEffect(() => {
     // Vẽ nền đã cache (Cực kỳ nhẹ)
     ctx.drawImage(gs.cachedBg, 0, 0);
 
-    // Vẽ sao (Stars)
-    if (bg.stars) {
+    // Vẽ hạt (Particles) theo từng Type
+    const speedMult = gs.gameSpeed / 2;
+    if (bg.type === 'stars') {
       ctx.fillStyle = '#fff';
-      for (let s of gs.background.stars) {
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
-        ctx.fill();
-        if (!gs.isGameOver) s.x -= s.speed * (gs.gameSpeed / 2);
-        if (s.x < 0) s.x = canvas.width;
+      for (let p of gs.background.particles) {
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+        if (!gs.isGameOver) p.x -= p.speed * speedMult;
+        if (p.x < 0) { p.x = canvas.width; p.y = Math.random() * canvas.height; }
+      }
+    } else if (bg.type === 'aurora') {
+      for (let p of gs.background.particles) {
+        ctx.fillStyle = `rgba(0, 255, 150, ${p.opacity})`;
+        ctx.fillRect(p.x, 0, p.w, p.h); // Dải lụa dọc cực quang
+        if (!gs.isGameOver) p.x -= p.speed * speedMult;
+        if (p.x < -p.w) p.x = canvas.width;
+      }
+    } else if (bg.type === 'bubbles') {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)'; ctx.lineWidth = 2;
+      for (let p of gs.background.particles) {
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.stroke();
+        if (!gs.isGameOver) {
+          p.x -= p.speed * speedMult;
+          p.y += Math.sin(gs.frames * 0.02 + p.floatOffset) * 0.5; // Bay lượn sóng
+        }
+        if (p.x < -p.size) { p.x = canvas.width; p.y = Math.random() * canvas.height; }
+      }
+    } else if (bg.type === 'fireflies') {
+      for (let p of gs.background.particles) {
+        const alpha = 0.3 + Math.abs(Math.sin(gs.frames * p.flicker));
+        ctx.fillStyle = `rgba(255, 165, 0, ${alpha})`;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+        if (!gs.isGameOver) p.x -= p.speed * speedMult;
+        if (p.x < -p.size) { p.x = canvas.width; p.y = Math.random() * canvas.height; }
+      }
+    } else if (bg.type === 'meteors') {
+      for (let p of gs.background.particles) {
+        ctx.fillStyle = '#8a95a5'; ctx.fillRect(p.x, p.y, p.size, p.size);
+        ctx.fillStyle = '#c5cfdd'; ctx.fillRect(p.x, p.y, p.size / 3, p.size / 3);
+        if (!gs.isGameOver) { p.x -= p.speedX * speedMult; p.y += p.speedY * speedMult; }
+        if (p.x < -p.size || p.y > canvas.height) { p.x = canvas.width + Math.random() * 100; p.y = -50 - Math.random() * 100; }
+      }
+    } else if (bg.type === 'hyperspace') {
+      ctx.strokeStyle = 'rgba(0, 255, 255, 0.6)'; ctx.lineWidth = 2;
+      for (let p of gs.background.particles) {
+        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + p.length, p.y); ctx.stroke();
+        if (!gs.isGameOver) p.x -= p.speed * speedMult;
+        if (p.x < -p.length) { p.x = canvas.width; p.y = Math.random() * canvas.height; }
       }
     }
   };
@@ -1451,28 +1506,34 @@ useEffect(() => {
 
       lastIdleTime = timestamp - (deltaTime % FPS_INTERVAL);
       
-      if (gs.background.stars.length === 0) {
+      if (gs.background.particles.length === 0) {
         const bg = BACKGROUNDS.find(b => b.id === gs.userSettings.bg) || BACKGROUNDS[0];
-        if (bg.stars) {
-          for (let i = 0; i < 100; i++) {
-            gs.background.stars.push({
-              x: Math.random() * gs.canvas.width,
-              y: Math.random() * gs.canvas.height,
-              size: Math.random() * 2,
-              speed: Math.random() * 2 + 0.5
-            });
-          }
+        if (bg.type === 'stars') {
+          for (let i = 0; i < 100; i++) { gs.background.particles.push({ x: Math.random() * gs.canvas.width, y: Math.random() * gs.canvas.height, size: Math.random() * 2, speed: Math.random() * 2 + 0.5 }); }
+        } else if (bg.type === 'aurora') {
+          for (let i = 0; i < 8; i++) { gs.background.particles.push({ x: Math.random() * gs.canvas.width, y: Math.random() * gs.canvas.height, w: Math.random() * 100 + 50, h: gs.canvas.height, opacity: Math.random() * 0.3, speed: Math.random() * 0.5 + 0.2 }); }
+        } else if (bg.type === 'bubbles') {
+          for (let i = 0; i < 30; i++) { gs.background.particles.push({ x: Math.random() * gs.canvas.width, y: Math.random() * gs.canvas.height, size: Math.random() * 15 + 5, speed: Math.random() * 1 + 0.5, floatOffset: Math.random() * Math.PI * 2 }); }
+        } else if (bg.type === 'fireflies') {
+          for (let i = 0; i < 50; i++) { gs.background.particles.push({ x: Math.random() * gs.canvas.width, y: Math.random() * gs.canvas.height, size: Math.random() * 3 + 1, speed: Math.random() * 1.5 + 0.5, flicker: Math.random() * 0.1 }); }
+        } else if (bg.type === 'meteors') {
+          for (let i = 0; i < 25; i++) { gs.background.particles.push({ x: Math.random() * gs.canvas.width, y: Math.random() * gs.canvas.height, size: Math.random() * 8 + 3, speedX: Math.random() * 3 + 2, speedY: Math.random() * 2 + 1 }); }
+        } else if (bg.type === 'hyperspace') {
+          for (let i = 0; i < 50; i++) { gs.background.particles.push({ x: Math.random() * gs.canvas.width, y: Math.random() * gs.canvas.height, length: Math.random() * 40 + 10, speed: Math.random() * 8 + 5 }); }
         }
       }
 
       gs.ctx.clearRect(0, 0, gs.canvas.width, gs.canvas.height);
       drawBackground();
       
-      for (let s of gs.background.stars) {
-        s.x -= s.speed * 1.5; 
-        if (s.x < 0) {
-          s.x = gs.canvas.width;
-          s.y = Math.random() * gs.canvas.height;
+      const bgType = BACKGROUNDS.find(b => b.id === gs.userSettings.bg)?.type || 'stars';
+      for (let p of gs.background.particles) {
+        if (bgType === 'meteors') {
+          p.x -= p.speedX * 1.5; p.y += p.speedY * 1.5;
+          if (p.x < -p.size || p.y > gs.canvas.height) { p.x = gs.canvas.width + Math.random() * 100; p.y = -50 - Math.random() * 100; }
+        } else {
+          p.x -= (p.speed || p.speedX || 2) * 1.5; 
+          if (p.x < -100) { p.x = gs.canvas.width; p.y = Math.random() * gs.canvas.height; }
         }
       }
       
@@ -1705,13 +1766,28 @@ useEffect(() => {
   // ==========================================
   const pendingRewardRef = useRef(null); // Lưu lại người dùng đang xem QC để nhận xu hay mạng
   const adReadyRef = useRef(false);      // Cờ đánh dấu quảng cáo đã tải sẵn sàng chưa
-  const AD_ID = 'ca-app-pub-8735238443425732/7696488422'; // ID thật của bạn
+  const IS_TESTING = true; 
+  
+  // ID Quảng cáo tặng thưởng (Reward)
+  const AD_ID = IS_TESTING 
+    ? 'ca-app-pub-3940256099942544/5224354917' // ID Test
+    : 'ca-app-pub-8735238443425732/3739555790'; // ID Thật của AstroCat
 
+  // ID Quảng cáo biểu ngữ (Banner)
+  const BANNER_ID = IS_TESTING 
+    ? 'ca-app-pub-3940256099942544/6300978111' // ID Test
+    : 'ca-app-pub-8735238443425732/8524978611';
+
+  const isBannerCreatedRef = useRef(false);
+  const saveUserProfileRef = useRef(saveUserProfile);
+    useEffect(() => {
+      saveUserProfileRef.current = saveUserProfile;
+    }, [saveUserProfile]);
   // Hàm tải ngầm quảng cáo
   const preloadAd = async () => {
     if (!Capacitor.isNativePlatform()) return;
     try {
-      await AdMob.prepareRewardVideoAd({ adId: AD_ID, isTesting: false });
+      await AdMob.prepareRewardVideoAd({ adId: AD_ID, isTesting: IS_TESTING });
       adReadyRef.current = true;
       console.log("✅ Quảng cáo đã được preload sẵn sàng!");
     } catch (error) {
@@ -1728,30 +1804,40 @@ useEffect(() => {
     const initAdMob = async () => {
       try {
         await AdMob.initialize();
-        
-        // 1. Nhận thưởng thành công
+        setIsAdInitialized(true);
+        let earnedReward = null;
         rewardListener = await AdMob.addListener(RewardAdPluginEvents.Rewarded, () => {
-          const rewardType = pendingRewardRef.current;
-          if (rewardType === 'coin') {
-            gsRef.current.coins += 50; 
-            gsRef.current.dailyCoinCount += 1; // Thêm dòng này để ghi nhận số lần lấy xu
-            setUIUpdates(prev => ({ ...prev, coins: gsRef.current.coins }));
-            toast.success(t[langRef.current]?.rewardCoin);
-          } else if (rewardType === 'life') {
-            gsRef.current.lives += 1;  
-            setUIUpdates(prev => ({ ...prev, lives: gsRef.current.lives }));
-            toast.success(t[langRef.current]?.rewardLife);
-          }
-          saveUserProfile(); 
-          pendingRewardRef.current = null;
+          earnedReward = pendingRewardRef.current; 
         });
-
-        // 2. Khi đóng quảng cáo (dù có nhận thưởng hay không) -> Tải sẵn luôn video tiếp theo
+        // 1. Nhận thưởng thành công
         dismissListener = await AdMob.addListener(RewardAdPluginEvents.Dismissed, () => {
           setIsWatchingAd(false);
-          adReadyRef.current = false; // Reset cờ
-          preloadAd(); // Kích hoạt tải ngầm quảng cáo mới
+          adReadyRef.current = false;
+          //const rewardType = pendingRewardRef.current;
+          if (earnedReward) {
+            if (earnedReward === 'coin') {
+              gsRef.current.coins += 50; 
+              gsRef.current.dailyCoinCount += 1;
+              setUIUpdates(prev => ({ ...prev, coins: gsRef.current.coins }));
+              toast.success(t[langRef.current]?.rewardCoin);
+            } else if (earnedReward === 'life') {
+              gsRef.current.lives += 1;  
+              setUIUpdates(prev => ({ ...prev, lives: gsRef.current.lives }));
+              toast.success(t[langRef.current]?.rewardLife);
+            }
+            saveUserProfileRef.current(); 
+            earnedReward = null; // Reset lại cờ
+          }
+          pendingRewardRef.current = null;
+          preloadAd(); // Tải video tiếp theo
         });
+
+        // // 2. Khi đóng quảng cáo (dù có nhận thưởng hay không) -> Tải sẵn luôn video tiếp theo
+        // dismissListener = await AdMob.addListener(RewardAdPluginEvents.Dismissed, () => {
+        //   setIsWatchingAd(false);
+        //   adReadyRef.current = false; // Reset cờ
+        //   preloadAd(); // Kích hoạt tải ngầm quảng cáo mới
+        // });
 
         // 3. (Tuỳ chọn) Bắt lỗi nếu quảng cáo load xịt giữa chừng
         failedListener = await AdMob.addListener(RewardAdPluginEvents.FailedToLoad, () => {
@@ -1774,7 +1860,42 @@ useEffect(() => {
       if (failedListener && failedListener.remove) failedListener.remove();
     };
   }, []);
+useEffect(() => {
+    const manageBanner = async () => {
+      // Chỉ chạy trên thiết bị di động (Android/iOS)
+      if (!Capacitor.isNativePlatform() || !isAdInitialized) return;
 
+      try {
+        if (screen === 'game') {
+          // 1. ĐANG CHƠI GAME -> ẨN BANNER ĐI
+          if (isBannerCreatedRef.current) {
+            await AdMob.hideBanner();
+          }
+        } else {
+          // 2. CÁC MÀN HÌNH KHÁC (Menu, Shop...) -> HIỆN BANNER LÊN
+          if (!isBannerCreatedRef.current) {
+            // Lần đầu khởi tạo Banner
+            await AdMob.showBanner({
+              adId: BANNER_ID,
+              adSize: BannerAdSize.BANNER,
+              position: BannerAdPosition.BOTTOM_CENTER,
+              margin: 0,
+              isTesting: IS_TESTING
+            });
+            isBannerCreatedRef.current = true;
+          } else {
+            // Đã có sẵn rồi thì gọi nó hiện lại
+            await AdMob.resumeBanner();
+          }
+        }
+      } catch (error) {
+        console.error("Lỗi xử lý Banner:", error);
+      }
+    };
+
+    manageBanner();
+
+  }, [screen,isAdInitialized]);
   const watchAd = async (rewardType) => {
     if (!currentUser) {
       toast.error(t[langRef.current]?.reqLoginReward || "Vui lòng đăng nhập!");
@@ -1810,14 +1931,18 @@ useEffect(() => {
         console.error("Lỗi khi show ad đã preload:", error);
         setIsWatchingAd(false);
         pendingRewardRef.current = null;
-        toast.error("Lỗi phát quảng cáo. Vui lòng thử lại!");
-        preloadAd(); // Thử tải lại
+        toast.error(t[langRef.current]?.errAdNotReady || "Lỗi phát quảng cáo. Vui lòng thử lại!");
+        preloadAd(); 
       }
     } else {
       // TRƯỜNG HỢP 2: Fallback (Mạng chậm, preload chưa kịp xong) -> Phải chờ tải
       const loadingToast = toast.loading(t[langRef.current]?.adConnecting || "Đang kết nối quảng cáo...");
       try {
-        await AdMob.prepareRewardVideoAd({ adId: AD_ID, isTesting: false });
+        // 2. VÁ LỖI TREO KẾT NỐI (TIMEOUT 10 GIÂY)
+        await Promise.race([
+          AdMob.prepareRewardVideoAd({ adId: AD_ID, isTesting: IS_TESTING }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 10000))
+        ]);
         toast.dismiss(loadingToast);
         await AdMob.showRewardVideoAd();
       } catch (error) {
@@ -2096,7 +2221,7 @@ useEffect(() => {
         </div>
       )}
       <Toaster 
-        position="bottom-center" 
+        position="top-center" 
         reverseOrder={false} 
         gutter={8} 
         toastOptions={{

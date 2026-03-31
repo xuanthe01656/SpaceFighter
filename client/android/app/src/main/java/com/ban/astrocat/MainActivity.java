@@ -20,7 +20,7 @@ public class MainActivity extends BridgeActivity {
         ViewCompat.setOnApplyWindowInsetsListener(contentView, (v, windowInsets) -> {
             Insets insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
             // Ép nội dung game thụt lùi vào trong, chừa khoảng trống cho Status Bar và Navigation Bar
-            v.setPadding(insets.left, insets.top, insets.right, insets.bottom);\
+            v.setPadding(insets.left, insets.top, insets.right, insets.bottom);
             return windowInsets;
         });
     }

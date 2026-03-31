@@ -201,7 +201,7 @@ export default function Shop({ currentUser, uiUpdates, setUIUpdates, gsRef, setS
         </div>
 
         {/* NỘI DUNG CUỘN */}
-        <div className="scrollable-layer" style={{ overflowY: 'auto', flex: 1, padding: 'clamp(15px, 4vw, 20px)', display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box' }}>
+        <div className="scrollable-layer" style={{ overflowY: 'auto', flex: 1, padding: 'clamp(15px, 4vw, 20px) clamp(15px, 4vw, 20px) 70px clamp(15px, 4vw, 20px)', display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box' }}>
           
           {/* HIỂN THỊ TÀI SẢN */}
           <div style={{ display: 'flex', gap: 'clamp(10px, 3vw, 20px)', marginBottom: '20px', justifyContent: 'center', flexWrap: 'wrap', width: '100%' }}>
@@ -275,7 +275,9 @@ export default function Shop({ currentUser, uiUpdates, setUIUpdates, gsRef, setS
                     <div key={s.id} className="shop-item" onClick={() => handlePurchase('skin', s)} 
                       style={{ border: isEquipped ? '3px solid #FFD700' : '2px solid #555', background: isEquipped ? 'rgba(255, 215, 0, 0.1)' : '#333', width: 'clamp(80px, 22vw, 100px)', minHeight: '110px', height: 'auto', padding: '10px 5px', display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: '8px', flexDirection: 'column', boxSizing: 'border-box' }}>
                       <img src={s.imgAlive || s.imgSrc} alt={s.name} style={{ width: '45px', height: '45px', imageRendering: 'pixelated', flexShrink: 0 }} />
-                      <div style={{ fontSize: 'clamp(12px, 3.5vw, 14px)', color: '#ccc', marginTop: '5px', textAlign: 'center', wordBreak: 'break-word' }}>{s.name}</div>
+                      <div style={{ fontSize: 'clamp(12px, 3.5vw, 14px)', color: '#ccc', marginTop: '5px', textAlign: 'center', wordBreak: 'break-word' }}>
+                        {typeof s.name === 'object' ? (s.name[lang] || s.name['vi']) : s.name}
+                      </div>
                       <div style={{ fontSize: 'clamp(12px, 3.5vw, 14px)', color: isOwned ? '#2ed573' : '#FFD700', fontWeight: 'bold', marginTop: 'auto', textAlign: 'center' }}>{isOwned ? (isEquipped ? text.useBtn : text.selectBtn) : `🪙 ${s.price}`}</div>
                     </div>
                   );
@@ -294,7 +296,9 @@ export default function Shop({ currentUser, uiUpdates, setUIUpdates, gsRef, setS
                     <div key={b.id} className="shop-item" onClick={() => handlePurchase('bg', b)} 
                       style={{ border: isEquipped ? '3px solid #00FFFF' : '2px solid #555', background: isEquipped ? 'rgba(0, 255, 255, 0.1)' : '#333', width: 'clamp(80px, 22vw, 100px)', minHeight: '110px', height: 'auto', padding: '10px 5px', display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: '8px', flexDirection: 'column', boxSizing: 'border-box' }}>
                       <div style={{ background: `linear-gradient(to bottom, ${b.top}, ${b.bottom})`, width: '30px', height: '30px', borderRadius: '50%', border: '1px solid #fff', flexShrink: 0 }}></div>
-                      <div style={{ fontSize: 'clamp(12px, 3.5vw, 14px)', color: '#ccc', marginTop: '5px', textAlign: 'center', wordBreak: 'break-word' }}>{b.name}</div>
+                      <div style={{ fontSize: 'clamp(12px, 3.5vw, 14px)', color: '#ccc', marginTop: '5px', textAlign: 'center', wordBreak: 'break-word' }}>
+                        {typeof b.name === 'object' ? (b.name[lang] || b.name['vi']) : b.name}
+                      </div>
                       <div style={{ fontSize: 'clamp(12px, 3.5vw, 14px)', color: isOwned ? '#2ed573' : '#FFD700', fontWeight: 'bold', marginTop: 'auto', textAlign: 'center' }}>{isOwned ? (isEquipped ? text.useBtn : text.selectBtn) : `🪙 ${b.price}`}</div>
                     </div>
                   );

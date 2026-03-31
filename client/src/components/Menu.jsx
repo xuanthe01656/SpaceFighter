@@ -114,7 +114,7 @@ export default function Menu({ currentUser, uiUpdates, topRecords, startGame, se
         )}
       </div>
 
-      <div style={{ marginTop: '20px', fontSize: '22px', textShadow: '2px 2px 4px #000', background: 'rgba(0,0,0,0.5)', padding: '15px', borderRadius: '10px', border: '1px solid #555' }}>
+      <div style={{ marginTop: '60px', fontSize: '22px', textShadow: '2px 2px 4px #000', background: 'rgba(0,0,0,0.5)', padding: '15px', borderRadius: '10px', border: '1px solid #555' }}>
         <div style={{ marginBottom: '8px', color: '#fff' }}>{text.topSingle} <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{topRecords.single}</span></div>
         <div style={{ color: '#fff' }}>{text.topPvP} <span style={{ color: '#00FFFF', fontWeight: 'bold' }}>{topRecords.pvp}</span></div>
       </div>
