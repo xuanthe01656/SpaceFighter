@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react'; // Thêm { useState } vào đây
 import toast from 'react-hot-toast';
 import { SKINS, BACKGROUNDS } from '../constants';
 import { Capacitor } from '@capacitor/core';
@@ -8,7 +8,7 @@ import { t } from '../utils/translations'; // 1. Nhúng từ điển
 export default function Shop({ currentUser, uiUpdates, setUIUpdates, gsRef, setScreen, selectSkin, selectBg, saveUserProfile, watchAd, isWatchingAd, lang }) {
   // 2. Lấy bộ từ vựng theo ngôn ngữ hiện tại
   const text = t[lang] || t['vi'];
-  
+  const [isProcessing, setIsProcessing] = useState(false);
   // Logic mua vật phẩm đã được chuyển lên Server bảo mật
   const handlePurchase = async (type, item) => {
     const gs = gsRef.current;
@@ -34,7 +34,7 @@ export default function Shop({ currentUser, uiUpdates, setUIUpdates, gsRef, setS
       return;
     }
 
-    const loadingToast = toast.loading("Đang xử lý giao dịch an toàn...");
+    const loadingToast = toast.loading(t[lang]?.processingPurchase || "Đang xử lý giao dịch...");
 
     try {
       // BƯỚC QUAN TRỌNG Ở CLIENT: Lấy Token định danh
@@ -61,7 +61,8 @@ export default function Shop({ currentUser, uiUpdates, setUIUpdates, gsRef, setS
 
       // --- SERVER TRẢ VỀ THÀNH CÔNG ---
       toast.dismiss(loadingToast);
-      toast.success(`${t[lang]?.successOwned || 'Đã sở hữu'} ${item.name}!`);
+      const itemName = typeof item.name === 'object' ? (item.name[lang] || item.name['vi']) : item.name;
+      toast.success(`${t[lang]?.successOwned || 'Đã sở hữu'} ${itemName}!`);
 
       // Cập nhật lại UI và Ref cục bộ cho đồng bộ với Server
       gs.coins = data.newCoins;
@@ -74,7 +75,6 @@ export default function Shop({ currentUser, uiUpdates, setUIUpdates, gsRef, setS
       }
 
       setUIUpdates(prev => ({...prev, coins: gs.coins}));
-      await saveUserProfile(); 
 
     } catch (error) {
       toast.dismiss(loadingToast);
@@ -247,7 +247,7 @@ export default function Shop({ currentUser, uiUpdates, setUIUpdates, gsRef, setS
                     onClick={handleRestorePurchases} 
                     style={{ background: 'transparent', color: '#ccc', border: 'none', textDecoration: 'underline', cursor: 'pointer', fontFamily: "'VT323', monospace", fontSize: 'clamp(14px, 4vw, 16px)' }}
                   >
-                    Khôi phục giao dịch (Restore Purchases)
+                    {text.restorePurchases || 'Khôi phục mua hàng (Restore Purchases)'}
                   </button>
                 </div>
               </div>
@@ -274,7 +274,28 @@ export default function Shop({ currentUser, uiUpdates, setUIUpdates, gsRef, setS
                   return (
                     <div key={s.id} className="shop-item" onClick={() => handlePurchase('skin', s)} 
                       style={{ border: isEquipped ? '3px solid #FFD700' : '2px solid #555', background: isEquipped ? 'rgba(255, 215, 0, 0.1)' : '#333', width: 'clamp(80px, 22vw, 100px)', minHeight: '110px', height: 'auto', padding: '10px 5px', display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: '8px', flexDirection: 'column', boxSizing: 'border-box' }}>
-                      <img src={s.imgAlive || s.imgSrc} alt={s.name} style={{ width: '45px', height: '45px', imageRendering: 'pixelated', flexShrink: 0 }} />
+                      <div style={{ 
+                        width: 'clamp(50px, 15vw, 65px)', // 👉 Tăng kích thước cơ bản lên một chút (từ 45px lên tối đa 65px)
+                        height: 'clamp(50px, 15vw, 65px)', // 👉 Phải là hình vuông để không bị méo ảnh
+                        display: 'flex', 
+                        justifyContent: 'center', 
+                        alignItems: 'center', 
+                        overflow: 'hidden', 
+                        flexShrink: 0, 
+                        marginTop: '5px' 
+                      }}>
+                        <img 
+                          src={s.imgAlive || s.imgSrc} 
+                          alt={s.name} 
+                          style={{ 
+                            width: '100%', 
+                            height: '100%', 
+                            objectFit: 'contain', // 👉 GIẢI PHÁP CHÍNH: Giúp chú mèo "ôm" sát khung hình mà không bị mất hình
+                            flexShrink: 0 
+                            // 'imageRendering: pixelated'
+                          }} 
+                        />
+                      </div>
                       <div style={{ fontSize: 'clamp(12px, 3.5vw, 14px)', color: '#ccc', marginTop: '5px', textAlign: 'center', wordBreak: 'break-word' }}>
                         {typeof s.name === 'object' ? (s.name[lang] || s.name['vi']) : s.name}
                       </div>
@@ -312,14 +333,20 @@ export default function Shop({ currentUser, uiUpdates, setUIUpdates, gsRef, setS
               
               {!uiUpdates.isVIP && (
                 <div className="shop-item" onClick={async () => {
+                    if (isProcessing) return; // 1. Chặn nếu đang xử lý
                     if (gsRef.current.lives >= 10) return toast.error(text.errLifeFull);
                     if (Number(gsRef.current.coins) < 50) return toast.error(text.errNotEnoughCoins);
+                    
+                    setIsProcessing(true); // 2. Khoá nút
+                    
                     gsRef.current.coins -= 50;
                     gsRef.current.lives += 1;
                     setUIUpdates(prev => ({...prev, coins: gsRef.current.coins, lives: gsRef.current.lives})); 
                     await saveUserProfile(); 
                     toast.success(text.successLife);
-                  }} 
+                    
+                    setIsProcessing(false); // 3. Xong việc thì mở khoá
+                  }}
                   style={{ border: '2px solid #ff4757', background: '#333', width: '100%', minHeight: '80px', height: 'auto', padding: '10px', display: 'flex', justifyContent: 'center', alignItems: 'center', borderRadius: '8px', flexDirection: 'column', boxSizing: 'border-box', textAlign: 'center' }}>
                   <div style={{ fontSize: 'clamp(14px, 4vw, 18px)', color: '#fff', wordBreak: 'break-word' }}><span className="pixel-icon icon-heart"></span> {text.buyLifeDesc}</div>
                   <div style={{ fontSize: 'clamp(14px, 4vw, 18px)', color: '#FFD700', fontWeight: 'bold', marginTop: '5px' }}>{text.priceText} 50</div>
@@ -328,17 +355,22 @@ export default function Shop({ currentUser, uiUpdates, setUIUpdates, gsRef, setS
 
               <div style={{ width: '100%', height: '1px', background: '#555', margin: '5px 0' }}></div>
               
-              <div className="shop-item" onClick={() => {
+              <div className="shop-item" onClick={async () => {
+                if (isProcessing) return; // 1. Chặn spam click
+
                 if (uiUpdates.isVIP) {
                   if (gsRef.current.dailyCoinCount >= 5) {
                     toast.error(text.errVipDailyLimit);
                     return;
                   }
+                  setIsProcessing(true); // 2. Khoá nút
                   gsRef.current.coins += 50;
                   gsRef.current.dailyCoinCount += 1; 
                   setUIUpdates(prev => ({...prev, coins: gsRef.current.coins}));
-                  saveUserProfile();
+                  await saveUserProfile();
                   toast.success(`${text.vipGetCoinSuccess} (${gsRef.current.dailyCoinCount}/5)`);
+                  
+                  setIsProcessing(false); // 3. Xong việc thì mở khoá
                 } else {
                   watchAd('coin');
                 }

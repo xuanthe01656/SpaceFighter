@@ -63,10 +63,13 @@ export const t = {
     useBtn: "DÙNG",
     selectBtn: "CHỌN",
     adCompleteToEarn:"Xem hết video để nhận thưởng!",
+    restorePurchases: "KHÔI PHỤC GÓI VIP",
+    errCoinHourlyLimitAd: "Đã đạt giới hạn 15 lần mỗi giờ. Vui lòng thử lại sau!",
     
     // Toast Messages
     errNotEnoughCoins: "Không đủ Xu!",
     successOwned: "Đã sở hữu",
+    processingPurchase: "Đang xử lý giao dịch...",
     errLoginVIP: "⚠️ Vui lòng đăng nhập tài khoản Google để mua Gói VIP!",
     errAppOnly: "Chỉ hỗ trợ trên Ứng dụng!",
     errAppOnlyDesc: "Vui lòng tải Astro Cat trên Google Play để mua VIP và ủng hộ nhà phát triển nhé.",
@@ -95,7 +98,7 @@ export const t = {
     connecting: "🔗 Đang kết nối...",
     canvasYouDied: "BẠN ĐÃ CHẾT!",
     canvasSpectating: "Đang xem",
-    canvasPlaying: "chơi...",
+    canvasPlaying: "Chơi...",
     canvasOpponentScore: "Điểm đối thủ:",
     loginOpening: "Đang mở Google...",
     loginAppSuccess: "Đăng nhập App thành công!",
@@ -189,10 +192,13 @@ export const t = {
     useBtn: "IN USE",
     selectBtn: "EQUIP",
     adCompleteToEarn:"Watch the full video to earn a reward!",
+    restorePurchases: "RESTORE VIP PURCHASES",
+    errCoinHourlyLimitAd: "Hourly limit of 15 reached. Please try again later!",
     
     // Toast Messages
     errNotEnoughCoins: "Not enough Coins!",
     successOwned: "Successfully purchased",
+    processingPurchase: "Processing transaction...",
     errLoginVIP: "⚠️ Please login with Google to buy VIP!",
     errAppOnly: "App Version Only!",
     errAppOnlyDesc: "Please download Astro Cat on Google Play to purchase VIP and support the dev.",

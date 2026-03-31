@@ -59,7 +59,10 @@ app.post('/api/shop/purchase', async (req, res) => {
 
       const data = doc.data();
       const currentCoins = data.coins || 0;
-      const inventory = data.inventory || { skins: ['classic'], bgs: ['deep'] };
+      const inventory = data.inventory || {};
+      // 2. Kiểm tra VÀ khởi tạo từng mảng bên trong (Vá lỗi undefined gây crash)
+      if (!inventory.skins) inventory.skins = ['classic'];
+      if (!inventory.bgs) inventory.bgs = ['deep'];
 
       const targetList = type === 'skin' ? inventory.skins : inventory.bgs;
       if (targetList.includes(itemId)) {
@@ -214,12 +217,15 @@ io.on('connection', (socket) => {
 
         // Cho phép nhảy tối đa 6 điểm 1 lúc (1 ống nước + 1 ngôi sao)
         // Cho phép nhận điểm liên tục với khoảng cách tối thiểu 300ms (tốc độ bay max)
-        if (scoreDifference > 6 || timeSinceLastUpdate < 300) {
-          console.log(`⚠️ Nghi vấn Hack điểm: User ${socket.id} - Bỏ qua update`);
-          data.score = player.score; 
-        } else {
-          player.score = data.score;
-          player.lastScoreUpdate = now;
+        if (data.score > player.score) {
+          const scoreDifference = data.score - player.score;
+          // Nếu mạng lag, nhiều gói tin có thể gửi gộp, nới lỏng giới hạn lên khoảng 15 điểm (VD: 2 sao + 5 ống)
+          if (scoreDifference > 15) {
+            console.log(`⚠️ Nghi vấn Hack điểm: User ${socket.id} - Nhảy vọt ${scoreDifference} điểm. Bỏ qua update`);
+            data.score = player.score; 
+          } else {
+            player.score = data.score;
+          }
         }
       }
       

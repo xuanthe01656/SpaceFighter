@@ -121,6 +121,8 @@ export default function Game() {
     isVIP: false,
     dailyCoinCount: 0,   // Số lần đã nhận xu hôm nay
     lastCoinDate: '',
+    hourlyCoinCount: 0,  // Số lần nhận xu qua Quảng cáo (15 lần/giờ)
+    lastCoinHour: '',
     userIP: 'unknown',
     gameMode: 'single',
     myName: 'Player',
@@ -819,9 +821,22 @@ useEffect(() => {
       for (let i = 0; i < 100; i++) {
         gs.background.particles.push({ x: Math.random() * gs.canvas.width, y: Math.random() * gs.canvas.height, size: Math.random() * 2, speed: Math.random() * 2 + 0.5 });
       }
-    } else if (bg.type === 'aurora') {
-      for (let i = 0; i < 8; i++) {
-        gs.background.particles.push({ x: Math.random() * gs.canvas.width, y: Math.random() * gs.canvas.height, w: Math.random() * 100 + 50, h: gs.canvas.height, opacity: Math.random() * 0.3, speed: Math.random() * 0.5 + 0.2 });
+   } else if (bg.type === 'aurora') {
+      // Tạo ít dải lụa hơn nhưng chất lượng hơn
+      const waveColors = ['rgba(0, 255, 238,', 'rgba(0, 255, 140,']; // Màu Cyan và Green neon
+      for (let i = 0; i < 6; i++) { 
+        gs.background.particles.push({ 
+          x: Math.random() * gs.canvas.width, 
+          // y ở nửa trên màn hình
+          y: Math.random() * gs.canvas.height * 0.4 + gs.canvas.height * 0.1, 
+          height: Math.random() * 200 + 150, // Độ cao của dải lụa
+          speed: Math.random() * 0.3 + 0.1, // Trôi rất chậm
+          // Các thông số để tạo sóng (Wavy effect)
+          color: waveColors[i % 2],
+          phase: Math.random() * Math.PI * 2, // Điểm bắt đầu của sóng
+          freqX: Math.random() * 0.005 + 0.002, // Độ dài sóng
+          amplitude: Math.random() * 20 + 10 // Độ cao sóng
+        }); 
       }
     } else if (bg.type === 'bubbles') {
       for (let i = 0; i < 30; i++) {
@@ -833,11 +848,35 @@ useEffect(() => {
       }
     } else if (bg.type === 'meteors') {
       for (let i = 0; i < 25; i++) {
-        gs.background.particles.push({ x: Math.random() * gs.canvas.width, y: Math.random() * gs.canvas.height, size: Math.random() * 8 + 3, speedX: Math.random() * 3 + 2, speedY: Math.random() * 2 + 1 });
+        // Tạo hình dáng đa giác gồ ghề ngẫu nhiên cho từng viên đá
+        const vertices = [];
+        const sides = Math.floor(Math.random() * 3) + 5; // 5 đến 7 cạnh
+        for (let j = 0; j < sides; j++) {
+          vertices.push(Math.random() * 0.4 + 0.8); // Độ gồ ghề của đá
+        }
+        gs.background.particles.push({ 
+          x: Math.random() * gs.canvas.width, 
+          y: Math.random() * gs.canvas.height, 
+          size: Math.random() * 15 + 10, // Kích thước to hơn
+          speedX: Math.random() * 2 + 1,
+          //speedY: Math.random() * 2 + 1,
+          rotation: Math.random() * Math.PI * 2,
+          rotSpeed: (Math.random() - 0.5) * 0.05, // Tốc độ xoay
+          vertices: vertices
+        });
       }
     } else if (bg.type === 'hyperspace') {
-      for (let i = 0; i < 50; i++) {
-        gs.background.particles.push({ x: Math.random() * gs.canvas.width, y: Math.random() * gs.canvas.height, length: Math.random() * 40 + 10, speed: Math.random() * 8 + 5 });
+      // Đa dạng màu sắc chuẩn Cyberpunk/Không gian
+      const colors = ['#ffffff', '#00ffff', '#8a2be2', '#ff00ff']; 
+      for (let i = 0; i < 60; i++) { 
+        gs.background.particles.push({ 
+          x: Math.random() * gs.canvas.width, 
+          y: Math.random() * gs.canvas.height, 
+          length: Math.random() * 80 + 30, // Vệt dài hơn tạo cảm giác siêu tốc
+          speed: Math.random() * 3 + 2,
+          color: colors[Math.floor(Math.random() * colors.length)], // Lấy màu ngẫu nhiên
+          thickness: Math.random() * 2 + 1
+        }); 
       }
     }
 
@@ -909,7 +948,7 @@ useEffect(() => {
  const startGame = (mode) => {
     if (!gsRef.current.isVIP && gsRef.current.lives <= 0) {
       // Sử dụng t[lang] để hiển thị đúng ngôn ngữ người dùng đã chọn
-      toast.error(t[lang]?.outOfLives || '❌ Bạn đã hết mạng! Hãy chờ hồi phục hoặc Xem quảng cáo.');
+      toast.error(t[lang]?.errNoLivesPlay || '❌ Bạn đã hết mạng! Hãy chờ hồi phục hoặc Xem quảng cáo.');
       return;
     }
     if (animationRef.current) {
@@ -1228,16 +1267,62 @@ useEffect(() => {
         if (p.x < 0) { p.x = canvas.width; p.y = Math.random() * canvas.height; }
       }
     } else if (bg.type === 'aurora') {
+      // CHẾ ĐỘ HÒA TRỘN LÀM SÁNG (Mượt và đẹp hơn cho hiệu ứng ánh sáng)
+      ctx.globalCompositeOperation = 'lighter'; 
+      
       for (let p of gs.background.particles) {
-        ctx.fillStyle = `rgba(0, 255, 150, ${p.opacity})`;
-        ctx.fillRect(p.x, 0, p.w, p.h); // Dải lụa dọc cực quang
+        // Tạo hiệu ứng lấp lánh nhẹ (Shimmer) theo thời gian
+        const flicker = Math.sin(gs.frames * 0.02 + p.phase) * 0.05 + 0.15;
+        
+        // Tạo Gradient dọc cho dải lụa: Đậm ở dưới, mờ dần lên trên
+        const grad = ctx.createLinearGradient(0, p.y, 0, p.y + p.height);
+        grad.addColorStop(0, 'rgba(255, 255, 255, 0)'); // Đỉnh dải lụa mờ tịt
+        grad.addColorStop(0.5, `${p.color} ${flicker})`); // Giữa dải lụa sáng màu
+        grad.addColorStop(1, 'rgba(255, 255, 255, 0)'); // Chân dải lụa mờ tịt
+
+        ctx.fillStyle = grad;
+        
+        // Vẽ dải lụa gợn sóng dùng Sine Wave
+        ctx.beginPath();
+        const startY = p.y;
+        
+        // Vẽ cạnh trên của dải lụa
+        for (let x = 0; x < canvas.width; x += 10) {
+          const wavyY = startY + Math.sin(x * p.freqX + gs.frames * 0.01 + p.phase) * p.amplitude;
+          if (x === 0) ctx.moveTo(p.x + x, wavyY);
+          else ctx.lineTo(p.x + x, wavyY);
+        }
+        
+        // Vẽ cạnh dưới của dải lụa (cách cạnh trên một khoảng p.height)
+        for (let x = canvas.width; x >= 0; x -= 10) {
+          const wavyY = startY + p.height + Math.sin(x * p.freqX + gs.frames * 0.01 + p.phase) * p.amplitude;
+          ctx.lineTo(p.x + x, wavyY);
+        }
+        
+        ctx.closePath();
+        ctx.fill();
+
+        // Cập nhật vị trí trôi chậm
         if (!gs.isGameOver) p.x -= p.speed * speedMult;
-        if (p.x < -p.w) p.x = canvas.width;
+        if (p.x < -canvas.width) p.x = canvas.width;
       }
+      
+      // RESET VỀ CHẾ ĐỘ HÒA TRỘN MẶC ĐỊNH
+      ctx.globalCompositeOperation = 'source-over'; 
+
     } else if (bg.type === 'bubbles') {
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)'; ctx.lineWidth = 2;
       for (let p of gs.background.particles) {
+        // 1. Vẽ vỏ bong bóng thủy tinh
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; 
+        ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.stroke();
+        
+        // 2. Thêm đốm sáng phản chiếu (Highlight 3D) rất nhẹ
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.beginPath(); 
+        ctx.arc(p.x - p.size * 0.35, p.y - p.size * 0.35, p.size * 0.25, 0, Math.PI * 2); 
+        ctx.fill();
+
         if (!gs.isGameOver) {
           p.x -= p.speed * speedMult;
           p.y += Math.sin(gs.frames * 0.02 + p.floatOffset) * 0.5; // Bay lượn sóng
@@ -1246,25 +1331,90 @@ useEffect(() => {
       }
     } else if (bg.type === 'fireflies') {
       for (let p of gs.background.particles) {
-        const alpha = 0.3 + Math.abs(Math.sin(gs.frames * p.flicker));
-        ctx.fillStyle = `rgba(255, 165, 0, ${alpha})`;
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+        const alpha = 0.2 + Math.abs(Math.sin(gs.frames * p.flicker)); // Nhịp thở lấp lánh
+        
+        // 1. Vẽ quầng sáng mờ tỏa ra xung quanh (Glow không giật lag)
+        ctx.fillStyle = `rgba(255, 215, 0, ${alpha * 0.3})`; // Vàng nhạt mờ
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.size * 3, 0, Math.PI * 2); ctx.fill();
+        
+        // 2. Vẽ lõi đóm lửa rực sáng
+        ctx.fillStyle = `rgba(255, 255, 255, ${alpha + 0.3})`; // Trắng sáng
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.size * 0.8, 0, Math.PI * 2); ctx.fill();
+
         if (!gs.isGameOver) p.x -= p.speed * speedMult;
-        if (p.x < -p.size) { p.x = canvas.width; p.y = Math.random() * canvas.height; }
+        if (p.x < -p.size * 3) { p.x = canvas.width; p.y = Math.random() * canvas.height; }
       }
     } else if (bg.type === 'meteors') {
       for (let p of gs.background.particles) {
-        ctx.fillStyle = '#8a95a5'; ctx.fillRect(p.x, p.y, p.size, p.size);
-        ctx.fillStyle = '#c5cfdd'; ctx.fillRect(p.x, p.y, p.size / 3, p.size / 3);
-        if (!gs.isGameOver) { p.x -= p.speedX * speedMult; p.y += p.speedY * speedMult; }
-        if (p.x < -p.size || p.y > canvas.height) { p.x = canvas.width + Math.random() * 100; p.y = -50 - Math.random() * 100; }
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rotation);
+        
+        //ctx.shadowColor = 'rgba(0,0,0,0.5)';
+        //ctx.shadowBlur = 8; // Bóng đổ không gian
+
+        // 1. Vẽ khung đa giác của tảng đá
+        ctx.beginPath();
+        for (let i = 0; i < p.vertices.length; i++) {
+          const angle = (i / p.vertices.length) * Math.PI * 2;
+          const r = p.size * p.vertices[i];
+          if (i === 0) ctx.moveTo(Math.cos(angle) * r, Math.sin(angle) * r);
+          else ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
+        }
+        ctx.closePath();
+        
+        // Tô màu vành đai và viền
+        ctx.fillStyle = '#636e72'; 
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#2d3436';
+        ctx.stroke();
+
+        // 2. Vẽ hố thiên thạch (craters) tạo độ sâu 3D
+        ctx.fillStyle = '#2d3436';
+        ctx.beginPath(); ctx.arc(-p.size/3, -p.size/4, p.size/4, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(p.size/4, p.size/3, p.size/6, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(p.size/3, -p.size/5, p.size/8, 0, Math.PI*2); ctx.fill();
+        
+        ctx.restore();
+
+        // Cập nhật vị trí và góc xoay
+        if (!gs.isGameOver) { 
+          p.x -= p.speedX * speedMult; 
+          p.rotation += p.rotSpeed; 
+        }
+        if (p.x < -p.size*2) { 
+          p.x = canvas.width + Math.random() * 100; 
+          p.y = Math.random() * canvas.height; // Trồi lên ở một độ cao ngẫu nhiên
+        }
       }
     } else if (bg.type === 'hyperspace') {
-      ctx.strokeStyle = 'rgba(0, 255, 255, 0.6)'; ctx.lineWidth = 2;
       for (let p of gs.background.particles) {
-        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + p.length, p.y); ctx.stroke();
+        // Gradient để đuôi vệt sáng mờ dần (Trong suốt)
+        const grad = ctx.createLinearGradient(p.x, p.y, p.x + p.length, p.y);
+        grad.addColorStop(0, p.color); // Đầu vệt sáng rõ màu
+        grad.addColorStop(1, 'rgba(0,0,0,0)'); // Đuôi tan biến
+        
+        ctx.strokeStyle = grad; 
+        ctx.lineWidth = p.thickness;
+        ctx.lineCap = 'round';
+        
+        // Hiệu ứng phát sáng Neon cực mạnh
+        //ctx.shadowBlur = 15;
+        //ctx.shadowColor = p.color;
+
+        ctx.beginPath(); 
+        ctx.moveTo(p.x, p.y); 
+        ctx.lineTo(p.x + p.length, p.y); 
+        ctx.stroke();
+        
+        //ctx.shadowBlur = 0; // Reset bóng để không lỗi các vật khác
+
         if (!gs.isGameOver) p.x -= p.speed * speedMult;
-        if (p.x < -p.length) { p.x = canvas.width; p.y = Math.random() * canvas.height; }
+        if (p.x < -p.length) { 
+          p.x = canvas.width + Math.random() * 200; 
+          p.y = Math.random() * canvas.height; 
+        }
       }
     }
   };
@@ -1511,15 +1661,58 @@ useEffect(() => {
         if (bg.type === 'stars') {
           for (let i = 0; i < 100; i++) { gs.background.particles.push({ x: Math.random() * gs.canvas.width, y: Math.random() * gs.canvas.height, size: Math.random() * 2, speed: Math.random() * 2 + 0.5 }); }
         } else if (bg.type === 'aurora') {
-          for (let i = 0; i < 8; i++) { gs.background.particles.push({ x: Math.random() * gs.canvas.width, y: Math.random() * gs.canvas.height, w: Math.random() * 100 + 50, h: gs.canvas.height, opacity: Math.random() * 0.3, speed: Math.random() * 0.5 + 0.2 }); }
+          // Tạo ít dải lụa hơn nhưng chất lượng hơn
+          const waveColors = ['rgba(0, 255, 238,', 'rgba(0, 255, 140,']; // Màu Cyan và Green neon
+          for (let i = 0; i < 6; i++) { 
+            gs.background.particles.push({ 
+              x: Math.random() * gs.canvas.width, 
+              // y ở nửa trên màn hình
+              y: Math.random() * gs.canvas.height * 0.4 + gs.canvas.height * 0.1, 
+              height: Math.random() * 200 + 150, // Độ cao của dải lụa
+              speed: Math.random() * 0.3 + 0.1, // Trôi rất chậm
+              // Các thông số để tạo sóng (Wavy effect)
+              color: waveColors[i % 2],
+              phase: Math.random() * Math.PI * 2, // Điểm bắt đầu của sóng
+              freqX: Math.random() * 0.005 + 0.002, // Độ dài sóng
+              amplitude: Math.random() * 20 + 10 // Độ cao sóng
+            }); 
+          }
         } else if (bg.type === 'bubbles') {
           for (let i = 0; i < 30; i++) { gs.background.particles.push({ x: Math.random() * gs.canvas.width, y: Math.random() * gs.canvas.height, size: Math.random() * 15 + 5, speed: Math.random() * 1 + 0.5, floatOffset: Math.random() * Math.PI * 2 }); }
         } else if (bg.type === 'fireflies') {
           for (let i = 0; i < 50; i++) { gs.background.particles.push({ x: Math.random() * gs.canvas.width, y: Math.random() * gs.canvas.height, size: Math.random() * 3 + 1, speed: Math.random() * 1.5 + 0.5, flicker: Math.random() * 0.1 }); }
         } else if (bg.type === 'meteors') {
-          for (let i = 0; i < 25; i++) { gs.background.particles.push({ x: Math.random() * gs.canvas.width, y: Math.random() * gs.canvas.height, size: Math.random() * 8 + 3, speedX: Math.random() * 3 + 2, speedY: Math.random() * 2 + 1 }); }
+          for (let i = 0; i < 25; i++) {
+            // Tạo hình dáng đa giác gồ ghề ngẫu nhiên cho từng viên đá
+            const vertices = [];
+            const sides = Math.floor(Math.random() * 3) + 5; // 5 đến 7 cạnh
+            for (let j = 0; j < sides; j++) {
+              vertices.push(Math.random() * 0.4 + 0.8); // Độ gồ ghề của đá
+            }
+            gs.background.particles.push({ 
+              x: Math.random() * gs.canvas.width, 
+              y: Math.random() * gs.canvas.height, 
+              size: Math.random() * 15 + 10, // Kích thước to hơn
+              speedX: Math.random() * 2 + 1,
+              //speedY: Math.random() * 2 + 1,
+              rotation: Math.random() * Math.PI * 2,
+              rotSpeed: (Math.random() - 0.5) * 0.05, // Tốc độ xoay
+              vertices: vertices
+            });
+          }
         } else if (bg.type === 'hyperspace') {
-          for (let i = 0; i < 50; i++) { gs.background.particles.push({ x: Math.random() * gs.canvas.width, y: Math.random() * gs.canvas.height, length: Math.random() * 40 + 10, speed: Math.random() * 8 + 5 }); }
+          // Đa dạng màu sắc chuẩn Cyberpunk/Không gian
+          const colors = ['#ffffff', '#00ffff', '#8a2be2', '#ff00ff']; 
+          for (let i = 0; i < 60; i++) { 
+            gs.background.particles.push({ 
+              x: Math.random() * gs.canvas.width, 
+              y: Math.random() * gs.canvas.height, 
+              length: Math.random() * 80 + 30, // Vệt dài hơn tạo cảm giác siêu tốc
+              speed: Math.random() * 3 + 2,
+              color: colors[Math.floor(Math.random() * colors.length)], // Lấy màu ngẫu nhiên
+              thickness: Math.random() * 2 + 1
+            }); 
+          }
         }
       }
 
@@ -1529,8 +1722,9 @@ useEffect(() => {
       const bgType = BACKGROUNDS.find(b => b.id === gs.userSettings.bg)?.type || 'stars';
       for (let p of gs.background.particles) {
         if (bgType === 'meteors') {
-          p.x -= p.speedX * 1.5; p.y += p.speedY * 1.5;
-          if (p.x < -p.size || p.y > gs.canvas.height) { p.x = gs.canvas.width + Math.random() * 100; p.y = -50 - Math.random() * 100; }
+          p.x -= p.speedX * 1.5; //p.y += p.speedY * 1.5;
+          if (p.rotation !== undefined) p.rotation += p.rotSpeed;
+          if (p.x < -p.size * 2 ) {p.x = gs.canvas.width + Math.random() * 100; p.y = Math.random() * gs.canvas.height; }
         } else {
           p.x -= (p.speed || p.speedX || 2) * 1.5; 
           if (p.x < -100) { p.x = gs.canvas.width; p.y = Math.random() * gs.canvas.height; }
@@ -1672,7 +1866,14 @@ useEffect(() => {
           gsRef.current.dailyCoinCount = 0; // Đã qua ngày mới chuẩn quốc tế -> Reset
         }
         gsRef.current.lastCoinDate = today;
-
+        // KIỂM TRA ĐẾM THEO GIỜ (Cho hệ thống quảng cáo)
+        const currentHourStr = `${today}-${realTimeNow.getHours()}`;
+        if (data.lastCoinHour === currentHourStr) {
+          gsRef.current.hourlyCoinCount = data.hourlyCoinCount || 0;
+        } else {
+          gsRef.current.hourlyCoinCount = 0; // Sang giờ mới -> Reset về 0
+        }
+        gsRef.current.lastCoinHour = currentHourStr;
         if (gsRef.current.isVIP) {
           gsRef.current.livesUpdatedAt = null;
         } else if (gsRef.current.lives < 10) {
@@ -1717,6 +1918,8 @@ useEffect(() => {
       isVIP: gsRef.current.isVIP || false,
       dailyCoinCount: gsRef.current.dailyCoinCount,
       lastCoinDate: gsRef.current.lastCoinDate,
+      hourlyCoinCount: gsRef.current.hourlyCoinCount,
+      lastCoinHour: gsRef.current.lastCoinHour,
       inventory: gsRef.current.inventory,
       equipped: gsRef.current.userSettings,
     });
@@ -1766,7 +1969,7 @@ useEffect(() => {
   // ==========================================
   const pendingRewardRef = useRef(null); // Lưu lại người dùng đang xem QC để nhận xu hay mạng
   const adReadyRef = useRef(false);      // Cờ đánh dấu quảng cáo đã tải sẵn sàng chưa
-  const IS_TESTING = true; 
+  const IS_TESTING = false; 
   
   // ID Quảng cáo tặng thưởng (Reward)
   const AD_ID = IS_TESTING 
@@ -1817,7 +2020,7 @@ useEffect(() => {
           if (earnedReward) {
             if (earnedReward === 'coin') {
               gsRef.current.coins += 50; 
-              gsRef.current.dailyCoinCount += 1;
+              gsRef.current.hourlyCoinCount += 1; // Tăng đếm giờ
               setUIUpdates(prev => ({ ...prev, coins: gsRef.current.coins }));
               toast.success(t[langRef.current]?.rewardCoin);
             } else if (earnedReward === 'life') {
@@ -1866,7 +2069,7 @@ useEffect(() => {
       if (!Capacitor.isNativePlatform() || !isAdInitialized) return;
 
       try {
-        if (screen === 'game') {
+        if (screen === 'game' || uiUpdates.isVIP) {
           // 1. ĐANG CHƠI GAME -> ẨN BANNER ĐI
           if (isBannerCreatedRef.current) {
             await AdMob.hideBanner();
@@ -1895,7 +2098,7 @@ useEffect(() => {
 
     manageBanner();
 
-  }, [screen,isAdInitialized]);
+  }, [screen,isAdInitialized, uiUpdates.isVIP]);
   const watchAd = async (rewardType) => {
     if (!currentUser) {
       toast.error(t[langRef.current]?.reqLoginReward || "Vui lòng đăng nhập!");
@@ -1905,9 +2108,20 @@ useEffect(() => {
       toast.error(t[langRef.current]?.errLifeFullAd);
       return; 
     }
-    if (rewardType === 'coin' && gsRef.current.dailyCoinCount >= 5) {
-      toast.error(t[langRef.current]?.errCoinLimitAd);
-      return;
+    if (rewardType === 'coin') {
+      const realTimeNow = new Date(getRealTime());
+      const currentHourStr = `${realTimeNow.getFullYear()}-${realTimeNow.getMonth() + 1}-${realTimeNow.getDate()}-${realTimeNow.getHours()}`;
+      
+      // Nếu nhảy sang giờ mới thì reset ngay lập tức
+      if (gsRef.current.lastCoinHour !== currentHourStr) {
+        gsRef.current.hourlyCoinCount = 0;
+        gsRef.current.lastCoinHour = currentHourStr;
+      }
+
+      if (gsRef.current.hourlyCoinCount >= 15) {
+        toast.error(t[langRef.current]?.errCoinHourlyLimitAd || "Đã đạt giới hạn 15 lần/giờ. Vui lòng quay lại vào giờ tiếp theo!");
+        return;
+      }
     }
     if (isWatchingAd) return;
 
@@ -1966,7 +2180,7 @@ useEffect(() => {
 
     if (rewardType === 'coin') {
       gsRef.current.coins += 50; 
-      gsRef.current.dailyCoinCount += 1;
+      gsRef.current.hourlyCoinCount += 1; // Tăng đếm giờ
       setUIUpdates(prev => ({ ...prev, coins: gsRef.current.coins }));
       toast.success(t[langRef.current]?.rewardCoin);
     } else if (rewardType === 'life') {
@@ -2069,16 +2283,22 @@ useEffect(() => {
     return () => clearInterval(timer);
   }, [currentUser, uiUpdates.lives]);
   useEffect(() => {
-    const handleUnload = () => {
-      if (currentUser) {
+    const handleVisibilityChange = () => {
+      if (!currentUser) return;
+      
+      // Khi người dùng ẩn app xuống nền hoặc tắt app
+      if (document.visibilityState === 'hidden') {
         const userRef = doc(db, "users", currentUser.uid);
-        // Dùng updateDoc bình thường hoặc navigator.sendBeacon nếu cần
-        updateDoc(userRef, { isOnline: false });
+        updateDoc(userRef, { isOnline: false, last_update_ms: Date.now() }).catch(() => {});
+      } else if (document.visibilityState === 'visible') {
+        // Khi người dùng quay lại app
+        const userRef = doc(db, "users", currentUser.uid);
+        updateDoc(userRef, { isOnline: true, last_update_ms: Date.now() }).catch(() => {});
       }
     };
 
-    window.addEventListener('beforeunload', handleUnload);
-    return () => window.removeEventListener('beforeunload', handleUnload);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [currentUser]);
   return (
     <div style={{ width: '100%', height: '100dvh', position: 'relative', backgroundColor: '#0d0e15' }}>
