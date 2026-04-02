@@ -3,8 +3,9 @@ import toast from 'react-hot-toast';
 import { Capacitor } from '@capacitor/core';
 import { t } from '../utils/translations';
 
-export default function Menu({ currentUser, uiUpdates, topRecords, startGame, setScreen, loginWithGoogle, logout, openShop, openLeaderboard, lang, toggleLanguage}) {
+export default function Menu({ currentUser, uiUpdates, topRecords, startGame, setScreen, loginWithGoogle, loginWithApple, logout, openShop, openLeaderboard, lang, toggleLanguage}) {
   const text = t[lang];
+  const platform = Capacitor.getPlatform();
   
   return (
     <div className="ui-layer">
@@ -34,10 +35,18 @@ export default function Menu({ currentUser, uiUpdates, topRecords, startGame, se
             </button>
           </div>
         ) : (
-          <button className="btn" onClick={loginWithGoogle} style={{ pointerEvents: 'auto', background: '#fff', color: '#333', border: '2px solid #ddd', borderRadius: '25px', padding: '8px 15px', fontSize: '16px', fontFamily: "'VT323', monospace", cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>
-            <img src="/images/google.png" alt="Google" style={{ width: '18px' }} />
-            {text.login}
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <button className="btn" onClick={loginWithGoogle} style={{ pointerEvents: 'auto', background: '#fff', color: '#333', border: '2px solid #ddd', borderRadius: '25px', padding: '8px 15px', fontSize: '16px', fontFamily: "'VT323', monospace", cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>
+              <img src="/images/google.png" alt="Google" style={{ width: '18px' }} />
+              {text.login}
+            </button>
+            
+            {platform === 'ios' && (
+              <button className="btn" onClick={loginWithApple} style={{ pointerEvents: 'auto', background: '#000', color: '#fff', border: '2px solid #555', borderRadius: '25px', padding: '8px 15px', fontSize: '16px', fontFamily: "'VT323', monospace", cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>
+                🍎 Đăng nhập Apple
+              </button>
+            )}
+          </div>
         )}
       </div>
 

@@ -5,6 +5,7 @@
     box-sizing: border-box; /* Bắt buộc để padding/border không làm phình kích thước phần tử */
     margin: 0;
     padding: 0;
+    -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -29,6 +30,10 @@ body {
     justify-content: center; align-items: center;
     text-align: center; text-shadow: 2px 2px 0 #000;
     z-index: 100;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
 }
 
 .title { 

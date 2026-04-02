@@ -3,9 +3,10 @@ import { io } from 'socket.io-client';
 import toast, { Toaster } from 'react-hot-toast';
 import { db, auth, googleProvider } from './firebase';
 import { collection, addDoc, query, where, orderBy, limit, getDocs, doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged,signInWithCredential, GoogleAuthProvider, } from 'firebase/auth';
+import { signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged,signInWithCredential, GoogleAuthProvider, OAuthProvider } from 'firebase/auth';
 import { AdMob, RewardAdPluginEvents, BannerAdSize, BannerAdPosition } from '@capacitor-community/admob';
 import { Capacitor } from '@capacitor/core';
+import { SignInWithApple } from '@capacitor-community/apple-sign-in';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { Device } from '@capacitor/device';
 import { Purchases } from '@revenuecat/purchases-capacitor';
@@ -1184,16 +1185,19 @@ useEffect(() => {
 
       // Thêm Icon cảnh báo nhấp nháy cho cột nguy hiểm (Type 1)
       if (p.type === 1) {
-        ctx.fillStyle = '#fff';
+        const alpha = 0.5 + Math.abs(Math.sin(gs.frames * 0.2)) * 0.5;
+        // 1. Vẽ quầng sáng đỏ mờ (Thay thế cho shadowBlur bị lag)
+        ctx.fillStyle = `rgba(255, 71, 87, ${alpha * 0.6})`;
+        ctx.font = 'bold 32px Arial'; 
+        ctx.fillText('!', currentX + gs.pipes.w/2 - 8, p.top - 34);
+        ctx.fillText('!', currentX + gs.pipes.w/2 - 8, canvas.height - p.bottom + 46);
+        // 2. Vẽ lõi trắng sắc nét đè lên trên
+        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
         ctx.font = 'bold 24px Arial';
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = '#ff4757';
-        // Tính toán độ mờ (Alpha) theo nhịp sin để tạo hiệu ứng nhấp nháy cảnh báo
-        ctx.globalAlpha = 0.5 + Math.abs(Math.sin(gs.frames * 0.2)) * 0.5;
         ctx.fillText('!', currentX + gs.pipes.w/2 - 6, p.top - 35);
         ctx.fillText('!', currentX + gs.pipes.w/2 - 6, canvas.height - p.bottom + 45);
+        
         ctx.globalAlpha = 1;
-        ctx.shadowBlur = 0;
       }
     }
   };
@@ -1768,6 +1772,24 @@ useEffect(() => {
       toast.error(t[lang]?.loginFail);
     }
   };
+  const loginWithApple = async () => {
+    try {
+      toast.loading(t[lang]?.loginOpening || "Đang kết nối Apple...", { id: 'appleLogin' });
+      const { response } = await SignInWithApple.authorize({
+        clientId: 'com.ban.astrocat', // Bundle ID của Apple sau này tạo
+        redirectURI: '',
+        scopes: 'email name',
+      });
+      const provider = new OAuthProvider('apple.com');
+      const credential = provider.credential({ idToken: response.identityToken });
+      await signInWithCredential(auth, credential);
+      toast.success(t[lang]?.loginAppSuccess || "Đăng nhập thành công!");
+    } catch (error) {
+      toast.dismiss('appleLogin');
+      console.error("Apple Login Error:", error);
+      toast.error(t[lang]?.loginFail || "Đăng nhập thất bại");
+    }
+  };
   const logout = async () => {
     try {
       if (currentUser) {
@@ -1795,10 +1817,10 @@ useEffect(() => {
     try {
       // --- KHỞI TẠO REVENUECAT (CHỈ CHẠY TRÊN NATIVE APP) ---
       if (Capacitor.isNativePlatform()) {
-        // Cấu hình SDK với API Key của Google Play (Sẽ lấy trên bảng điều khiển RevenueCat)
+        const isIOS = Capacitor.getPlatform() === 'ios'; 
         await Purchases.configure({ 
-            apiKey: "goog_CbZGtaRbTZyJqImOJePIWqxjpXr", 
-            appUserID: user.uid // Gắn chặt VIP với tài khoản Firebase
+            apiKey: isIOS ? "appl_Dien_Key_Apple_Vao_Day" : "goog_CbZGtaRbTZyJqImOJePIWqxjpXr", 
+            appUserID: user.uid 
         });
       }
       const snap = await getDoc(userRef);
@@ -1971,15 +1993,14 @@ useEffect(() => {
   const adReadyRef = useRef(false);      // Cờ đánh dấu quảng cáo đã tải sẵn sàng chưa
   const IS_TESTING = false; 
   
-  // ID Quảng cáo tặng thưởng (Reward)
   const AD_ID = IS_TESTING 
-    ? 'ca-app-pub-3940256099942544/5224354917' // ID Test
-    : 'ca-app-pub-8735238443425732/3739555790'; // ID Thật của AstroCat
+    ? (isIOS ? 'ca-app-pub-3940256099942544/1712485313' : 'ca-app-pub-3940256099942544/5224354917') 
+    : (isIOS ? 'ca-app-pub-xxx/yyy_ios' : 'ca-app-pub-8735238443425732/3739555790'); 
 
-  // ID Quảng cáo biểu ngữ (Banner)
+  // --- ID QUẢNG CÁO BIỂU NGỮ (BANNER) ---
   const BANNER_ID = IS_TESTING 
-    ? 'ca-app-pub-3940256099942544/6300978111' // ID Test
-    : 'ca-app-pub-8735238443425732/8524978611';
+    ? (isIOS ? 'ca-app-pub-3940256099942544/2934735716' : 'ca-app-pub-3940256099942544/6300978111') 
+    : (isIOS ? 'ca-app-pub-xxx/zzz_ios' : 'ca-app-pub-8735238443425732/8524978611');
 
   const isBannerCreatedRef = useRef(false);
   const saveUserProfileRef = useRef(saveUserProfile);
@@ -2321,6 +2342,7 @@ useEffect(() => {
           startGame={startGame} 
           setScreen={setScreen} 
           loginWithGoogle={loginWithGoogle} 
+          loginWithApple={loginWithApple}
           logout={logout} 
           openShop={openShop}
           openLeaderboard={openLeaderboard}
