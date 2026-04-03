@@ -65,6 +65,7 @@ export const t = {
     adCompleteToEarn:"Xem hết video để nhận thưởng!",
     restorePurchases: "KHÔI PHỤC GÓI VIP",
     errCoinHourlyLimitAd: "Đã đạt giới hạn 15 lần mỗi giờ. Vui lòng thử lại sau!",
+    sessionTaken: "Đã ngắt kết nối thiết bị cũ!",
     
     // Toast Messages
     errNotEnoughCoins: "Không đủ Xu!",
@@ -194,6 +195,7 @@ export const t = {
     adCompleteToEarn:"Watch the full video to earn a reward!",
     restorePurchases: "RESTORE VIP PURCHASES",
     errCoinHourlyLimitAd: "Hourly limit of 15 reached. Please try again later!",
+    sessionTaken: "Old session disconnected!",
     
     // Toast Messages
     errNotEnoughCoins: "Not enough Coins!",

@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import toast, { Toaster } from 'react-hot-toast';
 import { db, auth, googleProvider } from './firebase';
-import { collection, addDoc, query, where, orderBy, limit, getDocs, doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged,signInWithCredential, GoogleAuthProvider, OAuthProvider } from 'firebase/auth';
+import { collection, addDoc, query, where, orderBy, limit, getDocs, doc, getDoc, setDoc, updateDoc, serverTimestamp, onSnapshot, deleteDoc } from 'firebase/firestore';
+import { signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged,signInWithCredential, GoogleAuthProvider, OAuthProvider, deleteUser } from 'firebase/auth';
 import { AdMob, RewardAdPluginEvents, BannerAdSize, BannerAdPosition } from '@capacitor-community/admob';
 import { Capacitor } from '@capacitor/core';
 import { SignInWithApple } from '@capacitor-community/apple-sign-in';
@@ -1809,7 +1809,60 @@ useEffect(() => {
       toast.success(t[lang]?.logoutSuccess);
     } catch (e) { console.log(e); }
   };
+  const deleteAccount = async () => {
+    if (!currentUser) return;
+    
+    const isVipUser = uiUpdates.isVIP || gsRef.current.isVIP;
 
+    // 1. Cảnh báo lớp 1 (Tùy biến nội dung cực mạnh nếu là VIP)
+    let warningMsg = t[langRef.current]?.confirmDelete || "BẠN CÓ CHẮC CHẮN?\n\nHành động này sẽ xóa vĩnh viễn tài khoản và toàn bộ điểm số của bạn. KHÔNG THỂ HOÀN TÁC!";
+    
+    if (isVipUser) {
+      warningMsg = "🚨 CẢNH BÁO TÀI SẢN VIP 🚨\n\nTài khoản của bạn ĐANG SỞ HỮU GÓI VIP. Nếu tiếp tục xóa, bạn sẽ MẤT TOÀN BỘ quyền lợi VIP đã mua và điểm số.\n\nBạn có THẬT SỰ muốn xóa?";
+    }
+
+    const confirm1 = window.confirm(warningMsg);
+    if (!confirm1) return;
+
+    // 2. Cảnh báo lớp 2 (BẢO VỆ KÉP - CHỈ HIỆN RA NẾU LÀ VIP)
+    if (isVipUser) {
+      const confirm2 = window.confirm("HỎI LẠI LẦN CUỐI:\n\nBạn chấp nhận TỪ BỎ GÓI VIP ĐÃ MUA và xóa tài khoản này vĩnh viễn chứ?");
+      if (!confirm2) return;
+    }
+
+    const loadingToast = toast.loading(t[langRef.current]?.deletingAccount || "Đang xóa dữ liệu...");
+
+    try {
+      // 3. Xóa hồ sơ cá nhân trên Firestore
+      const userRef = doc(db, "users", currentUser.uid);
+      await deleteDoc(userRef);
+
+      // 4. Xóa tài khoản gốc trong Firebase Auth
+      await deleteUser(currentUser);
+
+      // 5. Xóa session nội bộ và đá người chơi ra ngoài
+      secureStorage.removeItem('astro_session_id');
+      if (Capacitor.isNativePlatform()) {
+        GoogleAuth.signOut().catch(() => {});
+      }
+      
+      setCurrentUser(null);
+      setScreen('menu');
+      toast.dismiss(loadingToast);
+      toast.success(t[langRef.current]?.deleteSuccess || "Tài khoản đã bị xóa vĩnh viễn!");
+
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      
+      // BẮT LỖI BẢO MẬT CỦA FIREBASE: Yêu cầu đăng nhập lại mới cho xóa
+      if (error.code === 'auth/requires-recent-login') {
+        toast.error(t[langRef.current]?.errRecentLogin || "Vì lý do bảo mật, bạn cần Đăng xuất và Đăng nhập lại một lần nữa trước khi xóa tài khoản!");
+      } else {
+        toast.error("Lỗi xóa tài khoản: " + error.message);
+        console.error("Delete Error:", error);
+      }
+    }
+  };
   const loadUserProfile = async (user) => {
     if (!user) return;
     const userRef = doc(db, "users", user.uid);
@@ -1841,12 +1894,10 @@ useEffect(() => {
         const isSameDevice = data.last_session_id === currentSocketId;
         const isQuickReload = (now - lastUpdate) < 15000; 
 
-        if (data.isOnline === true && !isSameDevice && !isQuickReload) {
-          toast.error(t[langRef.current]?.errMultiDevice);
-          await signOut(auth);
-          setCurrentUser(null);
-          setScreen('menu');
-          return;
+        // Bỏ cơ chế chặn cứng, thay bằng cơ chế "Cướp phiên"
+        if (data.isOnline === true && !isSameDevice) {
+          // Báo cho người chơi biết họ vừa đá cái máy cũ ra ngoài
+          toast.success(t[langRef.current]?.sessionTaken || "Đã ngắt kết nối thiết bị cũ!", { duration: 4000, icon: '🔄' });
         }
 
         // Cập nhật trạng thái mới
@@ -1948,7 +1999,7 @@ useEffect(() => {
   };
 useEffect(() => {
     let isMounted = true;
-
+    let unsubSnapshot = null;
     // Lắng nghe đăng nhập (Xử lý chung cho cả Web và APK)
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!isMounted) return;
@@ -1957,17 +2008,40 @@ useEffect(() => {
       if (user) {
         gsRef.current.myName = user.displayName; 
         await loadUserProfile(user);
+
+        // 2. --- BỘ LẮNG NGHE CHỐNG HACK & ĐÁNG NHẬP NHIỀU NƠI CÙNG LÚC ---
+        const userRef = doc(db, "users", user.uid);
+        unsubSnapshot = onSnapshot(userRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const currentData = docSnap.data();
+            const mySessionId = secureStorage.getItem('astro_session_id');
+
+            // Nếu phát hiện Session ID trên mây đã bị thiết bị khác ghi đè
+            if (currentData.last_session_id && currentData.last_session_id !== mySessionId) {
+              toast.error(t[langRef.current]?.errMultiDevice || "Tài khoản đang được chơi ở thiết bị khác!");
+              
+              // Tự động đăng xuất NỘI BỘ khỏi thiết bị này (không xóa data mây của máy kia)
+              secureStorage.removeItem('astro_session_id');
+              signOut(auth);
+              if (Capacitor.isNativePlatform()) {
+                GoogleAuth.signOut().catch(() => {});
+              }
+              setCurrentUser(null);
+              setScreen('menu');
+            }
+          }
+        });
       } else {
+        if (unsubSnapshot) unsubSnapshot(); // 3. Hủy lắng nghe nếu đăng xuất
+        
         // Xử lý khách (Guest)
         let savedLives = secureStorage.getItem('astro_guest_lives');
-        // SỬA LỖI 0 || 10 bằng cách kiểm tra null rõ ràng
         let guestLives = savedLives !== null ? parseInt(savedLives) : 10; 
         let guestCoins = parseInt(secureStorage.getItem('astro_guest_coins')) || 0;
         
         gsRef.current.lives = guestLives;
         gsRef.current.coins = guestCoins;
         
-        // Khôi phục mốc đếm ngược cho Guest
         if (guestLives < 10) {
           let lastLost = secureStorage.getItem('astro_guest_last_lost');
           gsRef.current.livesUpdatedAt = lastLost ? parseInt(lastLost) : getRealTime();
@@ -1983,6 +2057,7 @@ useEffect(() => {
     return () => {
       isMounted = false;
       unsubscribe();
+      if (unsubSnapshot) unsubSnapshot(); // Hủy lắng nghe khi tắt app
     };
   }, []);
   
@@ -2365,6 +2440,7 @@ useEffect(() => {
           loginWithGoogle={loginWithGoogle} 
           loginWithApple={loginWithApple}
           logout={logout} 
+          deleteAccount={deleteAccount}
           openShop={openShop}
           openLeaderboard={openLeaderboard}
           lang={lang}
