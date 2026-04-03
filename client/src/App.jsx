@@ -86,7 +86,7 @@ export default function Game() {
   const [currentUser, setCurrentUser] = useState(null);
   const [userRankData, setUserRankData] = useState(null);
   const [isWatchingAd, setIsWatchingAd] = useState(false);
-  const [webAd, setWebAd] = useState({ isPlaying: false, type: null });
+  //const [webAd, setWebAd] = useState({ isPlaying: false, type: null });
   const [isAdInitialized, setIsAdInitialized] = useState(false);
   const toggleLanguage = () => {
     const newLang = lang === 'vi' ? 'en' : 'vi';
@@ -1992,7 +1992,7 @@ useEffect(() => {
   const pendingRewardRef = useRef(null); // Lưu lại người dùng đang xem QC để nhận xu hay mạng
   const adReadyRef = useRef(false);      // Cờ đánh dấu quảng cáo đã tải sẵn sàng chưa
   const IS_TESTING = false; 
-  
+  const isIOS = Capacitor.getPlatform() === 'ios';
   const AD_ID = IS_TESTING 
     ? (isIOS ? 'ca-app-pub-3940256099942544/1712485313' : 'ca-app-pub-3940256099942544/5224354917') 
     : (isIOS ? 'ca-app-pub-xxx/yyy_ios' : 'ca-app-pub-8735238443425732/3739555790'); 
@@ -2152,7 +2152,28 @@ useEffect(() => {
     const isNative = Capacitor.isNativePlatform();
 
     if (!isNative) {
-      runFakeAd(rewardType);
+      setIsWatchingAd(false);
+      pendingRewardRef.current = null;
+      toast((tToast) => (
+        <div style={{ textAlign: 'center', padding: '5px' }}>
+          <div style={{ fontSize: '30px', marginBottom: '5px' }}>📱</div>
+          <div style={{ fontSize: '16px', marginBottom: '10px', color: '#FFD700' }}>
+            <b>{t[langRef.current]?.errAppOnly || 'Chỉ dành cho Ứng dụng!'}</b>
+          </div>
+          <div style={{ fontSize: '14px', marginBottom: '15px', color: '#ccc' }}>
+            {t[langRef.current]?.errAppOnlyDesc || 'Vui lòng tải App để xem quảng cáo nhận thưởng.'}
+          </div>
+          <button 
+            onClick={() => {
+              window.open("https://play.google.com/store/apps/details?id=com.ban.astrocat", "_blank"); 
+              toast.dismiss(tToast.id);
+            }}
+            style={{ background: '#2ed573', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer', width: '100%', fontFamily: "'VT323', monospace" }}
+          >
+            {t[langRef.current]?.downloadAppNow || 'Tải App Ngay'}
+          </button>
+        </div>
+      ), { duration: 6000, style: { background: '#1a1a2e', border: '2px solid #2ed573' } });
       return;
     }
 
@@ -2190,36 +2211,36 @@ useEffect(() => {
     }
   };
 
-  const runFakeAd = (rewardType) => {
-    setWebAd({ isPlaying: true, type: rewardType });
-  };
+  // const runFakeAd = (rewardType) => {
+  //   setWebAd({ isPlaying: true, type: rewardType });
+  // };
 
-  const handleWebAdComplete = () => {
-    const rewardType = webAd.type;
-    setWebAd({ isPlaying: false, type: null });
-    setIsWatchingAd(false);
+  // const handleWebAdComplete = () => {
+  //   const rewardType = webAd.type;
+  //   setWebAd({ isPlaying: false, type: null });
+  //   setIsWatchingAd(false);
 
-    if (rewardType === 'coin') {
-      gsRef.current.coins += 50; 
-      gsRef.current.hourlyCoinCount += 1; // Tăng đếm giờ
-      setUIUpdates(prev => ({ ...prev, coins: gsRef.current.coins }));
-      toast.success(t[langRef.current]?.rewardCoin);
-    } else if (rewardType === 'life') {
-      gsRef.current.lives += 1;  
-      setUIUpdates(prev => ({ ...prev, lives: gsRef.current.lives }));
-      toast.success(t[langRef.current]?.rewardLife);
-    }
+  //   if (rewardType === 'coin') {
+  //     gsRef.current.coins += 50; 
+  //     gsRef.current.hourlyCoinCount += 1; // Tăng đếm giờ
+  //     setUIUpdates(prev => ({ ...prev, coins: gsRef.current.coins }));
+  //     toast.success(t[langRef.current]?.rewardCoin);
+  //   } else if (rewardType === 'life') {
+  //     gsRef.current.lives += 1;  
+  //     setUIUpdates(prev => ({ ...prev, lives: gsRef.current.lives }));
+  //     toast.success(t[langRef.current]?.rewardLife);
+  //   }
     
-    if (currentUser) saveUserProfile(); 
-    pendingRewardRef.current = null;
-  };
+  //   if (currentUser) saveUserProfile(); 
+  //   pendingRewardRef.current = null;
+  // };
 
-  const handleWebAdClose = () => {
-    setWebAd({ isPlaying: false, type: null });
-    setIsWatchingAd(false);
-    pendingRewardRef.current = null;
-    toast.error(t[langRef.current]?.errAdIncomplete);
-  };
+  // const handleWebAdClose = () => {
+  //   setWebAd({ isPlaying: false, type: null });
+  //   setIsWatchingAd(false);
+  //   pendingRewardRef.current = null;
+  //   toast.error(t[langRef.current]?.errAdIncomplete);
+  // };
   // ==========================================
   // BỘ ĐẾM NGƯỢC THỜI GIAN HỒI MẠNG (CHẠY NGẦM & OFFLINE)
   // ==========================================
@@ -2420,48 +2441,45 @@ useEffect(() => {
         />
       )}
       {/* --- GIAO DIỆN QUẢNG CÁO WEB (VIDEO MẪU) --- */}
-      {webAd.isPlaying && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-          backgroundColor: '#000', zIndex: 9999, display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center'
-        }}>
-          {/* Nút Đóng */}
-          <button 
-            onClick={handleWebAdClose}
-            style={{
-              position: 'absolute', top: '20px', right: '20px', padding: '10px 20px',
-              backgroundColor: 'rgba(255,255,255,0.2)', color: '#fff', border: '2px solid #fff',
-              borderRadius: '8px', fontSize: '18px', cursor: 'pointer', zIndex: 10000,
-              fontFamily: "'VT323', monospace"
-            }}
-          >
-            {t[lang]?.closeBtn}
-          </button>
+      {/*webAd.isPlaying && (
+        // <div style={{
+        //   position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+        //   backgroundColor: '#000', zIndex: 9999, display: 'flex', flexDirection: 'column',
+        //   alignItems: 'center', justifyContent: 'center'
+        // }}>
+        //   <button 
+        //     onClick={handleWebAdClose}
+        //     style={{
+        //       position: 'absolute', top: '20px', right: '20px', padding: '10px 20px',
+        //       backgroundColor: 'rgba(255,255,255,0.2)', color: '#fff', border: '2px solid #fff',
+        //       borderRadius: '8px', fontSize: '18px', cursor: 'pointer', zIndex: 10000,
+        //       fontFamily: "'VT323', monospace"
+        //     }}
+        //   >
+        //     {t[lang]?.closeBtn}
+        //   </button>
 
-          <p style={{ 
-            color: '#FFD700', 
-            marginBottom: '15px', 
-            fontSize: 'clamp(16px, 5vw, 24px)', /* Chữ tự co giãn từ 16px đến 24px tùy màn hình */
-            fontFamily: "'VT323', monospace",
-            textAlign: 'center', /* Ép chữ luôn nằm giữa dù bị rớt dòng */
-            padding: '0 15px'    /* Tránh chữ dính sát lề điện thoại */
-          }}>
-            {t[lang]?.adPlaying}<br/>({t[lang]?.adCompleteToEarn})
-          </p>
-
-          {/* Trình phát Video Mẫu (10 giây) */}
-          <video 
-            src="https://www.w3schools.com/html/mov_bbb.mp4" 
-            autoPlay 
-            playsInline
-            onEnded={handleWebAdComplete} 
-            style={{ width: '90%', maxWidth: '700px', borderRadius: '12px', border: '4px solid #333', boxShadow: '0 0 20px rgba(0,255,255,0.3)' }}
-          >
-            {t[lang]?.videoNotSupported || "Trình duyệt của bạn không hỗ trợ video."}
-          </video>
-        </div>
-      )}
+        //   <p style={{ 
+        //     color: '#FFD700', 
+        //     marginBottom: '15px', 
+        //     fontSize: 'clamp(16px, 5vw, 24px)', /* Chữ tự co giãn từ 16px đến 24px tùy màn hình */
+        //     fontFamily: "'VT323', monospace",
+        //     textAlign: 'center', /* Ép chữ luôn nằm giữa dù bị rớt dòng */
+        //     padding: '0 15px'    /* Tránh chữ dính sát lề điện thoại */
+        //   }}>
+        //     {t[lang]?.adPlaying}<br/>({t[lang]?.adCompleteToEarn})
+        //   </p>
+        //   <video 
+        //     src="https://www.w3schools.com/html/mov_bbb.mp4" 
+        //     autoPlay 
+        //     playsInline
+        //     onEnded={handleWebAdComplete} 
+        //     style={{ width: '90%', maxWidth: '700px', borderRadius: '12px', border: '4px solid #333', boxShadow: '0 0 20px rgba(0,255,255,0.3)' }}
+        //   >
+        //     {t[lang]?.videoNotSupported || "Trình duyệt của bạn không hỗ trợ video."}
+        //   </video>
+        // </div>
+      /*)}*/}
       <Toaster 
         position="top-center" 
         reverseOrder={false} 
