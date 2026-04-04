@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import { Capacitor } from '@capacitor/core';
 import { t } from '../utils/translations';
 
-export default function Menu({ currentUser, uiUpdates, topRecords, startGame, setScreen, loginWithGoogle, loginWithApple, logout, openShop, openLeaderboard, lang, toggleLanguage}) {
+export default function Menu({ currentUser, uiUpdates, topRecords, startGame, setScreen, loginWithGoogle, loginWithApple, logout, deleteAccount, openShop, openLeaderboard, lang, toggleLanguage}) {
   const text = t[lang];
   const platform = Capacitor.getPlatform();
   
@@ -25,13 +25,24 @@ export default function Menu({ currentUser, uiUpdates, topRecords, startGame, se
         </button>
 
         {currentUser ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.6)', padding: '5px 10px', borderRadius: '50px', border: '2px solid #55efc4', pointerEvents: 'auto', width: '100%' }}>
-            <img src={currentUser.photoURL} alt="avatar" style={{ width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0 }} referrerPolicy="no-referrer" />
-            <span style={{ color: '#fff', fontSize: '18px', fontFamily: "'VT323', monospace", whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
-              {currentUser.displayName}
-            </span>
-            <button onClick={logout} style={{ background: '#ff4757', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', padding: '2px 8px', fontFamily: "'VT323', monospace", flexShrink: 0 }}>
-              {text.logout}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', width: '100%', alignItems: 'flex-end' }}>
+            {/* Thanh User & Logout cũ */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.6)', padding: '5px 10px', borderRadius: '50px', border: '2px solid #55efc4', pointerEvents: 'auto', width: '100%' }}>
+              <img src={currentUser.photoURL} alt="avatar" style={{ width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0 }} referrerPolicy="no-referrer" />
+              <span style={{ color: '#fff', fontSize: '18px', fontFamily: "'VT323', monospace", whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
+                {currentUser.displayName}
+              </span>
+              <button onClick={logout} style={{ background: '#ff4757', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', padding: '2px 8px', fontFamily: "'VT323', monospace", flexShrink: 0 }}>
+                {text.logout}
+              </button>
+            </div>
+            
+            {/* NÚT XÓA TÀI KHOẢN MỚI */}
+            <button 
+              onClick={deleteAccount} 
+              style={{ background: 'transparent', color: '#ff4757', border: 'none', textDecoration: 'underline', fontSize: '14px', cursor: 'pointer', fontFamily: "'VT323', monospace", pointerEvents: 'auto', paddingRight: '10px' }}
+            >
+              {lang === 'vi' ? 'Xóa tài khoản' : 'Delete Account'}
             </button>
           </div>
         ) : (
