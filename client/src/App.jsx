@@ -597,6 +597,10 @@ useEffect(() => {
           // Format thông báo lỗi điểm thấp hơn kỷ lục cũ
           const msg = t[lang]?.errScoreNotBeaten || `❌ Điểm ván này (${scoreToSend}) chưa vượt qua Kỷ lục cũ (${snap.data().score}) của bạn!`;
           toast.error(msg.replace('(${scoreToSend})', `(${scoreToSend})`).replace('(${snap.data().score})', `(${snap.data().score})`));
+          
+          if (mode === 'pvp') {
+            setTimeout(() => openLeaderboard(mode), 1500); // Đợi 1.5s cho người chơi đọc dòng chữ Win/Lose rồi mới chuyển
+          }
         }
         return false; 
       }
