@@ -1,4 +1,4 @@
-import React from 'react';
+import React , { useState } from 'react';
 import toast from 'react-hot-toast';
 import { Capacitor } from '@capacitor/core';
 import { t } from '../utils/translations';
@@ -6,9 +6,23 @@ import { t } from '../utils/translations';
 export default function Menu({ currentUser, uiUpdates, topRecords, startGame, setScreen, loginWithGoogle, loginWithApple, logout, deleteAccount, openShop, openLeaderboard, lang, toggleLanguage}) {
   const text = t[lang];
   const platform = Capacitor.getPlatform();
-  
+  const [showHelp, setShowHelp] = useState(false);
   return (
     <div className="ui-layer">
+      {/* NÚT HƯỚNG DẪN (?) GÓC TRÊN BÊN TRÁI */}
+      <button 
+        onClick={() => setShowHelp(true)}
+        style={{ 
+          position: 'absolute', top: '15px', left: '15px', zIndex: 100,
+          width: '40px', height: '40px', borderRadius: '50%',
+          background: 'rgba(0,0,0,0.6)', color: '#0abde3',
+          border: '2px solid #0abde3', fontSize: '24px',
+          fontWeight: 'bold', cursor: 'pointer', fontFamily: "'VT323', monospace",
+          pointerEvents: 'auto', boxShadow: '0 0 10px rgba(10, 189, 227, 0.4)'
+        }}
+      >
+        ?
+      </button>
       {/* KHU VỰC GÓC TRÊN BÊN PHẢI: Chứa User, Nút Thoát và Nút Đổi Ngôn Ngữ */}
       <div style={{ position: 'absolute', top: '15px', right: '15px', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '10px', zIndex: 100, maxWidth: '55vw' }}>
         
@@ -74,6 +88,7 @@ export default function Menu({ currentUser, uiUpdates, topRecords, startGame, se
         }}>
           {/* Box hiển thị Xu */}
           <div className="hud-item coin-box" style={{ 
+            marginTop: '45px',
             background: 'rgba(0,0,0,0.7)', padding: '5px 12px', borderRadius: '12px', 
             color: '#FFD700', fontSize: 'clamp(18px, 4vw, 24px)', border: '2px solid #FFD700', 
             display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 0 10px rgba(255, 215, 0, 0.2)',
@@ -138,6 +153,75 @@ export default function Menu({ currentUser, uiUpdates, topRecords, startGame, se
         <div style={{ marginBottom: '8px', color: '#fff' }}>{text.topSingle} <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{topRecords.single}</span></div>
         <div style={{ color: '#fff' }}>{text.topPvP} <span style={{ color: '#00FFFF', fontWeight: 'bold' }}>{topRecords.pvp}</span></div>
       </div>
+      {/* ========================================= */}
+      {/* POPUP HƯỚNG DẪN CƠ CHẾ GAME               */}
+      {/* ========================================= */}
+      {showHelp && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+          background: 'rgba(0,0,0,0.85)', display: 'flex', justifyContent: 'center',
+          alignItems: 'center', zIndex: 9999, pointerEvents: 'auto', backdropFilter: 'blur(3px)'
+        }}>
+           <div style={{
+             width: '90%', maxWidth: '500px', background: '#0a192f',
+             border: '3px solid #0abde3', borderRadius: '15px',
+             padding: '20px', display: 'flex', flexDirection: 'column',
+             maxHeight: '80vh', boxShadow: '0 0 25px rgba(10, 189, 227, 0.5)'
+           }}>
+              {/* Header của Bảng */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #1a365d', paddingBottom: '10px', marginBottom: '15px', flexShrink: 0 }}>
+                <div style={{ fontSize: 'clamp(24px, 6vw, 30px)', color: '#0abde3', fontWeight: 'bold', textShadow: '2px 2px 0 #000' }}>
+                  {lang === 'vi' ? 'HƯỚNG DẪN TÂN THỦ' : 'HOW TO PLAY'}
+                </div>
+                <button onClick={() => setShowHelp(false)} style={{ background: '#ff4757', color: '#fff', border: '2px solid #fff', borderRadius: '50%', width: '35px', height: '35px', fontSize: '18px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', boxShadow: '0 2px 5px rgba(255,71,87,0.5)' }}>
+                  ✕
+                </button>
+              </div>
+
+              {/* Nội dung cuộn */}
+              <div className="scrollable-layer" style={{ overflowY: 'auto', color: '#fff', fontSize: 'clamp(16px, 4vw, 20px)', textAlign: 'left', lineHeight: '1.4', paddingRight: '10px' }}>
+                
+                <div style={{ marginBottom: '15px', background: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: '8px' }}>
+                   <div style={{ color: '#FFD700', fontSize: '24px', marginBottom: '5px', fontWeight: 'bold' }}>🎮 {lang === 'vi' ? 'Cách Chơi' : 'Controls'}</div>
+                   <div>{lang === 'vi' ? '- Chạm vào màn hình hoặc bấm phím SPACE để nhảy.' : '- Tap screen or press SPACE to jump.'}</div>
+                   <div>{lang === 'vi' ? '- Né các Cột năng lượng để sống sót và ghi điểm.' : '- Avoid Energy Pipes to survive and score.'}</div>
+                </div>
+
+                <div style={{ marginBottom: '15px', background: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: '8px' }}>
+                   <div style={{ color: '#FFD700', fontSize: '24px', marginBottom: '10px', fontWeight: 'bold' }}>🎒 {lang === 'vi' ? 'Vật Phẩm (Rơi ngẫu nhiên)' : 'Items (Random Drops)'}</div>
+                   
+                   <div style={{ display: 'flex', gap: '10px', marginBottom: '12px', alignItems: 'flex-start' }}>
+                     <span style={{ fontSize: '28px', lineHeight: '1' }}>🪙</span>
+                     <div>
+                       <b style={{ color: '#FFD700' }}>{lang === 'vi' ? 'Đồng Xu:' : 'Coins:'}</b> {lang === 'vi' ? 'Dùng để mua Skin mèo, Bản đồ mới và mua Mạng tại Cửa Hàng. Có thể cày cuốc trong trận hoặc Xem quảng cáo để nhận.' : 'Used to buy Skins, Maps, and Lives in the Shop. Farm in-game or watch Ads.'}
+                     </div>
+                   </div>
+                   
+                   <div style={{ display: 'flex', gap: '10px', marginBottom: '12px', alignItems: 'flex-start' }}>
+                     <span style={{ fontSize: '28px', lineHeight: '1' }}>🛡️</span>
+                     <div>
+                       <b style={{ color: '#00FFFF' }}>{lang === 'vi' ? 'Khiên Năng Lượng:' : 'Energy Shield:'}</b> {lang === 'vi' ? 'Giúp mèo Bất Tử trong vài giây. Tự do đâm xuyên qua các cột chướng ngại vật.' : 'Grants Invincibility for a few seconds. Crash through pipes safely.'}
+                     </div>
+                   </div>
+                   
+                   <div style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'flex-start' }}>
+                     <span style={{ fontSize: '28px', lineHeight: '1' }}>⭐</span>
+                     <div>
+                       <b style={{ color: '#2ed573' }}>{lang === 'vi' ? 'Ngôi Sao:' : 'Star:'}</b> {lang === 'vi' ? 'Lập tức cộng ngay 5 ĐIỂM vào thành tích của bạn.' : 'Instantly adds +5 POINTS to your score.'}
+                     </div>
+                   </div>
+                </div>
+
+                <div style={{ marginBottom: '5px', background: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: '8px' }}>
+                   <div style={{ color: '#ff4757', fontSize: '24px', marginBottom: '5px', fontWeight: 'bold' }}>❤️ {lang === 'vi' ? 'Mạng (Lives)' : 'Lives'}</div>
+                   <div style={{ marginBottom: '5px' }}>{lang === 'vi' ? '- Mỗi lần chết mất 1 mạng. Hệ thống tự hồi 1 mạng sau mỗi 2 Tiếng.' : '- Lose 1 life per death. Auto-regenerates 1 life every 2 hours.'}</div>
+                   <div>{lang === 'vi' ? '- Nếu hết mạng, bạn có thể vào Cửa Hàng mua bằng Xu, xem Quảng cáo để lấy mạng, hoặc Mua Gói VIP để BẤT TỬ MẠNG vĩnh viễn.' : '- If out of lives, buy with Coins, watch Ads, or buy VIP for INFINITE lives.'}</div>
+                </div>
+                
+              </div>
+           </div>
+        </div>
+      )}
     </div>
   );
 }
