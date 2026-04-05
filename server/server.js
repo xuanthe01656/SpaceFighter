@@ -198,7 +198,72 @@ io.on('connection', (socket) => {
     io.to(roomCode).emit('game-start', { players: room.players });
     console.log(`🎮 Player ${playerName} joined room ${roomCode}`);
   });
+// ĐẤU NGẪU NHIÊN (Random Matchmaking)
+  socket.on('join-random', (playerData) => {
+    let foundRoom = null;
+    
+    // 1. Quét tìm phòng ngẫu nhiên đang chờ người
+    for (const [roomCode, room] of rooms.entries()) {
+      if (room.status === 'waiting' && room.isRandom && room.players.length === 1) {
+        foundRoom = room;
+        break;
+      }
+    }
 
+    if (foundRoom) {
+      // 2. TÌM THẤY -> Ghép vào phòng và bắt đầu game
+      socket.join(foundRoom.code);
+      foundRoom.players.push({
+        id: socket.id,
+        name: playerData.name,
+        score: 0,
+        isDead: false,
+        isHost: false,
+        lastScoreUpdate: Date.now()
+      });
+      foundRoom.status = 'playing';
+      
+      playerSockets.set(socket.id, {
+        ...playerSockets.get(socket.id),
+        roomCode: foundRoom.code,
+        isHost: false
+      });
+      
+      io.to(foundRoom.code).emit('game-start', { players: foundRoom.players });
+      console.log(`🌍 Random Match: ${playerData.name} joined ${foundRoom.code}`);
+      
+    } else {
+      // 3. KHÔNG TÌM THẤY -> Tạo phòng ngẫu nhiên mới và chờ
+      const roomCode = 'RND-' + Math.floor(1000 + Math.random() * 9000).toString();
+      socket.join(roomCode);
+      
+      const room = {
+        code: roomCode,
+        createdAt: Date.now(),
+        host: socket.id,
+        isRandom: true, // Cờ đánh dấu đây là phòng mở cho cộng đồng
+        players: [{
+          id: socket.id,
+          name: playerData.name,
+          score: 0,
+          isDead: false,
+          isHost: true,
+          lastScoreUpdate: Date.now()
+        }],
+        status: 'waiting'
+      };
+      
+      rooms.set(roomCode, room);
+      playerSockets.set(socket.id, {
+        ...playerSockets.get(socket.id),
+        roomCode: roomCode,
+        isHost: true
+      });
+      
+      socket.emit('waiting-random');
+      console.log(`🌍 Random Room created: ${roomCode} by ${playerData.name}`);
+    }
+  });
   // Gộp chung xử lý trạng thái game vào game-update
   socket.on('game-update', (data) => {
     const playerData = playerSockets.get(socket.id);
@@ -251,7 +316,20 @@ io.on('connection', (socket) => {
       console.log(`🏁 Game finished in room ${roomCode} - Cả 2 đã chết.`);
     }
   });
-
+  // Rời phòng / Hủy tìm trận ngẫu nhiên
+  socket.on('leave-room', () => {
+    const playerData = playerSockets.get(socket.id);
+    if (playerData && playerData.roomCode) {
+      const room = rooms.get(playerData.roomCode);
+      // Nếu phòng đang chờ ghép cặp thì xóa luôn phòng đó
+      if (room && room.status === 'waiting') {
+        rooms.delete(playerData.roomCode);
+        console.log(`🚫 Đã hủy phòng chờ: ${playerData.roomCode}`);
+      }
+      socket.leave(playerData.roomCode);
+      playerSockets.set(socket.id, { ...playerData, roomCode: null, isHost: false });
+    }
+  });
   // Disconnect handling
   socket.on('disconnect', () => {
     const playerData = playerSockets.get(socket.id);

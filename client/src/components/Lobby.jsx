@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { t } from '../utils/translations';
-export default function Lobby({ lobbyState, setLobbyState, currentUser, gsRef, createRoom, joinRoom, setScreen, lang }) {
+export default function Lobby({ lobbyState, setLobbyState, currentUser, gsRef, createRoom, joinRoom, joinRandom, leaveLobby, setScreen, lang }) {
   const text = t[lang] || t['vi'];
 
   const [playerName, setPlayerName] = useState(() => {
@@ -27,8 +27,14 @@ export default function Lobby({ lobbyState, setLobbyState, currentUser, gsRef, c
           <div style={{ fontSize: 'clamp(24px, 8vw, 40px)', color: '#a55eea', fontWeight: 'bold', textShadow: '2px 2px 0 #000', fontFamily: "'VT323', monospace", margin: 0 }}>
             {text.lobbyTitle}
           </div>
-          <button onClick={() => {setScreen('menu');setLobbyState('main'); gsRef.current.roomCode = null;
+          {/* <button onClick={() => {setScreen('menu');setLobbyState('main'); gsRef.current.roomCode = null;
             }} style={{ 
+            width: '40px', height: '40px', background: '#ff4757', color: '#fff', 
+            border: '2px solid #fff', borderRadius: '50%', fontSize: '20px', fontWeight: 'bold', 
+            cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', 
+            boxShadow: '0 4px 10px rgba(255, 71, 87, 0.4)', transition: '0.2s' 
+          }}>✕</button> */}
+          <button onClick={leaveLobby} style={{ 
             width: '40px', height: '40px', background: '#ff4757', color: '#fff', 
             border: '2px solid #fff', borderRadius: '50%', fontSize: '20px', fontWeight: 'bold', 
             cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', 
@@ -47,6 +53,16 @@ export default function Lobby({ lobbyState, setLobbyState, currentUser, gsRef, c
                 onChange={(e) => setPlayerName(e.target.value)}
                 style={{ width: '90%', padding: '10px', fontFamily: "'VT323', monospace", fontSize: 'clamp(18px, 5vw, 24px)', textAlign: 'center', borderRadius: '8px', border: '2px solid #FFD700', background: 'rgba(0,0,0,0.5)', color: '#fff', outline: 'none', marginBottom: '15px' }} 
               />
+              {/* NÚT TÌM TRẬN NGẪU NHIÊN */}
+              <button className="btn btn-green" onClick={() => joinRandom(playerName.trim())} style={{ width: '90%', marginBottom: '10px' }}>
+                {lang === 'vi' ? '🌍 ĐẤU NGẪU NHIÊN' : '🌍 RANDOM MATCH'}
+              </button>
+
+              <div style={{ display: 'flex', alignItems: 'center', width: '90%', margin: '10px auto', gap: '10px' }}>
+                <div style={{ flex: 1, height: '1px', background: '#555' }}></div>
+                <div style={{ color: '#aaa', fontSize: '16px' }}>HOẶC</div>
+                <div style={{ flex: 1, height: '1px', background: '#555' }}></div>
+              </div>
               <button className="btn btn-blue" onClick={() => createRoom(playerName.trim())} style={{ width: '90%', marginBottom: '10px' }}>
                 {text.createNewRoom}
               </button>
@@ -74,6 +90,21 @@ export default function Lobby({ lobbyState, setLobbyState, currentUser, gsRef, c
                 {gsRef.current.roomCode || '----'}
               </div>
               <div style={{ color: '#2ed573', fontSize: 'clamp(14px, 4vw, 18px)', animation: 'blink 1.5s infinite' }}>{text.waitingForOpponent}</div>
+            </div>
+          )}
+          {/* MÀN HÌNH TÌM KIẾM ĐỐI THỦ NGẪU NHIÊN */}
+          {lobbyState === 'finding' && (
+            <div id="lobbyFinding" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0' }}>
+              <div className="subtitle" style={{ fontSize: 'clamp(20px, 6vw, 28px)', marginBottom: '20px', color: '#0abde3', fontWeight: 'bold' }}>
+                {lang === 'vi' ? 'ĐANG DÒ TÌM ĐỐI THỦ...' : 'FINDING OPPONENT...'}
+              </div>
+              
+              {/* Icon Radar xoay / nhấp nháy */}
+              <div style={{ fontSize: '60px', animation: 'pulseText 1s infinite' }}>📡</div>
+              
+              <div style={{ color: '#2ed573', fontSize: 'clamp(14px, 4vw, 18px)', marginTop: '20px', animation: 'blink 1.5s infinite' }}>
+                {lang === 'vi' ? 'Vui lòng giữ màn hình sáng...' : 'Please keep the screen on...'}
+              </div>
             </div>
           )}
         </div>

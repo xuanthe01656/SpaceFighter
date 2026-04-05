@@ -81,6 +81,7 @@ export default function Game() {
   const [levelUpEffect, setLevelUpEffect] = useState(false);
   const [countdown, setCountdown] = useState(null);
   const countdownTimerRef = useRef(null);
+  const findMatchTimeoutRef = useRef(null);
   // const [frameCount, setFrameCount] = useState(0);
   const [uiUpdates, setUIUpdates] = useState({ score: 0, level: 1, isVIP: false });
   const [currentUser, setCurrentUser] = useState(null);
@@ -292,6 +293,7 @@ useEffect(() => {
     });
 
     socketRef.current.on('game-start', (data) => {
+      if (findMatchTimeoutRef.current) clearTimeout(findMatchTimeoutRef.current);
       const opponent = data.players.find(p => p.id !== socketRef.current.id);
       if (opponent) gsRef.current.remoteName = opponent.name;
       startGame('online');
@@ -730,7 +732,13 @@ useEffect(() => {
     fetchTop('single', 'single');
     fetchTop('pvp', 'pvp');
   };
- 
+  const leaveLobby = () => {
+    if (findMatchTimeoutRef.current) clearTimeout(findMatchTimeoutRef.current);
+    socketRef.current.emit('leave-room'); // Báo cho server xóa phòng
+    setScreen('menu');
+    setLobbyState('main');
+    gsRef.current.roomCode = null;
+  };
   const createRoom = (playerName) => {
     // 1. Kiểm tra đăng nhập
     if (!currentUser) return toast.error(t[lang]?.reqLogin || 'Vui lòng đăng nhập!');
@@ -776,7 +784,26 @@ useEffect(() => {
       playerName: playerName
     });
   };
+  const joinRandom = (playerName) => {
+    if (!currentUser) return toast.error(t[lang]?.reqLogin || 'Vui lòng đăng nhập!');
+    if (!playerName || playerName.length < 2) {
+      toast.error(t[lang]?.reqName || 'Vui lòng nhập tên (ít nhất 2 ký tự)!');
+      return;
+    }
+    
+    gsRef.current.myName = playerName;
+    secureStorage.setItem('astro_custom_name', playerName);
+    setLobbyState('finding'); 
+    
+    socketRef.current.emit('join-random', { name: playerName });
 
+    // CƠ CHẾ TIMEOUT 2 PHÚT
+    if (findMatchTimeoutRef.current) clearTimeout(findMatchTimeoutRef.current);
+    findMatchTimeoutRef.current = setTimeout(() => {
+      leaveLobby(); // Tự động thoát ra Menu và báo cho Server xóa phòng
+      toast.error(lang === 'vi' ? '⏱️ Không tìm thấy đối thủ, vui lòng thử lại!' : '⏱️ Matchmaking timeout. Try again!', { duration: 4000 });
+    }, 120000); 
+  };
   const openShop = () => {
     setScreen('shop');
   };
@@ -2460,6 +2487,8 @@ useEffect(() => {
           gsRef={gsRef} 
           createRoom={createRoom} 
           joinRoom={joinRoom} 
+          joinRandom={joinRandom}
+          leaveLobby={leaveLobby}
           setScreen={setScreen} 
           lang={lang}
         />
