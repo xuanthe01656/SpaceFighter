@@ -53,6 +53,11 @@ export default function Lobby({ lobbyState, setLobbyState, currentUser, gsRef, c
                 onChange={(e) => setPlayerName(e.target.value)}
                 style={{ width: '90%', padding: '10px', fontFamily: "'VT323', monospace", fontSize: 'clamp(18px, 5vw, 24px)', textAlign: 'center', borderRadius: '8px', border: '2px solid #FFD700', background: 'rgba(0,0,0,0.5)', color: '#fff', outline: 'none', marginBottom: '15px' }} 
               />
+              <div style={{ display: 'flex', alignItems: 'center', width: '90%', margin: '10px auto', gap: '10px' }}>
+                <div style={{ flex: 1, height: '1px', background: '#555' }}></div>
+                <div style={{ color: '#aaa', fontSize: '16px' }}>{lang === 'vi' ? 'CHỌN CHẾ ĐỘ CHƠI' : 'SELECT MODE'}</div>
+                <div style={{ flex: 1, height: '1px', background: '#555' }}></div>
+              </div>
               {/* NÚT TÌM TRẬN NGẪU NHIÊN */}
               <button className="btn btn-green" onClick={() => joinRandom(playerName.trim())} style={{ width: '90%', marginBottom: '10px' }}>
                 {lang === 'vi' ? '🌍 ĐẤU NGẪU NHIÊN' : '🌍 RANDOM MATCH'}
@@ -60,12 +65,17 @@ export default function Lobby({ lobbyState, setLobbyState, currentUser, gsRef, c
 
               <div style={{ display: 'flex', alignItems: 'center', width: '90%', margin: '10px auto', gap: '10px' }}>
                 <div style={{ flex: 1, height: '1px', background: '#555' }}></div>
-                <div style={{ color: '#aaa', fontSize: '16px' }}>HOẶC</div>
+                <div style={{ color: '#aaa', fontSize: '16px' }}>{lang === 'vi' ? 'HOẶC' : 'OR'}</div>
                 <div style={{ flex: 1, height: '1px', background: '#555' }}></div>
               </div>
               <button className="btn btn-blue" onClick={() => createRoom(playerName.trim())} style={{ width: '90%', marginBottom: '10px' }}>
                 {text.createNewRoom}
               </button>
+              <div style={{ display: 'flex', alignItems: 'center', width: '90%', margin: '10px auto', gap: '10px' }}>
+                <div style={{ flex: 1, height: '1px', background: '#555' }}></div>
+                <div style={{ color: '#aaa', fontSize: '16px' }}>{lang === 'vi' ? 'HOẶC NHẬP MÃ PHÒNG' : 'OR ENTER ROOM CODE'}</div>
+                <div style={{ flex: 1, height: '1px', background: '#555' }}></div>
+              </div>
               <div style={{ display: 'flex', width: '90%', gap: '10px', margin: '0 auto' }}>
                 <input 
                   type="text" 
