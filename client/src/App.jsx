@@ -1594,7 +1594,7 @@ useEffect(() => {
 
     const handleTouchOrMouse = (e) => {
       // THÊM '.leaderboard-scroll' VÀO ĐÂY ĐỂ CHO PHÉP VUỐT CUỘN
-      if (e.target && e.target.closest && e.target.closest('button, .btn, .shop-item, .control-btn, input, .tab-btn, .leaderboard-scroll')) {
+      if (e.target && e.target.closest && e.target.closest('button, .btn, .shop-item, .control-btn, input, .tab-btn, .leaderboard-scroll, .scrollable-layer')) {
         return;
       }
       if (e.type === 'touchstart' && e.cancelable) {

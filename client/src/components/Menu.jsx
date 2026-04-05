@@ -13,7 +13,7 @@ export default function Menu({ currentUser, uiUpdates, topRecords, startGame, se
       <button 
         onClick={() => setShowHelp(true)}
         style={{ 
-          position: 'absolute', top: '15px', left: '15px', zIndex: 100,
+          position: 'absolute', top: '15px', left: '15px', zIndex: 150,
           width: '40px', height: '40px', borderRadius: '50%',
           background: 'rgba(0,0,0,0.6)', color: '#0abde3',
           border: '2px solid #0abde3', fontSize: '24px',
@@ -83,7 +83,7 @@ export default function Menu({ currentUser, uiUpdates, topRecords, startGame, se
           display: 'flex', 
           flexDirection: 'column', 
           gap: '8px', 
-          pointerEvents: 'auto',
+          pointerEvents: 'none',
           zIndex: 100 
         }}>
           {/* Box hiển thị Xu */}
@@ -119,40 +119,56 @@ export default function Menu({ currentUser, uiUpdates, topRecords, startGame, se
         </div>
       )}
 
-      <div className="title">ASTRO CAT 5</div>
-      <div className="subtitle">Ultimate Online</div>
+      {/* --- KHU VỰC NỘI DUNG CHÍNH (TỰ ĐỘNG CUỘN NẾU MÀN HÌNH QUÁ NGẮN) --- */}
+        <div className="scrollable-layer" style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start',
+          width: '100%', height: '100%', pointerEvents: 'auto', overflowY: 'auto',
+          paddingTop: 'clamp(140px, 22vh, 180px)', paddingBottom: '30px', boxSizing: 'border-box'
+        }}>
+          
+          {/* Lệnh marginTop: 'auto' giúp tự động đẩy cả cụm này xuống giữa màn hình nếu màn hình dài */}
+          <div className="title" style={{ marginTop: 'auto', fontSize: 'clamp(45px, 10vw, 70px)' }}>ASTRO CAT 5</div>
+          <div className="subtitle" style={{ fontSize: 'clamp(16px, 4vw, 24px)', marginBottom: 'clamp(15px, 3vh, 30px)' }}>Ultimate Online</div>
 
-      <div className="menu-grid">
-        <button className="btn btn-red" onClick={() => startGame('single')}>{text.playSingle}</button>
-        <button className="btn btn-purple" onClick={() => {
-          if (!currentUser) {
-            toast.error(text.loginReqPvP, { duration: 4000 });
-            return;
-          }
-          setScreen('lobby');
-        }}>{text.playOnline}</button>
-        <button className="btn btn-blue" onClick={openShop}>{text.shop}</button>
-        <button className="btn btn-green" onClick={() => openLeaderboard('single')}>{text.leaderboard}</button>
-        
-        {/* NÚT TẢI APP - CHỈ HIỂN THỊ TRÊN WEB */}
-        {!Capacitor.isNativePlatform() && (
-          <button 
-            className="btn" 
-            onClick={() => window.open("https://play.google.com/store/apps/details?id=com.ban.astrocat", "_blank")}
-            style={{ 
-              marginTop: '15px', background: 'linear-gradient(45deg, #2ed573, #7bed9f)', 
-              color: '#000', border: '2px solid #fff', boxShadow: '0 0 15px rgba(46, 213, 115, 0.5)'
-            }}
-          >
-            {text.downloadApp}
-          </button>
-        )}
-      </div>
+          <div className="menu-grid" style={{ marginBottom: '10px' }}>
+            <button className="btn btn-red" onClick={() => startGame('single')}>{text.playSingle}</button>
+            <button className="btn btn-purple" onClick={() => {
+              if (!currentUser) {
+                toast.error(text.loginReqPvP, { duration: 4000 });
+                return;
+              }
+              setScreen('lobby');
+            }}>{text.playOnline}</button>
+            <button className="btn btn-blue" onClick={openShop}>{text.shop}</button>
+            <button className="btn btn-green" onClick={() => openLeaderboard('single')}>{text.leaderboard}</button>
+            
+            {/* NÚT TẢI APP - CHỈ HIỂN THỊ TRÊN WEB */}
+            {!Capacitor.isNativePlatform() && (
+              <button 
+                className="btn" 
+                onClick={() => window.open("https://play.google.com/store/apps/details?id=com.ban.astrocat", "_blank")}
+                style={{ 
+                  marginTop: 'clamp(5px, 2vh, 15px)', background: 'linear-gradient(45deg, #2ed573, #7bed9f)', 
+                  color: '#000', border: '2px solid #fff', boxShadow: '0 0 15px rgba(46, 213, 115, 0.5)'
+                }}
+              >
+                {text.downloadApp}
+              </button>
+            )}
+          </div>
 
-      <div style={{ marginTop: '60px', fontSize: '22px', textShadow: '2px 2px 4px #000', background: 'rgba(0,0,0,0.5)', padding: '15px', borderRadius: '10px', border: '1px solid #555' }}>
-        <div style={{ marginBottom: '8px', color: '#fff' }}>{text.topSingle} <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{topRecords.single}</span></div>
-        <div style={{ color: '#fff' }}>{text.topPvP} <span style={{ color: '#00FFFF', fontWeight: 'bold' }}>{topRecords.pvp}</span></div>
-      </div>
+          <div style={{ 
+            marginTop: 'clamp(20px, 4vh, 60px)', 
+            marginBottom: 'auto', // Giữ content ở giữa màn hình thay vì trôi tuột xuống đáy
+            fontSize: 'clamp(16px, 4vw, 22px)', textShadow: '2px 2px 4px #000', 
+            background: 'rgba(0,0,0,0.5)', padding: '15px', borderRadius: '10px', border: '1px solid #555',
+            width: '90%', maxWidth: '400px'
+          }}>
+            <div style={{ marginBottom: '8px', color: '#fff' }}>{text.topSingle} <span style={{ color: '#FFD700', fontWeight: 'bold' }}>{topRecords.single}</span></div>
+            <div style={{ color: '#fff' }}>{text.topPvP} <span style={{ color: '#00FFFF', fontWeight: 'bold' }}>{topRecords.pvp}</span></div>
+          </div>
+          
+        </div>
       {/* ========================================= */}
       {/* POPUP HƯỚNG DẪN CƠ CHẾ GAME               */}
       {/* ========================================= */}
