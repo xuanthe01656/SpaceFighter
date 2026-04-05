@@ -460,7 +460,7 @@ useEffect(() => {
     Sound.hit();
 
     // 1. XỬ LÝ ĐIỂM SỐ (Gộp lại một chỗ cho gọn)
-    if (gs.score > gs.bestScore) {
+    if (gs.gameMode === 'single' && gs.score > gs.bestScore) {
       gs.bestScore = gs.score;
       if (!currentUser) {
         secureStorage.setItem('astroCatBestScore', gs.bestScore);
@@ -564,14 +564,13 @@ useEffect(() => {
       scoreToSend = gs.score;
     } else {
       // --- FORMAT PVP STRING ĐỂ TỔNG HỢP 1 RANK DUY NHẤT ---
-      scoreToSend = gs.score; 
+      scoreToSend =Math.max(gs.score, gs.remoteScore); 
       
       const p1Name = gs.myName || 'Player';
       const p1Score = gs.score;
       const p2Name = gs.remoteName || 'Opponent';
       const p2Score = gs.remoteScore;
       
-      // Giữ nguyên logic format chuỗi để đảm bảo đồng bộ dữ liệu trên Firebase
       if (p1Score > p2Score) {
         name = `${p1Name} (${p1Score}) ⚔️ ${p2Name} (${p2Score})`;
       } else if (p2Score > p1Score) {
@@ -716,7 +715,7 @@ useEffect(() => {
           
           const displayText = mode === 'single'
                 ? `${name} - ${topData.score}`
-                : `${name} (${topData.score})`;
+                : `${name}`;
           setTopRecords(prev => ({ ...prev, [key]: displayText }));
         } else {
           // Thay 'Chưa có' bằng key trong từ điển
