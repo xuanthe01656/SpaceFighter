@@ -751,10 +751,15 @@ useEffect(() => {
   };
   const leaveLobby = () => {
     if (findMatchTimeoutRef.current) clearTimeout(findMatchTimeoutRef.current);
-    socketRef.current.emit('leave-room'); // Báo cho server xóa phòng
+    socketRef.current.emit('leave-room'); // Báo cho server ngắt kết nối phòng cũ
     setScreen('menu');
     setLobbyState('main');
     gsRef.current.roomCode = null;
+    
+    // DỌN SẠCH TÀN DƯ CỦA PHÒNG CŨ (Sửa lỗi kẹt phòng chờ)
+    setRoomPlayers([]);
+    setChatMessages([]);
+    setLobbyCountdownText(null);
   };
   const createRoom = (playerName) => {
     // 1. Kiểm tra đăng nhập
@@ -2558,6 +2563,7 @@ useEffect(() => {
           setLobbyState={setLobbyState}
           saveUserProfile={saveUserProfile}
           startGame={startGame}
+          leaveLobby={leaveLobby}
         />
       )}
 

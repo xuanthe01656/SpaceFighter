@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { t } from '../utils/translations'; // 1. Nhúng từ điển
 
-export default function GameOver({ gsRef, uiUpdates, currentUser, setScreen, submitScore, loginWithGoogle, lang, setLobbyState, startGame}) {
+export default function GameOver({ gsRef, uiUpdates, currentUser, setScreen, submitScore, loginWithGoogle, lang, setLobbyState, startGame, leaveLobby }) {
   // 2. Lấy bộ từ vựng theo ngôn ngữ hiện tại
   const text = t[lang] || t['vi'];
 
@@ -90,6 +90,7 @@ export default function GameOver({ gsRef, uiUpdates, currentUser, setScreen, sub
             } else {
               setScreen('menu');
               setLobbyState('main');
+              leaveLobby();
             }
           }} style={{ flex: 1, fontSize: '22px' }}>
             {text.playAgainBtn}
@@ -100,7 +101,8 @@ export default function GameOver({ gsRef, uiUpdates, currentUser, setScreen, sub
             gsRef.current.gameMode = 'single'; 
             gsRef.current.roomCode = null; 
             setLobbyState('main'); 
-            setScreen('menu'); 
+            setScreen('menu');
+            leaveLobby(); 
           }} style={{ flex: 1, fontSize: '22px' }}>
             {text.menuBtn}
           </button>
