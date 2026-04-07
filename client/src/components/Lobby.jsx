@@ -140,7 +140,7 @@ export default function Lobby({ lobbyState, setLobbyState, currentUser, gsRef, c
 
               {/* Khung Chat */}
               <div style={{ display: 'flex', flexDirection: 'column', height: '180px', background: 'rgba(0,0,0,0.6)', borderRadius: '10px', border: '1px solid #444', overflow: 'hidden' }}>
-                <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                <div className="scrollable-layer" style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
                   {chatMessages.length === 0 && <div style={{ color: '#666', textAlign: 'center', marginTop: '50px' }}>Hãy nói xin chào! 👋</div>}
                   {chatMessages.map((m, i) => (
                     <div key={i} style={{ textAlign: m.senderId === socketId ? 'right' : 'left' }}>
