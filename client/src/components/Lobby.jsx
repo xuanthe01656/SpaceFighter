@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { t } from '../utils/translations';
-export default function Lobby({ lobbyState, setLobbyState, currentUser, gsRef, createRoom, joinRoom, joinRandom, leaveLobby, setScreen, lang }) {
+export default function Lobby({ lobbyState, setLobbyState, currentUser, gsRef, createRoom, joinRoom, joinRandom, leaveLobby, setScreen, lang, roomPlayers, chatMessages, lobbyCountdownText, toggleReady, sendChat, isRandomRoom, socketId }) {
   const text = t[lang] || t['vi'];
 
   const [playerName, setPlayerName] = useState(() => {
@@ -93,13 +93,105 @@ export default function Lobby({ lobbyState, setLobbyState, currentUser, gsRef, c
               </div>
             </div>
           )}
+          {/* SẢNH CHỜ TRƯỚC KHI VÀO GAME */}
           {lobbyState === 'wait' && (
-            <div id="lobbyWait">
-              <div className="subtitle" style={{ fontSize: 'clamp(18px, 5vw, 24px)', marginBottom: '5px' }}>{text.yourRoomCode}</div>
-              <div className="room-code-box" style={{ fontSize: 'clamp(35px, 15vw, 70px)', fontWeight: 'bold', color: '#55efc4', border: '4px dashed #55efc4', background: 'rgba(0, 0, 0, 0.5)', padding: '10px', margin: '15px 0', textShadow: '0 0 10px #55efc4', letterSpacing: '5px', userSelect: 'text' }}>
-                {gsRef.current.roomCode || '----'}
+            <div id="lobbyWait" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              
+              {/* Tiêu đề / Mã phòng */}
+              <div style={{ textAlign: 'center', background: 'rgba(0,0,0,0.5)', padding: '10px', borderRadius: '10px', border: '2px solid #55efc4' }}>
+                <div style={{ fontSize: 'clamp(16px, 4vw, 20px)', color: '#ccc' }}>
+                  {isRandomRoom ? (lang === 'vi' ? 'PHÒNG ĐẤU NGẪU NHIÊN' : 'RANDOM MATCH ROOM') : text.yourRoomCode}
+                </div>
+                {!isRandomRoom && (
+                  <div style={{ fontSize: 'clamp(28px, 8vw, 45px)', fontWeight: 'bold', color: '#55efc4', letterSpacing: '5px' }}>
+                    {gsRef.current.roomCode}
+                  </div>
+                )}
               </div>
-              <div style={{ color: '#2ed573', fontSize: 'clamp(14px, 4vw, 18px)', animation: 'blink 1.5s infinite' }}>{text.waitingForOpponent}</div>
+
+              {/* Danh sách người chơi */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {roomPlayers.map((p, idx) => {
+                  const isMe = p.id === socketId;
+                  return (
+                    <div key={idx} style={{ 
+                      display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
+                      background: isMe ? 'rgba(10, 189, 227, 0.2)' : 'rgba(255, 255, 255, 0.05)', 
+                      padding: '10px 15px', borderRadius: '8px', border: `1px solid ${isMe ? '#0abde3' : '#555'}`
+                    }}>
+                      <div style={{ fontSize: 'clamp(18px, 5vw, 24px)', color: isMe ? '#0abde3' : '#fff' }}>
+                        {p.name} {isMe && '(Bạn)'}
+                      </div>
+                      <div style={{ 
+                        fontSize: '14px', fontWeight: 'bold', padding: '5px 10px', borderRadius: '5px',
+                        background: p.isReady ? '#2ed573' : '#ff4757', color: '#fff', boxShadow: '0 0 10px rgba(0,0,0,0.5)'
+                      }}>
+                        {p.isReady ? 'SẴN SÀNG' : 'CHƯA SẴN SÀNG'}
+                      </div>
+                    </div>
+                  )
+                })}
+                {roomPlayers.length === 1 && (
+                  <div style={{ textAlign: 'center', padding: '15px', color: '#aaa', border: '1px dashed #555', borderRadius: '8px', animation: 'pulseText 1.5s infinite' }}>
+                    {lang === 'vi' ? 'Đang chờ đối thủ vào phòng...' : 'Waiting for opponent...'}
+                  </div>
+                )}
+              </div>
+
+              {/* Khung Chat */}
+              <div style={{ display: 'flex', flexDirection: 'column', height: '180px', background: 'rgba(0,0,0,0.6)', borderRadius: '10px', border: '1px solid #444', overflow: 'hidden' }}>
+                <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  {chatMessages.length === 0 && <div style={{ color: '#666', textAlign: 'center', marginTop: '50px' }}>Hãy nói xin chào! 👋</div>}
+                  {chatMessages.map((m, i) => (
+                    <div key={i} style={{ textAlign: m.senderId === socketId ? 'right' : 'left' }}>
+                      <span style={{ fontSize: '12px', color: '#aaa' }}>{m.senderName}</span><br/>
+                      <span style={{ display: 'inline-block', background: m.senderId === socketId ? '#0abde3' : '#333', color: '#fff', padding: '5px 10px', borderRadius: '8px', fontSize: '16px', maxWidth: '80%', wordBreak: 'break-word', textAlign: 'left' }}>
+                        {m.text}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', borderTop: '1px solid #444' }}>
+                  <input 
+                    type="text" id="chatInput"
+                    placeholder="Nhập tin nhắn..." 
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && e.target.value.trim()) {
+                        sendChat(e.target.value);
+                        e.target.value = '';
+                      }
+                    }}
+                    style={{ flex: 1, background: 'transparent', border: 'none', color: '#fff', padding: '10px', outline: 'none', fontFamily: "'VT323', monospace", fontSize: '18px' }}
+                  />
+                  <button onClick={() => {
+                    const inp = document.getElementById('chatInput');
+                    if (inp.value.trim()) { sendChat(inp.value); inp.value = ''; }
+                  }} style={{ background: '#2ed573', color: '#000', border: 'none', padding: '0 15px', fontWeight: 'bold', cursor: 'pointer' }}>GỬI</button>
+                </div>
+              </div>
+
+              {/* Nút SẴN SÀNG */}
+              <button 
+                onClick={toggleReady} 
+                disabled={roomPlayers.length < 2}
+                style={{ 
+                  background: roomPlayers.length < 2 ? '#555' : 'linear-gradient(45deg, #a55eea, #8854d0)', 
+                  color: '#fff', border: '2px solid #fff', padding: '15px', fontSize: '24px', 
+                  fontFamily: "'VT323', monospace", borderRadius: '10px', cursor: roomPlayers.length < 2 ? 'not-allowed' : 'pointer',
+                  boxShadow: roomPlayers.length < 2 ? 'none' : '0 0 15px rgba(165, 94, 234, 0.6)'
+                }}
+              >
+                {roomPlayers.find(p => p.id === socketId)?.isReady ? 'HỦY SẴN SÀNG' : 'SẴN SÀNG'}
+              </button>
+
+              {/* Overlay Đếm ngược 3-2-1 */}
+              {lobbyCountdownText && (
+                <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, borderRadius: '20px' }}>
+                  <div style={{ fontSize: '120px', color: '#FFD700', fontWeight: 'bold', textShadow: '0 0 20px #ff4757', animation: 'popIn 0.5s infinite' }}>
+                    {lobbyCountdownText}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {/* MÀN HÌNH TÌM KIẾM ĐỐI THỦ NGẪU NHIÊN */}

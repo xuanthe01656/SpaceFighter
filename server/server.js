@@ -147,7 +147,8 @@ io.on('connection', (socket) => {
           score: 0,
           isDead: false,
           isHost: true,
-          lastScoreUpdate: Date.now() // Phục vụ Anti-cheat
+          lastScoreUpdate: Date.now(),
+          isReady: false
         }
       ],
       status: 'waiting'
@@ -185,7 +186,8 @@ io.on('connection', (socket) => {
       score: 0,
       isDead: false,
       isHost: false,
-      lastScoreUpdate: Date.now() // Phục vụ Anti-cheat
+      lastScoreUpdate: Date.now(),
+      isReady: false
     });
     room.status = 'playing';
     
@@ -195,14 +197,12 @@ io.on('connection', (socket) => {
       isHost: false
     });
     
-    io.to(roomCode).emit('game-start', { players: room.players });
+   io.to(roomCode).emit('room-updated', { players: room.players, roomCode: roomCode, isRandom: false });
     console.log(`🎮 Player ${playerName} joined room ${roomCode}`);
   });
-// ĐẤU NGẪU NHIÊN (Random Matchmaking)
+/// ĐẤU NGẪU NHIÊN (Random Matchmaking)
   socket.on('join-random', (playerData) => {
     let foundRoom = null;
-    
-    // 1. Quét tìm phòng ngẫu nhiên đang chờ người
     for (const [roomCode, room] of rooms.entries()) {
       if (room.status === 'waiting' && room.isRandom && room.players.length === 1) {
         foundRoom = room;
@@ -211,57 +211,72 @@ io.on('connection', (socket) => {
     }
 
     if (foundRoom) {
-      // 2. TÌM THẤY -> Ghép vào phòng và bắt đầu game
+      // 2. TÌM THẤY -> Ghép vào phòng và CÙNG VÀO SẢNH CHỜ
       socket.join(foundRoom.code);
       foundRoom.players.push({
-        id: socket.id,
-        name: playerData.name,
-        score: 0,
-        isDead: false,
-        isHost: false,
-        lastScoreUpdate: Date.now()
+        id: socket.id, name: playerData.name, score: 0, isDead: false, isHost: false, lastScoreUpdate: Date.now(), isReady: false
       });
-      foundRoom.status = 'playing';
+      playerSockets.set(socket.id, { ...playerSockets.get(socket.id), roomCode: foundRoom.code, isHost: false });
       
-      playerSockets.set(socket.id, {
-        ...playerSockets.get(socket.id),
-        roomCode: foundRoom.code,
-        isHost: false
-      });
-      
-      io.to(foundRoom.code).emit('game-start', { players: foundRoom.players });
+      // Báo cho cả 2 người cập nhật danh sách phòng
+      io.to(foundRoom.code).emit('room-updated', { players: foundRoom.players, roomCode: foundRoom.code, isRandom: true });
       console.log(`🌍 Random Match: ${playerData.name} joined ${foundRoom.code}`);
       
     } else {
-      // 3. KHÔNG TÌM THẤY -> Tạo phòng ngẫu nhiên mới và chờ
+      // 3. KHÔNG TÌM THẤY -> Tạo phòng ngẫu nhiên chờ
       const roomCode = 'RND-' + Math.floor(1000 + Math.random() * 9000).toString();
       socket.join(roomCode);
-      
       const room = {
-        code: roomCode,
-        createdAt: Date.now(),
-        host: socket.id,
-        isRandom: true, // Cờ đánh dấu đây là phòng mở cho cộng đồng
-        players: [{
-          id: socket.id,
-          name: playerData.name,
-          score: 0,
-          isDead: false,
-          isHost: true,
-          lastScoreUpdate: Date.now()
-        }],
+        code: roomCode, createdAt: Date.now(), host: socket.id, isRandom: true,
+        players: [{ id: socket.id, name: playerData.name, score: 0, isDead: false, isHost: true, lastScoreUpdate: Date.now(), isReady: false }],
         status: 'waiting'
       };
-      
       rooms.set(roomCode, room);
-      playerSockets.set(socket.id, {
-        ...playerSockets.get(socket.id),
-        roomCode: roomCode,
-        isHost: true
-      });
+      playerSockets.set(socket.id, { ...playerSockets.get(socket.id), roomCode: roomCode, isHost: true });
       
-      socket.emit('waiting-random');
+      socket.emit('waiting-random'); // Vẫn báo Radar
       console.log(`🌍 Random Room created: ${roomCode} by ${playerData.name}`);
+    }
+  });
+  // --- TÍNH NĂNG CHAT TRONG LOBBY ---
+  socket.on('chat-message', (msg) => {
+    const p = playerSockets.get(socket.id);
+    if (p && p.roomCode) {
+      io.to(p.roomCode).emit('chat-message', { senderId: socket.id, senderName: p.name, text: msg });
+    }
+  });
+
+  // --- TÍNH NĂNG SẴN SÀNG & ĐẾM NGƯỢC ---
+  socket.on('toggle-ready', () => {
+    const p = playerSockets.get(socket.id);
+    if (!p || !p.roomCode) return;
+    const room = rooms.get(p.roomCode);
+    if (!room || room.status !== 'waiting') return;
+
+    const player = room.players.find(pl => pl.id === socket.id);
+    if (player) {
+      player.isReady = !player.isReady; // Đảo trạng thái
+      io.to(p.roomCode).emit('room-updated', { players: room.players, roomCode: p.roomCode, isRandom: room.isRandom });
+
+      // Nếu đủ 2 người và CẢ HAI đều sẵn sàng
+      if (room.players.length === 2 && room.players.every(pl => pl.isReady)) {
+        room.status = 'starting'; // Khóa phòng không cho đổi trạng thái nữa
+        io.to(p.roomCode).emit('lobby-countdown', 3);
+        
+        let count = 2;
+        room.countdownInterval = setInterval(() => {
+          if (count > 0) {
+            io.to(p.roomCode).emit('lobby-countdown', count);
+            count--;
+          } else {
+            clearInterval(room.countdownInterval);
+            room.status = 'playing';
+            // Reset sẵn sàng cho ván sau
+            room.players.forEach(pl => pl.isReady = false);
+            io.to(p.roomCode).emit('game-start', { players: room.players });
+          }
+        }, 1000);
+      }
     }
   });
   // Gộp chung xử lý trạng thái game vào game-update
@@ -321,11 +336,16 @@ io.on('connection', (socket) => {
     const playerData = playerSockets.get(socket.id);
     if (playerData && playerData.roomCode) {
       const room = rooms.get(playerData.roomCode);
+      
+      // THÊM DÒNG NÀY: Tắt đếm ngược nếu có
+      if (room && room.countdownInterval) clearInterval(room.countdownInterval);
+
       // Nếu phòng đang chờ ghép cặp thì xóa luôn phòng đó
-      if (room && room.status === 'waiting') {
+      if (room && (room.status === 'waiting' || room.status === 'starting')) {
         rooms.delete(playerData.roomCode);
-        console.log(`🚫 Đã hủy phòng chờ: ${playerData.roomCode}`);
+        console.log(`🚫 Đã hủy phòng: ${playerData.roomCode}`);
       }
+      
       socket.leave(playerData.roomCode);
       playerSockets.set(socket.id, { ...playerData, roomCode: null, isHost: false });
     }

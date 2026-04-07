@@ -87,6 +87,10 @@ export default function Game() {
   const [currentUser, setCurrentUser] = useState(null);
   const [userRankData, setUserRankData] = useState(null);
   const [isWatchingAd, setIsWatchingAd] = useState(false);
+  const [roomPlayers, setRoomPlayers] = useState([]);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [lobbyCountdownText, setLobbyCountdownText] = useState(null);
+  const [isRandomRoom, setIsRandomRoom] = useState(false);
   //const [webAd, setWebAd] = useState({ isPlaying: false, type: null });
   const [isAdInitialized, setIsAdInitialized] = useState(false);
   const toggleLanguage = () => {
@@ -286,13 +290,26 @@ useEffect(() => {
       reconnectionAttempts: 5,
       timeout: 10000,
     });
-
+    socketRef.current.on('room-updated', (data) => {
+      setRoomPlayers(data.players);
+      setLobbyState('wait'); // Ép chuyển sang sảnh chờ
+      gsRef.current.roomCode = data.roomCode;
+      setIsRandomRoom(data.isRandom);
+      if (findMatchTimeoutRef.current) clearTimeout(findMatchTimeoutRef.current); // Tắt radar 2 phút
+    });
+    socketRef.current.on('chat-message', (data) => {
+      setChatMessages(prev => [...prev, data]);
+    });
+    socketRef.current.on('lobby-countdown', (count) => {
+      setLobbyCountdownText(count);
+    });
     socketRef.current.on('room-created', (data) => {
       gsRef.current.roomCode = data.roomCode;
       setUIUpdates(prev => ({ ...prev, roomCode: data.roomCode }));
     });
 
     socketRef.current.on('game-start', (data) => {
+      setLobbyCountdownText(null); // Tắt số đếm 3..2..1
       if (findMatchTimeoutRef.current) clearTimeout(findMatchTimeoutRef.current);
       const opponent = data.players.find(p => p.id !== socketRef.current.id);
       if (opponent) gsRef.current.remoteName = opponent.name;
@@ -324,7 +341,8 @@ useEffect(() => {
       if (socketRef.current) socketRef.current.disconnect();
     };
   }, []);
-
+  const toggleReady = () => socketRef.current.emit('toggle-ready');
+  const sendChat = (msg) => socketRef.current.emit('chat-message', msg);
   const Sound = {
     playTone: (freq, type, duration, vol = 0.1) => {
       if (gsRef.current.isMuted || !audioCtxRef.current) return;
@@ -2490,6 +2508,13 @@ useEffect(() => {
           leaveLobby={leaveLobby}
           setScreen={setScreen} 
           lang={lang}
+          roomPlayers={roomPlayers}
+          chatMessages={chatMessages}
+          lobbyCountdownText={lobbyCountdownText}
+          toggleReady={toggleReady}
+          sendChat={sendChat}
+          isRandomRoom={isRandomRoom}
+          socketId={socketRef.current?.id}
         />
       )}
 
