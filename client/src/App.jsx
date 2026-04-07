@@ -294,8 +294,41 @@ useEffect(() => {
       setRoomPlayers(data.players);
       setLobbyState('wait'); // Ép chuyển sang sảnh chờ
       gsRef.current.roomCode = data.roomCode;
+      gsRef.current.isRandomRoom = data.isRandom;
       setIsRandomRoom(data.isRandom);
       if (findMatchTimeoutRef.current) clearTimeout(findMatchTimeoutRef.current); // Tắt radar 2 phút
+    });
+    socketRef.current.on('opponent-left-lobby', () => {
+      // Dọn sạch tàn dư của phòng cũ
+      gsRef.current.roomCode = null;
+      setRoomPlayers([]);
+      setChatMessages([]);
+      setLobbyCountdownText(null);
+
+      // Nếu là đấu ngẫu nhiên -> Tự động bật Radar tìm trận mới luôn
+      if (gsRef.current.isRandomRoom) {
+        toast.error(langRef.current === 'vi' ? '⚠️ Đối thủ đã rời đi. Đang tìm người mới...' : '⚠️ Opponent left. Finding new match...', { duration: 4000, icon: '🔄' });
+        setLobbyState('finding'); // Đẩy về màn Radar
+        socketRef.current.emit('join-random', { name: gsRef.current.myName }); // Tự động gửi lệnh tìm mới
+
+        // Khởi động lại đồng hồ đếm ngược 2 phút
+        if (findMatchTimeoutRef.current) clearTimeout(findMatchTimeoutRef.current);
+        findMatchTimeoutRef.current = setTimeout(() => {
+          socketRef.current.emit('leave-room');
+          setScreen('menu');
+          setLobbyState('main');
+          gsRef.current.roomCode = null;
+          setRoomPlayers([]);
+          setChatMessages([]);
+          setLobbyCountdownText(null);
+          toast.error(langRef.current === 'vi' ? '⏱️ Không tìm thấy đối thủ, vui lòng thử lại!' : '⏱️ Matchmaking timeout. Try again!', { duration: 4000 });
+        }, 120000); 
+
+      // Nếu là tạo phòng chơi với bạn bè -> Đẩy ra ngoài để nhập lại mã
+      } else {
+        toast.error(langRef.current === 'vi' ? '⚠️ Phòng đã hủy do có người rời đi!' : '⚠️ Room destroyed because someone left!', { duration: 4000 });
+        setLobbyState('main'); 
+      }
     });
     socketRef.current.on('chat-message', (data) => {
       setChatMessages(prev => [...prev, data]);

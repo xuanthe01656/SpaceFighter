@@ -337,11 +337,12 @@ io.on('connection', (socket) => {
     if (playerData && playerData.roomCode) {
       const room = rooms.get(playerData.roomCode);
       
-      // THÊM DÒNG NÀY: Tắt đếm ngược nếu có
       if (room && room.countdownInterval) clearInterval(room.countdownInterval);
 
-      // Nếu phòng đang chờ ghép cặp thì xóa luôn phòng đó
       if (room && (room.status === 'waiting' || room.status === 'starting')) {
+        // BÁO CHO NGƯỜI CÒN LẠI BIẾT LÀ ĐỐI THỦ ĐÃ THOÁT
+        socket.to(playerData.roomCode).emit('opponent-left-lobby');
+        
         rooms.delete(playerData.roomCode);
         console.log(`🚫 Đã hủy phòng: ${playerData.roomCode}`);
       }
@@ -350,16 +351,24 @@ io.on('connection', (socket) => {
       playerSockets.set(socket.id, { ...playerData, roomCode: null, isHost: false });
     }
   });
-  // Disconnect handling
+
+  // Disconnect handling (Trường hợp mất mạng hoặc tắt app ngang)
   socket.on('disconnect', () => {
     const playerData = playerSockets.get(socket.id);
     
     if (playerData && playerData.roomCode) {
       const room = rooms.get(playerData.roomCode);
       if (room) {
-        io.to(playerData.roomCode).emit('opponent-disconnected', {
-          playerId: socket.id
-        });
+        if (room.countdownInterval) clearInterval(room.countdownInterval);
+        
+        // Phân loại: Đang ở sảnh chờ thì báo rời sảnh, đang trong game thì báo mất kết nối ván đấu
+        if (room.status === 'waiting' || room.status === 'starting') {
+          socket.to(playerData.roomCode).emit('opponent-left-lobby');
+        } else {
+          io.to(playerData.roomCode).emit('opponent-disconnected', {
+            playerId: socket.id
+          });
+        }
         rooms.delete(playerData.roomCode);
         console.log(`🎮 Room ${playerData.roomCode} deleted (player disconnect)`);
       }
