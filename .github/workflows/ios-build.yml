@@ -29,8 +29,11 @@ jobs:
           npm install
           npm run build
 
-      - name: 4. Đồng bộ code vào lõi iOS (Capacitor)
+      - name: 4. Khởi tạo và Đồng bộ code vào iOS
         run: |
+          npm install @capacitor/ios
+          rm -rf ios
+          npx cap add ios
           npx cap sync ios
 
       - name: 5. Mở két sắt lấy Chứng chỉ & Giấy phép Apple
