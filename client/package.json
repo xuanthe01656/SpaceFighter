@@ -18,7 +18,7 @@
     "@capacitor/ios": "^8.3.0",
     "@capawesome/capacitor-app-update": "^8.0.3",
     "@codetrix-studio/capacitor-google-auth": "^3.4.0-rc.4",
-    "@revenuecat/purchases-capacitor": "^12.3.2",
+    "@revenuecat/purchases-capacitor": "^7.7.1",
     "crypto-js": "^4.2.0",
     "firebase": "^12.9.0",
     "react": "^18.2.0",
