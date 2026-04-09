@@ -24,7 +24,7 @@ jobs:
 
       - name: 3. Cài đặt thư viện và Build Game (Frontend)
         run: |
-          npm ci
+          npm install
           npm run build
 
       - name: 4. Khởi tạo và Đồng bộ code vào iOS
@@ -33,25 +33,6 @@ jobs:
           npm install @capacitor/ios
           npx cap add ios
           npx cap sync ios
-
-      - name: 4.1 Apply temporary SPM range patch
-        run: |
-          files=$(grep -RIl "capacitor-swift-pm" node_modules || true)
-          for f in $files; do
-            sed -i '' -e 's/7\.0\.0..<8\.0\.0/7.0.0..<9.0.0/g' "$f" || true
-            sed -i '' -e 's/8\.0\.0..<9\.0\.0/7.0.0..<9.0.0/g' "$f" || true
-          done
-
-      - name: 4.2 Clean SPM cache and DerivedData
-        run: |
-          rm -rf ~/Library/Caches/org.swift.swiftpm
-          rm -rf ~/Library/Developer/Xcode/DerivedData
-
-      - name: 4.3 Resolve Swift packages
-        run: |
-          cd ios/App
-          xcodebuild -resolvePackageDependencies -project App.xcodeproj -scheme App -configuration Release
-
 
       - name: 5. Mở két sắt lấy Chứng chỉ & Giấy phép Apple
         env:
