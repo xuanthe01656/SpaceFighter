@@ -1,0 +1,103 @@
+name: Build iOS App
+
+on:
+  push:
+    branches: [ main ] 
+  workflow_dispatch: 
+
+jobs:
+  build_ios:
+    runs-on: macos-latest 
+
+    # 👇 THÊM ĐOẠN NÀY: Bắt buộc mọi dòng lệnh phải chạy bên trong thư mục client
+    defaults:
+      run:
+        working-directory: ./client
+
+    steps:
+      - name: 1. Lấy mã nguồn
+        uses: actions/checkout@v3
+
+      - name: 2. Cài đặt Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: 3. Cài đặt thư viện và Build Game (Frontend)
+        run: |
+          npm install
+          npm run build
+
+      - name: 4. Đồng bộ code vào lõi iOS (Capacitor)
+        run: |
+          npx cap sync ios
+
+      - name: 5. Mở két sắt lấy Chứng chỉ & Giấy phép Apple
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode -o $PP_PATH
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+          
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
+
+      - name: 6. Build dự án ra file nén Archive (.xcarchive)
+        run: |
+          cd ios/App
+          xcodebuild -workspace App.xcworkspace \
+          -scheme App \
+          -sdk iphoneos \
+          -configuration Release \
+          clean archive \
+          -archivePath $RUNNER_TEMP/AstroCat.xcarchive \
+          CODE_SIGN_STYLE=Manual \
+          PROVISIONING_PROFILE_SPECIFIER="AstroCat_AppStore_Profile"
+
+      - name: 7. Tạo cấu hình xuất file IPA
+        run: |
+          cat <<EOF > $RUNNER_TEMP/ExportOptions.plist
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>app-store</string>
+              <key>provisioningProfiles</key>
+              <dict>
+                  <key>com.ban.astrocat</key>
+                  <string>AstroCat_AppStore_Profile</string>
+              </dict>
+          </dict>
+          </plist>
+          EOF
+
+      - name: 8. Đóng gói ra file ứng dụng (.ipa)
+        run: |
+          cd ios/App
+          xcodebuild -exportArchive \
+          -archivePath $RUNNER_TEMP/AstroCat.xcarchive \
+          -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
+          -exportPath $RUNNER_TEMP/export
+
+      - name: 9. Tải file IPA lên kho thành quả
+        uses: actions/upload-artifact@v3
+        with:
+          name: AstroCat-iOS-Release
+          path: ${{ runner.temp }}/export/*.ipa
