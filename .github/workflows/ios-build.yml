@@ -14,11 +14,9 @@ jobs:
         working-directory: ./client
 
     steps:
-      # Sửa thành v4
       - name: 1. Lấy mã nguồn
         uses: actions/checkout@v4
 
-      # Sửa thành v4
       - name: 2. Cài đặt Node.js
         uses: actions/setup-node@v4
         with:
@@ -31,8 +29,8 @@ jobs:
 
       - name: 4. Khởi tạo và Đồng bộ code vào iOS
         run: |
-          npm install @capacitor/ios
           rm -rf ios
+          npm install @capacitor/ios
           npx cap add ios
           npx cap sync ios
 
@@ -65,8 +63,8 @@ jobs:
       - name: 6. Build dự án ra file nén Archive (.xcarchive)
         run: |
           cd ios/App
-          pod install --repo-update
-          xcodebuild -workspace App.xcworkspace \
+          # Đã xóa lệnh pod install và đổi workspace thành project chuẩn mới
+          xcodebuild -project App.xcodeproj \
           -scheme App \
           -sdk iphoneos \
           -configuration Release \
@@ -101,7 +99,6 @@ jobs:
           -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
           -exportPath $RUNNER_TEMP/export
 
-      # Sửa thành v4
       - name: 9. Tải file IPA lên kho thành quả
         uses: actions/upload-artifact@v4
         with:
