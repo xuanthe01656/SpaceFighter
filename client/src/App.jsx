@@ -91,6 +91,10 @@ export default function Game() {
   const [chatMessages, setChatMessages] = useState([]);
   const [lobbyCountdownText, setLobbyCountdownText] = useState(null);
   const [isRandomRoom, setIsRandomRoom] = useState(false);
+  const [showRevivePopup, setShowRevivePopup] = useState(false);
+  const [reviveTimer, setReviveTimer] = useState(6);
+  const reviveIntervalRef = useRef(null);
+  const revivePlayerRef = useRef(null);
   //const [webAd, setWebAd] = useState({ isPlaying: false, type: null });
   const [isAdInitialized, setIsAdInitialized] = useState(false);
   const toggleLanguage = () => {
@@ -120,6 +124,7 @@ export default function Game() {
       shield: 0, 
       revive: 0  
     },
+    reviveCount: 0,
     isGameOver: false,
     isPlaying: false,
     isPaused: false,
@@ -504,65 +509,169 @@ useEffect(() => {
     }
   };
 
+  // 1. HÀM KÍCH HOẠT CÁI CHẾT (Chạy animation nổ và hiển thị Popup)
   const gameOver = () => {
     const gs = gsRef.current;
     if (gs.isGameOver) return;
     gs.isGameOver = true;
     Sound.hit();
 
-    // 1. XỬ LÝ ĐIỂM SỐ (Gộp lại một chỗ cho gọn)
-    if (gs.gameMode === 'single' && gs.score > gs.bestScore) {
-      gs.bestScore = gs.score;
-      if (!currentUser) {
-        secureStorage.setItem('astroCatBestScore', gs.bestScore);
-      }
-    }
-
-    // 2. XỬ LÝ MẠNG VÀ THỜI GIAN HỒI MẠNG
-    if (!gs.isVIP) { // CHỈ TRỪ MẠNG NẾU KHÔNG PHẢI VIP
-      if (gs.lives > 0) {
-        if (gs.lives >= 10 || !gs.livesUpdatedAt) {
-          const now = getRealTime();
-          gs.livesUpdatedAt = now;
-          if (!currentUser) {
-            secureStorage.setItem('astro_guest_last_lost', now);
-          }
-        }
-
-        gs.lives -= 1;
-        setUIUpdates(prev => ({ ...prev, lives: gs.lives }));
-
-        if (!currentUser) {
-          secureStorage.setItem('astro_guest_lives', gs.lives);
-        }
-      }
-    }
-
-    // 3. LƯU DỮ LIỆU
-    if (currentUser) {
-      saveUserProfile(); // Hàm này sẽ lưu cả highScore, lives và livesUpdatedAt lên Firestore
-    } else {
-      secureStorage.setItem('astro_guest_coins', gs.coins);
-    }
-
-    // 4. HIỆU ỨNG VÀ CHUYỂN SCREEN
     createParticles(gs.cat.x, gs.cat.y, 'orange', 20);
     createParticles(gs.cat.x, gs.cat.y, 'white', 10);
 
     if (gs.gameMode === 'single') {
-      gs.isPlaying = false;
       setTimeout(() => {
-        setUIUpdates(prev => ({
-          ...prev,
-          finalScore: gs.score,
-          bestScore: gs.bestScore,
-          coins: gs.coins
-        }));
-        setScreen('gameover');
-      }, 800);
+        if (gs.reviveCount < 2) {
+          gs.isPaused = true; 
+          setShowRevivePopup(true);
+          setReviveTimer(6);
+          if (reviveIntervalRef.current) clearInterval(reviveIntervalRef.current);
+          reviveIntervalRef.current = setInterval(() => {
+            // --- CƠ CHẾ ĐÓNG BĂNG ĐỒNG HỒ ---
+            if (pendingRewardRef.current === 'revive') return;
+
+            setReviveTimer(prev => {
+              if (prev <= 1) {
+                clearInterval(reviveIntervalRef.current);
+                finalizeGameOver();
+                return 0;
+              }
+              return prev - 1;
+            });
+          }, 1000);
+        } else {
+          finalizeGameOver();
+        }
+      }, 800); 
     } else {
       sendData();
     }
+  };
+
+  // 2. HÀM CHẾT THẬT (Trừ mạng, lưu điểm và chuyển sang Game Over)
+  const finalizeGameOver = () => {
+    const gs = gsRef.current;
+    setShowRevivePopup(false);
+    gs.isPaused = false; // Mở khóa lại
+    gs.isPlaying = false; 
+    if (reviveIntervalRef.current) clearInterval(reviveIntervalRef.current);
+
+    // XỬ LÝ ĐIỂM SỐ
+    if (gs.score > gs.bestScore) {
+      gs.bestScore = gs.score;
+      if (!currentUser) secureStorage.setItem('astroCatBestScore', gs.bestScore);
+    }
+
+    // XỬ LÝ TRỪ MẠNG
+    if (!gs.isVIP) {
+      if (gs.lives > 0) {
+        if (gs.lives >= 10 || !gs.livesUpdatedAt) {
+          const now = getRealTime();
+          gs.livesUpdatedAt = now;
+          if (!currentUser) secureStorage.setItem('astro_guest_last_lost', now);
+        }
+        gs.lives -= 1;
+        setUIUpdates(prev => ({ ...prev, lives: gs.lives }));
+        if (!currentUser) secureStorage.setItem('astro_guest_lives', gs.lives);
+      }
+    }
+
+    // LƯU DỮ LIỆU
+    if (currentUser) {
+      saveUserProfile();
+    } else {
+      secureStorage.setItem('astro_guest_coins', gs.coins);
+    }
+
+    // CHUYỂN MÀN HÌNH
+    setUIUpdates(prev => ({
+      ...prev,
+      finalScore: gs.score,
+      bestScore: gs.bestScore,
+      coins: gs.coins
+    }));
+    setScreen('gameover');
+  };
+  const revivePlayer = () => {
+    const gs = gsRef.current;
+    gs.reviveCount++;
+    gs.isGameOver = false;
+    
+    // 1. KHOÁ GAME LẠI ĐỂ CHUẨN BỊ ĐẾM NGƯỢC
+    gs.isPaused = true; 
+
+    // 2. Thiết lập lại trạng thái an toàn cho mèo
+    gs.cat.y = gs.canvas.height / 2;
+    gs.cat.velocity = 0;
+    gs.cat.rotation = 0;
+    gs.cat.isInvincible = true;
+    gs.cat.invincibleTimer = 180; // 3 giây bất tử
+
+    // 3. Dọn chướng ngại vật ở gần
+    gs.pipes.items.forEach(p => {
+      if (p.x > gs.cat.x - 150 && p.x < gs.cat.x + 300) {
+        p.x = -200; 
+      }
+    });
+
+    // 4. Đóng popup và dọn dẹp các đồng hồ cũ
+    setShowRevivePopup(false);
+    if (reviveIntervalRef.current) clearInterval(reviveIntervalRef.current);
+    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+
+    // 5. Cập nhật ngay 1 khung hình tĩnh để hiển thị vị trí mới của mèo đứng chờ
+    gs.ctx.clearRect(0, 0, gs.canvas.width, gs.canvas.height);
+    drawBackground();
+    drawPipes();
+    drawCat();
+
+    // 6. BẮT ĐẦU ĐẾM NGƯỢC 3-2-1
+    setCountdown(3);
+    Sound.jump(); // Phát tiếng "Bíp"
+
+    let count = 3;
+    countdownTimerRef.current = setInterval(() => {
+      count -= 1;
+      if (count > 0) {
+        setCountdown(count);
+        Sound.jump(); 
+      } else if (count === 0) {
+        setCountdown('GO!');
+        Sound.levelUp(); // Phát tiếng bíp dài
+      } else {
+        // KẾT THÚC ĐẾM NGƯỢC -> CHO GAME CHẠY TIẾP
+        clearInterval(countdownTimerRef.current);
+        setCountdown(null);
+        gsRef.current.isPaused = false; // Mở khóa vòng lặp
+        gsRef.current.lastFrameTime = 0; // Reset lại bộ đếm FPS
+        loop(); // Kích hoạt lại đồ họa
+      }
+    }, 1000);
+
+    toast.success(langRef.current === 'vi' ? '⚡ Hồi sinh thành công!' : '⚡ Revived!');
+  };
+
+  // Lưu hàm vào Ref để AdMob gọi không bị lỗi closure
+  useEffect(() => {
+    revivePlayerRef.current = revivePlayer;
+  }, [revivePlayer]);
+
+  const handleReviveWithCoins = () => {
+    if (gsRef.current.coins >= 550) {
+      gsRef.current.coins -= 550;
+      setUIUpdates(prev => ({ ...prev, coins: gsRef.current.coins }));
+      if (currentUser) saveUserProfile();
+      else secureStorage.setItem('astro_guest_coins', gsRef.current.coins);
+      revivePlayer();
+    } else {
+      toast.error(langRef.current === 'vi' ? '❌ Không đủ 550 Xu!' : '❌ Not enough 550 Coins!');
+    }
+  };
+
+  const handleWatchAdRevive = () => {
+    // Dừng đồng hồ đếm ngược ngay lập tức để chờ xem quảng cáo
+    //if (reviveIntervalRef.current) clearInterval(reviveIntervalRef.current);
+    watchAd('revive');
   };
 
   const sendData = () => {
@@ -881,6 +990,7 @@ useEffect(() => {
 
   const initGame = () => {
     const gs = gsRef.current;
+    gs.reviveCount = 0;
     gs.cat.y = 150;
     gs.cat.velocity = 0;
     gs.cat.rotation = 0;
@@ -2202,16 +2312,19 @@ useEffect(() => {
           if (earnedReward) {
             if (earnedReward === 'coin') {
               gsRef.current.coins += 50; 
-              gsRef.current.hourlyCoinCount += 1; // Tăng đếm giờ
+              gsRef.current.hourlyCoinCount += 1;
               setUIUpdates(prev => ({ ...prev, coins: gsRef.current.coins }));
               toast.success(t[langRef.current]?.rewardCoin);
             } else if (earnedReward === 'life') {
               gsRef.current.lives += 1;  
               setUIUpdates(prev => ({ ...prev, lives: gsRef.current.lives }));
               toast.success(t[langRef.current]?.rewardLife);
+            } else if (earnedReward === 'revive') {
+              // --- NHÁNH GỌI HỒI SINH MỚI THÊM ---
+              if (revivePlayerRef.current) revivePlayerRef.current();
             }
             saveUserProfileRef.current(); 
-            earnedReward = null; // Reset lại cờ
+            earnedReward = null; 
           }
           pendingRewardRef.current = null;
           preloadAd(); // Tải video tiếp theo
@@ -2282,47 +2395,46 @@ useEffect(() => {
 
   }, [screen,isAdInitialized, uiUpdates.isVIP]);
   const watchAd = async (rewardType) => {
-    if (!currentUser) {
+    // 1. SỬA ĐỔI: Chỉ chặn khách nếu xem để lấy Xu/Mạng. Còn Hồi sinh thì cho phép qua cửa!
+    if (!currentUser && rewardType !== 'revive') {
       toast.error(t[langRef.current]?.reqLoginReward || "Vui lòng đăng nhập!");
       return;
     }
+
     if (rewardType === 'life' && gsRef.current.lives >= 10) {
       toast.error(t[langRef.current]?.errLifeFullAd);
       return; 
     }
+    
     if (rewardType === 'coin') {
       const realTimeNow = new Date(getRealTime());
       const currentHourStr = `${realTimeNow.getFullYear()}-${realTimeNow.getMonth() + 1}-${realTimeNow.getDate()}-${realTimeNow.getHours()}`;
-      
-      // Nếu nhảy sang giờ mới thì reset ngay lập tức
       if (gsRef.current.lastCoinHour !== currentHourStr) {
         gsRef.current.hourlyCoinCount = 0;
         gsRef.current.lastCoinHour = currentHourStr;
       }
-
       if (gsRef.current.hourlyCoinCount >= 15) {
         toast.error(t[langRef.current]?.errCoinHourlyLimitAd || "Đã đạt giới hạn 15 lần/giờ. Vui lòng quay lại vào giờ tiếp theo!");
         return;
       }
     }
+    
     if (isWatchingAd) return;
 
     setIsWatchingAd(true);
+    // BIẾN QUAN TRỌNG: Đánh dấu là đang xử lý quảng cáo
     pendingRewardRef.current = rewardType;
 
     const isNative = Capacitor.isNativePlatform();
 
     if (!isNative) {
       setIsWatchingAd(false);
-      pendingRewardRef.current = null;
+      pendingRewardRef.current = null; // Nhả băng đồng hồ
       toast((tToast) => (
         <div style={{ textAlign: 'center', padding: '5px' }}>
           <div style={{ fontSize: '30px', marginBottom: '5px' }}>📱</div>
           <div style={{ fontSize: '16px', marginBottom: '10px', color: '#FFD700' }}>
             <b>{t[langRef.current]?.errAppOnly || 'Chỉ dành cho Ứng dụng!'}</b>
-          </div>
-          <div style={{ fontSize: '14px', marginBottom: '15px', color: '#ccc' }}>
-            {t[langRef.current]?.errAppOnlyDesc || 'Vui lòng tải App để xem quảng cáo nhận thưởng.'}
           </div>
           <button 
             onClick={() => {
@@ -2331,31 +2443,27 @@ useEffect(() => {
             }}
             style={{ background: '#2ed573', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '5px', fontWeight: 'bold', cursor: 'pointer', width: '100%', fontFamily: "'VT323', monospace" }}
           >
-            {t[langRef.current]?.downloadAppNow || 'Tải App Ngay'}
+            Tải App Ngay
           </button>
         </div>
       ), { duration: 6000, style: { background: '#1a1a2e', border: '2px solid #2ed573' } });
       return;
     }
 
-    // --- LOGIC PHÁT QUẢNG CÁO ĐÃ TỐI ƯU ---
     if (adReadyRef.current) {
-      // TRƯỜNG HỢP 1: Quảng cáo đã tải sẵn -> Bật lên ngay lập tức!
       try {
         await AdMob.showRewardVideoAd();
         adReadyRef.current = false; 
       } catch (error) {
         console.error("Lỗi khi show ad đã preload:", error);
         setIsWatchingAd(false);
-        pendingRewardRef.current = null;
+        pendingRewardRef.current = null; // Nhả băng đồng hồ khi lỗi
         toast.error(t[langRef.current]?.errAdNotReady || "Lỗi phát quảng cáo. Vui lòng thử lại!");
         preloadAd(); 
       }
     } else {
-      // TRƯỜNG HỢP 2: Fallback (Mạng chậm, preload chưa kịp xong) -> Phải chờ tải
       const loadingToast = toast.loading(t[langRef.current]?.adConnecting || "Đang kết nối quảng cáo...");
       try {
-        // 2. VÁ LỖI TREO KẾT NỐI (TIMEOUT 10 GIÂY)
         await Promise.race([
           AdMob.prepareRewardVideoAd({ adId: AD_ID, isTesting: IS_TESTING }),
           new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 10000))
@@ -2366,42 +2474,12 @@ useEffect(() => {
         console.error("AdMob Fallback Error:", error);
         toast.dismiss(loadingToast);
         setIsWatchingAd(false);
-        pendingRewardRef.current = null;
+        pendingRewardRef.current = null; // Nhả băng đồng hồ khi timeout
         toast.error(t[langRef.current]?.errAdNotReady || "Quảng cáo chưa sẵn sàng. Vui lòng thử lại sau!");
       }
     }
   };
 
-  // const runFakeAd = (rewardType) => {
-  //   setWebAd({ isPlaying: true, type: rewardType });
-  // };
-
-  // const handleWebAdComplete = () => {
-  //   const rewardType = webAd.type;
-  //   setWebAd({ isPlaying: false, type: null });
-  //   setIsWatchingAd(false);
-
-  //   if (rewardType === 'coin') {
-  //     gsRef.current.coins += 50; 
-  //     gsRef.current.hourlyCoinCount += 1; // Tăng đếm giờ
-  //     setUIUpdates(prev => ({ ...prev, coins: gsRef.current.coins }));
-  //     toast.success(t[langRef.current]?.rewardCoin);
-  //   } else if (rewardType === 'life') {
-  //     gsRef.current.lives += 1;  
-  //     setUIUpdates(prev => ({ ...prev, lives: gsRef.current.lives }));
-  //     toast.success(t[langRef.current]?.rewardLife);
-  //   }
-    
-  //   if (currentUser) saveUserProfile(); 
-  //   pendingRewardRef.current = null;
-  // };
-
-  // const handleWebAdClose = () => {
-  //   setWebAd({ isPlaying: false, type: null });
-  //   setIsWatchingAd(false);
-  //   pendingRewardRef.current = null;
-  //   toast.error(t[langRef.current]?.errAdIncomplete);
-  // };
   // ==========================================
   // BỘ ĐẾM NGƯỢC THỜI GIAN HỒI MẠNG (CHẠY NGẦM & OFFLINE)
   // ==========================================
@@ -2612,46 +2690,30 @@ useEffect(() => {
           //frameCount={frameCount}
         />
       )}
-      {/* --- GIAO DIỆN QUẢNG CÁO WEB (VIDEO MẪU) --- */}
-      {/*webAd.isPlaying && (
-        // <div style={{
-        //   position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-        //   backgroundColor: '#000', zIndex: 9999, display: 'flex', flexDirection: 'column',
-        //   alignItems: 'center', justifyContent: 'center'
-        // }}>
-        //   <button 
-        //     onClick={handleWebAdClose}
-        //     style={{
-        //       position: 'absolute', top: '20px', right: '20px', padding: '10px 20px',
-        //       backgroundColor: 'rgba(255,255,255,0.2)', color: '#fff', border: '2px solid #fff',
-        //       borderRadius: '8px', fontSize: '18px', cursor: 'pointer', zIndex: 10000,
-        //       fontFamily: "'VT323', monospace"
-        //     }}
-        //   >
-        //     {t[lang]?.closeBtn}
-        //   </button>
-
-        //   <p style={{ 
-        //     color: '#FFD700', 
-        //     marginBottom: '15px', 
-        //     fontSize: 'clamp(16px, 5vw, 24px)', /* Chữ tự co giãn từ 16px đến 24px tùy màn hình */
-        //     fontFamily: "'VT323', monospace",
-        //     textAlign: 'center', /* Ép chữ luôn nằm giữa dù bị rớt dòng */
-        //     padding: '0 15px'    /* Tránh chữ dính sát lề điện thoại */
-        //   }}>
-        //     {t[lang]?.adPlaying}<br/>({t[lang]?.adCompleteToEarn})
-        //   </p>
-        //   <video 
-        //     src="https://www.w3schools.com/html/mov_bbb.mp4" 
-        //     autoPlay 
-        //     playsInline
-        //     onEnded={handleWebAdComplete} 
-        //     style={{ width: '90%', maxWidth: '700px', borderRadius: '12px', border: '4px solid #333', boxShadow: '0 0 20px rgba(0,255,255,0.3)' }}
-        //   >
-        //     {t[lang]?.videoNotSupported || "Trình duyệt của bạn không hỗ trợ video."}
-        //   </video>
-        // </div>
-      /*)}*/}
+      {showRevivePopup && (
+        <div className="ui-layer" style={{ background: 'rgba(0,0,0,0.85)', zIndex: 5000, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <div style={{ background: '#1a1a2e', border: '3px solid #FFD700', borderRadius: '20px', padding: '30px', textAlign: 'center', width: '85%', maxWidth: '350px', boxShadow: '0 0 25px rgba(255, 215, 0, 0.4)' }}>
+            <h2 style={{ color: '#FFD700', fontSize: '38px', margin: '0 0 5px 0', fontFamily: "'VT323', monospace", textShadow: '2px 2px 0 #000' }}>
+              {lang === 'vi' ? 'TIẾP TỤC?' : 'CONTINUE?'}
+            </h2>
+            <p style={{ color: '#ccc', fontSize: '18px', margin: '0 0 20px 0' }}>
+              {lang === 'vi' ? `Lượt hồi sinh: ${gsRef.current.reviveCount}/2` : `Revives: ${gsRef.current.reviveCount}/2`}
+            </p>
+            
+            <button className="btn btn-green" onClick={handleReviveWithCoins} style={{ width: '100%', marginBottom: '12px', fontSize: '22px' }}>
+               🪙 550 {lang === 'vi' ? 'Xu' : 'Coins'}
+            </button>
+            
+            <button className="btn btn-blue" onClick={handleWatchAdRevive} style={{ width: '100%', marginBottom: '15px', fontSize: '22px' }}>
+               📺 {lang === 'vi' ? 'Xem Quảng Cáo' : 'Watch Ad'}
+            </button>
+            
+            <button onClick={finalizeGameOver} style={{ background: 'transparent', color: '#ff4757', border: 'none', textDecoration: 'underline', cursor: 'pointer', fontSize: '20px', fontFamily: "'VT323', monospace" }}>
+              {lang === 'vi' ? `Bỏ qua (${reviveTimer})` : `Skip (${reviveTimer})`}
+            </button>
+          </div>
+        </div>
+      )}
       <Toaster 
         position="top-center" 
         reverseOrder={false} 
