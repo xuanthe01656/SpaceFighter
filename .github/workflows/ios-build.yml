@@ -62,6 +62,7 @@ jobs:
       - name: 6. Build dự án ra file nén Archive (.xcarchive)
         run: |
           cd ios/App
+          pod install --repo-update
           xcodebuild -workspace App.xcworkspace \
           -scheme App \
           -sdk iphoneos \
