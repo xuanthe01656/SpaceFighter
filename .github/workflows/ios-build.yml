@@ -9,17 +9,18 @@ jobs:
   build_ios:
     runs-on: macos-latest 
 
-    # 👇 THÊM ĐOẠN NÀY: Bắt buộc mọi dòng lệnh phải chạy bên trong thư mục client
     defaults:
       run:
         working-directory: ./client
 
     steps:
+      # Sửa thành v4
       - name: 1. Lấy mã nguồn
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
+      # Sửa thành v4
       - name: 2. Cài đặt Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
 
@@ -96,8 +97,9 @@ jobs:
           -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
           -exportPath $RUNNER_TEMP/export
 
+      # Sửa thành v4
       - name: 9. Tải file IPA lên kho thành quả
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: AstroCat-iOS-Release
           path: ${{ runner.temp }}/export/*.ipa
