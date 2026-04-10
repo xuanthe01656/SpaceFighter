@@ -65,11 +65,23 @@ jobs:
         run: |
           cd ios/App
           
-          # Lệnh sed để dọn dẹp Podfile và ép iOS 14 + Tắt Signing cho Pods
-          sed -i '' 's/assert_deployment_target!(installer)/assert_deployment_target!(installer); installer.pods_project.targets.each { |t| t.build_configurations.each { |c| c.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "14.0"; c.build_settings["CODE_SIGNING_ALLOWED"] = "NO"; c.build_settings["CODE_SIGNING_REQUIRED"] = "NO"; c.build_settings["PROVISIONING_PROFILE_SPECIFIER"] = ""; c.build_settings["DEVELOPMENT_TEAM"] = "" } }/' Podfile
-
+          # Chạy pod install trước để nó sinh ra mọi thứ
           pod install --repo-update
           
+          # SAU ĐÓ, dùng xcodebuild command line để ép các Pods không được ký tên
+          # Bằng cách tạo một file xcconfig "vô hiệu hóa Signing"
+          cat <<EOF > disable_signing.xcconfig
+          CODE_SIGNING_ALLOWED = NO
+          CODE_SIGNING_REQUIRED = NO
+          EXPANDED_CODE_SIGN_IDENTITY = ""
+          CODE_SIGN_IDENTITY = ""
+          CODE_SIGN_ENTITLEMENTS = ""
+          PROVISIONING_PROFILE_SPECIFIER = ""
+          DEVELOPMENT_TEAM = ""
+          IPHONEOS_DEPLOYMENT_TARGET = 14.0
+          EOF
+          
+          # Gắn file xcconfig này vào TẤT CẢ các thư viện Pods thông qua xcodebuild
           xcodebuild -workspace App.xcworkspace \
           -scheme App \
           -sdk iphoneos \
@@ -79,7 +91,8 @@ jobs:
           CODE_SIGN_STYLE=Manual \
           PROVISIONING_PROFILE_SPECIFIER="AstroCat_AppStore_Profile" \
           DEVELOPMENT_TEAM="ZQ3P9M5HL6" \
-          CODE_SIGN_IDENTITY="Apple Distribution"
+          CODE_SIGN_IDENTITY="Apple Distribution" \
+          -xcconfig disable_signing.xcconfig # <-- Vũ khí bí mật nằm ở đây!
 
       - name: 7. Tạo cấu hình xuất file IPA
         run: |
