@@ -31,6 +31,7 @@ jobs:
           npm run build
 
       - name: 4. Khởi tạo và Đồng bộ code vào iOS
+        working-directory: ./client
         run: |
           npm install @capacitor/ios@7 
           npx cap sync ios
