@@ -106,7 +106,7 @@ jobs:
           -archivePath $RUNNER_TEMP/AstroCat.xcarchive \
           -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
           -exportPath $RUNNER_TEMP/export \
-          DEVELOPMENT_TEAM="ZQ3P9M5HL6" \ 
+          DEVELOPMENT_TEAM="ZQ3P9M5HL6" \
           CODE_SIGN_IDENTITY="Apple Distribution"
 
       - name: 9. Tải file IPA lên kho thành quả
