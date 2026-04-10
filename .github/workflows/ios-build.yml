@@ -65,12 +65,10 @@ jobs:
         run: |
           cd ios/App
           
-          # Dùng Ruby để dọn dẹp Podfile một cách triệt để
+          # Ruby script nâng cấp: Vừa tắt Signing Pods, vừa ép lên iOS 14.0
           ruby -e "
           p = File.read('Podfile')
-          # Bước 1: Xóa mọi khối post_install cũ nếu có để tránh lỗi 'multiple post_install'
           p.gsub!(/^post_install do \|installer\|.*?^end/m, '')
-          # Bước 2: Thêm khối post_install mới tinh, tắt toàn bộ signing cho Pods
           p << %Q{
           post_install do |installer|
             installer.pods_project.targets.each do |target|
@@ -79,6 +77,8 @@ jobs:
                 config.build_settings['DEVELOPMENT_TEAM'] = ''
                 config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
                 config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
+                # Dòng then chốt: Ép mọi plugin phải build cho iOS 14.0 trở lên
+                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
               end
             end
           end
@@ -87,7 +87,6 @@ jobs:
 
           pod install --repo-update
           
-          # Lệnh build viết liền mạch, cực kỳ cẩn thận với các dấu gạch chéo
           xcodebuild -workspace App.xcworkspace \
           -scheme App \
           -sdk iphoneos \
