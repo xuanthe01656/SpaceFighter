@@ -16,7 +16,10 @@ jobs:
     steps:
       - name: 1. Lấy mã nguồn
         uses: actions/checkout@v4
-
+      - name: 1.5. Nâng cấp Xcode (Xóa cảnh báo iOS SDK)
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: 'latest-stable'
       - name: 2. Cài đặt Node.js
         uses: actions/setup-node@v4
         with:
@@ -34,7 +37,12 @@ jobs:
           npm install @capacitor/ios@7 
           npx cap add ios
           npx cap sync ios
-
+          npm install -g @capacitor/assets
+          npx @capacitor/assets generate --ios
+      - name: 4.5. Tự động tăng số Build (Fix lỗi trùng Version)
+        run: |
+          # Dùng số lần chạy của GitHub Actions làm số thứ tự Build (Ví dụ chạy lần 15 sẽ ra Build 15)
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" ios/App/App/Info.plist
       - name: 5. Mở két sắt lấy Chứng chỉ & Giấy phép Apple
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
