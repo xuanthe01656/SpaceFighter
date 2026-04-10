@@ -2262,7 +2262,7 @@ useEffect(() => {
   // ==========================================
   const pendingRewardRef = useRef(null); // Lưu lại người dùng đang xem QC để nhận xu hay mạng
   const adReadyRef = useRef(false);      // Cờ đánh dấu quảng cáo đã tải sẵn sàng chưa
-  const IS_TESTING = false; 
+  const IS_TESTING = true; 
   const isIOS = Capacitor.getPlatform() === 'ios';
   const AD_ID = IS_TESTING 
     ? (isIOS ? 'ca-app-pub-3940256099942544/1712485313' : 'ca-app-pub-3940256099942544/5224354917') 
@@ -2299,6 +2299,19 @@ useEffect(() => {
     const initAdMob = async () => {
       try {
         await AdMob.initialize();
+        if (Capacitor.getPlatform() === 'ios') {
+          try {
+            await AdMob.requestTrackingAuthorization();
+          } catch (e) {
+            console.log("Lỗi xin quyền ATT:", e);
+          }
+        }
+
+        // Khởi tạo AdMob có kèm xác nhận ATT
+        await AdMob.initialize({
+          requestTrackingAuthorization: true
+        });
+        
         setIsAdInitialized(true);
         let earnedReward = null;
         rewardListener = await AdMob.addListener(RewardAdPluginEvents.Rewarded, () => {

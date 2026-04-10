@@ -47,5 +47,7 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSUserTrackingUsageDescription</key>
+    <string>Astro Cat cần quyền này để hiển thị quảng cáo phù hợp với sở thích của bạn, giúp chúng tôi có thêm kinh phí duy trì và phát triển game.</string>
 </dict>
 </plist>
