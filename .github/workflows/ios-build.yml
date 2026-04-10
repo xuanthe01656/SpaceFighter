@@ -64,20 +64,30 @@ jobs:
       - name: 6. Build dự án ra file nén Archive (.xcarchive)
         run: |
           cd ios/App
-          # Lệnh Ruby "Siêu cấp" để tắt hoàn toàn signing của Pods
+          
+          # Dùng Ruby để dọn dẹp Podfile một cách triệt để
           ruby -e "
           p = File.read('Podfile')
-          fix = \"    installer.pods_project.targets.each { |t| t.build_configurations.each { |c| c.build_settings['PROVISIONING_PROFILE_SPECIFIER'] = ''; c.build_settings['CODE_SIGNING_ALLOWED'] = 'NO' } }\"
-          if p.include? 'post_install do |installer|'
-            p.gsub!(/post_install do \|installer\|/, \"post_install do |installer|\\n#{fix}\")
-          else
-            p << \"\\npost_install do |installer|\\n#{fix}\\nend\\n\"
+          # Bước 1: Xóa mọi khối post_install cũ nếu có để tránh lỗi 'multiple post_install'
+          p.gsub!(/^post_install do \|installer\|.*?^end/m, '')
+          # Bước 2: Thêm khối post_install mới tinh, tắt toàn bộ signing cho Pods
+          p << %Q{
+          post_install do |installer|
+            installer.pods_project.targets.each do |target|
+              target.build_configurations.each do |config|
+                config.build_settings['PROVISIONING_PROFILE_SPECIFIER'] = ''
+                config.build_settings['DEVELOPMENT_TEAM'] = ''
+                config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+                config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
+              end
+            end
           end
+          }
           File.write('Podfile', p)"
 
           pod install --repo-update
           
-          # Build lệnh này KHÔNG được để dư bất kỳ khoảng trắng nào sau dấu gạch chéo \
+          # Lệnh build viết liền mạch, cực kỳ cẩn thận với các dấu gạch chéo
           xcodebuild -workspace App.xcworkspace \
           -scheme App \
           -sdk iphoneos \
