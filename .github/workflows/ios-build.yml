@@ -20,7 +20,7 @@ jobs:
       - name: 2. Cài đặt Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '20' # Hạ xuống bản 20 để ổn định nhất với Capacitor 7
 
       - name: 3. Cài đặt thư viện và Build Game (Frontend)
         run: |
@@ -30,7 +30,8 @@ jobs:
       - name: 4. Khởi tạo và Đồng bộ code vào iOS
         run: |
           rm -rf ios
-          npm install @capacitor/ios
+          # Quan trọng: Cài đúng bản ios 7 để khớp với package.json
+          npm install @capacitor/ios@7 
           npx cap add ios
           npx cap sync ios
 
@@ -63,8 +64,11 @@ jobs:
       - name: 6. Build dự án ra file nén Archive (.xcarchive)
         run: |
           cd ios/App
-          # Đã xóa lệnh pod install và đổi workspace thành project chuẩn mới
-          xcodebuild -project App.xcodeproj \
+          # Với bản v7, ta cần pod install để gộp các plugin cũ như Apple Sign-in, Google Auth
+          pod install --repo-update
+          
+          # Đổi từ -project thành -workspace vì pod install tạo ra file xcworkspace
+          xcodebuild -workspace App.xcworkspace \
           -scheme App \
           -sdk iphoneos \
           -configuration Release \
