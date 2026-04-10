@@ -64,7 +64,16 @@ jobs:
       - name: 6. Build dự án ra file nén Archive (.xcarchive)
         run: |
           cd ios/App
-          ruby -e "content = File.read('Podfile'); content.gsub!('assert_deployment_target!(installer)', \"assert_deployment_target!(installer)\n    installer.pods_project.targets.each do |target|\n      target.build_configurations.each do |config|\n        config.build_settings['PROVISIONING_PROFILE_SPECIFIER'] = ''\n        config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'\n      end\n    end\"); File.write('Podfile', content)"
+          ruby -e "
+          p = File.read('Podfile')
+          fix = \"    installer.pods_project.targets.each { |t| t.build_configurations.each { |c| c.build_settings['PROVISIONING_PROFILE_SPECIFIER'] = ''; c.build_settings['CODE_SIGNING_ALLOWED'] = 'NO' } }\"
+          if p.include? 'post_install do |installer|'
+            p.gsub!(/post_install do \|installer\|/, \"post_install do |installer|\\n#{fix}\")
+          else
+            p << \"\\npost_install do |installer|\\n#{fix}\\nend\\n\"
+          end
+          File.write('Podfile', p)"
+
           pod install --repo-update
           xcodebuild -workspace App.xcworkspace \
           -scheme App \
