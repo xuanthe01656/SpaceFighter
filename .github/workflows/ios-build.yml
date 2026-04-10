@@ -69,7 +69,7 @@ jobs:
 
       - name: 6. Build dự án ra file nén Archive (.xcarchive)
         run: |
-          cd ios/App
+          cd client/ios/App
           
           # Dùng Ruby để can thiệp CHÍNH XÁC vào Pods (bảo đảm không dính tới App chính)
           ruby -e "
