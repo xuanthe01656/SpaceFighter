@@ -65,23 +65,28 @@ jobs:
         run: |
           cd ios/App
           
-          # Chạy pod install trước để nó sinh ra mọi thứ
+          # Dùng Ruby để can thiệp CHÍNH XÁC vào Pods (bảo đảm không dính tới App chính)
+          ruby -e "
+          p = File.read('Podfile')
+          p.gsub!(/^post_install do \|installer\|.*?^end/m, '')
+          p << %Q{
+          post_install do |installer|
+            installer.pods_project.targets.each do |target|
+              target.build_configurations.each do |config|
+                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+                config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+                config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
+                config.build_settings['PROVISIONING_PROFILE_SPECIFIER'] = ''
+                config.build_settings['DEVELOPMENT_TEAM'] = ''
+              end
+            end
+          end
+          }
+          File.write('Podfile', p)"
+
           pod install --repo-update
           
-          # SAU ĐÓ, dùng xcodebuild command line để ép các Pods không được ký tên
-          # Bằng cách tạo một file xcconfig "vô hiệu hóa Signing"
-          cat <<EOF > disable_signing.xcconfig
-          CODE_SIGNING_ALLOWED = NO
-          CODE_SIGNING_REQUIRED = NO
-          EXPANDED_CODE_SIGN_IDENTITY = ""
-          CODE_SIGN_IDENTITY = ""
-          CODE_SIGN_ENTITLEMENTS = ""
-          PROVISIONING_PROFILE_SPECIFIER = ""
-          DEVELOPMENT_TEAM = ""
-          IPHONEOS_DEPLOYMENT_TARGET = 14.0
-          EOF
-          
-          # Gắn file xcconfig này vào TẤT CẢ các thư viện Pods thông qua xcodebuild
+          # Lệnh build chuẩn (KHÔNG dùng -xcconfig nữa để App chính vẫn được ký tên bình thường)
           xcodebuild -workspace App.xcworkspace \
           -scheme App \
           -sdk iphoneos \
@@ -91,8 +96,7 @@ jobs:
           CODE_SIGN_STYLE=Manual \
           PROVISIONING_PROFILE_SPECIFIER="AstroCat_AppStore_Profile" \
           DEVELOPMENT_TEAM="ZQ3P9M5HL6" \
-          CODE_SIGN_IDENTITY="Apple Distribution" \
-          -xcconfig disable_signing.xcconfig # <-- Vũ khí bí mật nằm ở đây!
+          CODE_SIGN_IDENTITY="Apple Distribution"
 
       - name: 7. Tạo cấu hình xuất file IPA
         run: |
