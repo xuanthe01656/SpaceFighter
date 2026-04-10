@@ -32,10 +32,7 @@ jobs:
 
       - name: 4. Khởi tạo và Đồng bộ code vào iOS
         run: |
-          rm -rf ios
-          # Quan trọng: Cài đúng bản ios 7 để khớp với package.json
           npm install @capacitor/ios@7 
-          npx cap add ios
           npx cap sync ios
           npm install -g @capacitor/assets
           npx @capacitor/assets generate --ios
