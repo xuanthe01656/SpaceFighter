@@ -64,6 +64,7 @@ jobs:
       - name: 6. Build dự án ra file nén Archive (.xcarchive)
         run: |
           cd ios/App
+          # Lệnh Ruby "Siêu cấp" để tắt hoàn toàn signing của Pods
           ruby -e "
           p = File.read('Podfile')
           fix = \"    installer.pods_project.targets.each { |t| t.build_configurations.each { |c| c.build_settings['PROVISIONING_PROFILE_SPECIFIER'] = ''; c.build_settings['CODE_SIGNING_ALLOWED'] = 'NO' } }\"
@@ -75,6 +76,8 @@ jobs:
           File.write('Podfile', p)"
 
           pod install --repo-update
+          
+          # Build lệnh này KHÔNG được để dư bất kỳ khoảng trắng nào sau dấu gạch chéo \
           xcodebuild -workspace App.xcworkspace \
           -scheme App \
           -sdk iphoneos \
