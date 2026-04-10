@@ -74,7 +74,8 @@ jobs:
           -archivePath $RUNNER_TEMP/AstroCat.xcarchive \
           CODE_SIGN_STYLE=Manual \
           PROVISIONING_PROFILE_SPECIFIER="AstroCat_AppStore_Profile" \
-          DEVELOPMENT_TEAM="ZQ3P9M5HL6"
+          DEVELOPMENT_TEAM="ZQ3P9M5HL6" \ 
+          CODE_SIGN_IDENTITY="Apple Distribution"
 
       - name: 7. Tạo cấu hình xuất file IPA
         run: |
@@ -85,6 +86,10 @@ jobs:
           <dict>
               <key>method</key>
               <string>app-store</string>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>signingCertificate</key>
+              <string>Apple Distribution</string>
               <key>provisioningProfiles</key>
               <dict>
                   <key>com.ban.astrocat</key>
@@ -101,7 +106,8 @@ jobs:
           -archivePath $RUNNER_TEMP/AstroCat.xcarchive \
           -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
           -exportPath $RUNNER_TEMP/export \
-          DEVELOPMENT_TEAM="ZQ3P9M5HL6"
+          DEVELOPMENT_TEAM="ZQ3P9M5HL6" \ 
+          CODE_SIGN_IDENTITY="Apple Distribution"
 
       - name: 9. Tải file IPA lên kho thành quả
         uses: actions/upload-artifact@v4
