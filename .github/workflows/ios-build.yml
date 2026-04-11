@@ -28,6 +28,13 @@ jobs:
       - name: 3. Cài đặt thư viện và Build Game (Frontend)
         run: |
           npm install
+          echo "VITE_SOCKET_URL=https://astro-cat.onrender.com" >> .env
+          echo "VITE_FIREBASE_API_KEY=AIzaSyBs6iVyirKOErvyiNGFRq-lbKfWB_Q1yvQ" >> .env
+          echo "VITE_FIREBASE_AUTH_DOMAIN=astro-cat-5.firebaseapp.com" >> .env
+          echo "VITE_FIREBASE_PROJECT_ID=astro-cat-5" >> .env
+          echo "VITE_FIREBASE_STORAGE_BUCKET=astro-cat-5.firebasestorage.app" >> .env
+          echo "VITE_FIREBASE_MESSAGING_SENDER_ID=271365354200" >> .env
+          echo "VITE_FIREBASE_APP_ID=1:271365354200:web:af4e26e6386c39af971dad" >> .env
           npm run build
 
       - name: 4. Khởi tạo và Đồng bộ code vào iOS
