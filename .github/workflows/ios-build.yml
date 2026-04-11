@@ -74,12 +74,31 @@ jobs:
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
 
+      - name: 5.5. Bơm quyền Apple Sign-In vào App (Fix Error 1000)
+        run: |
+          cd ios/App/App
+          # Tự động tạo file Entitlements chứa quyền Apple Sign In
+          cat <<EOF > App.entitlements
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>com.apple.developer.applesignin</key>
+              <array>
+                  <string>Default</string>
+              </array>
+          </dict>
+          </plist>
+          EOF
+          cd ..
+          # Dùng Perl để chèn đường dẫn file này vào lõi Xcode
+          perl -pi -e 's/(INFOPLIST_FILE = App\/Info.plist;)/$1\n\t\t\t\tCODE_SIGN_ENTITLEMENTS = App\/App.entitlements;/g' App.xcodeproj/project.pbxproj
+
       - name: 6. Build dự án ra file nén Archive (.xcarchive)
         run: |
           cd ios/App
-          
-          # Build thẳng bằng SPM, không dùng CocoaPods nữa
-          xcodebuild -project App.xcodeproj \
+          # SỬA LẠI: Build bằng "workspace" để nhúng plugin GoogleAuth vào
+          xcodebuild -workspace App.xcworkspace \
           -scheme App \
           -sdk iphoneos \
           -configuration Release \
@@ -127,16 +146,13 @@ jobs:
         with:
           name: AstroCat-iOS-Release
           path: ${{ runner.temp }}/export/*.ipa
+
       - name: 10. Tự động đẩy App lên App Store Connect (TestFlight)
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
         run: |
-          # Tìm file .ipa vừa tạo
           IPA_PATH=$(find ${{ runner.temp }}/export -name "*.ipa" | head -n 1)
-          echo "Đang tải lên file: $IPA_PATH"
-          
-          # Dùng công cụ altool của Apple để upload
           xcrun altool --upload-app \
             -f "$IPA_PATH" \
             -t ios \

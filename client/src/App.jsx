@@ -862,6 +862,7 @@ useEffect(() => {
       }
     } catch (err) {
       console.error("Firebase Query Error:", err);
+      alert("🚨 LỖI LEADERBOARD:\n" + err.message);
       setLeaderboardData([]);
     }
     setIsLoadingLeaderboard(false);
