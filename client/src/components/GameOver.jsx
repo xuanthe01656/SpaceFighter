@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { t } from '../utils/translations'; // 1. Nhúng từ điển
+import { Capacitor } from '@capacitor/core';
 
-export default function GameOver({ gsRef, uiUpdates, currentUser, setScreen, submitScore, loginWithGoogle, lang, setLobbyState, startGame, leaveLobby }) {
+export default function GameOver({ gsRef, uiUpdates, currentUser, setScreen, submitScore, loginWithGoogle , loginWithApple, lang, setLobbyState, startGame, leaveLobby }) {
   // 2. Lấy bộ từ vựng theo ngôn ngữ hiện tại
   const text = t[lang] || t['vi'];
+  const platform = Capacitor.getPlatform();
 
   // Quản lý input tên và trạng thái đã lưu kỷ lục thành công hay chưa
   const [playerName, setPlayerName] = useState(() => {
@@ -73,9 +75,18 @@ export default function GameOver({ gsRef, uiUpdates, currentUser, setScreen, sub
             ) : (
               <div style={{ textAlign: 'center', width: '100%' }}>
                 <p style={{ color: '#FFD700', fontSize: '18px', margin: '0 0 10px 0', fontFamily: "'VT323', monospace" }}>{text.loginToSave}</p>
-                <button onClick={loginWithGoogle} className="btn btn-blue" style={{ width: '90%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', margin: '0 auto' }}>
-                  <img src="/images/google.png" alt="Google" style={{ width: '24px' }} /> {text.loginNowBtn}
-                </button>
+                {/* Gom 2 nút vào chung 1 thẻ div để sắp xếp cho đẹp */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', width: '100%' }}>
+                  <button onClick={loginWithGoogle} className="btn btn-blue" style={{ width: '90%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', margin: '0 auto' }}>
+                    <img src="/images/google.png" alt="Google" style={{ width: '24px' }} /> {text.loginNowBtn}
+                  </button>
+                  {platform === 'ios' && (
+                    <button onClick={loginWithApple} className="btn" style={{ width: '90%', background: '#000', color: '#fff', border: '2px solid #555', borderRadius: '8px', padding: '10px', fontSize: '18px', fontFamily: "'VT323', monospace", cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', margin: '0 auto', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>
+                      🍎 {lang === 'vi' ? 'Đăng nhập Apple' : 'Sign in with Apple'}
+                    </button>
+                  )}
+
+                </div>
               </div>
             )}
           </div>

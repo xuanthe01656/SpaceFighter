@@ -106,6 +106,16 @@ export default function Game() {
   useEffect(() => {
     langRef.current = lang;
   }, [lang]);
+  useEffect(() => {
+    window.onerror = function(message, source, lineno, colno, error) {
+      alert(`🚨 LỖI JS NGẦM:\n${message}\nTại dòng: ${lineno}`);
+      return true; 
+    };
+    window.addEventListener("unhandledrejection", function(event) {
+      // Bắt các lỗi Firebase bị từ chối
+      alert(`🚨 LỖI HỆ THỐNG:\n${event.reason}`);
+    });
+  }, []);
   const gsRef = useRef({
     canvas: null,
     ctx: null,
@@ -1946,29 +1956,26 @@ useEffect(() => {
   const loginWithGoogle = async () => {
     try {
       if (Capacitor.isNativePlatform()) {
-        // Đăng nhập Native cho App APK
         toast.loading(t[lang]?.loginOpening, { id: 'nativeLogin' });
-        // BẮT BUỘC PHẢI THÊM ĐOẠN NÀY ĐỂ ÉP KHỞI TẠO Ở NATIVE
-        // GoogleAuth.initialize({
-        //   clientId: '271365354200-divjlei917agdhao9na226dnhemtiq2b.apps.googleusercontent.com',
-        //   scopes: ['profile', 'email'],
-        //   grantOfflineAccess: true,
-        // });
+        
         const googleUser = await GoogleAuth.signIn();
         const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
         await signInWithCredential(auth, credential);
+        
+        toast.dismiss('nativeLogin');
         toast.success(t[lang]?.loginAppSuccess);
       } else {
-        // Đăng nhập Popup cho Web
         await signInWithPopup(auth, googleProvider);
         toast.success(t[lang]?.loginWebSuccess);
       }
     } catch (error) {
       toast.dismiss('nativeLogin');
-      console.error("Login Error:", error);
+      // 👇 ÉP IOS IN LỖI CHI TIẾT RA GIỮA MÀN HÌNH
+      alert("🚨 LỖI GOOGLE:\n" + JSON.stringify(error, Object.getOwnPropertyNames(error)));
       toast.error(t[lang]?.loginFail);
     }
   };
+
   const loginWithApple = async () => {
     try {
       toast.loading(t[lang]?.loginOpening || "Đang kết nối Apple...", { id: 'appleLogin' });
@@ -1980,11 +1987,13 @@ useEffect(() => {
       const provider = new OAuthProvider('apple.com');
       const credential = provider.credential({ idToken: response.identityToken });
       await signInWithCredential(auth, credential);
+      
       toast.dismiss('appleLogin');
       toast.success(t[lang]?.loginAppSuccess || "Đăng nhập thành công!");
     } catch (error) {
       toast.dismiss('appleLogin');
-      console.error("Apple Login Error:", error);
+      // 👇 ÉP IOS IN LỖI CHI TIẾT RA GIỮA MÀN HÌNH
+      alert("🚨 LỖI APPLE:\n" + JSON.stringify(error, Object.getOwnPropertyNames(error)));
       toast.error(t[lang]?.loginFail || "Đăng nhập thất bại");
     }
   };
@@ -2685,6 +2694,7 @@ useEffect(() => {
           setScreen={setScreen} 
           submitScore={submitScore} 
           loginWithGoogle={loginWithGoogle} 
+          loginWithApple={loginWithApple}
           lang={lang}
           setLobbyState={setLobbyState}
           saveUserProfile={saveUserProfile}
