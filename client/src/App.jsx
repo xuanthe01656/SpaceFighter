@@ -808,7 +808,6 @@ useEffect(() => {
     setScreen('leaderboard');
 
     try {
-      // Tăng limit lên 20 để có chỗ bù trừ khi chúng ta gộp các ván đấu trùng lặp
       const q = query(
         collection(db, "leaderboard"), 
         where("mode", "==", mode), 
@@ -816,14 +815,21 @@ useEffect(() => {
         limit(mode === 'pvp' ? 20 : 10) 
       );
       
-      const querySnapshot = await getDocs(q);
+      // 👇 CÀI BOM HẸN GIỜ 1: Lấy danh sách Top
+      const timeout1 = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("Firebase bị treo cứng không tải được danh sách Top sau 8s!")), 8000)
+      );
+      const querySnapshot = await Promise.race([
+        getDocs(q),
+        timeout1
+      ]);
+
       let data = [];
-      const seenNames = new Set(); // Bộ lọc trùng lặp
+      const seenNames = new Set(); 
 
       querySnapshot.forEach((doc) => {
         const docData = doc.data();
         if (mode === 'pvp') {
-          // Lọc: Nếu ván đấu này (chuỗi name) chưa có trong danh sách thì mới thêm vào
           if (!seenNames.has(docData.name)) {
             seenNames.add(docData.name);
             data.push({ ...docData, id: doc.id });
@@ -833,16 +839,22 @@ useEffect(() => {
         }
       });
       
-      // Sau khi lọc xong, cắt lại cho đúng chuẩn Top 10
       if (data.length > 10) data = data.slice(0, 10);
-      
       setLeaderboardData(data);
 
       // --- TÍNH HẠNG CỦA CÁ NHÂN (NẾU ĐÃ ĐĂNG NHẬP) ---
       if (currentUser) {
         const userDocId = `${currentUser.uid}_${mode}`;
         const userDocRef = doc(db, "leaderboard", userDocId);
-        const userDocSnap = await getDoc(userDocRef);
+        
+        // 👇 CÀI BOM HẸN GIỜ 2: Lấy điểm cá nhân
+        const timeout2 = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("Firebase bị treo khi tải dữ liệu cá nhân!")), 8000)
+        );
+        const userDocSnap = await Promise.race([
+          getDoc(userDocRef),
+          timeout2
+        ]);
         
         if (userDocSnap.exists()) {
           const uData = userDocSnap.data();
@@ -854,7 +866,16 @@ useEffect(() => {
               where("mode", "==", mode),
               where("score", ">", uData.score)
             );
-            const higherSnap = await getDocs(higherQ);
+            
+            // 👇 CÀI BOM HẸN GIỜ 3: Tính thứ hạng
+            const timeout3 = new Promise((_, reject) => 
+              setTimeout(() => reject(new Error("Firebase bị treo khi tính toán thứ hạng!")), 8000)
+            );
+            const higherSnap = await Promise.race([
+              getDocs(higherQ),
+              timeout3
+            ]);
+            
             const rank = higherSnap.docs.length + 1;
             setUserRankData({ ...uData, rank: rank });
           }
@@ -862,6 +883,7 @@ useEffect(() => {
       }
     } catch (err) {
       console.error("Firebase Query Error:", err);
+      // NẾU TREO MẠNG, ALERT NÀY SẼ NỔ SAU 8 GIÂY
       alert("🚨 LỖI LEADERBOARD:\n" + err.message);
       setLeaderboardData([]);
     }
@@ -877,7 +899,15 @@ useEffect(() => {
           orderBy("score", "desc"), 
           limit(1)
         );
-        const querySnapshot = await getDocs(q);
+        
+        // 👇 CÀI BOM HẸN GIỜ 4: Lấy Top Kỷ Lục ngoài Menu
+        const timeout = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("Lỗi tải Top Kỷ lục")), 8000)
+        );
+        const querySnapshot = await Promise.race([
+          getDocs(q),
+          timeout
+        ]);
         
         if (!querySnapshot.empty) {
           const topData = querySnapshot.docs[0].data();
@@ -889,12 +919,11 @@ useEffect(() => {
                 : `${name}`;
           setTopRecords(prev => ({ ...prev, [key]: displayText }));
         } else {
-          // Thay 'Chưa có' bằng key trong từ điển
           setTopRecords(prev => ({ ...prev, [key]: t[lang]?.topNone || 'Chưa có' }));
         }
       } catch (error) {
         console.error("Top records error:", error);
-        // Thay 'Lỗi tải' bằng key trong từ điển
+        // Lỗi ngoài menu thì không cần popup làm phiền người chơi, chỉ cần hiện text báo lỗi
         setTopRecords(prev => ({ ...prev, [key]: t[lang]?.topError || 'Lỗi tải' }));
       }
     };
@@ -2004,23 +2033,33 @@ useEffect(() => {
         clientId: 'com.ban.astrocat',
         redirectURI: '',
         scopes: 'email name',
-        nonce: hashedNonce // 👈 Nộp bản băm cho Apple
+        nonce: hashedNonce 
       });
 
       // 4. Trình diện Firebase bằng bản NGUYÊN BẢN
       const provider = new OAuthProvider('apple.com');
       const credential = provider.credential({ 
         idToken: response.identityToken,
-        rawNonce: rawNonce // 👈 Nộp bản gốc cho Firebase
+        rawNonce: rawNonce 
       });
 
-      await signInWithCredential(auth, credential);
+      // 5. CÀI BOM HẸN GIỜ 8 GIÂY (Chống iOS chặn mạng làm App bị treo)
+      const timeout = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("LỖI MẠNG iOS: Firebase bị treo cứng không phản hồi sau 8 giây!")), 8000)
+      );
+
+      // 6. Cho lệnh kết nối Firebase chạy đua với quả bom
+      await Promise.race([
+        signInWithCredential(auth, credential),
+        timeout
+      ]);
       
       toast.dismiss('appleLogin');
       toast.success(t[lang]?.loginAppSuccess || "Đăng nhập thành công!");
     } catch (error) {
       toast.dismiss('appleLogin');
-      alert("🚨 LỖI APPLE:\n" + JSON.stringify(error, Object.getOwnPropertyNames(error)));
+      // NẾU BỊ TREO HOẶC LỖI, SẼ BẬT ALERT ĐỎ LÊN MÀN HÌNH
+      alert("🚨 LỖI APPLE:\n" + (error.message || JSON.stringify(error, Object.getOwnPropertyNames(error))));
       toast.error(t[lang]?.loginFail || "Đăng nhập thất bại");
     }
   };
