@@ -1964,6 +1964,7 @@ useEffect(() => {
         toast.success(t[lang]?.loginWebSuccess);
       }
     } catch (error) {
+      toast.dismiss('nativeLogin');
       console.error("Login Error:", error);
       toast.error(t[lang]?.loginFail);
     }
@@ -1972,13 +1973,14 @@ useEffect(() => {
     try {
       toast.loading(t[lang]?.loginOpening || "Đang kết nối Apple...", { id: 'appleLogin' });
       const { response } = await SignInWithApple.authorize({
-        clientId: 'com.ban.astrocat', // Bundle ID của Apple sau này tạo
+        clientId: 'com.ban.astrocat',
         redirectURI: '',
         scopes: 'email name',
       });
       const provider = new OAuthProvider('apple.com');
       const credential = provider.credential({ idToken: response.identityToken });
       await signInWithCredential(auth, credential);
+      toast.dismiss('appleLogin');
       toast.success(t[lang]?.loginAppSuccess || "Đăng nhập thành công!");
     } catch (error) {
       toast.dismiss('appleLogin');
