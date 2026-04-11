@@ -1,6 +1,6 @@
 // src/firebase.js
 import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, initializeFirestore } from "firebase/firestore";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 
 const firebaseConfig = {
@@ -16,7 +16,8 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 //export const db = getFirestore(app);
 export const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true
+  experimentalForceLongPolling: true,
+  experimentalAutoDetectLongPolling: true
 });
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
