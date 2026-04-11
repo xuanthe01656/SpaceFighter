@@ -1949,11 +1949,11 @@ useEffect(() => {
         // Đăng nhập Native cho App APK
         toast.loading(t[lang]?.loginOpening, { id: 'nativeLogin' });
         // BẮT BUỘC PHẢI THÊM ĐOẠN NÀY ĐỂ ÉP KHỞI TẠO Ở NATIVE
-        GoogleAuth.initialize({
-          clientId: '271365354200-divjlei917agdhao9na226dnhemtiq2b.apps.googleusercontent.com',
-          scopes: ['profile', 'email'],
-          grantOfflineAccess: true,
-        });
+        // GoogleAuth.initialize({
+        //   clientId: '271365354200-divjlei917agdhao9na226dnhemtiq2b.apps.googleusercontent.com',
+        //   scopes: ['profile', 'email'],
+        //   grantOfflineAccess: true,
+        // });
         const googleUser = await GoogleAuth.signIn();
         const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
         await signInWithCredential(auth, credential);
