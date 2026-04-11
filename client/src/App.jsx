@@ -1980,20 +1980,36 @@ useEffect(() => {
   const loginWithApple = async () => {
     try {
       toast.loading(t[lang]?.loginOpening || "Đang kết nối Apple...", { id: 'appleLogin' });
+      
+      // 1. TẠO MÃ BẢO MẬT (NONCE) - Bắt buộc để Firebase không bị treo
+      const generateNonce = () => {
+        const array = new Uint8Array(32);
+        window.crypto.getRandomValues(array);
+        return Array.from(array, c => c.toString(16).padStart(2, '0')).join('');
+      };
+      const rawNonce = generateNonce();
+
+      // 2. GỌI APPLE LOGIN KÈM MÃ NONCE
       const { response } = await SignInWithApple.authorize({
         clientId: 'com.ban.astrocat',
         redirectURI: '',
         scopes: 'email name',
+        nonce: rawNonce // 👈 THÊM DÒNG NÀY ĐỂ MỞ KHÓA
       });
+
+      // 3. TRUYỀN CẢ TOKEN VÀ NONCE CHO FIREBASE
       const provider = new OAuthProvider('apple.com');
-      const credential = provider.credential({ idToken: response.identityToken });
+      const credential = provider.credential({ 
+        idToken: response.identityToken,
+        rawNonce: rawNonce // 👈 THÊM DÒNG NÀY ĐỂ MỞ KHÓA
+      });
+
       await signInWithCredential(auth, credential);
       
       toast.dismiss('appleLogin');
       toast.success(t[lang]?.loginAppSuccess || "Đăng nhập thành công!");
     } catch (error) {
       toast.dismiss('appleLogin');
-      // 👇 ÉP IOS IN LỖI CHI TIẾT RA GIỮA MÀN HÌNH
       alert("🚨 LỖI APPLE:\n" + JSON.stringify(error, Object.getOwnPropertyNames(error)));
       toast.error(t[lang]?.loginFail || "Đăng nhập thất bại");
     }
