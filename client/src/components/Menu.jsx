@@ -61,10 +61,12 @@ export default function Menu({ currentUser, uiUpdates, topRecords, startGame, se
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <button className="btn" onClick={loginWithGoogle} style={{ pointerEvents: 'auto', background: '#fff', color: '#333', border: '2px solid #ddd', borderRadius: '25px', padding: '8px 15px', fontSize: '16px', fontFamily: "'VT323', monospace", cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>
-              <img src="/images/google.png" alt="Google" style={{ width: '18px' }} />
-              {text.login}
-            </button>
+            {platform !== 'ios' && (
+              <button className="btn" onClick={loginWithGoogle} style={{ pointerEvents: 'auto', background: '#fff', color: '#333', border: '2px solid #ddd', borderRadius: '25px', padding: '8px 15px', fontSize: '16px', fontFamily: "'VT323', monospace", cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>
+                <img src="/images/google.png" alt="Google" style={{ width: '18px' }} />
+                {text.login}
+              </button>
+            )}
             
             {platform === 'ios' && (
               <button className="btn" onClick={loginWithApple} style={{ pointerEvents: 'auto', background: '#000', color: '#fff', border: '2px solid #555', borderRadius: '25px', padding: '8px 15px', fontSize: '16px', fontFamily: "'VT323', monospace", cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.3)' }}>
