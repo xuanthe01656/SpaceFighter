@@ -73,7 +73,23 @@ jobs:
 
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
-
+      - name: 4.8. Ép cài CocoaPods cho Google (Fix lỗi Unimplemented)
+        working-directory: ./client/ios/App
+        run: |
+          # Bơm file cấu hình Podfile tiêu chuẩn của Capacitor
+          cat <<EOF > Podfile
+          require_relative '../../node_modules/@capacitor/ios/scripts/pods_helpers'
+          platform :ios, '14.0'
+          use_frameworks!
+          target 'App' do
+            capacitor_pods
+          end
+          post_install do |installer|
+            assertDeploymentTarget(installer)
+          end
+          EOF
+          # Chạy cài đặt để hệ thống nhúng GoogleAuth và sinh ra file App.xcworkspace
+          pod install --repo-update
       - name: 5.5. Bơm quyền Apple Sign-In vào App (Fix Error 1000)
         run: |
           cd ios/App/App
@@ -91,14 +107,14 @@ jobs:
           </plist>
           EOF
           cd ..
-          # Dùng Perl để chèn đường dẫn file này vào lõi Xcode
+          # Dùng Perl chèn quyền này vào lõi cấu hình Xcode
           perl -pi -e 's/(INFOPLIST_FILE = App\/Info.plist;)/$1\n\t\t\t\tCODE_SIGN_ENTITLEMENTS = App\/App.entitlements;/g' App.xcodeproj/project.pbxproj
-
       - name: 6. Build dự án ra file nén Archive (.xcarchive)
         run: |
           cd ios/App
-          # SỬA LẠI: Build bằng "workspace" để nhúng plugin GoogleAuth vào
-          xcodebuild -workspace App.xcworkspace \
+          
+          # Build thẳng bằng SPM, không dùng CocoaPods nữa
+          xcodebuild -project App.xcodeproj \
           -scheme App \
           -sdk iphoneos \
           -configuration Release \
@@ -146,13 +162,16 @@ jobs:
         with:
           name: AstroCat-iOS-Release
           path: ${{ runner.temp }}/export/*.ipa
-
       - name: 10. Tự động đẩy App lên App Store Connect (TestFlight)
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
         run: |
+          # Tìm file .ipa vừa tạo
           IPA_PATH=$(find ${{ runner.temp }}/export -name "*.ipa" | head -n 1)
+          echo "Đang tải lên file: $IPA_PATH"
+          
+          # Dùng công cụ altool của Apple để upload
           xcrun altool --upload-app \
             -f "$IPA_PATH" \
             -t ios \
