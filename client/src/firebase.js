@@ -23,6 +23,7 @@ try {
     experimentalForceLongPolling: true
   });
 } catch (error) {
+  alert("🚨 LỖI FIRESTORE KHI MỞ APP:\n" + error.message);
   console.error("Lỗi initializeFirestore, lùi về getFirestore:", error);
   // Nếu lỗi, tự động dùng hàm cũ để App vẫn lên hình bình thường
   dbInstance = getFirestore(app);

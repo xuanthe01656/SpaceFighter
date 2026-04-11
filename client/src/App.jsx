@@ -1981,7 +1981,7 @@ useEffect(() => {
     try {
       toast.loading(t[lang]?.loginOpening || "Đang kết nối Apple...", { id: 'appleLogin' });
       
-      // 1. TẠO MÃ BẢO MẬT (NONCE) - Bắt buộc để Firebase không bị treo
+      // 1. Tạo tem NGUYÊN BẢN (Raw Nonce)
       const generateNonce = () => {
         const array = new Uint8Array(32);
         window.crypto.getRandomValues(array);
@@ -1989,19 +1989,29 @@ useEffect(() => {
       };
       const rawNonce = generateNonce();
 
-      // 2. GỌI APPLE LOGIN KÈM MÃ NONCE
+      // 2. Hàm BĂM NÁT tem bằng thuật toán SHA-256
+      const sha256 = async (raw) => {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(raw);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      };
+      const hashedNonce = await sha256(rawNonce);
+
+      // 3. Gọi FaceID và nộp bản BĂM NÁT cho Apple
       const { response } = await SignInWithApple.authorize({
         clientId: 'com.ban.astrocat',
         redirectURI: '',
         scopes: 'email name',
-        nonce: rawNonce // 👈 THÊM DÒNG NÀY ĐỂ MỞ KHÓA
+        nonce: hashedNonce // 👈 Nộp bản băm cho Apple
       });
 
-      // 3. TRUYỀN CẢ TOKEN VÀ NONCE CHO FIREBASE
+      // 4. Trình diện Firebase bằng bản NGUYÊN BẢN
       const provider = new OAuthProvider('apple.com');
       const credential = provider.credential({ 
         idToken: response.identityToken,
-        rawNonce: rawNonce // 👈 THÊM DÒNG NÀY ĐỂ MỞ KHÓA
+        rawNonce: rawNonce // 👈 Nộp bản gốc cho Firebase
       });
 
       await signInWithCredential(auth, credential);
