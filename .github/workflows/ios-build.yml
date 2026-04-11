@@ -40,6 +40,11 @@ jobs:
       - name: 4. Khởi tạo và Đồng bộ code vào iOS
         working-directory: ./client
         run: |
+          # BƠM THÊM 2 DÒNG NÀY ĐỂ ÉP PLUGIN NÂNG CẤP LÊN CHUẨN SPM MỚI NHẤT
+          npm install @codetrix-studio/capacitor-google-auth@latest
+          npm install @capacitor-community/apple-sign-in@latest
+          
+          # Các dòng dưới giữ nguyên
           npm install @capacitor/ios@7 
           npx cap sync ios
           npm install -g @capacitor/assets
@@ -73,23 +78,7 @@ jobs:
 
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
-      - name: 4.8. Ép cài CocoaPods cho Google (Fix lỗi Unimplemented)
-        working-directory: ./client/ios/App
-        run: |
-          # Bơm file cấu hình Podfile tiêu chuẩn của Capacitor
-          cat <<EOF > Podfile
-          require_relative '../../node_modules/@capacitor/ios/scripts/pods_helpers'
-          platform :ios, '14.0'
-          use_frameworks!
-          target 'App' do
-            capacitor_pods
-          end
-          post_install do |installer|
-            assertDeploymentTarget(installer)
-          end
-          EOF
-          # Chạy cài đặt để hệ thống nhúng GoogleAuth và sinh ra file App.xcworkspace
-          pod install --repo-update
+      
       - name: 5.5. Bơm quyền Apple Sign-In vào App (Fix Error 1000)
         run: |
           cd ios/App/App
