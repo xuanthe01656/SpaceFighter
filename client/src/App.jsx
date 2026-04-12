@@ -2158,17 +2158,17 @@ useEffect(() => {
       const userRef = doc(db, "users", currentUser.uid);
       // 1. Tạo một gói dữ liệu cơ bản KHÔNG chứa Tên và Ảnh
       const updateData = {
-        highScore: gsRef.current.bestScore,
-        coins: gsRef.current.coins,
-        lives: gsRef.current.lives,
+        highScore: gsRef.current.bestScore || 0,
+        coins: gsRef.current.coins || 0,
+        lives: gsRef.current.lives !== undefined ? gsRef.current.lives : 10,
         livesUpdatedAt: gsRef.current.livesUpdatedAt || null,
         isVIP: gsRef.current.isVIP || false,
-        dailyCoinCount: gsRef.current.dailyCoinCount,
-        lastCoinDate: gsRef.current.lastCoinDate,
-        hourlyCoinCount: gsRef.current.hourlyCoinCount,
-        lastCoinHour: gsRef.current.lastCoinHour,
-        inventory: gsRef.current.inventory,
-        equipped: gsRef.current.userSettings,
+        dailyCoinCount: gsRef.current.dailyCoinCount || 0,
+        lastCoinDate: gsRef.current.lastCoinDate || '',
+        hourlyCoinCount: gsRef.current.hourlyCoinCount || 0,
+        lastCoinHour: gsRef.current.lastCoinHour || '',
+        inventory: gsRef.current.inventory || { skins: ['classic'], bgs: ['deep'] },
+        equipped: gsRef.current.userSettings || { skin: 'classic', bg: 'deep' },
       };
       // 👇 2. BẢO VỆ DỮ LIỆU: Chỉ gắn thêm Tên và Ảnh vào gói hàng NẾU CÓ DỮ LIỆU THẬT
       if (currentUser.displayName) {
@@ -2312,6 +2312,13 @@ useEffect(() => {
         });
 
         gsRef.current.myName = finalName;
+        gsRef.current.coins = 0;
+        gsRef.current.lives = 10;
+        gsRef.current.isVIP = false;
+        gsRef.current.livesUpdatedAt = null;
+        gsRef.current.bestScore = 0;
+        gsRef.current.inventory = { skins: ['classic'], bgs: ['deep'] };
+        gsRef.current.userSettings = { skin: 'classic', bg: 'deep' };
       }
 
       // 👇 TUYỆT CHIÊU 4: ÉP MENU HIỂN THỊ ẢNH VÀ TÊN NGAY LẬP TỨC
