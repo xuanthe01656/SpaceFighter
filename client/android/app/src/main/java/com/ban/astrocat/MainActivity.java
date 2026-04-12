@@ -1,27 +1,36 @@
-package com.ban.astrocat; // Giữ nguyên package của bạn
+package com.ban.astrocat;
 
 import android.os.Bundle;
-import android.view.View;
 import androidx.activity.EdgeToEdge;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
+
+// 👇 1. IMPORT THÊM 3 THƯ VIỆN NÀY ĐỂ ĐIỀU KHIỂN HỆ THỐNG GIAO DIỆN ANDROID
+import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
+
 import com.getcapacitor.BridgeActivity;
+import com.codetrixstudio.capacitor.GoogleAuth.GoogleAuth;
 
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // Đăng ký Google Auth
+        registerPlugin(GoogleAuth.class);
+        
         super.onCreate(savedInstanceState); 
-        // 1. Kích hoạt chế độ tràn viền theo chuẩn Android 15
         EdgeToEdge.enable(this); 
-        // 2. Lấy khung nhìn gốc của ứng dụng Capacitor
-        View contentView = findViewById(android.R.id.content);
-        // 3. Tự động lắng nghe và tính toán kích thước các thanh hệ thống
-        ViewCompat.setOnApplyWindowInsetsListener(contentView, (v, windowInsets) -> {
-            Insets insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
-            // Ép nội dung game thụt lùi vào trong, chừa khoảng trống cho Status Bar và Navigation Bar
-            v.setPadding(insets.left, insets.top, insets.right, insets.bottom);
-            return windowInsets;
-        });
+
+        // 👇 2. CƠ CHẾ ẨN THANH ĐIỀU HƯỚNG & TRẠNG THÁI (IMMERSIVE MODE)
+        WindowInsetsControllerCompat windowInsetsController =
+                WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+        
+        if (windowInsetsController != null) {
+            // Cài đặt hành vi: Vuốt mép để hiện tạm thời (sẽ tự động ẩn lại sau vài giây)
+            windowInsetsController.setSystemBarsBehavior(
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            );
+            // Ra lệnh ẨN toàn bộ các thanh hệ thống (systemBars = Navigation Bar + Status Bar)
+            windowInsetsController.hide(WindowInsetsCompat.Type.systemBars());
+        }
     }
 }

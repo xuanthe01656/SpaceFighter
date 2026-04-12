@@ -7,13 +7,18 @@ export default function Menu({ currentUser, uiUpdates, topRecords, startGame, se
   const text = t[lang];
   const platform = Capacitor.getPlatform();
   const [showHelp, setShowHelp] = useState(false);
+  
   return (
     <div className="ui-layer">
       {/* NÚT HƯỚNG DẪN (?) GÓC TRÊN BÊN TRÁI */}
       <button 
         onClick={() => setShowHelp(true)}
         style={{ 
-          position: 'absolute', top: '15px', left: '15px', zIndex: 150,
+          position: 'absolute', 
+          // 👇 Ép né tai thỏ trên và né viền cong khi xoay ngang
+          top: 'calc(env(safe-area-inset-top) + 15px)', 
+          left: 'max(env(safe-area-inset-left), 15px)', 
+          zIndex: 150,
           width: '40px', height: '40px', borderRadius: '50%',
           background: 'rgba(0,0,0,0.6)', color: '#0abde3',
           border: '2px solid #0abde3', fontSize: '24px',
@@ -23,8 +28,15 @@ export default function Menu({ currentUser, uiUpdates, topRecords, startGame, se
       >
         ?
       </button>
+
       {/* KHU VỰC GÓC TRÊN BÊN PHẢI: Chứa User, Nút Thoát và Nút Đổi Ngôn Ngữ */}
-      <div style={{ position: 'absolute', top: '15px', right: '15px', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '10px', zIndex: 100, maxWidth: '55vw' }}>
+      <div style={{ 
+        position: 'absolute', 
+        // 👇 Ép né tai thỏ và đảo bảo không bị lẹm viền phải
+        top: 'calc(env(safe-area-inset-top) + 15px)', 
+        right: 'max(env(safe-area-inset-right), 15px)', 
+        display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '10px', zIndex: 100, maxWidth: '55vw' 
+      }}>
         
         {/* NÚT CHUYỂN ĐỔI NGÔN NGỮ */}
         <button 
@@ -40,7 +52,6 @@ export default function Menu({ currentUser, uiUpdates, topRecords, startGame, se
 
         {currentUser ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', width: '100%', alignItems: 'flex-end' }}>
-            {/* Thanh User & Logout cũ */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.6)', padding: '5px 10px', borderRadius: '50px', border: '2px solid #55efc4', pointerEvents: 'auto', width: '100%' }}>
               <img src={currentUser.photoURL} alt="avatar" style={{ width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0 }} referrerPolicy="no-referrer" />
               <span style={{ color: '#fff', fontSize: '18px', fontFamily: "'VT323', monospace", whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
@@ -51,7 +62,6 @@ export default function Menu({ currentUser, uiUpdates, topRecords, startGame, se
               </button>
             </div>
             
-            {/* NÚT XÓA TÀI KHOẢN MỚI */}
             <button 
               onClick={deleteAccount} 
               style={{ background: 'transparent', color: '#ff4757', border: 'none', textDecoration: 'underline', fontSize: '14px', cursor: 'pointer', fontFamily: "'VT323', monospace", pointerEvents: 'auto', paddingRight: '10px' }}
@@ -80,40 +90,45 @@ export default function Menu({ currentUser, uiUpdates, topRecords, startGame, se
       {currentUser && (
         <div className="hud-container" style={{ 
           position: 'absolute', 
-          top: 'min(3vh, 20px)', 
-          left: 'min(3vw, 20px)', 
+          top: 'calc(env(safe-area-inset-top) + min(3vh, 20px))', 
+          left: 'max(env(safe-area-inset-left), min(3vw, 20px))', 
           display: 'flex', 
           flexDirection: 'column', 
           gap: '8px', 
           pointerEvents: 'none',
-          zIndex: 100 
+          zIndex: 100,
+          /* 👇 Giới hạn chiều rộng tối đa để không đụng vào khu vực User bên phải */
+          maxWidth: '45vw' 
         }}>
           {/* Box hiển thị Xu */}
           <div className="hud-item coin-box" style={{ 
             marginTop: '45px',
-            background: 'rgba(0,0,0,0.7)', padding: '5px 12px', borderRadius: '12px', 
-            color: '#FFD700', fontSize: 'clamp(18px, 4vw, 24px)', border: '2px solid #FFD700', 
-            display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 0 10px rgba(255, 215, 0, 0.2)',
-            fontFamily: "'VT323', monospace"
+            background: 'rgba(0,0,0,0.7)', padding: '5px 10px', borderRadius: '12px', 
+            color: '#FFD700', fontSize: 'clamp(16px, 4vw, 24px)', border: '2px solid #FFD700', 
+            display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 0 10px rgba(255, 215, 0, 0.2)',
+            fontFamily: "'VT323', monospace",
+            /* 👇 Cho phép co giãn linh hoạt theo nội dung */
+            height: 'auto', minHeight: '35px', flexWrap: 'wrap'
           }}>
             <span className="pixel-icon icon-coin"></span>
-            <span>{uiUpdates.coins || 0}</span>
+            <span style={{ lineHeight: '1.2', wordBreak: 'break-all' }}>{uiUpdates.coins || 0}</span>
           </div>
 
           {/* Box hiển thị Mạng/Tim */}
           <div className="hud-item life-box" style={{ 
-            background: 'rgba(0,0,0,0.7)', padding: '5px 12px', borderRadius: '12px', 
-            color: '#ff4757', fontSize: 'clamp(18px, 4vw, 24px)', border: '2px solid #ff4757', 
+            background: 'rgba(0,0,0,0.7)', padding: '5px 10px', borderRadius: '12px', 
+            color: '#ff4757', fontSize: 'clamp(16px, 4vw, 24px)', border: '2px solid #ff4757', 
             display: 'flex', flexDirection: 'column', alignItems: 'flex-start', 
-            boxShadow: '0 0 10px rgba(255, 71, 87, 0.2)', fontFamily: "'VT323', monospace", minWidth: '100px'
+            boxShadow: '0 0 10px rgba(255, 71, 87, 0.2)', fontFamily: "'VT323', monospace", 
+            minWidth: '80px', height: 'auto'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', width: '100%', flexWrap: 'wrap' }}>
               <span className="pixel-icon icon-heart"></span>
-              <span>{uiUpdates.isVIP ? '∞' : `${uiUpdates.lives || 0}/10`}</span>
+              <span style={{ lineHeight: '1.2' }}>{uiUpdates.isVIP ? '∞' : `${uiUpdates.lives || 0}/10`}</span>
             </div>
             
             {uiUpdates.nextLifeTime && (
-              <div style={{ fontSize: 'clamp(10px, 2.5vw, 14px)', color: '#ccc', width: '100%', textAlign: 'right', marginTop: '-2px', opacity: 0.9 }}>
+              <div style={{ fontSize: 'clamp(10px, 2.5vw, 14px)', color: '#ccc', width: '100%', textAlign: 'right', marginTop: '2px', opacity: 0.9 }}>
                 {uiUpdates.nextLifeTime}
               </div>
             )}
@@ -121,14 +136,13 @@ export default function Menu({ currentUser, uiUpdates, topRecords, startGame, se
         </div>
       )}
 
-      {/* --- KHU VỰC NỘI DUNG CHÍNH (TỰ ĐỘNG CUỘN NẾU MÀN HÌNH QUÁ NGẮN) --- */}
+      {/* --- KHU VỰC NỘI DUNG CHÍNH --- */}
         <div className="scrollable-layer" style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start',
           width: '100%', height: '100%', pointerEvents: 'auto', overflowY: 'auto',
           paddingTop: 'clamp(140px, 22vh, 180px)', paddingBottom: '30px', boxSizing: 'border-box'
         }}>
           
-          {/* Lệnh marginTop: 'auto' giúp tự động đẩy cả cụm này xuống giữa màn hình nếu màn hình dài */}
           <div className="title" style={{ marginTop: 'auto', fontSize: 'clamp(45px, 10vw, 70px)' }}>ASTRO CAT 5</div>
           <div className="subtitle" style={{ fontSize: 'clamp(16px, 4vw, 24px)', marginBottom: 'clamp(15px, 3vh, 30px)' }}>Ultimate Online</div>
 
@@ -144,7 +158,6 @@ export default function Menu({ currentUser, uiUpdates, topRecords, startGame, se
             <button className="btn btn-blue" onClick={openShop}>{text.shop}</button>
             <button className="btn btn-green" onClick={() => openLeaderboard('single')}>{text.leaderboard}</button>
             
-            {/* NÚT TẢI APP - CHỈ HIỂN THỊ TRÊN WEB */}
             {!Capacitor.isNativePlatform() && (
               <button 
                 className="btn" 
@@ -161,7 +174,7 @@ export default function Menu({ currentUser, uiUpdates, topRecords, startGame, se
 
           <div style={{ 
             marginTop: 'clamp(20px, 4vh, 60px)', 
-            marginBottom: 'auto', // Giữ content ở giữa màn hình thay vì trôi tuột xuống đáy
+            marginBottom: 'auto', 
             fontSize: 'clamp(16px, 4vw, 22px)', textShadow: '2px 2px 4px #000', 
             background: 'rgba(0,0,0,0.5)', padding: '15px', borderRadius: '10px', border: '1px solid #555',
             width: '90%', maxWidth: '400px'
@@ -171,9 +184,7 @@ export default function Menu({ currentUser, uiUpdates, topRecords, startGame, se
           </div>
           
         </div>
-      {/* ========================================= */}
-      {/* POPUP HƯỚNG DẪN CƠ CHẾ GAME               */}
-      {/* ========================================= */}
+      
       {showHelp && (
         <div style={{
           position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
@@ -186,7 +197,6 @@ export default function Menu({ currentUser, uiUpdates, topRecords, startGame, se
              padding: '20px', display: 'flex', flexDirection: 'column',
              maxHeight: '80vh', boxShadow: '0 0 25px rgba(10, 189, 227, 0.5)'
            }}>
-              {/* Header của Bảng */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #1a365d', paddingBottom: '10px', marginBottom: '15px', flexShrink: 0 }}>
                 <div style={{ fontSize: 'clamp(24px, 6vw, 30px)', color: '#0abde3', fontWeight: 'bold', textShadow: '2px 2px 0 #000' }}>
                   {lang === 'vi' ? 'HƯỚNG DẪN TÂN THỦ' : 'HOW TO PLAY'}
@@ -196,7 +206,6 @@ export default function Menu({ currentUser, uiUpdates, topRecords, startGame, se
                 </button>
               </div>
 
-              {/* Nội dung cuộn */}
               <div className="scrollable-layer" style={{ overflowY: 'auto', color: '#fff', fontSize: 'clamp(16px, 4vw, 20px)', textAlign: 'left', lineHeight: '1.4', paddingRight: '10px' }}>
                 
                 <div style={{ marginBottom: '15px', background: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: '8px' }}>

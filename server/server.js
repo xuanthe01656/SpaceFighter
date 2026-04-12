@@ -33,8 +33,8 @@ app.get('/ping', (req, res) => {
   res.status(200).send('pong');
 });
 const SHOP_PRICES = {
-  skin: { 'classic': 0, 'dog': 0, 'evilFly': 300, 'ufo': 500, 'plane': 700 },
-  bg: { 'deep': 0, 'forest': 150, 'ocean': 350,'sunset': 550, 'meteor': 700, 'hyperspace': 1200}
+  skin: { 'classic': 0, 'dog': 0, 'evilFly': 300, 'ufo': 500, 'plane': 700, 'astro_plane': 2000 },
+  bg: { 'deep': 0, 'forest': 150, 'ocean': 550,'sunset': 1200, 'meteor': 350, 'hyperspace': 700 }
 };
 // Gọi API purchase
 app.post('/api/shop/purchase', async (req, res) => {

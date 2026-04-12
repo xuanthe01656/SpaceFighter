@@ -1861,17 +1861,12 @@ useEffect(() => {
     return () => window.removeEventListener('resize', resizeCanvas);
   }, []);
 
+  // ĐOẠN CODE ĐÃ ĐƯỢC GỠ BẪY "RETURN": TÁCH BẠCH VÒNG LẶP NỀN KHỎI BỘ ĐẾM MẠNG
   useEffect(() => {
     const gs = gsRef.current;
-    // Nếu là VIP hoặc mạng đã đầy thì không cần tính toán
-    if (gs.isVIP || gs.lives >= 10) {
-      if (uiUpdates.nextLifeTime) {
-        setUIUpdates(prev => ({ ...prev, nextLifeTime: null }));
-      }
-      return;
-    }
     const canvas = canvasRef.current;
     
+    // Khởi tạo Canvas an toàn
     if (canvas && !gs.canvas) {
       gs.canvas = canvas;
       gs.ctx = canvas.getContext('2d');
@@ -1896,25 +1891,23 @@ useEffect(() => {
 
       lastIdleTime = timestamp - (deltaTime % FPS_INTERVAL);
       
+      // Tạo lại hạt nếu rỗng
       if (gs.background.particles.length === 0) {
         const bg = BACKGROUNDS.find(b => b.id === gs.userSettings.bg) || BACKGROUNDS[0];
         if (bg.type === 'stars') {
           for (let i = 0; i < 100; i++) { gs.background.particles.push({ x: Math.random() * gs.canvas.width, y: Math.random() * gs.canvas.height, size: Math.random() * 2, speed: Math.random() * 2 + 0.5 }); }
         } else if (bg.type === 'aurora') {
-          // Tạo ít dải lụa hơn nhưng chất lượng hơn
-          const waveColors = ['rgba(0, 255, 238,', 'rgba(0, 255, 140,']; // Màu Cyan và Green neon
+          const waveColors = ['rgba(0, 255, 238,', 'rgba(0, 255, 140,']; 
           for (let i = 0; i < 6; i++) { 
             gs.background.particles.push({ 
               x: Math.random() * gs.canvas.width, 
-              // y ở nửa trên màn hình
               y: Math.random() * gs.canvas.height * 0.4 + gs.canvas.height * 0.1, 
-              height: Math.random() * 200 + 150, // Độ cao của dải lụa
-              speed: Math.random() * 0.3 + 0.1, // Trôi rất chậm
-              // Các thông số để tạo sóng (Wavy effect)
+              height: Math.random() * 200 + 150, 
+              speed: Math.random() * 0.3 + 0.1, 
               color: waveColors[i % 2],
-              phase: Math.random() * Math.PI * 2, // Điểm bắt đầu của sóng
-              freqX: Math.random() * 0.005 + 0.002, // Độ dài sóng
-              amplitude: Math.random() * 20 + 10 // Độ cao sóng
+              phase: Math.random() * Math.PI * 2, 
+              freqX: Math.random() * 0.005 + 0.002, 
+              amplitude: Math.random() * 20 + 10 
             }); 
           }
         } else if (bg.type === 'bubbles') {
@@ -1923,46 +1916,44 @@ useEffect(() => {
           for (let i = 0; i < 50; i++) { gs.background.particles.push({ x: Math.random() * gs.canvas.width, y: Math.random() * gs.canvas.height, size: Math.random() * 3 + 1, speed: Math.random() * 1.5 + 0.5, flicker: Math.random() * 0.1 }); }
         } else if (bg.type === 'meteors') {
           for (let i = 0; i < 25; i++) {
-            // Tạo hình dáng đa giác gồ ghề ngẫu nhiên cho từng viên đá
             const vertices = [];
-            const sides = Math.floor(Math.random() * 3) + 5; // 5 đến 7 cạnh
+            const sides = Math.floor(Math.random() * 3) + 5; 
             for (let j = 0; j < sides; j++) {
-              vertices.push(Math.random() * 0.4 + 0.8); // Độ gồ ghề của đá
+              vertices.push(Math.random() * 0.4 + 0.8); 
             }
             gs.background.particles.push({ 
               x: Math.random() * gs.canvas.width, 
               y: Math.random() * gs.canvas.height, 
-              size: Math.random() * 15 + 10, // Kích thước to hơn
+              size: Math.random() * 15 + 10, 
               speedX: Math.random() * 2 + 1,
-              //speedY: Math.random() * 2 + 1,
               rotation: Math.random() * Math.PI * 2,
-              rotSpeed: (Math.random() - 0.5) * 0.05, // Tốc độ xoay
+              rotSpeed: (Math.random() - 0.5) * 0.05, 
               vertices: vertices
             });
           }
         } else if (bg.type === 'hyperspace') {
-          // Đa dạng màu sắc chuẩn Cyberpunk/Không gian
           const colors = ['#ffffff', '#00ffff', '#8a2be2', '#ff00ff']; 
           for (let i = 0; i < 60; i++) { 
             gs.background.particles.push({ 
               x: Math.random() * gs.canvas.width, 
               y: Math.random() * gs.canvas.height, 
-              length: Math.random() * 80 + 30, // Vệt dài hơn tạo cảm giác siêu tốc
+              length: Math.random() * 80 + 30, 
               speed: Math.random() * 3 + 2,
-              color: colors[Math.floor(Math.random() * colors.length)], // Lấy màu ngẫu nhiên
+              color: colors[Math.floor(Math.random() * colors.length)], 
               thickness: Math.random() * 2 + 1
             }); 
           }
         }
       }
 
+      // Xóa màn hình và vẽ lại (Sẽ tự động xóa mèo chết khi về menu)
       gs.ctx.clearRect(0, 0, gs.canvas.width, gs.canvas.height);
       drawBackground();
       
       const bgType = BACKGROUNDS.find(b => b.id === gs.userSettings.bg)?.type || 'stars';
       for (let p of gs.background.particles) {
         if (bgType === 'meteors') {
-          p.x -= p.speedX * 1.5; //p.y += p.speedY * 1.5;
+          p.x -= p.speedX * 1.5; 
           if (p.rotation !== undefined) p.rotation += p.rotSpeed;
           if (p.x < -p.size * 2 ) {p.x = gs.canvas.width + Math.random() * 100; p.y = Math.random() * gs.canvas.height; }
         } else {
@@ -1974,6 +1965,7 @@ useEffect(() => {
       menuAnimId = requestAnimationFrame(idleLoop);
     };
 
+    // Chỉ chạy nền chuyển động khi KHÔNG ở trong game
     if (screen !== 'game') {
       menuAnimId = requestAnimationFrame(idleLoop);
     }
@@ -2189,7 +2181,7 @@ useEffect(() => {
     const userRef = doc(db, "users", user.uid);
     
     try {
-      // --- KHỞI TẠO REVENUECAT (CHỈ CHẠY TRÊN NATIVE APP) ---
+      // --- KHỞI TẠO REVENUECAT ---
       if (Capacitor.isNativePlatform()) {
         const isIOS = Capacitor.getPlatform() === 'ios'; 
         await Purchases.configure({ 
@@ -2198,41 +2190,60 @@ useEffect(() => {
         });
       }
       const snap = await getDoc(userRef);
-      // Sử dụng Session ID cố định lưu trong máy
-      let savedId = secureStorage.getItem('astro_session_id');
+
+      // 1. CƠ CHẾ RAM: XỬ LÝ ĐỘ TRỄ IOS
+      let savedId = window.local_astro_session || secureStorage.getItem('astro_session_id');
       if (!savedId) {
         savedId = "sess_" + Math.random().toString(36).substring(2, 15);
         secureStorage.setItem('astro_session_id', savedId);
       }
+      window.local_astro_session = savedId; 
       const currentSocketId = savedId;
+
+      // 2. MÓC TÊN/ẢNH TỪ GOOGLE NẾU BỊ APPLE GIẤU
+      let authName = user.displayName;
+      let authPhoto = user.photoURL;
+
+      if (user.providerData && user.providerData.length > 0) {
+        user.providerData.forEach(provider => {
+          if (provider.displayName && !authName) authName = provider.displayName;
+          if (provider.photoURL && !authPhoto) authPhoto = provider.photoURL;
+        });
+      }
+
+      let finalName = authName;
+      let finalPhoto = authPhoto || "";
 
       if (snap.exists()) {
         const data = snap.data();
         const now = getRealTime();
         const lastUpdate = data.last_update_ms || 0;
 
-        // Nếu ID khớp (cùng thiết bị) hoặc mới Online cách đây < 15 giây (do load lại trang)
         const isSameDevice = data.last_session_id === currentSocketId;
         const isQuickReload = (now - lastUpdate) < 15000; 
 
-        // Bỏ cơ chế chặn cứng, thay bằng cơ chế "Cướp phiên"
         if (data.isOnline === true && !isSameDevice) {
-          // Báo cho người chơi biết họ vừa đá cái máy cũ ra ngoài
           toast.success(t[langRef.current]?.sessionTaken || "Đã ngắt kết nối thiết bị cũ!", { duration: 4000, icon: '🔄' });
         }
 
-        // Cập nhật trạng thái mới
+        // 3. CHỮA LÀNH DỮ LIỆU LÊN MÂY
+        finalName = authName || data.displayName || 'Player';
+        finalPhoto = authPhoto || data.photoURL || '';
+        gsRef.current.myName = finalName;
+
         await updateDoc(userRef, {
           isOnline: true,
           last_session_id: currentSocketId,
-          last_update_ms: now
+          last_update_ms: now,
+          displayName: finalName, 
+          photoURL: finalPhoto    
         });
 
-        // Tải dữ liệu
+        // Tải dữ liệu Game
         gsRef.current.coins = data.coins || 0;
         gsRef.current.lives = data.lives !== undefined ? data.lives : 10;
         gsRef.current.isVIP = data.isVIP || false;
-        // Xử lý nạp mạng và Vô cực (∞)
+        
         if (gsRef.current.isVIP) {
           gsRef.current.lives = '∞';
           gsRef.current.livesUpdatedAt = null;
@@ -2249,51 +2260,41 @@ useEffect(() => {
             gsRef.current.livesUpdatedAt = null;
           }
         }
-        // KIỂM TRA RESET LƯỢT NHẬN XU THEO NGÀY
-        // Lấy giờ thật đã được đồng bộ qua API (Chống hack đổi giờ trên máy)
+        
         const realTimeNow = new Date(getRealTime());
-        // Tạo chuỗi ngày chuẩn (Ví dụ: "2026-3-23")
         const today = `${realTimeNow.getFullYear()}-${realTimeNow.getMonth() + 1}-${realTimeNow.getDate()}`;
         if (data.lastCoinDate === today) {
           gsRef.current.dailyCoinCount = data.dailyCoinCount || 0; 
         } else {
-          gsRef.current.dailyCoinCount = 0; // Đã qua ngày mới chuẩn quốc tế -> Reset
+          gsRef.current.dailyCoinCount = 0; 
         }
         gsRef.current.lastCoinDate = today;
-        // KIỂM TRA ĐẾM THEO GIỜ (Cho hệ thống quảng cáo)
+        
         const currentHourStr = `${today}-${realTimeNow.getHours()}`;
         if (data.lastCoinHour === currentHourStr) {
           gsRef.current.hourlyCoinCount = data.hourlyCoinCount || 0;
         } else {
-          gsRef.current.hourlyCoinCount = 0; // Sang giờ mới -> Reset về 0
+          gsRef.current.hourlyCoinCount = 0; 
         }
         gsRef.current.lastCoinHour = currentHourStr;
-        if (gsRef.current.isVIP) {
-          gsRef.current.livesUpdatedAt = null;
-        } else if (gsRef.current.lives < 10) {
-          if (!data.livesUpdatedAt) {
-            gsRef.current.livesUpdatedAt = now;
-            updateDoc(userRef, { livesUpdatedAt: now });
-          } else {
-            gsRef.current.livesUpdatedAt = data.livesUpdatedAt;
-          }
-        } else {
-          gsRef.current.livesUpdatedAt = null;
-        }
+        
         gsRef.current.bestScore = data.highScore || 0;
         gsRef.current.inventory = data.inventory || { skins: ['classic'], bgs: ['deep'] };
+        const newSettings = data.equipped || { skin: 'classic', bg: 'deep' };
+        // Nếu nền trên mây khác với nền mặc định, phải xóa sạch hạt cũ để hệ thống vẽ lại
+        if (gsRef.current.userSettings.bg !== newSettings.bg) {
+          gsRef.current.background.particles = []; 
+        }
         gsRef.current.userSettings = data.equipped || { skin: 'classic', bg: 'deep' };
+
       } else {
-        // 👇 TẠO TÊN DỰ PHÒNG: Nếu Apple giấu Tên, cấp ngay cho người chơi một tên Random
-        let defaultName = user.displayName;
-        if (!defaultName) {
-           defaultName = `Astro_${Math.floor(Math.random() * 10000)}`;
+        if (!finalName) {
+           finalName = `Astro_${Math.floor(Math.random() * 10000)}`;
         }
 
-        // Tạo profile mới
         await setDoc(userRef, {
-          displayName: defaultName,
-          photoURL: user.photoURL || "", // Ép thành chuỗi rỗng nếu không có ảnh để tránh lỗi UI
+          displayName: finalName,
+          photoURL: finalPhoto, 
           isOnline: true,
           last_session_id: currentSocketId,
           last_update_ms: Date.now(),
@@ -2302,10 +2303,35 @@ useEffect(() => {
           highScore: 0
         });
 
-        // Cập nhật tên vào biến game để hiển thị ngay lập tức
-        gsRef.current.myName = defaultName;
+        gsRef.current.myName = finalName;
       }
-      setUIUpdates(prev => ({ ...prev, coins: gsRef.current.coins, lives: gsRef.current.lives, isVIP: gsRef.current.isVIP, nextLifeTime: gsRef.current.isVIP ? null : prev.nextLifeTime}));
+
+      // 👇 TUYỆT CHIÊU 4: ÉP MENU HIỂN THỊ ẢNH VÀ TÊN NGAY LẬP TỨC
+      if (user.displayName !== finalName || user.photoURL !== finalPhoto) {
+        try {
+          await updateProfile(user, {
+            displayName: finalName,
+            photoURL: finalPhoto
+          });
+          // Gán thẳng vào biến để file Menu.jsx nhận diện được sự thay đổi
+          user.displayName = finalName;
+          user.photoURL = finalPhoto;
+        } catch (e) {
+          console.error("Lỗi đồng bộ Auth:", e);
+        }
+      }
+      
+      // CẬP NHẬT GIAO DIỆN CHUNG
+      setUIUpdates(prev => ({ 
+        ...prev, 
+        coins: gsRef.current.coins, 
+        lives: gsRef.current.lives, 
+        isVIP: gsRef.current.isVIP, 
+        nextLifeTime: gsRef.current.isVIP ? null : prev.nextLifeTime,
+        displayName: finalName, 
+        photoURL: finalPhoto    
+      }));
+      
     } catch (error) {
       console.error("Lỗi tải hồ sơ:", error);
     }
@@ -2319,7 +2345,7 @@ useEffect(() => {
       setCurrentUser(user);
       
       if (user) {
-        gsRef.current.myName = user.displayName; 
+        gsRef.current.myName = user.displayName || 'Player';
         await loadUserProfile(user);
 
         // 2. --- BỘ LẮNG NGHE CHỐNG HACK & ĐÁNG NHẬP NHIỀU NƠI CÙNG LÚC ---
@@ -2327,7 +2353,7 @@ useEffect(() => {
         unsubSnapshot = onSnapshot(userRef, (docSnap) => {
           if (docSnap.exists()) {
             const currentData = docSnap.data();
-            const mySessionId = secureStorage.getItem('astro_session_id');
+            const mySessionId = window.local_astro_session || secureStorage.getItem('astro_session_id');
 
             // Nếu phát hiện Session ID trên mây đã bị thiết bị khác ghi đè
             if (currentData.last_session_id && currentData.last_session_id !== mySessionId) {
@@ -2822,7 +2848,7 @@ useEffect(() => {
         />
       )}
       {showRevivePopup && (
-        <div className="ui-layer" style={{ background: 'rgba(0,0,0,0.85)', zIndex: 5000, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <div className="ui-layer" style={{ pointerEvents: 'auto', background: 'rgba(0,0,0,0.85)', zIndex: 5000, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
           <div style={{ background: '#1a1a2e', border: '3px solid #FFD700', borderRadius: '20px', padding: '30px', textAlign: 'center', width: '85%', maxWidth: '350px', boxShadow: '0 0 25px rgba(255, 215, 0, 0.4)' }}>
             <h2 style={{ color: '#FFD700', fontSize: '38px', margin: '0 0 5px 0', fontFamily: "'VT323', monospace", textShadow: '2px 2px 0 #000' }}>
               {lang === 'vi' ? 'TIẾP TỤC?' : 'CONTINUE?'}
@@ -2831,15 +2857,35 @@ useEffect(() => {
               {lang === 'vi' ? `Lượt hồi sinh: ${gsRef.current.reviveCount}/2` : `Revives: ${gsRef.current.reviveCount}/2`}
             </p>
             
-            <button className="btn btn-green" onClick={handleReviveWithCoins} style={{ width: '100%', marginBottom: '12px', fontSize: '22px' }}>
-               🪙 550 {lang === 'vi' ? 'Xu' : 'Coins'}
-            </button>
+            {/* 👇 PHÂN LUỒNG LOGIC: VIP VS NGƯỜI CHƠI THƯỜNG */}
+            {uiUpdates.isVIP ? (
+              // --- NHÁNH DÀNH CHO VIP ---
+              gsRef.current.reviveCount === 0 ? (
+                /* Lượt 1: Miễn phí hoàn toàn cho VIP */
+                <button className="btn btn-purple" onClick={revivePlayer} style={{ width: '100%', marginBottom: '12px', fontSize: '22px' }}>
+                   🎁 {lang === 'vi' ? 'Miễn phí (VIP)' : 'Free (VIP)'}
+                </button>
+              ) : (
+                /* Lượt 2: Bắt đầu thu phí bằng Xu */
+                <button className="btn btn-green" onClick={handleReviveWithCoins} style={{ width: '100%', marginBottom: '12px', fontSize: '22px' }}>
+                   🪙 550 {lang === 'vi' ? 'Xu' : 'Coins'}
+                </button>
+              )
+            ) : (
+              // --- NHÁNH DÀNH CHO NGƯỜI CHƠI THƯỜNG ---
+              <>
+                <button className="btn btn-green" onClick={handleReviveWithCoins} style={{ width: '100%', marginBottom: '12px', fontSize: '22px' }}>
+                   🪙 550 {lang === 'vi' ? 'Xu' : 'Coins'}
+                </button>
+                
+                <button className="btn btn-blue" onClick={handleWatchAdRevive} style={{ width: '100%', marginBottom: '15px', fontSize: '22px' }}>
+                   📺 {lang === 'vi' ? 'Xem Quảng Cáo' : 'Watch Ad'}
+                </button>
+              </>
+            )}
             
-            <button className="btn btn-blue" onClick={handleWatchAdRevive} style={{ width: '100%', marginBottom: '15px', fontSize: '22px' }}>
-               📺 {lang === 'vi' ? 'Xem Quảng Cáo' : 'Watch Ad'}
-            </button>
-            
-            <button onClick={finalizeGameOver} style={{ background: 'transparent', color: '#ff4757', border: 'none', textDecoration: 'underline', cursor: 'pointer', fontSize: '20px', fontFamily: "'VT323', monospace" }}>
+            {/* Nút Bỏ qua (Đã được sửa pointerEvents để có thể bấm ngay) */}
+            <button onClick={finalizeGameOver} style={{ pointerEvents: 'auto', background: 'transparent', color: '#ff4757', border: 'none', textDecoration: 'underline', cursor: 'pointer', fontSize: '20px', fontFamily: "'VT323', monospace" }}>
               {lang === 'vi' ? `Bỏ qua (${reviveTimer})` : `Skip (${reviveTimer})`}
             </button>
           </div>
@@ -2849,6 +2895,9 @@ useEffect(() => {
         position="top-center" 
         reverseOrder={false} 
         gutter={8} 
+        containerStyle={{
+          top: 'calc(env(safe-area-inset-top) + 20px)' // Đẩy xuống khỏi tai thỏ 20px
+        }}
         toastOptions={{
           duration: 3000,
           style: {

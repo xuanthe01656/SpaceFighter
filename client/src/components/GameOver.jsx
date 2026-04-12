@@ -1,7 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { t } from '../utils/translations'; // 1. Nhúng từ điển
 import { Capacitor } from '@capacitor/core';
-
+import toast from 'react-hot-toast';
+const BAD_WORDS = [
+  // Tiếng Anh
+  'fuck', 'shit', 'bitch', 'dick', 'cunt', 'pussy', 'asshole', 'slut', 'whore', 'nigga', 'nigger',
+  // Tiếng Việt (Có dấu và Không dấu)
+  'đụ', 'đù', 'đĩ', 'lồn', 'cặc', 'buồi', 'chó', 'đm', 'vcl', 'địt', 'dit', 'lon', 'cac', 'buoi', 'nulo', 'dkm', 'vcc'
+];
 export default function GameOver({ gsRef, uiUpdates, currentUser, setScreen, submitScore, loginWithGoogle , loginWithApple, lang, setLobbyState, startGame, leaveLobby }) {
   // 2. Lấy bộ từ vựng theo ngôn ngữ hiện tại
   const text = t[lang] || t['vi'];
@@ -18,8 +24,25 @@ export default function GameOver({ gsRef, uiUpdates, currentUser, setScreen, sub
       localStorage.setItem('astro_custom_name', currentUser.displayName);
     }
   }, [currentUser]);
+  // 👇 HÀM KIỂM TRA ĐIỀU KIỆN TÊN
   const handleSaveScore = async () => {
-    const success = await submitScore('single', false, playerName.trim());
+    // 1. Chống khoảng trắng rỗng (ví dụ: "    ")
+    const trimName = playerName.trim();
+    if (!trimName || trimName.length < 2) {
+      toast.error(lang === 'vi' ? 'Tên phải có ít nhất 2 ký tự!' : 'Name must be at least 2 characters!');
+      return;
+    }
+
+    // 2. Chống từ ngữ thô tục
+    const lowerName = trimName.toLowerCase();
+    const hasBadWord = BAD_WORDS.some(word => lowerName.includes(word));
+    if (hasBadWord) {
+      toast.error(lang === 'vi' ? 'Tên chứa từ ngữ không phù hợp!' : 'Inappropriate name detected!');
+      return;
+    }
+
+    // 3. Nếu vượt qua mọi bài kiểm tra, mới cho phép lưu
+    const success = await submitScore('single', false, trimName);
     if (success) {
       setIsSubmitted(true);
     }
@@ -111,6 +134,8 @@ export default function GameOver({ gsRef, uiUpdates, currentUser, setScreen, sub
 
           <button className="btn btn-blue" onClick={() => { 
             gsRef.current.isPlaying = false;
+            gsRef.current.isGameOver = false; 
+            gsRef.current.isPaused = false;
             gsRef.current.gameMode = 'single'; 
             gsRef.current.roomCode = null; 
             setLobbyState('main'); 
