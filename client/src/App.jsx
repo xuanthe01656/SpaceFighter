@@ -697,10 +697,8 @@ useEffect(() => {
     const gs = gsRef.current;
     gs.isPlaying = false;
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
-
     const result = gs.score > gs.remoteScore ? 'WIN' : gs.score < gs.remoteScore ? 'LOSE' : 'DRAW';
     if (result === 'WIN') Sound.win();
-
     setUIUpdates(prev => ({
       ...prev,
       finalScore: gs.score,
@@ -711,6 +709,15 @@ useEffect(() => {
     }));
     setScreen('gameover');
     submitScore('pvp', false);
+    // 👇 DỌN DẸP TÀN DƯ "BÓNG MA" NGAY KHI TRẬN ĐẤU KẾT THÚC
+    socketRef.current.emit('leave-room'); // Rút ống thở khỏi phòng trên Server
+    gs.roomCode = null; // Xóa mã phòng trên thiết bị
+    setRoomPlayers([]); // Làm trống danh sách đối thủ
+    setChatMessages([]); // Xóa sạch lịch sử chat
+    setLobbyState('main'); // Trả sảnh chờ về màn hình chọn chế độ ban đầu
+    // Rã đông hình nền để lúc hiển thị điểm số nền không bị đóng băng
+    gs.isGameOver = false; 
+    gs.isPaused = false;
   };
 
   const submitScore = async (mode = 'single', isAuto = false, customName = '') => {
