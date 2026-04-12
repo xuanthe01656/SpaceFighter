@@ -1986,24 +1986,28 @@ useEffect(() => {
   const loginWithGoogle = async () => {
     try {
       if (Capacitor.isNativePlatform()) {
+        // Đăng nhập Native cho App APK
         toast.loading(t[lang]?.loginOpening, { id: 'nativeLogin' });
-        
+        // BẮT BUỘC PHẢI THÊM ĐOẠN NÀY ĐỂ ÉP KHỞI TẠO Ở NATIVE
+        GoogleAuth.initialize({
+          clientId: '271365354200-divjlei917agdhao9na226dnhemtiq2b.apps.googleusercontent.com',
+          scopes: ['profile', 'email'],
+          grantOfflineAccess: true,
+        });
         const googleUser = await GoogleAuth.signIn();
         const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
         await signInWithCredential(auth, credential);
-        
-        toast.dismiss('nativeLogin');
         toast.success(t[lang]?.loginAppSuccess);
       } else {
         await signInWithPopup(auth, googleProvider);
         toast.success(t[lang]?.loginWebSuccess);
       }
+
     } catch (error) {
-      toast.dismiss('nativeLogin');
-      // 👇 ÉP IOS IN LỖI CHI TIẾT RA GIỮA MÀN HÌNH
-      alert("🚨 LỖI GOOGLE:\n" + JSON.stringify(error, Object.getOwnPropertyNames(error)));
+      console.error("Login Error:", error);
       toast.error(t[lang]?.loginFail);
     }
+
   };
 
   const loginWithApple = async () => {

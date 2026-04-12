@@ -1,7 +1,8 @@
 // src/firebase.js
 import { initializeApp } from "firebase/app";
 import { getFirestore, initializeFirestore } from "firebase/firestore";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+// 👇 1. THAY ĐỔI Ở ĐÂY: Import thêm initializeAuth và indexedDBLocalPersistence
+import { getAuth, GoogleAuthProvider, initializeAuth, indexedDBLocalPersistence } from "firebase/auth";
 
 const firebaseConfig = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -30,5 +31,18 @@ try {
 }
 
 export const db = dbInstance;
-export const auth = getAuth(app);
+
+// 👇 2. ĐẶC TRỊ TREO ĐĂNG NHẬP IOS Ở ĐÂY
+let authInstance;
+try {
+  // Ép iOS sử dụng bộ nhớ gốc của máy để lưu Token, tránh bị WebKit đóng băng
+  authInstance = initializeAuth(app, {
+    persistence: indexedDBLocalPersistence
+  });
+} catch (error) {
+  // Dự phòng: Nếu hệ thống đã tự khởi tạo Auth từ trước thì xài lại đồ cũ
+  authInstance = getAuth(app);
+}
+
+export const auth = authInstance;
 export const googleProvider = new GoogleAuthProvider();
