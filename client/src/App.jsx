@@ -106,16 +106,16 @@ export default function Game() {
   useEffect(() => {
     langRef.current = lang;
   }, [lang]);
-  useEffect(() => {
-    window.onerror = function(message, source, lineno, colno, error) {
-      alert(`🚨 LỖI JS NGẦM:\n${message}\nTại dòng: ${lineno}`);
-      return true; 
-    };
-    window.addEventListener("unhandledrejection", function(event) {
-      // Bắt các lỗi Firebase bị từ chối
-      alert(`🚨 LỖI HỆ THỐNG:\n${event.reason}`);
-    });
-  }, []);
+  // useEffect(() => {
+  //   window.onerror = function(message, source, lineno, colno, error) {
+  //     alert(`🚨 LỖI JS NGẦM:\n${message}\nTại dòng: ${lineno}`);
+  //     return true; 
+  //   };
+  //   window.addEventListener("unhandledrejection", function(event) {
+  //     // Bắt các lỗi Firebase bị từ chối
+  //     alert(`🚨 LỖI HỆ THỐNG:\n${event.reason}`);
+  //   });
+  // }, []);
   const gsRef = useRef({
     canvas: null,
     ctx: null,
