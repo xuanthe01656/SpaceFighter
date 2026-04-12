@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import toast, { Toaster } from 'react-hot-toast';
 import { db, auth, googleProvider } from './firebase';
 import { collection, addDoc, query, where, orderBy, limit, getDocs, doc, getDoc, setDoc, updateDoc, serverTimestamp, onSnapshot, deleteDoc } from 'firebase/firestore';
-import { signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged,signInWithCredential, GoogleAuthProvider, OAuthProvider, deleteUser } from 'firebase/auth';
+import { signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged,signInWithCredential, GoogleAuthProvider, OAuthProvider, updateProfile, deleteUser } from 'firebase/auth';
 import { AdMob, RewardAdPluginEvents, BannerAdSize, BannerAdPosition } from '@capacitor-community/admob';
 import { Capacitor } from '@capacitor/core';
 import { SignInWithApple } from '@capacitor-community/apple-sign-in';
@@ -2032,10 +2032,9 @@ useEffect(() => {
       };
       const hashedNonce = await sha256(rawNonce);
 
-      // 3. Gọi FaceID và nộp bản BĂM NÁT cho Apple
+      // 3. Gọi FaceID và nộp bản BĂM NÁT cho Apple (ĐÃ XÓA redirectURI ĐỂ CHỐNG TREO)
       const { response } = await SignInWithApple.authorize({
         clientId: 'com.ban.astrocat',
-        redirectURI: '',
         scopes: 'email name',
         nonce: hashedNonce 
       });
@@ -2052,11 +2051,25 @@ useEffect(() => {
         setTimeout(() => reject(new Error("LỖI MẠNG iOS: Firebase bị treo cứng không phản hồi sau 8 giây!")), 8000)
       );
 
-      // 6. Cho lệnh kết nối Firebase chạy đua với quả bom
-      await Promise.race([
+      // 6. Cho lệnh kết nối Firebase chạy đua với quả bom (VÀ HỨNG LẤY USER)
+      const userCredential = await Promise.race([
         signInWithCredential(auth, credential),
         timeout
       ]);
+      const user = userCredential.user;
+
+      // 👇 7. BẮT SỐNG TÊN CỦA APPLE (CHỈ CÓ TÁC DỤNG LẦN ĐĂNG NHẬP ĐẦU TIÊN)
+      if (response.givenName || response.familyName) {
+        const appleName = `${response.familyName || ''} ${response.givenName || ''}`.trim();
+        
+        // Ép Firebase nhớ mãi mãi cái tên này
+        await updateProfile(user, {
+          displayName: appleName
+        });
+        
+        // Gán ngay vào biến để UI nhận diện tức thì
+        user.displayName = appleName; 
+      }
       
       toast.dismiss('appleLogin');
       toast.success(t[lang]?.loginAppSuccess || "Đăng nhập thành công!");
@@ -2140,6 +2153,37 @@ useEffect(() => {
       }
     }
   };
+  const saveUserProfile = async () => {
+    if (!currentUser) return; 
+    const userRef = doc(db, "users", currentUser.uid);
+    
+    // 1. Tạo một gói dữ liệu cơ bản KHÔNG chứa Tên và Ảnh
+    const updateData = {
+      highScore: gsRef.current.bestScore,
+      coins: gsRef.current.coins,
+      lives: gsRef.current.lives,
+      livesUpdatedAt: gsRef.current.livesUpdatedAt,
+      isVIP: gsRef.current.isVIP || false,
+      dailyCoinCount: gsRef.current.dailyCoinCount,
+      lastCoinDate: gsRef.current.lastCoinDate,
+      hourlyCoinCount: gsRef.current.hourlyCoinCount,
+      lastCoinHour: gsRef.current.lastCoinHour,
+      inventory: gsRef.current.inventory,
+      equipped: gsRef.current.userSettings,
+    };
+
+    // 👇 2. BẢO VỆ DỮ LIỆU: Chỉ gắn thêm Tên và Ảnh vào gói hàng NẾU CÓ DỮ LIỆU THẬT
+    if (currentUser.displayName) {
+      updateData.displayName = currentUser.displayName;
+    }
+    if (currentUser.photoURL) {
+      updateData.photoURL = currentUser.photoURL;
+    }
+
+    // 3. Đẩy lên mây (Nếu Apple trả null, nó sẽ bỏ qua không ghi đè mất Tên/Ảnh cũ)
+    await updateDoc(userRef, updateData);
+  };
+
   const loadUserProfile = async (user) => {
     if (!user) return;
     const userRef = doc(db, "users", user.uid);
@@ -2240,39 +2284,31 @@ useEffect(() => {
         gsRef.current.inventory = data.inventory || { skins: ['classic'], bgs: ['deep'] };
         gsRef.current.userSettings = data.equipped || { skin: 'classic', bg: 'deep' };
       } else {
+        // 👇 TẠO TÊN DỰ PHÒNG: Nếu Apple giấu Tên, cấp ngay cho người chơi một tên Random
+        let defaultName = user.displayName;
+        if (!defaultName) {
+           defaultName = `Astro_${Math.floor(Math.random() * 10000)}`;
+        }
+
         // Tạo profile mới
         await setDoc(userRef, {
-          displayName: user.displayName,
+          displayName: defaultName,
+          photoURL: user.photoURL || "", // Ép thành chuỗi rỗng nếu không có ảnh để tránh lỗi UI
           isOnline: true,
           last_session_id: currentSocketId,
           last_update_ms: Date.now(),
-          coins: 0, lives: 10, highScore: 0
+          coins: 0, 
+          lives: 10, 
+          highScore: 0
         });
+
+        // Cập nhật tên vào biến game để hiển thị ngay lập tức
+        gsRef.current.myName = defaultName;
       }
       setUIUpdates(prev => ({ ...prev, coins: gsRef.current.coins, lives: gsRef.current.lives, isVIP: gsRef.current.isVIP, nextLifeTime: gsRef.current.isVIP ? null : prev.nextLifeTime}));
     } catch (error) {
       console.error("Lỗi tải hồ sơ:", error);
     }
-  };
-
-  const saveUserProfile = async () => {
-    if (!currentUser) return; 
-    const userRef = doc(db, "users", currentUser.uid);
-    await updateDoc(userRef, {
-      displayName: currentUser.displayName,
-      photoURL: currentUser.photoURL,
-      highScore: gsRef.current.bestScore,
-      coins: gsRef.current.coins,
-      lives: gsRef.current.lives,
-      livesUpdatedAt: gsRef.current.livesUpdatedAt,
-      isVIP: gsRef.current.isVIP || false,
-      dailyCoinCount: gsRef.current.dailyCoinCount,
-      lastCoinDate: gsRef.current.lastCoinDate,
-      hourlyCoinCount: gsRef.current.hourlyCoinCount,
-      lastCoinHour: gsRef.current.lastCoinHour,
-      inventory: gsRef.current.inventory,
-      equipped: gsRef.current.userSettings,
-    });
   };
 useEffect(() => {
     let isMounted = true;
