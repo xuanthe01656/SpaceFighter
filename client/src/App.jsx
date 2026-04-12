@@ -2154,33 +2154,34 @@ useEffect(() => {
   };
   const saveUserProfile = async () => {
     if (!currentUser) return; 
-    const userRef = doc(db, "users", currentUser.uid);
-    
-    // 1. Tạo một gói dữ liệu cơ bản KHÔNG chứa Tên và Ảnh
-    const updateData = {
-      highScore: gsRef.current.bestScore,
-      coins: gsRef.current.coins,
-      lives: gsRef.current.lives,
-      livesUpdatedAt: gsRef.current.livesUpdatedAt,
-      isVIP: gsRef.current.isVIP || false,
-      dailyCoinCount: gsRef.current.dailyCoinCount,
-      lastCoinDate: gsRef.current.lastCoinDate,
-      hourlyCoinCount: gsRef.current.hourlyCoinCount,
-      lastCoinHour: gsRef.current.lastCoinHour,
-      inventory: gsRef.current.inventory,
-      equipped: gsRef.current.userSettings,
-    };
-
-    // 👇 2. BẢO VỆ DỮ LIỆU: Chỉ gắn thêm Tên và Ảnh vào gói hàng NẾU CÓ DỮ LIỆU THẬT
-    if (currentUser.displayName) {
-      updateData.displayName = currentUser.displayName;
+    try {
+      const userRef = doc(db, "users", currentUser.uid);
+      // 1. Tạo một gói dữ liệu cơ bản KHÔNG chứa Tên và Ảnh
+      const updateData = {
+        highScore: gsRef.current.bestScore,
+        coins: gsRef.current.coins,
+        lives: gsRef.current.lives,
+        livesUpdatedAt: gsRef.current.livesUpdatedAt || null,
+        isVIP: gsRef.current.isVIP || false,
+        dailyCoinCount: gsRef.current.dailyCoinCount,
+        lastCoinDate: gsRef.current.lastCoinDate,
+        hourlyCoinCount: gsRef.current.hourlyCoinCount,
+        lastCoinHour: gsRef.current.lastCoinHour,
+        inventory: gsRef.current.inventory,
+        equipped: gsRef.current.userSettings,
+      };
+      // 👇 2. BẢO VỆ DỮ LIỆU: Chỉ gắn thêm Tên và Ảnh vào gói hàng NẾU CÓ DỮ LIỆU THẬT
+      if (currentUser.displayName) {
+        updateData.displayName = currentUser.displayName;
+      }
+      if (currentUser.photoURL) {
+        updateData.photoURL = currentUser.photoURL;
+      }
+      // 3. Đẩy lên mây (Nếu Apple trả null, nó sẽ bỏ qua không ghi đè mất Tên/Ảnh cũ)
+      await updateDoc(userRef, updateData);
+    } catch (e) {
+      console.error("Lỗi đồng bộ hồ sơ lên mây:", e);
     }
-    if (currentUser.photoURL) {
-      updateData.photoURL = currentUser.photoURL;
-    }
-
-    // 3. Đẩy lên mây (Nếu Apple trả null, nó sẽ bỏ qua không ghi đè mất Tên/Ảnh cũ)
-    await updateDoc(userRef, updateData);
   };
 
   const loadUserProfile = async (user) => {
