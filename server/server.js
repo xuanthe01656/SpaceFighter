@@ -131,14 +131,14 @@ io.on('connection', (socket) => {
     console.log(`✅ Player ${playerData.name || 'Player'} joined lobby`);
   });
 
-  // Host creates a room
+  // 1. CHỦ PHÒNG TẠO PHÒNG
   socket.on('create-room', (playerData) => {
     const roomCode = Math.floor(1000 + Math.random() * 9000).toString();
     socket.join(roomCode);
     
     const room = {
       code: roomCode,
-      createdAt: Date.now(), // Thêm timestamp để theo dõi tuổi của phòng
+      createdAt: Date.now(), 
       host: socket.id,
       players: [
         {
@@ -155,8 +155,10 @@ io.on('connection', (socket) => {
     };
     
     rooms.set(roomCode, room);
+    
+    // VÁ LỖI HIỂN THỊ TÊN KHUNG CHAT: Lưu tên người chơi vào Server
     playerSockets.set(socket.id, {
-      ...playerSockets.get(socket.id),
+      name: playerData.name,
       roomCode: roomCode,
       isHost: true
     });
@@ -165,7 +167,7 @@ io.on('connection', (socket) => {
     console.log(`🎮 Room created: ${roomCode} (Host: ${playerData.name})`);
   });
 
-  // Guest joins a room
+  // 2. KHÁCH VÀO PHÒNG BẰNG MÃ
   socket.on('join-room', (data) => {
     const { roomCode, playerName } = data;
     const room = rooms.get(roomCode);
@@ -189,15 +191,17 @@ io.on('connection', (socket) => {
       lastScoreUpdate: Date.now(),
       isReady: false
     });
-    room.status = 'playing';
+    
+    // 👇 SỬA LỖI CHÍ MẠNG Ở ĐÂY: Giữ nguyên trạng thái chờ để ấn được nút Sẵn sàng
+    room.status = 'waiting'; 
     
     playerSockets.set(socket.id, {
-      ...playerSockets.get(socket.id),
+      name: playerName,
       roomCode: roomCode,
       isHost: false
     });
     
-   io.to(roomCode).emit('room-updated', { players: room.players, roomCode: roomCode, isRandom: false });
+    io.to(roomCode).emit('room-updated', { players: room.players, roomCode: roomCode, isRandom: false });
     console.log(`🎮 Player ${playerName} joined room ${roomCode}`);
   });
 /// ĐẤU NGẪU NHIÊN (Random Matchmaking)
@@ -331,49 +335,65 @@ io.on('connection', (socket) => {
       console.log(`🏁 Game finished in room ${roomCode} - Cả 2 đã chết.`);
     }
   });
-  // Rời phòng / Hủy tìm trận ngẫu nhiên
-  socket.on('leave-room', () => {
-    const playerData = playerSockets.get(socket.id);
+  // --- HÀM TÁI SỬ DỤNG: XỬ LÝ KHI CÓ NGƯỜI THOÁT ---
+  const handlePlayerLeave = (socketId) => {
+    const playerData = playerSockets.get(socketId);
     if (playerData && playerData.roomCode) {
-      const room = rooms.get(playerData.roomCode);
-      
-      if (room && room.countdownInterval) clearInterval(room.countdownInterval);
+      const roomCode = playerData.roomCode;
+      const room = rooms.get(roomCode);
 
-      if (room && (room.status === 'waiting' || room.status === 'starting')) {
-        // BÁO CHO NGƯỜI CÒN LẠI BIẾT LÀ ĐỐI THỦ ĐÃ THOÁT
-        socket.to(playerData.roomCode).emit('opponent-left-lobby');
-        
-        rooms.delete(playerData.roomCode);
-        console.log(`🚫 Đã hủy phòng: ${playerData.roomCode}`);
-      }
-      
-      socket.leave(playerData.roomCode);
-      playerSockets.set(socket.id, { ...playerData, roomCode: null, isHost: false });
-    }
-  });
-
-  // Disconnect handling (Trường hợp mất mạng hoặc tắt app ngang)
-  socket.on('disconnect', () => {
-    const playerData = playerSockets.get(socket.id);
-    
-    if (playerData && playerData.roomCode) {
-      const room = rooms.get(playerData.roomCode);
       if (room) {
         if (room.countdownInterval) clearInterval(room.countdownInterval);
-        
-        // Phân loại: Đang ở sảnh chờ thì báo rời sảnh, đang trong game thì báo mất kết nối ván đấu
-        if (room.status === 'waiting' || room.status === 'starting') {
-          socket.to(playerData.roomCode).emit('opponent-left-lobby');
+
+        if (room.status === 'playing') {
+          io.to(roomCode).emit('opponent-disconnected', { playerId: socketId });
+          rooms.delete(roomCode);
+          console.log(`❌ Hủy phòng ${roomCode} do có người thoát khi đang chơi.`);
         } else {
-          io.to(playerData.roomCode).emit('opponent-disconnected', {
-            playerId: socket.id
-          });
+          // --- PHÂN BIỆT RÕ RÀNG Ở ĐÂY ---
+          if (room.isRandom) {
+            // 1. Nếu là phòng NGẪU NHIÊN: Giải tán phòng luôn
+            io.to(roomCode).emit('opponent-left-lobby');
+            rooms.delete(roomCode);
+            console.log(`🌍 Hủy phòng ngẫu nhiên ${roomCode}`);
+          } else {
+            // 2. Nếu là phòng THƯỜNG: Lọc người thoát ra, giữ người còn lại
+            room.players = room.players.filter(p => p.id !== socketId);
+            
+            if (room.players.length === 0) {
+              rooms.delete(roomCode);
+              console.log(`🚫 Xóa phòng trống: ${roomCode}`);
+            } else {
+              // Đưa phòng về trạng thái chờ, hủy sẵn sàng
+              room.status = 'waiting';
+              room.players.forEach(p => {
+                p.isReady = false;
+                p.isHost = true; // Ép người còn lại làm Host
+              });
+              
+              // Báo cho người còn lại biết để load lại UI (chỉ còn 1 người)
+              io.to(roomCode).emit('room-updated', { players: room.players, roomCode: roomCode, isRandom: false });
+              io.to(roomCode).emit('opponent-left-lobby');
+              console.log(`👤 1 người rời phòng ${roomCode}, còn 1 người ở lại.`);
+            }
+          }
         }
-        rooms.delete(playerData.roomCode);
-        console.log(`🎮 Room ${playerData.roomCode} deleted (player disconnect)`);
       }
+      
+      const socketObj = io.sockets.sockets.get(socketId);
+      if (socketObj) socketObj.leave(roomCode);
+      playerSockets.set(socketId, { ...playerData, roomCode: null, isHost: false });
     }
-    
+  };
+
+  // Rời phòng / Hủy tìm trận ngẫu nhiên
+  socket.on('leave-room', () => {
+    handlePlayerLeave(socket.id);
+  });
+
+  // Disconnect (Mất mạng, tắt app ngang)
+  socket.on('disconnect', () => {
+    handlePlayerLeave(socket.id);
     playerSockets.delete(socket.id);
     console.log(`❌ User disconnected: ${socket.id}`);
   });

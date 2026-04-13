@@ -18,7 +18,7 @@ export default function Shop({ currentUser, uiUpdates, setUIUpdates, gsRef, setS
     if (inventory.includes(item.id)) {
       if (type === 'skin') selectSkin(item.id);
       else selectBg(item.id);
-      await saveUserProfile();
+      await saveUserProfile({ equipped: gs.userSettings });
       return;
     }
 
@@ -133,7 +133,12 @@ export default function Shop({ currentUser, uiUpdates, setUIUpdates, gsRef, setS
           gsRef.current.livesUpdatedAt = null;
 
           setUIUpdates(prev => ({ ...prev, isVIP: true, lives: '∞', nextLifeTime: null }));
-          await saveUserProfile(); 
+          // Kích hoạt VIP siêu tốc
+          await saveUserProfile({
+            isVIP: true,
+            lives: '∞',
+            livesUpdatedAt: null
+          });
           toast.success(text.vipSuccess, { duration: 5000 });
         }
       } else {
@@ -166,7 +171,12 @@ export default function Shop({ currentUser, uiUpdates, setUIUpdates, gsRef, setS
         gsRef.current.livesUpdatedAt = null;
         setUIUpdates(prev => ({ ...prev, isVIP: true, lives: '∞', nextLifeTime: null }));
         
-        await saveUserProfile(); 
+        // Kích hoạt VIP siêu tốc
+        await saveUserProfile({
+          isVIP: true,
+          lives: '∞',
+          livesUpdatedAt: null
+        });
         toast.dismiss(loadingToast);
         toast.success(text.vipSuccess || 'Khôi phục thành công!');
         
