@@ -2202,12 +2202,16 @@ useEffect(() => {
     
     try {
       // --- KHỞI TẠO REVENUECAT ---
-      if (Capacitor.isNativePlatform()) {
-        const isIOS = Capacitor.getPlatform() === 'ios'; 
-        await Purchases.configure({ 
-            apiKey: isIOS ? "appl_Dien_Key_Apple_Vao_Day" : "goog_CbZGtaRbTZyJqImOJePIWqxjpXr", 
-            appUserID: user.uid 
-        });
+      try {
+        if (Capacitor.isNativePlatform()) {
+          const isIOS = Capacitor.getPlatform() === 'ios'; 
+          await Purchases.configure({ 
+              apiKey: isIOS ? "appl_Dien_Key_Apple_Vao_Day" : "goog_CbZGtaRbTZyJqImOJePIWqxjpXr", 
+              appUserID: user.uid 
+          });
+        }
+      } catch (rcError) {
+        console.error("Lỗi khởi tạo Cửa Hàng, đã chặn không cho sập hồ sơ:", rcError);
       }
       const snap = await getDoc(userRef);
 
