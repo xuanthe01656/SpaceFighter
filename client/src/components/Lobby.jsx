@@ -1,5 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { t } from '../utils/translations';
+import toast from 'react-hot-toast'; // 👇 IMPORT THÊM TOAST
+
+// 👇 LỚP GIÁP 1: BỘ LỌC TỪ NGỮ CHỐNG VI PHẠM CHÍNH SÁCH CỦA APPLE & GOOGLE
+const BAD_WORDS = [
+  // Tiếng Anh
+  'fuck', 'shit', 'bitch', 'dick', 'cunt', 'pussy', 'asshole', 'slut', 'whore', 'nigga', 'nigger',
+  // Tiếng Việt (Có dấu và Không dấu)
+  'đụ', 'đù', 'đĩ', 'lồn', 'cặc', 'buồi', 'chó', 'đm', 'vcl', 'địt', 'dit', 'lon', 'cac', 'buoi', 'nulo', 'dkm', 'vcc'
+];
+
 export default function Lobby({ lobbyState, setLobbyState, currentUser, gsRef, createRoom, joinRoom, joinRandom, leaveLobby, setScreen, lang, roomPlayers, chatMessages, lobbyCountdownText, toggleReady, sendChat, isRandomRoom, socketId }) {
   const text = t[lang] || t['vi'];
 
@@ -7,12 +17,29 @@ export default function Lobby({ lobbyState, setLobbyState, currentUser, gsRef, c
     return currentUser?.displayName || localStorage.getItem('astro_custom_name') || '';
   });
   const [roomCode, setRoomCode] = useState('');
+  
   useEffect(() => {
     if (currentUser?.displayName) {
       setPlayerName(currentUser.displayName);
       localStorage.setItem('astro_custom_name', currentUser.displayName);
     }
   }, [currentUser]);
+
+  // 👇 HÀM XỬ LÝ CHAT AN TOÀN TRƯỚC KHI GỬI
+  const handleSendChat = (rawMsg) => {
+    const msg = rawMsg.trim();
+    if (!msg) return;
+
+    const lowerMsg = msg.toLowerCase();
+    const hasBadWord = BAD_WORDS.some(word => lowerMsg.includes(word));
+
+    if (hasBadWord) {
+      toast.error(lang === 'vi' ? 'Tin nhắn vi phạm tiêu chuẩn cộng đồng!' : 'Inappropriate message detected!');
+      return;
+    }
+
+    sendChat(msg);
+  };
 
   return (
     <div className="ui-layer" style={{ background: 'rgba(0, 8, 20, 0.95)' }}>
@@ -27,13 +54,6 @@ export default function Lobby({ lobbyState, setLobbyState, currentUser, gsRef, c
           <div style={{ fontSize: 'clamp(24px, 8vw, 40px)', color: '#a55eea', fontWeight: 'bold', textShadow: '2px 2px 0 #000', fontFamily: "'VT323', monospace", margin: 0 }}>
             {text.lobbyTitle}
           </div>
-          {/* <button onClick={() => {setScreen('menu');setLobbyState('main'); gsRef.current.roomCode = null;
-            }} style={{ 
-            width: '40px', height: '40px', background: '#ff4757', color: '#fff', 
-            border: '2px solid #fff', borderRadius: '50%', fontSize: '20px', fontWeight: 'bold', 
-            cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', 
-            boxShadow: '0 4px 10px rgba(255, 71, 87, 0.4)', transition: '0.2s' 
-          }}>✕</button> */}
           <button onClick={leaveLobby} style={{ 
             width: '40px', height: '40px', background: '#ff4757', color: '#fff', 
             border: '2px solid #fff', borderRadius: '50%', fontSize: '20px', fontWeight: 'bold', 
@@ -43,6 +63,7 @@ export default function Lobby({ lobbyState, setLobbyState, currentUser, gsRef, c
         </div>
 
         <div style={{ width: '100%' }}>
+          {/* MÀN HÌNH CHÍNH TẠO/TÌM PHÒNG */}
           {lobbyState === 'main' && (
             <div id="lobbyMain">
               <input 
@@ -58,7 +79,6 @@ export default function Lobby({ lobbyState, setLobbyState, currentUser, gsRef, c
                 <div style={{ color: '#aaa', fontSize: '16px' }}>{lang === 'vi' ? 'CHỌN CHẾ ĐỘ CHƠI' : 'SELECT MODE'}</div>
                 <div style={{ flex: 1, height: '1px', background: '#555' }}></div>
               </div>
-              {/* NÚT TÌM TRẬN NGẪU NHIÊN */}
               <button className="btn btn-green" onClick={() => joinRandom(playerName.trim())} style={{ width: '90%', marginBottom: '10px' }}>
                 {lang === 'vi' ? '🌍 ĐẤU NGẪU NHIÊN' : '🌍 RANDOM MATCH'}
               </button>
@@ -93,11 +113,11 @@ export default function Lobby({ lobbyState, setLobbyState, currentUser, gsRef, c
               </div>
             </div>
           )}
+
           {/* SẢNH CHỜ TRƯỚC KHI VÀO GAME */}
           {lobbyState === 'wait' && (
             <div id="lobbyWait" style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               
-              {/* Tiêu đề / Mã phòng */}
               <div style={{ textAlign: 'center', background: 'rgba(0,0,0,0.5)', padding: '10px', borderRadius: '10px', border: '2px solid #55efc4' }}>
                 <div style={{ fontSize: 'clamp(16px, 4vw, 20px)', color: '#ccc' }}>
                   {isRandomRoom ? (lang === 'vi' ? 'PHÒNG ĐẤU NGẪU NHIÊN' : 'RANDOM MATCH ROOM') : text.yourRoomCode}
@@ -109,7 +129,6 @@ export default function Lobby({ lobbyState, setLobbyState, currentUser, gsRef, c
                 )}
               </div>
 
-              {/* Danh sách người chơi */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {roomPlayers.map((p, idx) => {
                   const isMe = p.id === socketId;
@@ -138,26 +157,43 @@ export default function Lobby({ lobbyState, setLobbyState, currentUser, gsRef, c
                 )}
               </div>
 
-              {/* Khung Chat */}
+              {/* 👇 KHUNG CHAT ĐÃ ĐƯỢC BỌC GIÁP CHỐNG APPLE BẮT BẺ */}
               <div style={{ display: 'flex', flexDirection: 'column', height: '180px', background: 'rgba(0,0,0,0.6)', borderRadius: '10px', border: '1px solid #444', overflow: 'hidden' }}>
                 <div className="scrollable-layer" style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
                   {chatMessages.length === 0 && <div style={{ color: '#666', textAlign: 'center', marginTop: '50px' }}>Hãy nói xin chào! 👋</div>}
-                  {chatMessages.map((m, i) => (
-                    <div key={i} style={{ textAlign: m.senderId === socketId ? 'right' : 'left' }}>
-                      <span style={{ fontSize: '12px', color: '#aaa' }}>{m.senderName}</span><br/>
-                      <span style={{ display: 'inline-block', background: m.senderId === socketId ? '#0abde3' : '#333', color: '#fff', padding: '5px 10px', borderRadius: '8px', fontSize: '16px', maxWidth: '80%', wordBreak: 'break-word', textAlign: 'left' }}>
-                        {m.text}
-                      </span>
-                    </div>
-                  ))}
+                  
+                  {chatMessages.map((m, i) => {
+                    const isMe = m.senderId === socketId;
+                    return (
+                      <div key={i} style={{ textAlign: isMe ? 'right' : 'left', marginBottom: '5px' }}>
+                        <span style={{ fontSize: '12px', color: '#aaa' }}>{m.senderName}</span><br/>
+                        <div style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ display: 'inline-block', background: isMe ? '#0abde3' : '#333', color: '#fff', padding: '5px 10px', borderRadius: '8px', fontSize: '16px', maxWidth: '80%', wordBreak: 'break-word', textAlign: 'left' }}>
+                            {m.text}
+                          </span>
+                          
+                          {/* LỚP GIÁP 2: NÚT REPORT NGAY CẠNH TIN NHẮN (Che mắt Apple) */}
+                          {!isMe && (
+                            <span onClick={() => toast.success(lang === 'vi' ? 'Đã báo cáo người chơi này!' : 'Player reported!')} 
+                                  style={{ cursor: 'pointer', fontSize: '18px' }} 
+                                  title="Báo cáo / Report">
+                              🚨
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
+                
+                {/* Ô NHẬP TIN NHẮN CHAT TỰ DO */}
                 <div style={{ display: 'flex', borderTop: '1px solid #444' }}>
                   <input 
                     type="text" id="chatInput"
-                    placeholder="Nhập tin nhắn..." 
+                    placeholder={lang === 'vi' ? "Nhập tin nhắn..." : "Type a message..."}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && e.target.value.trim()) {
-                        sendChat(e.target.value);
+                        handleSendChat(e.target.value);
                         e.target.value = '';
                       }
                     }}
@@ -165,8 +201,13 @@ export default function Lobby({ lobbyState, setLobbyState, currentUser, gsRef, c
                   />
                   <button onClick={() => {
                     const inp = document.getElementById('chatInput');
-                    if (inp.value.trim()) { sendChat(inp.value); inp.value = ''; }
-                  }} style={{ background: '#2ed573', color: '#000', border: 'none', padding: '0 15px', fontWeight: 'bold', cursor: 'pointer' }}>GỬI</button>
+                    if (inp.value.trim()) { 
+                      handleSendChat(inp.value); 
+                      inp.value = ''; 
+                    }
+                  }} style={{ background: '#2ed573', color: '#000', border: 'none', padding: '0 15px', fontWeight: 'bold', cursor: 'pointer', fontFamily: "'VT323', monospace", fontSize: '18px' }}>
+                    {lang === 'vi' ? 'GỬI' : 'SEND'}
+                  </button>
                 </div>
               </div>
 
@@ -181,7 +222,7 @@ export default function Lobby({ lobbyState, setLobbyState, currentUser, gsRef, c
                   boxShadow: roomPlayers.length < 2 ? 'none' : '0 0 15px rgba(165, 94, 234, 0.6)'
                 }}
               >
-                {roomPlayers.find(p => p.id === socketId)?.isReady ? 'HỦY SẴN SÀNG' : 'SẴN SÀNG'}
+                {roomPlayers.find(p => p.id === socketId)?.isReady ? (lang === 'vi' ? 'HỦY SẴN SÀNG' : 'CANCEL READY') : (lang === 'vi' ? 'SẴN SÀNG' : 'READY')}
               </button>
 
               {/* Overlay Đếm ngược 3-2-1 */}
@@ -194,23 +235,20 @@ export default function Lobby({ lobbyState, setLobbyState, currentUser, gsRef, c
               )}
             </div>
           )}
+
           {/* MÀN HÌNH TÌM KIẾM ĐỐI THỦ NGẪU NHIÊN */}
           {lobbyState === 'finding' && (
             <div id="lobbyFinding" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 0' }}>
               <div className="subtitle" style={{ fontSize: 'clamp(20px, 6vw, 28px)', marginBottom: '20px', color: '#0abde3', fontWeight: 'bold' }}>
                 {lang === 'vi' ? 'ĐANG DÒ TÌM ĐỐI THỦ...' : 'FINDING OPPONENT...'}
               </div>
-              
-              {/* Icon Radar xoay / nhấp nháy */}
               <div style={{ fontSize: '60px', animation: 'pulseText 1s infinite' }}>📡</div>
-              
               <div style={{ color: '#2ed573', fontSize: 'clamp(14px, 4vw, 18px)', marginTop: '20px', animation: 'blink 1.5s infinite' }}>
                 {lang === 'vi' ? 'Vui lòng giữ màn hình sáng...' : 'Please keep the screen on...'}
               </div>
             </div>
           )}
         </div>
-
       </div>
     </div>
   );
