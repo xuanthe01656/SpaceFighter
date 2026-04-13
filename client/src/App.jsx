@@ -2156,29 +2156,41 @@ useEffect(() => {
     if (!currentUser) return; 
     try {
       const userRef = doc(db, "users", currentUser.uid);
-      // 1. Tạo một gói dữ liệu cơ bản KHÔNG chứa Tên và Ảnh
+      
+      // 👇 LỚP GIÁP 1: BỘ LỌC ÉP KIỂU TUYỆT ĐỐI (Ngăn chặn 100% lỗi NaN/undefined của iOS WebKit)
+      const safeNum = (val, fallback) => (typeof val === 'number' && !isNaN(val)) ? val : fallback;
+      const safeStr = (val, fallback) => (typeof val === 'string') ? val : fallback;
+      
+      let currentLives = gsRef.current.lives;
+      if (currentLives !== '∞') {
+        currentLives = safeNum(currentLives, 10);
+      }
+
+      // 1. Tạo một gói dữ liệu cơ bản KHÔNG chứa Tên và Ảnh (Đã bọc giáp an toàn)
       const updateData = {
-        highScore: gsRef.current.bestScore || 0,
-        coins: gsRef.current.coins || 0,
-        lives: gsRef.current.lives !== undefined ? gsRef.current.lives : 10,
-        livesUpdatedAt: gsRef.current.livesUpdatedAt || null,
-        isVIP: gsRef.current.isVIP || false,
-        dailyCoinCount: gsRef.current.dailyCoinCount || 0,
-        lastCoinDate: gsRef.current.lastCoinDate || '',
-        hourlyCoinCount: gsRef.current.hourlyCoinCount || 0,
-        lastCoinHour: gsRef.current.lastCoinHour || '',
+        highScore: safeNum(gsRef.current.bestScore, 0),
+        coins: safeNum(gsRef.current.coins, 0),
+        lives: currentLives,
+        livesUpdatedAt: typeof gsRef.current.livesUpdatedAt === 'number' && !isNaN(gsRef.current.livesUpdatedAt) ? gsRef.current.livesUpdatedAt : null,
+        isVIP: !!gsRef.current.isVIP,
+        dailyCoinCount: safeNum(gsRef.current.dailyCoinCount, 0),
+        lastCoinDate: safeStr(gsRef.current.lastCoinDate, ''),
+        hourlyCoinCount: safeNum(gsRef.current.hourlyCoinCount, 0),
+        lastCoinHour: safeStr(gsRef.current.lastCoinHour, ''),
         inventory: gsRef.current.inventory || { skins: ['classic'], bgs: ['deep'] },
         equipped: gsRef.current.userSettings || { skin: 'classic', bg: 'deep' },
       };
-      // 👇 2. BẢO VỆ DỮ LIỆU: Chỉ gắn thêm Tên và Ảnh vào gói hàng NẾU CÓ DỮ LIỆU THẬT
+
+      // 2. BẢO VỆ DỮ LIỆU: Chỉ gắn thêm Tên và Ảnh vào gói hàng NẾU CÓ DỮ LIỆU THẬT
       if (currentUser.displayName) {
         updateData.displayName = currentUser.displayName;
       }
       if (currentUser.photoURL) {
         updateData.photoURL = currentUser.photoURL;
       }
-      // 3. Đẩy lên mây (Nếu Apple trả null, nó sẽ bỏ qua không ghi đè mất Tên/Ảnh cũ)
-      await updateDoc(userRef, updateData);
+
+      // 👇 LỚP GIÁP 2: DÙNG setDoc KÈM merge: true -> AN TOÀN VÀ VƯỢT LỖI TỐT HƠN updateDoc
+      await setDoc(userRef, updateData, { merge: true });
     } catch (e) {
       console.error("Lỗi đồng bộ hồ sơ lên mây:", e);
     }
@@ -2239,28 +2251,28 @@ useEffect(() => {
         finalPhoto = authPhoto || data.photoURL || '';
         gsRef.current.myName = finalName;
 
-        await updateDoc(userRef, {
+        // 👇 LỚP GIÁP 3: ĐỔI SANG setDoc KÈM .catch ĐỂ DẬP TẮT MỌI CẢNH BÁO LỖI NGẦM TRÊN IOS
+        await setDoc(userRef, {
           isOnline: true,
           last_session_id: currentSocketId,
           last_update_ms: now,
           displayName: finalName, 
           photoURL: finalPhoto    
-        });
+        }, { merge: true }).catch(e => console.error("Lỗi update online:", e));
 
-        // Tải dữ liệu Game
-        gsRef.current.coins = data.coins || 0;
-        gsRef.current.lives = data.lives !== undefined ? data.lives : 10;
+        // 👇 LỚP GIÁP 4: BỘ LỌC "KHỬ TRÙNG" DỮ LIỆU KHI KÉO TỪ MÂY VỀ
+        gsRef.current.coins = (typeof data.coins === 'number' && !isNaN(data.coins)) ? data.coins : 0;
         gsRef.current.isVIP = data.isVIP || false;
         
         if (gsRef.current.isVIP) {
           gsRef.current.lives = '∞';
           gsRef.current.livesUpdatedAt = null;
         } else {
-          gsRef.current.lives = data.lives !== undefined ? data.lives : 10;
+          gsRef.current.lives = (typeof data.lives === 'number' && !isNaN(data.lives)) ? data.lives : 10;
           if (gsRef.current.lives < 10) {
-            if (!data.livesUpdatedAt) {
+            if (!data.livesUpdatedAt || isNaN(data.livesUpdatedAt)) {
               gsRef.current.livesUpdatedAt = now;
-              updateDoc(userRef, { livesUpdatedAt: now });
+              setDoc(userRef, { livesUpdatedAt: now }, { merge: true }).catch(e => console.error("Lỗi time:", e));
             } else {
               gsRef.current.livesUpdatedAt = data.livesUpdatedAt;
             }
@@ -2269,7 +2281,7 @@ useEffect(() => {
           }
         }
         
-        const realTimeNow = new Date(getRealTime());
+        const realTimeNow = new Date(now);
         const today = `${realTimeNow.getFullYear()}-${realTimeNow.getMonth() + 1}-${realTimeNow.getDate()}`;
         if (data.lastCoinDate === today) {
           gsRef.current.dailyCoinCount = data.dailyCoinCount || 0; 
@@ -2286,14 +2298,15 @@ useEffect(() => {
         }
         gsRef.current.lastCoinHour = currentHourStr;
         
-        gsRef.current.bestScore = data.highScore || 0;
+        gsRef.current.bestScore = (typeof data.highScore === 'number' && !isNaN(data.highScore)) ? data.highScore : 0;
         gsRef.current.inventory = data.inventory || { skins: ['classic'], bgs: ['deep'] };
         const newSettings = data.equipped || { skin: 'classic', bg: 'deep' };
-        // Nếu nền trên mây khác với nền mặc định, phải xóa sạch hạt cũ để hệ thống vẽ lại
+        
+        // CƠ CHẾ LOGIC CŨ CỦA BẠN: Khởi tạo lại hạt nếu nền thay đổi
         if (gsRef.current.userSettings.bg !== newSettings.bg) {
           gsRef.current.background.particles = []; 
         }
-        gsRef.current.userSettings = data.equipped || { skin: 'classic', bg: 'deep' };
+        gsRef.current.userSettings = newSettings;
 
       } else {
         if (!finalName) {
@@ -2312,6 +2325,8 @@ useEffect(() => {
         });
 
         gsRef.current.myName = finalName;
+        
+        // CƠ CHẾ LOGIC CŨ CỦA BẠN: Xóa sạch trí nhớ Guest chống rò rỉ Mạng/Xu
         gsRef.current.coins = 0;
         gsRef.current.lives = 10;
         gsRef.current.isVIP = false;
