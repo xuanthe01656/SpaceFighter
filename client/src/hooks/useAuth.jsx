@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
-import { signInWithPopup, signInWithCredential, GoogleAuthProvider, OAuthProvider, updateProfile, deleteUser, signOut, onAuthStateChanged } from 'firebase/auth';
+import { signInWithPopup, signInWithCredential, GoogleAuthProvider, OAuthProvider, updateProfile, deleteUser, signOut, onAuthStateChanged, browserPopupRedirectResolver } from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
 import { SignInWithApple } from '@capacitor-community/apple-sign-in';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { Purchases } from '@revenuecat/purchases-capacitor';
 import toast from 'react-hot-toast';
-import { auth, db, googleProvider } from '../firebase';
+import { auth, db } from '../firebase';
 import { secureStorage } from '../utils/storageHelper';
 import { t } from '../utils/translations';
 
@@ -19,7 +19,7 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
     try {
       const userRef = doc(db, "users", currentUser.uid);
       
-      // 🌟 NẾU CÓ CHỈ ĐỊNH RÕ RÀNG -> Chỉ cập nhật đúng mảng dữ liệu đó (Siêu tiết kiệm băng thông)
+      //  NẾU CÓ CHỈ ĐỊNH RÕ RÀNG -> Chỉ cập nhật đúng mảng dữ liệu đó (Siêu tiết kiệm băng thông)
       if (specificUpdates) {
         await setDoc(userRef, specificUpdates, { merge: true });
         return; // Xong là thoát, không làm các bước dưới
@@ -44,6 +44,7 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
         lastCoinHour: safeStr(gsRef.current.lastCoinHour, ''),
         inventory: gsRef.current.inventory || { skins: ['classic'], bgs: ['deep'] },
         equipped: gsRef.current.userSettings || { skin: 'classic', bg: 'deep' },
+        campaignData: gsRef.current.campaignData
       };
 
       if (currentUser.displayName) updateData.displayName = currentUser.displayName;
@@ -144,6 +145,7 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
         
         if (gsRef.current.userSettings.bg !== newSettings.bg) { gsRef.current.background.particles = []; }
         gsRef.current.userSettings = newSettings;
+        gsRef.current.campaignData = data.campaignData || defaultCampaignData;
 
       } else {
         if (!finalName) finalName = `Astro_${Math.floor(Math.random() * 10000)}`;
@@ -155,6 +157,8 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
         gsRef.current.myName = finalName;
         gsRef.current.coins = 0; gsRef.current.lives = 10; gsRef.current.isVIP = false; gsRef.current.livesUpdatedAt = null; gsRef.current.bestScore = 0;
         gsRef.current.inventory = { skins: ['classic'], bgs: ['deep'] }; gsRef.current.userSettings = { skin: 'classic', bg: 'deep' };
+        gsRef.current.campaignData = defaultCampaignData;
+        
       }
 
       if (user.displayName !== finalName || user.photoURL !== finalPhoto) {
@@ -167,7 +171,23 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
       setUIUpdates(prev => ({ ...prev, coins: gsRef.current.coins, lives: gsRef.current.lives, isVIP: gsRef.current.isVIP, nextLifeTime: gsRef.current.isVIP ? null : prev.nextLifeTime, displayName: finalName, photoURL: finalPhoto }));
     } catch (error) { console.error("Lỗi tải hồ sơ:", error); }
   };
-
+  // Dữ liệu mặc định của Chế độ Chiến Dịch (Gói Tân Thủ)
+  const defaultCampaignData = {
+    progress: { currentStage: 1, highestStage: 1, combatPower: 1200 },
+    loadout: { 
+      pilot: "pilot_alpha", 
+      aircraft: "ship_xwing", 
+      mainGun: "item_start_gun", 
+      wingman: "", 
+      armor: "" 
+    },
+    ownedPilots: { "pilot_alpha": { level: 1, stars: 1 } },
+    ownedAircrafts: { "ship_xwing": { level: 1, stars: 1 } },
+    items: {
+      "item_start_gun": { baseId: "gun_laser", rarity: 1, level: 1, type: "mainGun" }
+    },
+    materials: { gears: 0, blueprints: 0 }
+  };
   // 3. CÁC HÀM ĐĂNG NHẬP / XÓA
   const loginWithGoogle = async () => {
     try {
@@ -183,7 +203,8 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
         await signInWithCredential(auth, credential);
         toast.success(t[langRef.current]?.loginAppSuccess);
       } else {
-        await signInWithPopup(auth, googleProvider);
+        const provider = new GoogleAuthProvider(); 
+        await signInWithPopup(auth, provider, browserPopupRedirectResolver); 
         toast.success(t[langRef.current]?.loginWebSuccess);
       }
     } catch (error) {
@@ -237,7 +258,7 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
       secureStorage.removeItem('astro_session_id');
       await signOut(auth);
       if (Capacitor.isNativePlatform()) { await GoogleAuth.signOut(); }
-      setCurrentUser(null); setScreen('menu'); toast.success(t[langRef.current]?.logoutSuccess);
+      setCurrentUser(null); setScreen('portal'); toast.success(t[langRef.current]?.logoutSuccess);
     } catch (e) { console.log(e); }
   };
 
@@ -298,6 +319,7 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
         let guestCoins = parseInt(secureStorage.getItem('astro_guest_coins')) || 0;
         
         gsRef.current.lives = guestLives; gsRef.current.coins = guestCoins;
+        gsRef.current.campaignData = defaultCampaignData;
         if (guestLives < 10) {
           let lastLost = secureStorage.getItem('astro_guest_last_lost');
           gsRef.current.livesUpdatedAt = lastLost ? parseInt(lastLost) : getRealTime();

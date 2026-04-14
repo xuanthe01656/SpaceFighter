@@ -11,8 +11,6 @@ import { useAuth } from './hooks/useAuth';
 import { useLifeRegen } from './hooks/useLifeRegen';
 import { useMultiplayer } from './hooks/useMultiplayer';
 import { useLeaderboard } from './hooks/useLeaderboard';
-
-
 // --- IMPORT CÁC HẰNG SỐ VÀ COMPONENT ĐÃ TÁCH ---
 import { SKINS, BACKGROUNDS, PIPE_DIST_DESKTOP, PIPE_DIST_MOBILE, MAX_Y_DIFF } from './constants';
 import Menu from './components/Menu';
@@ -21,8 +19,10 @@ import Shop from './components/Shop';
 import Leaderboard from './components/Leaderboard';
 import GameOver from './components/GameOver';
 import GameHUD from './components/GameHUD';
+import Portal from './components/Portal';
+import HQ from './components/HQ';
+import Inventory from './components/Inventory';
 import { secureStorage } from './utils/storageHelper';
-
 const imageCache = {};
 const getImage = (src) => {
   if (!src) return null;
@@ -95,12 +95,11 @@ export default function Game() {
   const animationRef = useRef(null);
   const loadedImagesRef = useRef({});
 
-  const [screen, setScreen] = useState('menu');
+  const [screen, setScreen] = useState('portal');
   const [lang, setLang] = useState(secureStorage.getItem('astro_lang') || 'vi');
   const [levelUpEffect, setLevelUpEffect] = useState(false);
   const [countdown, setCountdown] = useState(null);
   const countdownTimerRef = useRef(null);
-  // const [frameCount, setFrameCount] = useState(0);
   const [uiUpdates, setUIUpdates] = useState({ score: 0, level: 1, isVIP: false });
   const [showRevivePopup, setShowRevivePopup] = useState(false);
   const [reviveTimer, setReviveTimer] = useState(6);
@@ -189,7 +188,6 @@ export default function Game() {
     lobbyCountdownText, isRandomRoom, toggleReady, sendChat, sendData, 
     leaveLobby, createRoom, joinRoom, joinRandom
   } = useMultiplayer(gsRef, setUIUpdates, setScreen, currentUser, langRef, (mode) => startGame(mode), () => finishOnlineGame());
-
   // Bù lại dòng loadTopRecords() lúc nãy vừa lỡ tay xóa
   useEffect(() => {
     loadTopRecords();
@@ -201,7 +199,6 @@ useEffect(() => {
       try {
         // Sử dụng await trực tiếp từ đối tượng Device
         const info = await Device.getInfo(); 
-        
         if (info.isVirtual) {
           toast.error(t[langRef.current]?.errEmulator);
           setTimeout(() => {
@@ -209,17 +206,14 @@ useEffect(() => {
           }, 3000);
           return;
         }
-
         const idResult = await Device.getId();
         gsRef.current.deviceId = idResult.uuid; // Lưu ID thiết bị để định danh
         console.log("Device ID Verified:", idResult.uuid);
-
       } catch (error) {
         console.error("Security Check Error:", error);
       }
     }
   };
-
   checkSecurity();
 }, []);
 useEffect(() => {
@@ -240,7 +234,6 @@ useEffect(() => {
       }
     }
   };
-
   checkAppUpdate();
 }, []);
   // Preload skins
@@ -274,24 +267,19 @@ useEffect(() => {
         'https://timeapi.io/api/Time/current/zone?timeZone=UTC', // Nguồn 1: Cực kỳ ổn định
         'https://worldclockapi.com/api/json/utc/now'              // Nguồn 2: Dự phòng
       ];
-
       for (const url of sources) {
         try {
           // Giới hạn thời gian chờ 4 giây để game không bị treo nếu mạng lag
           const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
-          if (!res.ok) continue;
-          
+          if (!res.ok) continue;        
           const data = await res.json();
           // Hỗ trợ đọc cả 2 format của 2 API trên
-          let timeString = data.dateTime || data.currentDateTime; 
-          
+          let timeString = data.dateTime || data.currentDateTime;       
           // Đảm bảo chuỗi thời gian luôn ở chuẩn UTC (thêm chữ Z ở cuối nếu thiếu)
           if (timeString && !timeString.endsWith('Z')) {
              timeString += 'Z';
           }
-
-          const realTimeMs = new Date(timeString).getTime();
-          
+          const realTimeMs = new Date(timeString).getTime();        
           if (!isNaN(realTimeMs)) {
             gsRef.current.timeOffset = realTimeMs - Date.now(); 
             console.log("✅ Đã đồng bộ giờ chuẩn từ:", url);
@@ -300,17 +288,14 @@ useEffect(() => {
         } catch (error) {
           console.warn(`⚠️ Nguồn ${url} lỗi, đang thử nguồn tiếp theo...`);
         }
-      }
-      
+      } 
       // Nếu tất cả API đều sập, đành dùng giờ của máy tính/điện thoại
       console.warn("❌ Tất cả API giờ đều lỗi, dùng giờ thiết bị cục bộ.");
       gsRef.current.timeOffset = 0; 
     };
     syncTime();
   }, []);
-
   // Socket.io setup
-  
   const Sound = {
     playTone: (freq, type, duration, vol = 0.1) => {
       if (gsRef.current.isMuted || !audioCtxRef.current) return;
@@ -339,7 +324,6 @@ useEffect(() => {
       setTimeout(() => Sound.playTone(800, 'square', 0.2), 150);
     }
   };
-
   const createParticles = (x, y, color, count = 5) => {
     const gs = gsRef.current;
     for (let i = 0; i < count; i++) {
@@ -359,7 +343,6 @@ useEffect(() => {
       gs.particles.push(p);
     }
   };
-
   const checkLevelUp = () => {
     let newLevel = 1;
     if (gsRef.current.score >= 100) newLevel = 5;
@@ -377,24 +360,18 @@ useEffect(() => {
       setTimeout(() => setLevelUpEffect(false), 1500);
     }
   };
-
   const addPipe = () => {
     const gs = gsRef.current;
     const canvas = gs.canvas;
     let xPos = canvas.width; 
-    
     let isShortScreen = canvas.height < 500;
-    let currentGap = Math.max(130, 170 - (gs.level * 5));
-    
-    if (isShortScreen) currentGap = Math.max(90, canvas.height * 0.35); 
-    
+    let currentGap = Math.max(130, 170 - (gs.level * 5));   
+    if (isShortScreen) currentGap = Math.max(90, canvas.height * 0.35);  
     gs.pipes.gap = currentGap;
-    let minPipeHeight = isShortScreen ? 25 : 50; 
-    
+    let minPipeHeight = isShortScreen ? 25 : 50;  
     let maxAvailableY = canvas.height - currentGap - minPipeHeight;
     let topHeight;
     let lastPipe = gs.pipes.items[gs.pipes.items.length - 1];
-
     if (lastPipe) {
       let prevTop = lastPipe.initialTop;
       let minSafe = Math.max(minPipeHeight, prevTop - MAX_Y_DIFF);
@@ -405,7 +382,6 @@ useEffect(() => {
       let startMax = Math.max(startMin, Math.min(maxAvailableY, canvas.height / 2 + 50));
       topHeight = Math.floor(Math.random() * (startMax - startMin + 1)) + startMin;
     }
-
     let type = 0;
     if (gs.score >= 20) {
       let rand = Math.random();
@@ -413,7 +389,6 @@ useEffect(() => {
       else if (gs.score >= 40) type = rand > 0.5 ? 2 : 0;
       else type = rand > 0.6 ? 1 : 0;
     }
-
     gs.pipes.items.push({
       x: xPos,
       top: topHeight,
@@ -423,13 +398,11 @@ useEffect(() => {
       moveDir: Math.random() > 0.5 ? 1 : -1,
       initialTop: topHeight
     });
-
     if (Math.random() < 0.4) {
       const randType = Math.random();
       let pType = 'COIN';
       if (randType > 0.75) pType = 'SHIELD';
       else if (randType > 0.5) pType = 'STAR';
-
       gs.powerUps.push({
         x: xPos + 30,
         y: topHeight + currentGap / 2,
@@ -438,17 +411,14 @@ useEffect(() => {
       });
     }
   };
-
   // 1. HÀM KÍCH HOẠT CÁI CHẾT (Chạy animation nổ và hiển thị Popup)
   const gameOver = () => {
     const gs = gsRef.current;
     if (gs.isGameOver) return;
     gs.isGameOver = true;
     Sound.hit();
-
     createParticles(gs.cat.x, gs.cat.y, 'orange', 20);
     createParticles(gs.cat.x, gs.cat.y, 'white', 10);
-
     if (gs.gameMode === 'single') {
       setTimeout(() => {
         if (gs.reviveCount < 2) {
@@ -459,7 +429,6 @@ useEffect(() => {
           reviveIntervalRef.current = setInterval(() => {
             // --- CƠ CHẾ ĐÓNG BĂNG ĐỒNG HỒ ---
             if (pendingRewardRef.current === 'revive') return;
-
             setReviveTimer(prev => {
               if (prev <= 1) {
                 clearInterval(reviveIntervalRef.current);
@@ -477,7 +446,6 @@ useEffect(() => {
       sendData();
     }
   };
-
   // 2. HÀM CHẾT THẬT (Trừ mạng, lưu điểm và chuyển sang Game Over)
   const finalizeGameOver = () => {
     const gs = gsRef.current;
@@ -485,13 +453,11 @@ useEffect(() => {
     gs.isPaused = false; // Mở khóa lại
     gs.isPlaying = false; 
     if (reviveIntervalRef.current) clearInterval(reviveIntervalRef.current);
-
     // XỬ LÝ ĐIỂM SỐ
     if (gs.score > gs.bestScore) {
       gs.bestScore = gs.score;
       if (!currentUser) secureStorage.setItem('astroCatBestScore', gs.bestScore);
     }
-
     // XỬ LÝ TRỪ MẠNG
     if (!gs.isVIP) {
       if (gs.lives > 0) {
@@ -505,9 +471,7 @@ useEffect(() => {
         if (!currentUser) secureStorage.setItem('astro_guest_lives', gs.lives);
       }
     }
-
     // LƯU DỮ LIỆU
-    // Cập nhật Cục bộ: Chỉ đẩy Lên Mây đúng Điểm, Xu và Mạng của ván này!
     if (currentUser) {
       saveUserProfile({
         coins: gs.coins,
@@ -518,7 +482,6 @@ useEffect(() => {
     } else {
       secureStorage.setItem('astro_guest_coins', gs.coins);
     }
-
     // CHUYỂN MÀN HÌNH
     setUIUpdates(prev => ({
       ...prev,
@@ -532,24 +495,20 @@ useEffect(() => {
     const gs = gsRef.current;
     gs.reviveCount++;
     gs.isGameOver = false;
-    
     // 1. KHOÁ GAME LẠI ĐỂ CHUẨN BỊ ĐẾM NGƯỢC
     gs.isPaused = true; 
-
     // 2. Thiết lập lại trạng thái an toàn cho mèo
     gs.cat.y = gs.canvas.height / 2;
     gs.cat.velocity = 0;
     gs.cat.rotation = 0;
     gs.cat.isInvincible = true;
     gs.cat.invincibleTimer = 180; // 3 giây bất tử
-
     // 3. Dọn chướng ngại vật ở gần
     gs.pipes.items.forEach(p => {
       if (p.x > gs.cat.x - 150 && p.x < gs.cat.x + 300) {
         p.x = -200; 
       }
     });
-
     // 4. Đóng popup và dọn dẹp các đồng hồ cũ
     setShowRevivePopup(false);
     if (reviveIntervalRef.current) clearInterval(reviveIntervalRef.current);
@@ -560,11 +519,9 @@ useEffect(() => {
     drawBackground();
     drawPipes();
     drawCat();
-
     // 6. BẮT ĐẦU ĐẾM NGƯỢC 3-2-1
     setCountdown(3);
     Sound.jump(); // Phát tiếng "Bíp"
-
     let count = 3;
     countdownTimerRef.current = setInterval(() => {
       count -= 1;
@@ -583,15 +540,12 @@ useEffect(() => {
         loop(); // Kích hoạt lại đồ họa
       }
     }, 1000);
-
     toast.success(langRef.current === 'vi' ? '⚡ Hồi sinh thành công!' : '⚡ Revived!');
   };
-
   // Lưu hàm vào Ref để AdMob gọi không bị lỗi closure
   useEffect(() => {
     revivePlayerRef.current = revivePlayer;
   }, [revivePlayer]);
-
   const handleReviveWithCoins = () => {
     if (gsRef.current.coins >= 550) {
       gsRef.current.coins -= 550;
@@ -603,51 +557,39 @@ useEffect(() => {
       toast.error(langRef.current === 'vi' ? '❌ Không đủ 550 Xu!' : '❌ Not enough 550 Coins!');
     }
   };
-
   const handleWatchAdRevive = () => {
     // Dừng đồng hồ đếm ngược ngay lập tức để chờ xem quảng cáo
     //if (reviveIntervalRef.current) clearInterval(reviveIntervalRef.current);
     watchAd('revive');
   };
-
-
   const finishOnlineGame = () => {
     const gs = gsRef.current;
     gs.isPlaying = false;
-    if (animationRef.current) cancelAnimationFrame(animationRef.current);
-    
+    if (animationRef.current) cancelAnimationFrame(animationRef.current);    
     const result = gs.score > gs.remoteScore ? 'WIN' : gs.score < gs.remoteScore ? 'LOSE' : 'DRAW';
-    if (result === 'WIN') Sound.win();
-    
+    if (result === 'WIN') Sound.win();   
     setUIUpdates(prev => ({
       ...prev, finalScore: gs.score, remoteScore: gs.remoteScore, gameResult: result, remoteName: gs.remoteName, coins: gs.coins
-    }));
-    
+    }));   
     submitScore('pvp', false);
-    if (auth.currentUser) saveUserProfile({ coins: gs.coins });
-    
+    if (auth.currentUser) saveUserProfile({ coins: gs.coins });    
     // 👇 GỌI HÀM LEAVE LOBBY TỪ HOOK (Ép chuyển sang màn hình 'gameover')
-    leaveLobby('gameover'); 
-    
+    leaveLobby('gameover');    
     gs.isGameOver = false; 
     gs.isPaused = false;
   };  
- 
   const openShop = () => {
     setScreen('shop');
   };
-
   const selectSkin = (skinId) => {
     gsRef.current.userSettings.skin = skinId;
     setUIUpdates(prev => ({ ...prev, selectedSkin: skinId }));
   };
-
   const selectBg = (bgId) => {
     gsRef.current.userSettings.bg = bgId;
     gsRef.current.background.particles = []; 
     setUIUpdates(prev => ({ ...prev, selectedBg: bgId }));
   };
-
   const initGame = () => {
     const gs = gsRef.current;
     gs.reviveCount = 0;
@@ -1385,7 +1327,7 @@ useEffect(() => {
 
     const handleTouchOrMouse = (e) => {
       // THÊM '.leaderboard-scroll' VÀO ĐÂY ĐỂ CHO PHÉP VUỐT CUỘN
-      if (e.target && e.target.closest && e.target.closest('button, .btn, .shop-item, .control-btn, input, .tab-btn, .leaderboard-scroll, .scrollable-layer')) {
+      if (e.target && e.target.closest && e.target.closest('button, .btn, .shop-item, .control-btn, input, .tab-btn, .leaderboard-scroll, .scrollable-layer, .portal-card, .hq-interact')) {
         return;
       }
       if (e.type === 'touchstart' && e.cancelable) {
@@ -1505,7 +1447,26 @@ useEffect(() => {
           pointerEvents: screen === 'game' ? 'auto' : 'none' 
         }}
       />
+      {screen === 'portal' && (
+          <Portal 
+            setScreen={setScreen}
+            currentUser={currentUser}
+            loginWithGoogle={loginWithGoogle}
+            loginWithApple={loginWithApple}
+            logout={logout}
+            deleteAccount={deleteAccount}
+            lang={lang}
+            toggleLanguage={toggleLanguage}
+          />
+        )}
 
+        {screen === 'hq' && (
+          <HQ 
+            gsRef={gsRef}
+            setScreen={setScreen}
+            lang={lang}
+          />
+        )}
       {screen === 'menu' && (
         <Menu 
           currentUser={currentUser} 
@@ -1601,6 +1562,14 @@ useEffect(() => {
           countdown={countdown}
           lang={lang}
           //frameCount={frameCount}
+        />
+      )}
+      {screen === 'inventory' && (
+        <Inventory 
+          gsRef={gsRef}
+          setScreen={setScreen}
+          lang={lang}
+          saveUserProfile={saveUserProfile} // Truyền hàm lưu từ useAuth
         />
       )}
       {showRevivePopup && (

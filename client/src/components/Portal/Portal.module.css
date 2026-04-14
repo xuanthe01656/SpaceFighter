@@ -1,0 +1,135 @@
+.container {
+    width: 100%;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: transparent; 
+    font-family: 'VT323', monospace;
+    color: white;
+    position: relative;
+    z-index: 10;
+    pointer-events: auto;
+  }
+  
+  .header {
+    position: absolute;
+    top: calc(env(safe-area-inset-top) + 15px);
+    right: max(env(safe-area-inset-right), 15px);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10px;
+    z-index: 100;
+  }
+  
+  .title {
+    font-size: clamp(45px, 10vw, 80px);
+    color: #FFD700;
+    text-shadow: 0 0 20px rgba(255, 215, 0, 0.5), 2px 2px 0px #000;
+    margin-bottom: 10px;
+    text-align: center;
+  }
+  
+  .cardsWrapper {
+    display: flex;
+    gap: 20px;
+    width: 90%;
+    max-width: 800px;
+    flex-direction: column; 
+    margin-top: 20px;
+  }
+  
+  @media (min-width: 600px) {
+    .cardsWrapper {
+      flex-direction: row; 
+    }
+  }
+  
+  .card {
+    flex: 1;
+    border-radius: 20px;
+    padding: 30px 20px;
+    background: rgba(11, 12, 16, 0.85);
+    backdrop-filter: blur(8px);
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .cardEndless {
+    border: 3px solid #0abde3;
+    box-shadow: 0 0 15px rgba(10, 189, 227, 0.3);
+  }
+  .cardEndless:hover {
+    transform: translateY(-10px) scale(1.02);
+    box-shadow: 0 15px 30px rgba(10, 189, 227, 0.6);
+    border-color: #48dbfb;
+  }
+  .cardCampaign {
+    border: 3px solid #ff4757;
+    box-shadow: 0 0 15px rgba(255, 71, 87, 0.3);
+  } 
+  @media (hover: hover) and (pointer: fine) {
+    .cardEndless:hover {
+      transform: translateY(-10px) scale(1.02);
+      box-shadow: 0 15px 30px rgba(10, 189, 227, 0.6);
+      border-color: #48dbfb;
+    }
+    
+    .cardCampaign:hover {
+      transform: translateY(-10px) scale(1.02);
+      box-shadow: 0 15px 30px rgba(255, 71, 87, 0.6);
+      border-color: #ff6b81;
+    }
+  }
+  
+  /* =========================================
+     TỐI ƯU HOÁ CHO ĐIỆN THOẠI CẢM ỨNG (iOS/Android) 
+     ========================================= */
+  .cardEndless:active {
+    transform: scale(0.95);
+    box-shadow: 0 0 5px rgba(10, 189, 227, 0.8);
+    border-color: #00d2d3;
+    transition: all 0.1s ease; /* Phản hồi tức thì khi chạm */
+  }
+  
+  .cardCampaign:active {
+    transform: scale(0.95);
+    box-shadow: 0 0 5px rgba(255, 71, 87, 0.8);
+    border-color: #ff7675;
+    transition: all 0.1s ease;
+  }
+  .cardCampaign {
+    border: 3px solid #ff4757;
+    box-shadow: 0 0 15px rgba(255, 71, 87, 0.3);
+  }
+  .cardCampaign:hover {
+    transform: translateY(-10px) scale(1.02);
+    box-shadow: 0 15px 30px rgba(255, 71, 87, 0.6);
+    border-color: #ff6b81;
+  }
+  
+  .icon {
+    font-size: 60px;
+    margin-bottom: 15px;
+    line-height: 1;
+  }
+  
+  .cardTitle {
+    font-size: 32px;
+    margin: 0 0 10px 0;
+    text-transform: uppercase;
+  }
+  
+  .desc {
+    font-size: 18px;
+    color: #c8d6e5;
+    margin: 0;
+    line-height: 1.4;
+  }
