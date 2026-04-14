@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 
 export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
   const [selectedId, setSelectedId] = useState(null);
+  const [refreshTick, setRefreshTick] = useState(0);
   const campaignData = gsRef.current.campaignData;
   const { items, loadout } = campaignData;
 
@@ -42,9 +43,7 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
   // 3. Hàm Trang bị / Tháo đồ (Toggle)
   const toggleEquip = () => {
     if (!selectedItem) return;
-
     const isEquipped = loadout[selectedItem.type] === selectedItem.uuid;
-    // Nếu đang mặc thì tháo ra (gán chuỗi rỗng), ngược lại thì mặc vào
     const newLoadout = { 
       ...loadout, 
       [selectedItem.type]: isEquipped ? "" : selectedItem.uuid 
@@ -55,12 +54,13 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
     gsRef.current.campaignData.progress.combatPower = newCP;
     // Đồng bộ Firebase
     saveUserProfile();
+    // 👇 THÊM DÒNG NÀY ĐỂ ÉP REACT VẼ LẠI MÀN HÌNH TỨC THÌ
+    setRefreshTick(prev => prev + 1); 
     toast.success(lang === 'vi' 
       ? (isEquipped ? 'Đã tháo trang bị!' : 'Đã trang bị!') 
       : (isEquipped ? 'Unequipped!' : 'Equipped!')
     );
   };
-
   return (
     <div className={`${styles.container} scrollable-layer`}>
       <div className={styles.header}>
