@@ -1449,6 +1449,7 @@ useEffect(() => {
       />
       {screen === 'portal' && (
           <Portal 
+            gsRef={gsRef}
             setScreen={setScreen}
             currentUser={currentUser}
             loginWithGoogle={loginWithGoogle}

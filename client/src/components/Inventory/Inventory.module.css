@@ -1,73 +1,108 @@
 /* src/components/Inventory/Inventory.module.css */
 .container {
-    width: 100%; height: 100dvh; background-color: #0b0c10; color: #fff;
-    display: flex; flex-direction: column; font-family: 'VT323', monospace;
-    padding: 20px; box-sizing: border-box; position: relative; z-index: 20;
-  }
-  
-  .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #1f2833; padding-bottom: 10px; margin-bottom: 15px; }
-  .backBtn { background: transparent; color: #66fcf1; border: 1px solid #66fcf1; padding: 5px 15px; border-radius: 5px; font-family: inherit; font-size: 18px; cursor: pointer; }
-  
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
-    gap: 10px;
-    overflow-y: auto;
-    flex: 1;
-    padding: 10px;
-    background: rgba(0,0,0,0.3);
-    border-radius: 10px;
-  }
-  
-  .itemSlot {
-    aspect-ratio: 1/1;
-    background: #1f2833;
-    border: 2px solid #45a29e;
-    border-radius: 8px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    cursor: pointer;
-  }
-  
-  .itemSlot.selected { border-color: #FFD700; box-shadow: 0 0 10px #FFD700; }
-  .itemSlot:active { transform: scale(0.95); }
-  
-  /* Màu sắc độ hiếm */
-  .rarity1 { border-color: #c5c6c7; } /* Thường - Xám */
-  .rarity2 { border-color: #2ed573; } /* Hiếm - Xanh lá */
-  .rarity3 { border-color: #1e90ff; } /* Cực hiếm - Xanh dương */
-  
-  .equippedBadge {
-    position: absolute; top: -5px; right: -5px;
-    background: #FF416C; color: #fff; font-size: 10px;
-    padding: 2px 5px; border-radius: 4px; font-weight: bold;
-  }
-  
-  .detailPanel {
-    margin-top: 15px;
-    background: #1f2833;
-    border: 2px solid #45a29e;
-    border-radius: 15px;
-    padding: 15px;
-    min-height: 150px;
-    display: flex;
-    flex-direction: column;
-  }
-  
-  .equipBtn {
-    margin-top: auto;
-    padding: 12px;
-    background: linear-gradient(45deg, #0abde3, #48dbfb);
-    border: none; color: #fff; border-radius: 8px;
-    font-family: inherit; font-size: 20px; font-weight: bold; cursor: pointer;
-    transition: all 0.1s ease;
-  }
-  .equipBtn:active { transform: scale(0.95); }
-  /* Class mới dành cho trạng thái tháo đồ */
-  .unequipBtn {
-    background: linear-gradient(45deg, #ff4757, #ff6b81);
-    box-shadow: 0 0 10px rgba(255, 71, 87, 0.4);
-  }
+  width: 100%; height: 100dvh; 
+  background: radial-gradient(circle at 50% -20%, #2c3e50 0%, #000000 80%);
+  color: #fff; display: flex; flex-direction: column; align-items: center; 
+  font-family: 'VT323', monospace; padding: 20px; box-sizing: border-box; 
+  position: relative; z-index: 20; overflow-y: hidden; pointer-events: auto;
+}
+
+/* Lưới Hologram */
+.container::before {
+  content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  background-image: linear-gradient(rgba(102, 252, 241, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(102, 252, 241, 0.05) 1px, transparent 1px);
+  background-size: 30px 30px; pointer-events: none; z-index: 0;
+}
+
+/* Khung giới hạn chống giãn ngoác trên PC */
+.contentWrapper {
+  width: 100%; max-width: 900px; display: flex; flex-direction: column; flex: 1; height: 100%; z-index: 10;
+}
+
+.header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid rgba(102, 252, 241, 0.3); padding-bottom: 10px; margin-bottom: 15px; flex-shrink: 0; }
+.backBtn { background: rgba(11, 12, 16, 0.8); color: #66fcf1; border: 1px solid #66fcf1; padding: 5px 15px; border-radius: 5px; font-family: inherit; font-size: 18px; cursor: pointer; text-transform: uppercase; }
+
+/* TABS CỦA KHO ĐỒ VÀ CỬA HÀNG */
+.tabs { display: flex; gap: 10px; margin-bottom: 15px; flex-shrink: 0; }
+.tabBtn {
+  flex: 1; padding: 10px; background: rgba(31, 40, 51, 0.6); color: #888; border: 1px solid #45a29e;
+  font-family: inherit; font-size: clamp(16px, 4vw, 20px); cursor: pointer; border-radius: 8px; text-transform: uppercase;
+  transition: all 0.3s ease; backdrop-filter: blur(5px);
+}
+.tabBtn.active {
+  color: #fff; background: rgba(69, 162, 158, 0.3); border-color: #66fcf1;
+  box-shadow: 0 0 15px rgba(102, 252, 241, 0.4), inset 0 0 10px rgba(102, 252, 241, 0.2);
+  text-shadow: 0 0 5px #66fcf1;
+}
+
+/* LƯỚI KHO ĐỒ */
+.grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(75px, 1fr)); gap: 12px;
+  overflow-y: auto; flex: 1; padding: 10px; align-content: flex-start;
+  background: rgba(11, 12, 16, 0.5); backdrop-filter: blur(10px);
+  border: 1px solid rgba(102, 252, 241, 0.1); border-radius: 10px;
+}
+
+.itemSlot {
+  aspect-ratio: 1/1; background: rgba(31, 40, 51, 0.8); border: 2px solid #555;
+  border-radius: 8px; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; position: relative; cursor: pointer;
+  box-shadow: inset 0 0 15px rgba(0,0,0,0.8); transition: transform 0.1s;
+}
+.itemSlot.selected { transform: scale(1.05); }
+
+/* MÀU SẮC ĐỘ HIẾM */
+.rarity1 { border-color: #95a5a6; box-shadow: inset 0 0 10px rgba(149, 165, 166, 0.3); } 
+.rarity2 { border-color: #2ecc71; box-shadow: 0 0 10px rgba(46, 204, 113, 0.5), inset 0 0 15px rgba(46, 204, 113, 0.3); } 
+.rarity3 { border-color: #3498db; box-shadow: 0 0 12px rgba(52, 152, 219, 0.6), inset 0 0 15px rgba(52, 152, 219, 0.4); } 
+.rarity4 { border-color: #9b59b6; box-shadow: 0 0 15px rgba(155, 89, 182, 0.8), inset 0 0 20px rgba(155, 89, 182, 0.5); } 
+.rarity5 { border-color: #f1c40f; box-shadow: 0 0 20px rgba(241, 196, 15, 1), inset 0 0 20px rgba(241, 196, 15, 0.5); } 
+
+.equippedBadge {
+  position: absolute; top: -8px; right: -8px; background: #ff4757; color: #fff; font-size: 12px;
+  padding: 2px 6px; border-radius: 4px; font-weight: bold; box-shadow: 0 0 10px rgba(255, 71, 87, 0.8); border: 1px solid #fff;
+}
+
+/* BẢNG CHI TIẾT */
+.detailPanel {
+  margin-top: 15px; background: rgba(11, 12, 16, 0.7); backdrop-filter: blur(15px);
+  border: 1px solid rgba(102, 252, 241, 0.3); box-shadow: 0 0 20px rgba(0,0,0,0.5), inset 0 0 20px rgba(102,252,241,0.05);
+  border-radius: 15px; padding: 15px; min-height: 180px; display: flex; flex-direction: column; flex-shrink: 0;
+}
+
+.actionGroup { display: flex; gap: 10px; margin-top: auto; }
+.btnAction {
+  flex: 1; padding: 12px; border: none; color: #fff; font-family: inherit; font-size: clamp(16px, 4vw, 20px); 
+  font-weight: bold; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+.equipBtn { background: linear-gradient(90deg, #0abde3, #48dbfb); box-shadow: 0 0 15px rgba(10, 189, 227, 0.5); }
+.unequipBtn { background: linear-gradient(90deg, #ff4757, #ff6b81); box-shadow: 0 0 15px rgba(255, 71, 87, 0.5); }
+.upgradeBtn { background: linear-gradient(90deg, #f1c40f, #e67e22); box-shadow: 0 0 15px rgba(241, 196, 15, 0.5); }
+.upgradeBtn:disabled { background: #555; color: #888; box-shadow: none; cursor: not-allowed; }
+
+/* --- GIAO DIỆN CỬA HÀNG (DẠNG LƯỚI CHO NHIỀU HÒM) --- */
+.storeContainer {
+  flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px;
+  overflow-y: auto; padding: 10px; align-content: flex-start;
+}
+
+.crateCard {
+  background: rgba(11, 12, 16, 0.6); backdrop-filter: blur(10px); border-radius: 15px;
+  border: 1px solid rgba(102, 252, 241, 0.3); padding: 20px; display: flex; flex-direction: column;
+  align-items: center; justify-content: space-between; text-align: center; min-height: 300px;
+}
+.crateBasic { border-color: #3498db; box-shadow: inset 0 0 20px rgba(52, 152, 219, 0.2); }
+.cratePremium { border-color: #9b59b6; box-shadow: inset 0 0 20px rgba(155, 89, 182, 0.2); }
+.crateEpic { border-color: #f1c40f; box-shadow: inset 0 0 20px rgba(241, 196, 15, 0.2); }
+
+.gachaIcon { font-size: 70px; margin-bottom: 10px; }
+.gachaBtn {
+  margin-top: 15px; padding: 12px 20px; font-size: 20px; font-family: inherit; font-weight: bold; color: #000;
+  border: none; cursor: pointer; width: 100%;
+  clip-path: polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px);
+}
+
+@media (min-width: 768px) {
+  .grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
+}
