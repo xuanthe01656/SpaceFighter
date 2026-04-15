@@ -21,6 +21,7 @@ import GameOver from './components/GameOver';
 import GameHUD from './components/GameHUD';
 import Portal from './components/Portal';
 import HQ from './components/HQ';
+import Pilots from './components/Pilots';
 import Inventory from './components/Inventory';
 import { secureStorage } from './utils/storageHelper';
 const imageCache = {};
@@ -105,6 +106,7 @@ export default function Game() {
   const [reviveTimer, setReviveTimer] = useState(6);
   const reviveIntervalRef = useRef(null);
   const revivePlayerRef = useRef(null);
+  const isWatchingAdRef = useRef(false);
   const toggleLanguage = () => {
     const newLang = lang === 'vi' ? 'en' : 'vi';
     setLang(newLang);
@@ -428,7 +430,7 @@ useEffect(() => {
           if (reviveIntervalRef.current) clearInterval(reviveIntervalRef.current);
           reviveIntervalRef.current = setInterval(() => {
             // --- CƠ CHẾ ĐÓNG BĂNG ĐỒNG HỒ ---
-            if (pendingRewardRef.current === 'revive') return;
+            if (isWatchingAdRef.current) return;
             setReviveTimer(prev => {
               if (prev <= 1) {
                 clearInterval(reviveIntervalRef.current);
@@ -1434,7 +1436,9 @@ useEffect(() => {
   const { watchAd, isWatchingAd } = useAdMob(
     gsRef, setUIUpdates, currentUser, screen, uiUpdates.isVIP, langRef, saveUserProfile, revivePlayer, getRealTime
   );
-
+  useEffect(() => {
+    isWatchingAdRef.current = isWatchingAd;
+  }, [isWatchingAd]);
   return (
     <div style={{ width: '100%', height: '100dvh', position: 'relative', backgroundColor: '#0d0e15' }}>
       
@@ -1466,6 +1470,11 @@ useEffect(() => {
             gsRef={gsRef}
             setScreen={setScreen}
             lang={lang}
+          />
+        )}
+        {screen === 'pilots' && (
+          <Pilots 
+            gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile}
           />
         )}
       {screen === 'menu' && (

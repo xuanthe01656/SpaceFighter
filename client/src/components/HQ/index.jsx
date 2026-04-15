@@ -14,7 +14,6 @@ export default function HQ({ gsRef, setScreen, lang }) {
     );
   }
 
-  // Phân tách dữ liệu Cửa Hàng / Tài sản
   const energy = gsRef.current?.energy ?? 50;
   const lives = gsRef.current?.lives ?? 10;
   const coins = gsRef.current?.coins ?? 0;
@@ -24,8 +23,18 @@ export default function HQ({ gsRef, setScreen, lang }) {
   const { progress, loadout, items } = campaignData;
   const currentPilot = PILOTS.find(p => p.id === loadout.pilot) || PILOTS[0];
   const currentAircraft = AIRCRAFTS.find(a => a.id === loadout.aircraft) || AIRCRAFTS[0];
+  
+  // 1. ĐỌC SÚNG CHÍNH
   const mainGunItem = items[loadout.mainGun];
   const currentMainGun = mainGunItem ? GEAR_CATALOG.mainGun.find(g => g.id === mainGunItem.baseId) : null;
+
+  // 2. ĐỌC SÚNG PHỤ (WINGMAN)
+  const wingmanItem = items[loadout.wingman];
+  const currentWingman = wingmanItem ? GEAR_CATALOG.wingman.find(g => g.id === wingmanItem.baseId) : null;
+
+  // 3. ĐỌC GIÁP (ARMOR)
+  const armorItem = items[loadout.armor];
+  const currentArmor = armorItem ? GEAR_CATALOG.armor.find(g => g.id === armorItem.baseId) : null;
 
   const itemVariants = {
     hidden: { y: 20, opacity: 0 },
@@ -37,7 +46,6 @@ export default function HQ({ gsRef, setScreen, lang }) {
       className={`${styles.container} scrollable-layer`}
       initial="hidden" animate="visible" transition={{ staggerChildren: 0.1 }} 
     >
-      {/* KHUNG BỌC BẢO VỆ GIAO DIỆN (CHỐNG DỊ DẠNG TRÊN PC) */}
       <div className={styles.contentWrapper}>
         
         {/* HEADER & TÀI NGUYÊN */}
@@ -74,7 +82,7 @@ export default function HQ({ gsRef, setScreen, lang }) {
           <h2 className={styles.cpValue}>{progress.combatPower.toLocaleString()}</h2>
         </motion.div>
 
-        {/* KHU VỰC TRƯNG BÀY (KÍNH HOLOGRAM) */}
+        {/* KHU VỰC TRƯNG BÀY */}
         <motion.div variants={itemVariants} className={`${styles.glassPanel} ${styles.hangar}`}>
           <motion.div 
             animate={{ y: [0, -10, 0] }} transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
@@ -92,10 +100,12 @@ export default function HQ({ gsRef, setScreen, lang }) {
           </div>
         </motion.div>
 
-        {/* TRANG BỊ */}
-        <motion.div variants={itemVariants} className={styles.loadoutSection}>
+        {/* TRANG BỊ ĐANG MẶC (ĐÃ CẬP NHẬT ĐẦY ĐỦ 3 SLOT) */}
+        <motion.div variants={itemVariants} className={styles.loadoutSection} style={{ flexWrap: 'wrap' }}>
+          
+          {/* SLOT 1: SÚNG CHÍNH */}
           <motion.div whileTap={{ scale: 0.95 }} className={`${styles.loadoutSlot} hq-interact ${styles.glassPanel}`}>
-             <p className={styles.loadoutLabel}>{lang === 'vi' ? 'VŨ KHÍ CHÍNH' : 'PRIMARY WEAPON'}</p>
+             <p className={styles.loadoutLabel}>{lang === 'vi' ? 'SÚNG CHÍNH' : 'PRIMARY GUN'}</p>
              {currentMainGun ? (
                <>
                  <div style={{ fontSize: 'clamp(28px, 6vw, 35px)', marginBottom: '10px' }}>🔫</div>
@@ -106,10 +116,35 @@ export default function HQ({ gsRef, setScreen, lang }) {
                <div style={{ color: '#555', fontSize: '16px', marginTop: '20px' }}>[ TRỐNG ]</div>
              )}
           </motion.div>
+
+          {/* SLOT 2: SÚNG PHỤ (WINGMAN) */}
           <motion.div whileTap={{ scale: 0.95 }} className={`${styles.loadoutSlot} hq-interact ${styles.glassPanel}`}>
-             <p className={styles.loadoutLabel}>{lang === 'vi' ? 'VŨ KHÍ PHỤ' : 'SECONDARY WEAPON'}</p>
-             <div style={{ color: '#555', fontSize: '16px', marginTop: '30px' }}>[ TRỐNG ]</div>
+             <p className={styles.loadoutLabel}>{lang === 'vi' ? 'SÚNG PHỤ' : 'WINGMAN'}</p>
+             {currentWingman ? (
+               <>
+                 <div style={{ fontSize: 'clamp(28px, 6vw, 35px)', marginBottom: '10px' }}>🛸</div>
+                 <div style={{ color: '#fff', fontSize: '16px', fontWeight: 'bold' }}>{currentWingman.name[lang]}</div>
+                 <div style={{ color: '#b388ff', fontSize: '14px', marginTop: '5px' }}>Lv.{wingmanItem.level} (ATK: {currentWingman.baseAtk})</div>
+               </>
+             ) : (
+               <div style={{ color: '#555', fontSize: '16px', marginTop: '20px' }}>[ TRỐNG ]</div>
+             )}
           </motion.div>
+
+          {/* SLOT 3: GIÁP (ARMOR) */}
+          <motion.div whileTap={{ scale: 0.95 }} className={`${styles.loadoutSlot} hq-interact ${styles.glassPanel}`}>
+             <p className={styles.loadoutLabel}>{lang === 'vi' ? 'GIÁP BẢO VỆ' : 'ARMOR'}</p>
+             {currentArmor ? (
+               <>
+                 <div style={{ fontSize: 'clamp(28px, 6vw, 35px)', marginBottom: '10px' }}>🛡️</div>
+                 <div style={{ color: '#fff', fontSize: '16px', fontWeight: 'bold' }}>{currentArmor.name[lang]}</div>
+                 <div style={{ color: '#2ed573', fontSize: '14px', marginTop: '5px' }}>Lv.{armorItem.level} (HP: {currentArmor.baseHp})</div>
+               </>
+             ) : (
+               <div style={{ color: '#555', fontSize: '16px', marginTop: '20px' }}>[ TRỐNG ]</div>
+             )}
+          </motion.div>
+
         </motion.div>
 
         {/* DANH SÁCH TÍNH NĂNG */}
@@ -117,7 +152,10 @@ export default function HQ({ gsRef, setScreen, lang }) {
           <motion.button whileTap={{ scale: 0.95 }} className={`${styles.btnBase} hq-interact`} onClick={() => setScreen('inventory')}>
             📦 {lang === 'vi' ? 'KHO ĐỒ' : 'INVENTORY'}
           </motion.button>
-          <motion.button whileTap={{ scale: 0.95 }} className={`${styles.btnBase} hq-interact`}>
+          <motion.button 
+            whileTap={{ scale: 0.95 }} className={`${styles.btnBase} hq-interact`}
+            onClick={() => setScreen('pilots')} // 👇 Đổi từ hq sang pilots
+          >
             👨‍🚀 {lang === 'vi' ? 'NHÂN SỰ' : 'CREW'}
           </motion.button>
         </motion.div>

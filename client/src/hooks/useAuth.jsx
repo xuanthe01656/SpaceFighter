@@ -13,12 +13,28 @@ import { t } from '../utils/translations';
 export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
   const [currentUser, setCurrentUser] = useState(null);
 
-  // 1. HÀM LƯU HỒ SƠ
+  // Dữ liệu mặc định của Chế độ Chiến Dịch (Gói Tân Thủ)
+  const defaultCampaignData = {
+    progress: { currentStage: 1, highestStage: 1, combatPower: 1200 },
+    loadout: { 
+      pilot: "pilot_alpha", 
+      aircraft: "ship_xwing", 
+      mainGun: "item_start_gun", 
+      wingman: "", 
+      armor: "" 
+    },
+    ownedPilots: { "pilot_alpha": { level: 1, stars: 1 } },
+    ownedAircrafts: { "ship_xwing": { level: 1, stars: 1 } },
+    items: {
+      "item_start_gun": { baseId: "gun_laser", rarity: 1, level: 1, type: "mainGun" }
+    },
+    materials: { gears: 0, blueprints: 0 }
+  };
+
   const saveUserProfile = async (specificUpdates = null) => {
     if (!currentUser) return; 
     try {
       const userRef = doc(db, "users", currentUser.uid);
-      
       if (specificUpdates) {
         await setDoc(userRef, specificUpdates, { merge: true });
         return; 
@@ -26,18 +42,14 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
 
       const safeNum = (val, fallback) => (typeof val === 'number' && !isNaN(val)) ? val : fallback;
       const safeStr = (val, fallback) => (typeof val === 'string') ? val : fallback;
-      
       let currentLives = gsRef.current.lives;
       if (currentLives !== '∞') currentLives = safeNum(currentLives, 10);
 
       const updateData = {
         highScore: safeNum(gsRef.current.bestScore, 0),
         coins: safeNum(gsRef.current.coins, 0),
-        diamonds: safeNum(gsRef.current.diamonds, 0), // 👇 LƯU KIM CƯƠNG
         lives: currentLives,
         livesUpdatedAt: typeof gsRef.current.livesUpdatedAt === 'number' && !isNaN(gsRef.current.livesUpdatedAt) ? gsRef.current.livesUpdatedAt : null,
-        energy: safeNum(gsRef.current.energy, 50), // 👇 LƯU NĂNG LƯỢNG CHIẾN DỊCH
-        energyUpdatedAt: typeof gsRef.current.energyUpdatedAt === 'number' && !isNaN(gsRef.current.energyUpdatedAt) ? gsRef.current.energyUpdatedAt : null,
         isVIP: !!gsRef.current.isVIP,
         dailyCoinCount: safeNum(gsRef.current.dailyCoinCount, 0),
         lastCoinDate: safeStr(gsRef.current.lastCoinDate, ''),
@@ -57,7 +69,6 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
     }
   };
 
-  // 2. HÀM TẢI HỒ SƠ
   const loadUserProfile = async (user) => {
     if (!user) return;
     const userRef = doc(db, "users", user.uid);
@@ -114,10 +125,7 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
           isOnline: true, last_session_id: currentSocketId, last_update_ms: now, displayName: finalName, photoURL: finalPhoto    
         }, { merge: true }).catch(e => console.error("Lỗi update online:", e));
 
-        // 👇 ĐỌC TÀI NGUYÊN TỪ DATABASE
         gsRef.current.coins = (typeof data.coins === 'number' && !isNaN(data.coins)) ? data.coins : 0;
-        gsRef.current.diamonds = (typeof data.diamonds === 'number' && !isNaN(data.diamonds)) ? data.diamonds : 0;
-        gsRef.current.energy = (typeof data.energy === 'number' && !isNaN(data.energy)) ? data.energy : 50;
         gsRef.current.isVIP = data.isVIP || false;
         
         if (gsRef.current.isVIP) {
@@ -144,34 +152,26 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
         gsRef.current.lastCoinHour = currentHourStr;
         
         gsRef.current.bestScore = (typeof data.highScore === 'number' && !isNaN(data.highScore)) ? data.highScore : 0;
-        
-        const dbInv = data.inventory || {};
-        gsRef.current.inventory = { 
-          skins: Array.isArray(dbInv.skins) ? dbInv.skins : ['classic'], 
-          bgs: Array.isArray(dbInv.bgs) ? dbInv.bgs : ['deep'] 
-        };
-        const dbEquip = data.equipped || {};
-        const newSettings = { skin: dbEquip.skin || 'classic', bg: dbEquip.bg || 'deep' };
+        gsRef.current.inventory = data.inventory || { skins: ['classic'], bgs: ['deep'] };
+        const newSettings = data.equipped || { skin: 'classic', bg: 'deep' };
         
         if (gsRef.current.userSettings.bg !== newSettings.bg) { gsRef.current.background.particles = []; }
         gsRef.current.userSettings = newSettings;
-        gsRef.current.campaignData = data.campaignData || defaultCampaignData;
+        
+        // 👇 COPY AN TOÀN ĐỂ KHÔNG BỊ LỖI THAM CHIẾU DỮ LIỆU
+        gsRef.current.campaignData = data.campaignData || JSON.parse(JSON.stringify(defaultCampaignData));
 
       } else {
         if (!finalName) finalName = `Astro_${Math.floor(Math.random() * 10000)}`;
 
         await setDoc(userRef, {
-          displayName: finalName, photoURL: finalPhoto, isOnline: true, last_session_id: currentSocketId, 
-          last_update_ms: Date.now(), coins: 0, diamonds: 0, lives: 10, energy: 50, highScore: 0,
-          campaignData: defaultCampaignData
+          displayName: finalName, photoURL: finalPhoto, isOnline: true, last_session_id: currentSocketId, last_update_ms: Date.now(), coins: 0, lives: 10, highScore: 0
         });
 
         gsRef.current.myName = finalName;
-        gsRef.current.coins = 0; gsRef.current.diamonds = 0; gsRef.current.lives = 10; gsRef.current.energy = 50; 
-        gsRef.current.isVIP = false; gsRef.current.livesUpdatedAt = null; gsRef.current.bestScore = 0;
-        gsRef.current.inventory = { skins: ['classic'], bgs: ['deep'] }; 
-        gsRef.current.userSettings = { skin: 'classic', bg: 'deep' };
-        gsRef.current.campaignData = defaultCampaignData;
+        gsRef.current.coins = 0; gsRef.current.lives = 10; gsRef.current.isVIP = false; gsRef.current.livesUpdatedAt = null; gsRef.current.bestScore = 0;
+        gsRef.current.inventory = { skins: ['classic'], bgs: ['deep'] }; gsRef.current.userSettings = { skin: 'classic', bg: 'deep' };
+        gsRef.current.campaignData = JSON.parse(JSON.stringify(defaultCampaignData));
       }
 
       if (user.displayName !== finalName || user.photoURL !== finalPhoto) {
@@ -181,32 +181,15 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
         } catch (e) { console.error("Lỗi đồng bộ Auth:", e); }
       }
       
-      setUIUpdates(prev => ({ 
-        ...prev, coins: gsRef.current.coins, diamonds: gsRef.current.diamonds, 
-        lives: gsRef.current.lives, energy: gsRef.current.energy, 
-        isVIP: gsRef.current.isVIP, nextLifeTime: gsRef.current.isVIP ? null : prev.nextLifeTime, 
-        displayName: finalName, photoURL: finalPhoto 
-      }));
+      setUIUpdates(prev => ({ ...prev, coins: gsRef.current.coins, lives: gsRef.current.lives, isVIP: gsRef.current.isVIP, nextLifeTime: gsRef.current.isVIP ? null : prev.nextLifeTime, displayName: finalName, photoURL: finalPhoto }));
     } catch (error) { console.error("Lỗi tải hồ sơ:", error); }
   };
 
-  const defaultCampaignData = {
-    progress: { currentStage: 1, highestStage: 1, combatPower: 1200 },
-    loadout: { pilot: "pilot_alpha", aircraft: "ship_xwing", mainGun: "item_start_gun", wingman: "", armor: "" },
-    ownedPilots: { "pilot_alpha": { level: 1, stars: 1 } },
-    ownedAircrafts: { "ship_xwing": { level: 1, stars: 1 } },
-    items: { "item_start_gun": { baseId: "gun_laser", rarity: 1, level: 1, type: "mainGun" } },
-    materials: { gears: 0, blueprints: 0 }
-  };
-
-  const loginWithGoogle = async () => {
+  const loginWithGoogle = async () => { /* Giữ nguyên không đổi */
     try {
       if (Capacitor.isNativePlatform()) {
         toast.loading(t[langRef.current]?.loginOpening, { id: 'nativeLogin' });
-        GoogleAuth.initialize({
-          clientId: '271365354200-divjlei917agdhao9na226dnhemtiq2b.apps.googleusercontent.com',
-          scopes: ['profile', 'email'], grantOfflineAccess: true,
-        });
+        GoogleAuth.initialize({ clientId: '271365354200-divjlei917agdhao9na226dnhemtiq2b.apps.googleusercontent.com', scopes: ['profile', 'email'], grantOfflineAccess: true });
         const googleUser = await GoogleAuth.signIn();
         const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
         await signInWithCredential(auth, credential);
@@ -219,7 +202,7 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
     } catch (error) { toast.error(t[langRef.current]?.loginFail); }
   };
 
-  const loginWithApple = async () => {
+  const loginWithApple = async () => { /* Giữ nguyên không đổi */
     try {
       toast.loading(t[langRef.current]?.loginOpening || "Đang kết nối Apple...", { id: 'appleLogin' });
       const generateNonce = () => {
@@ -248,9 +231,7 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
         user.displayName = appleName; 
       }
       toast.dismiss('appleLogin'); toast.success(t[langRef.current]?.loginAppSuccess || "Đăng nhập thành công!");
-    } catch (error) {
-      toast.dismiss('appleLogin'); toast.error(t[langRef.current]?.loginFail || "Đăng nhập thất bại");
-    }
+    } catch (error) { toast.dismiss('appleLogin'); toast.error(t[langRef.current]?.loginFail || "Đăng nhập thất bại"); }
   };
 
   const logout = async () => {
@@ -262,54 +243,56 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
       secureStorage.removeItem('astro_session_id');
       await signOut(auth);
       if (Capacitor.isNativePlatform()) { await GoogleAuth.signOut(); }
-      
-      // 👇 RESET CHỈ SỐ VỀ 0 KHI ĐĂNG XUẤT
-      gsRef.current.coins = 0; gsRef.current.diamonds = 0; gsRef.current.lives = 10; gsRef.current.energy = 50;
-      gsRef.current.inventory = { skins: ['classic'], bgs: ['deep'] }; gsRef.current.userSettings = { skin: 'classic', bg: 'deep' };
-      setUIUpdates(prev => ({ ...prev, coins: 0, diamonds: 0, lives: 10, energy: 50, isVIP: false, nextLifeTime: null }));
-      
       setCurrentUser(null); setScreen('portal'); toast.success(t[langRef.current]?.logoutSuccess);
     } catch (e) { console.log(e); }
   };
 
-  const deleteAccount = async () => { /* Giữ nguyên của bạn */
+  const deleteAccount = async () => {
     if (!currentUser) return;
     const isVipUser = gsRef.current.isVIP;
-    let warningMsg = t[langRef.current]?.confirmDelete || "BẠN CÓ CHẮC CHẮN?\\n\\nHành động này sẽ xóa vĩnh viễn tài khoản và toàn bộ điểm số của bạn. KHÔNG THỂ HOÀN TÁC!";
-    if (isVipUser) warningMsg = "🚨 CẢNH BÁO TÀI SẢN VIP 🚨\\n\\nTài khoản của bạn ĐANG SỞ HỮU GÓI VIP. Nếu tiếp tục xóa, bạn sẽ MẤT TOÀN BỘ quyền lợi VIP đã mua và điểm số.\\n\\nBạn có THẬT SỰ muốn xóa?";
+    let warningMsg = t[langRef.current]?.confirmDelete || "BẠN CÓ CHẮC CHẮN?\n\nHành động này sẽ xóa vĩnh viễn tài khoản và toàn bộ điểm số của bạn. KHÔNG THỂ HOÀN TÁC!";
+    if (isVipUser) warningMsg = "🚨 CẢNH BÁO TÀI SẢN VIP 🚨\n\nTài khoản của bạn ĐANG SỞ HỮU GÓI VIP. Nếu tiếp tục xóa, bạn sẽ MẤT TOÀN BỘ quyền lợi VIP đã mua và điểm số.\n\nBạn có THẬT SỰ muốn xóa?";
+    
     if (!window.confirm(warningMsg)) return;
-    if (isVipUser && !window.confirm("HỎI LẠI LẦN CUỐI:\\n\\nBạn chấp nhận TỪ BỎ GÓI VIP ĐÃ MUA và xóa tài khoản này vĩnh viễn chứ?")) return;
+    if (isVipUser && !window.confirm("HỎI LẠI LẦN CUỐI:\n\nBạn chấp nhận TỪ BỎ GÓI VIP ĐÃ MUA và xóa tài khoản này vĩnh viễn chứ?")) return;
 
     const loadingToast = toast.loading(t[langRef.current]?.deletingAccount || "Đang xóa dữ liệu...");
     try {
       const userRef = doc(db, "users", currentUser.uid);
-      await deleteDoc(userRef); await deleteUser(currentUser);
+      await deleteDoc(userRef);
+      await deleteUser(currentUser);
       secureStorage.removeItem('astro_session_id');
       if (Capacitor.isNativePlatform()) GoogleAuth.signOut().catch(() => {});
-      setCurrentUser(null); setScreen('portal'); toast.dismiss(loadingToast); toast.success(t[langRef.current]?.deleteSuccess || "Tài khoản đã bị xóa vĩnh viễn!");
+      setCurrentUser(null); setScreen('menu'); toast.dismiss(loadingToast); toast.success(t[langRef.current]?.deleteSuccess || "Tài khoản đã bị xóa vĩnh viễn!");
     } catch (error) {
-      toast.dismiss(loadingToast); toast.error("Lỗi xóa tài khoản: " + error.message);
+      toast.dismiss(loadingToast);
+      if (error.code === 'auth/requires-recent-login') toast.error(t[langRef.current]?.errRecentLogin || "Bạn cần Đăng xuất và Đăng nhập lại trước khi xóa tài khoản!");
+      else toast.error("Lỗi xóa tài khoản: " + error.message);
     }
   };
 
   useEffect(() => {
-    let isMounted = true; let unsubSnapshot = null;
+    let isMounted = true;
+    let unsubSnapshot = null;
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!isMounted) return;
       setCurrentUser(user);
+      
       if (user) {
         gsRef.current.myName = user.displayName || 'Player';
         await loadUserProfile(user);
+
         const userRef = doc(db, "users", user.uid);
         unsubSnapshot = onSnapshot(userRef, (docSnap) => {
           if (docSnap.exists()) {
             const currentData = docSnap.data();
             const mySessionId = window.local_astro_session || secureStorage.getItem('astro_session_id');
             if (currentData.last_session_id && currentData.last_session_id !== mySessionId) {
-              toast.error(t[langRef.current]?.errMultiDevice || "Tài khoản đang chơi ở thiết bị khác!");
-              secureStorage.removeItem('astro_session_id'); signOut(auth);
+              toast.error(t[langRef.current]?.errMultiDevice || "Tài khoản đang được chơi ở thiết bị khác!");
+              secureStorage.removeItem('astro_session_id');
+              signOut(auth);
               if (Capacitor.isNativePlatform()) GoogleAuth.signOut().catch(() => {});
-              setCurrentUser(null); setScreen('portal');
+              setCurrentUser(null); setScreen('menu');
             }
           }
         });
@@ -320,19 +303,36 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
         let guestCoins = parseInt(secureStorage.getItem('astro_guest_coins')) || 0;
         
         gsRef.current.lives = guestLives; gsRef.current.coins = guestCoins;
-        gsRef.current.diamonds = 0; gsRef.current.energy = 50; // 👈 Ép về mặc định cho Khách
-        
         if (guestLives < 10) {
           let lastLost = secureStorage.getItem('astro_guest_last_lost');
           gsRef.current.livesUpdatedAt = lastLost ? parseInt(lastLost) : getRealTime();
           if (!lastLost) secureStorage.setItem('astro_guest_last_lost', gsRef.current.livesUpdatedAt);
         } else { gsRef.current.livesUpdatedAt = null; }
-        setUIUpdates(prev => ({ ...prev, lives: guestLives, coins: guestCoins, diamonds: 0, energy: 50 }));
+        setUIUpdates(prev => ({ ...prev, lives: guestLives, coins: guestCoins }));
+
+        // 👇 FIX LỖI KẸT LOADING MÀN HÌNH HQ CHO KHÁCH
+        if (!gsRef.current.campaignData) {
+          gsRef.current.campaignData = JSON.parse(JSON.stringify(defaultCampaignData));
+        }
       }
     });
 
-    return () => { isMounted = false; unsubscribe(); if (unsubSnapshot) unsubSnapshot(); };
+    return () => {
+      isMounted = false; unsubscribe();
+      if (unsubSnapshot) unsubSnapshot(); 
+    };
   }, []);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!currentUser) return;
+      const userRef = doc(db, "users", currentUser.uid);
+      if (document.visibilityState === 'hidden') updateDoc(userRef, { isOnline: false, last_update_ms: Date.now() }).catch(() => {});
+      else if (document.visibilityState === 'visible') updateDoc(userRef, { isOnline: true, last_update_ms: Date.now() }).catch(() => {});
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [currentUser]);
 
   return { currentUser, loginWithGoogle, loginWithApple, logout, deleteAccount, saveUserProfile };
 }

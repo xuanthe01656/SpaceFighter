@@ -1,26 +1,30 @@
 /* src/components/Inventory/Inventory.module.css */
 .container {
   width: 100%; height: 100dvh; 
-  background: radial-gradient(circle at 50% -20%, #2c3e50 0%, #000000 80%);
+  background: radial-gradient(circle at 50% -20%, #0f0c29 0%, #000000 80%);
   color: #fff; display: flex; flex-direction: column; align-items: center; 
-  font-family: 'VT323', monospace; padding: 20px; box-sizing: border-box; 
-  position: relative; z-index: 20; overflow-y: hidden; pointer-events: auto;
+  font-family: 'VT323', monospace; padding: 15px; box-sizing: border-box; 
+  position: relative; z-index: 20; overflow: hidden; pointer-events: auto;
 }
 
-/* Lưới Hologram */
+/* Lưới không gian 3D mờ ảo (Giống màn hình Pilots) */
 .container::before {
   content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-  background-image: linear-gradient(rgba(102, 252, 241, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(102, 252, 241, 0.05) 1px, transparent 1px);
-  background-size: 30px 30px; pointer-events: none; z-index: 0;
+  background-image: 
+    linear-gradient(rgba(0, 229, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 229, 255, 0.05) 1px, transparent 1px);
+  background-size: 40px 40px; pointer-events: none; z-index: 0;
+  transform: perspective(500px) rotateX(60deg) translateY(-100px) scale(3);
+  transform-origin: top; opacity: 0.4;
 }
 
-/* Khung giới hạn chống giãn ngoác trên PC */
 .contentWrapper {
   width: 100%; max-width: 900px; display: flex; flex-direction: column; flex: 1; height: 100%; z-index: 10;
 }
 
-.header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid rgba(102, 252, 241, 0.3); padding-bottom: 10px; margin-bottom: 15px; flex-shrink: 0; }
-.backBtn { background: rgba(11, 12, 16, 0.8); color: #66fcf1; border: 1px solid #66fcf1; padding: 5px 15px; border-radius: 5px; font-family: inherit; font-size: 18px; cursor: pointer; text-transform: uppercase; }
+.header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid rgba(0, 229, 255, 0.3); padding-bottom: 10px; margin-bottom: 15px; flex-shrink: 0; }
+.backBtn { background: rgba(11, 12, 16, 0.8); color: #00e5ff; border: 1px solid #00e5ff; padding: 5px 15px; border-radius: 5px; font-family: inherit; font-size: 18px; cursor: pointer; text-transform: uppercase; transition: all 0.2s; }
+.backBtn:active { transform: scale(0.9); }
 
 /* TABS CỦA KHO ĐỒ VÀ CỬA HÀNG */
 .tabs { display: flex; gap: 10px; margin-bottom: 15px; flex-shrink: 0; }
@@ -30,9 +34,9 @@
   transition: all 0.3s ease; backdrop-filter: blur(5px);
 }
 .tabBtn.active {
-  color: #fff; background: rgba(69, 162, 158, 0.3); border-color: #66fcf1;
-  box-shadow: 0 0 15px rgba(102, 252, 241, 0.4), inset 0 0 10px rgba(102, 252, 241, 0.2);
-  text-shadow: 0 0 5px #66fcf1;
+  color: #fff; background: rgba(0, 229, 255, 0.15); border-color: #00e5ff;
+  box-shadow: 0 0 15px rgba(0, 229, 255, 0.4), inset 0 0 10px rgba(0, 229, 255, 0.2);
+  text-shadow: 0 0 5px #00e5ff;
 }
 
 /* LƯỚI KHO ĐỒ */
@@ -40,7 +44,7 @@
   display: grid; grid-template-columns: repeat(auto-fill, minmax(75px, 1fr)); gap: 12px;
   overflow-y: auto; flex: 1; padding: 10px; align-content: flex-start;
   background: rgba(11, 12, 16, 0.5); backdrop-filter: blur(10px);
-  border: 1px solid rgba(102, 252, 241, 0.1); border-radius: 10px;
+  border: 1px solid rgba(0, 229, 255, 0.1); border-radius: 10px;
 }
 
 .itemSlot {
@@ -49,7 +53,7 @@
   justify-content: center; position: relative; cursor: pointer;
   box-shadow: inset 0 0 15px rgba(0,0,0,0.8); transition: transform 0.1s;
 }
-.itemSlot.selected { transform: scale(1.05); }
+.itemSlot.selected { transform: scale(1.05); z-index: 2;}
 
 /* MÀU SẮC ĐỘ HIẾM */
 .rarity1 { border-color: #95a5a6; box-shadow: inset 0 0 10px rgba(149, 165, 166, 0.3); } 
@@ -63,14 +67,20 @@
   padding: 2px 6px; border-radius: 4px; font-weight: bold; box-shadow: 0 0 10px rgba(255, 71, 87, 0.8); border: 1px solid #fff;
 }
 
-/* BẢNG CHI TIẾT */
+/* BẢNG CHI TIẾT (Góc công nghệ Tech Corners) */
 .detailPanel {
   margin-top: 15px; background: rgba(11, 12, 16, 0.7); backdrop-filter: blur(15px);
-  border: 1px solid rgba(102, 252, 241, 0.3); box-shadow: 0 0 20px rgba(0,0,0,0.5), inset 0 0 20px rgba(102,252,241,0.05);
-  border-radius: 15px; padding: 15px; min-height: 180px; display: flex; flex-direction: column; flex-shrink: 0;
+  border: 1px solid rgba(0, 229, 255, 0.3); box-shadow: 0 0 20px rgba(0,0,0,0.5);
+  border-radius: 15px; padding: 20px; min-height: 180px; display: flex; flex-direction: column; flex-shrink: 0;
+  position: relative;
 }
+.detailPanel::before, .detailPanel::after {
+  content: ""; position: absolute; width: 15px; height: 15px; border: 2px solid #00e5ff;
+}
+.detailPanel::before { top: -2px; left: -2px; border-right: none; border-bottom: none; }
+.detailPanel::after { bottom: -2px; right: -2px; border-left: none; border-top: none; }
 
-.actionGroup { display: flex; gap: 10px; margin-top: auto; }
+.actionGroup { display: flex; gap: 10px; margin-top: auto; padding-top: 15px; }
 .btnAction {
   flex: 1; padding: 12px; border: none; color: #fff; font-family: inherit; font-size: clamp(16px, 4vw, 20px); 
   font-weight: bold; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;
@@ -83,26 +93,34 @@
 
 /* --- GIAO DIỆN CỬA HÀNG (DẠNG LƯỚI CHO NHIỀU HÒM) --- */
 .storeContainer {
-  flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px;
+  flex: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px;
   overflow-y: auto; padding: 10px; align-content: flex-start;
 }
 
 .crateCard {
   background: rgba(11, 12, 16, 0.6); backdrop-filter: blur(10px); border-radius: 15px;
   border: 1px solid rgba(102, 252, 241, 0.3); padding: 20px; display: flex; flex-direction: column;
-  align-items: center; justify-content: space-between; text-align: center; min-height: 300px;
+  align-items: center; justify-content: space-between; text-align: center; min-height: 280px;
+  position: relative; overflow: hidden;
 }
 .crateBasic { border-color: #3498db; box-shadow: inset 0 0 20px rgba(52, 152, 219, 0.2); }
 .cratePremium { border-color: #9b59b6; box-shadow: inset 0 0 20px rgba(155, 89, 182, 0.2); }
 .crateEpic { border-color: #f1c40f; box-shadow: inset 0 0 20px rgba(241, 196, 15, 0.2); }
+.cratePilot { border-color: #00e5ff; box-shadow: inset 0 0 20px rgba(0, 229, 255, 0.2); }
 
-.gachaIcon { font-size: 70px; margin-bottom: 10px; }
+.gachaIcon { font-size: 60px; margin-bottom: 10px; transition: transform 0.3s; }
+.crateCard:hover .gachaIcon { transform: translateY(-5px) scale(1.1); }
+
 .gachaBtn {
-  margin-top: 15px; padding: 12px 20px; font-size: 20px; font-family: inherit; font-weight: bold; color: #000;
+  margin-top: 15px; padding: 12px 20px; font-size: 18px; font-family: inherit; font-weight: bold; color: #000;
   border: none; cursor: pointer; width: 100%;
   clip-path: polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px);
+  transition: filter 0.2s;
 }
+.gachaBtn:hover { filter: brightness(1.2); }
 
 @media (min-width: 768px) {
   .grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
+  .detailPanel { flex-direction: row; gap: 30px; align-items: center; }
+  .actionGroup { flex-direction: column; width: 200px; margin-top: 0; padding-top: 0; }
 }

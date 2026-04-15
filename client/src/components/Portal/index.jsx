@@ -27,10 +27,9 @@ export default function Portal({
 
   return (
     <motion.div variants={containerVariants} initial="hidden" animate="visible" className={styles.container}>
-      
       {/* THANH HUD TRÊN CÙNG */}
+      <div className={styles.backgroundLayer} />
       <div className={styles.topNav}>
-        
         {/* GÓC TRÁI: HỒ SƠ NGƯỜI CHƠI HOẶC TRỐNG */}
         <motion.div variants={itemVariants} className={styles.authSection}>
           {currentUser && (
@@ -50,7 +49,6 @@ export default function Portal({
             </>
           )}
         </motion.div>
-
         {/* GÓC PHẢI: TÀI NGUYÊN (Khung viền Vàng) */}
         <motion.div variants={itemVariants} className={styles.rightSection}>
           <div className={styles.resourceHud}>
@@ -80,51 +78,40 @@ export default function Portal({
 
       {/* 2 CÁNH CỬA (Lưới 2 cột song song) */}
       <motion.div variants={itemVariants} className={styles.cardsWrapper}>
-        
-        <motion.div 
-          whileTap={{ scale: 0.95 }}
-          className={`portal-card ${styles.card} ${styles.cardEndless}`} 
+        {/* CỬA 1: VÔ CỰC */}
+        <div 
+          className={`${styles.card} ${styles.cardEndless}`} 
           onClick={() => setScreen('menu')}
         >
-          {/* KHUNG ẢNH THAY THẾ CHO ICON CŨ */}
-          <div className={`${styles.cardBanner} ${styles.bannerEndless}`}>
-             ♾️
-          </div>
-          <h2 className={styles.cardTitle} style={{ color: '#00e5ff' }}>{lang === 'vi' ? 'VÔ CỰC' : 'ENDLESS MODE'}</h2>
-          <p className={styles.desc}>{lang === 'vi' ? 'Bay lượn, nhặt xu, thi đấu PvP trực tuyến.' : 'Fly, collect coins, play online PvP.'}</p>
-        </motion.div>
-
-        <motion.div 
-          whileTap={{ scale: 0.95 }}
-          className={`portal-card ${styles.card} ${styles.cardCampaign}`} 
+          <div className={`${styles.cardBanner} ${styles.bannerEndless}`}>♾️</div>
+          <h2 className={styles.cardTitle} style={{ color: '#00e5ff' }}>VÔ CỰC</h2>
+          <p className={styles.desc}>Bay lượn, nhặt xu, thi đấu PvP trực tuyến.</p>
+        </div>
+        {/* CỬA 2: CHIẾN DỊCH */}
+        <div 
+          className={`${styles.card} ${styles.cardCampaign}`} 
           onClick={() => setScreen('hq')}
         >
-          <div className={`${styles.cardBanner} ${styles.bannerCampaign}`}>
-             🚀
-          </div>
-          <h2 className={styles.cardTitle} style={{ color: '#b388ff' }}>{lang === 'vi' ? 'CHIẾN DỊCH' : 'CAMPAIGN'}</h2>
-          <p className={styles.desc}>{lang === 'vi' ? 'Quản lý Phi cơ, nâng cấp vũ khí, đánh Boss.' : 'Manage Aircrafts, upgrade gear, defeat Bosses.'}</p>
-        </motion.div>
-
+          <div className={`${styles.cardBanner} ${styles.bannerCampaign}`}>🚀</div>
+          <h2 className={styles.cardTitle} style={{ color: '#b388ff' }}>CHIẾN DỊCH</h2>
+          <p className={styles.desc}>Quản lý Phi cơ, nâng cấp vũ khí, đánh Boss.</p>
+        </div>
       </motion.div>
-
       {/* NÚT ĐĂNG NHẬP Ở DƯỚI CÙNG (Dành cho tài khoản Khách) */}
       {!currentUser && (
         <motion.div variants={itemVariants} className={styles.bottomAction}>
           {platform !== 'ios' && (
-            <motion.button whileTap={{ scale: 0.95 }} onClick={loginWithGoogle} className={styles.actionBtn}>
-              <img src="/images/google.png" alt="G" style={{ width: '20px' }} />
-              {lang === 'vi' ? 'GOOGLE LOGIN' : 'GOOGLE LOGIN'}
-            </motion.button>
+            <button onClick={loginWithGoogle} className={styles.actionBtn}>
+              <img src="/images/google.png" alt="G" style={{ width: '18px' }} /> GOOGLE LOGIN
+            </button>
           )}
           {platform === 'ios' && (
-            <motion.button whileTap={{ scale: 0.95 }} onClick={loginWithApple} className={`${styles.actionBtn} ${styles.actionBtnApple}`}>
-              🍎 {lang === 'vi' ? 'APPLE LOGIN' : 'APPLE LOGIN'}
-            </motion.button>
+            <button onClick={loginWithApple} className={`${styles.actionBtn} ${styles.actionBtnApple}`}>
+              🍎 APPLE LOGIN
+            </button>
           )}
         </motion.div>
       )}
-
     </motion.div>
   );
 }
