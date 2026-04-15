@@ -23,6 +23,7 @@ import Portal from './components/Portal';
 import HQ from './components/HQ';
 import Pilots from './components/Pilots';
 import Inventory from './components/Inventory';
+import CampaignEngine from './components/Campaign/CampaignEngine';
 import { secureStorage } from './utils/storageHelper';
 const imageCache = {};
 const getImage = (src) => {
@@ -1529,6 +1530,13 @@ useEffect(() => {
             gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile}
           />
         )}
+        {screen === 'campaign' && (
+        <CampaignEngine 
+          gsRef={gsRef}
+          setScreen={setScreen}
+          lang={lang}
+        />
+      )}
       {screen === 'menu' && (
         <Menu 
           currentUser={currentUser} 

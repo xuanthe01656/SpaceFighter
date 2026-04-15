@@ -162,7 +162,11 @@ export default function HQ({ gsRef, setScreen, lang }) {
 
         {/* NÚT XUẤT KÍCH */}
         <motion.div variants={itemVariants} style={{ display: 'flex', justifyContent: 'center' }}>
-          <motion.button whileTap={{ scale: 0.95 }} className={`${styles.launchBtn} hq-interact`}>
+          <motion.button 
+            whileTap={{ scale: 0.95 }} 
+            className={`${styles.launchBtn} hq-interact`}
+            onClick={() => setScreen('campaign')} // 👇 THÊM DÒNG NÀY ĐỂ KÍCH HOẠT TRẬN ĐÁNH
+          >
             {lang === 'vi' ? `KHỞI ĐỘNG (ẢI ${progress.currentStage})` : `INITIATE STAGE ${progress.currentStage}`}
           </motion.button>
         </motion.div>
