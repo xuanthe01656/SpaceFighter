@@ -80,7 +80,7 @@ export default function Portal({
       <motion.div variants={itemVariants} className={styles.cardsWrapper}>
         {/* CỬA 1: VÔ CỰC */}
         <div 
-          className={`${styles.card} ${styles.cardEndless}`} 
+          className={`portal-card ${styles.card} ${styles.cardEndless}`} 
           onClick={() => setScreen('menu')}
         >
           <div className={`${styles.cardBanner} ${styles.bannerEndless}`}>♾️</div>
@@ -89,7 +89,7 @@ export default function Portal({
         </div>
         {/* CỬA 2: CHIẾN DỊCH */}
         <div 
-          className={`${styles.card} ${styles.cardCampaign}`} 
+          className={`portal-card ${styles.card} ${styles.cardCampaign}`} 
           onClick={() => setScreen('hq')}
         >
           <div className={`${styles.cardBanner} ${styles.bannerCampaign}`}>🚀</div>

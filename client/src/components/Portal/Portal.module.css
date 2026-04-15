@@ -20,11 +20,11 @@
 /* Logic tự động đổi hình nền theo hướng màn hình (Responsive) */
 @media (orientation: landscape) {
   /* 👇 HÌNH CHO PC, MÁY TÍNH BẢNG (NGANG) */
-  .backgroundLayer { background-image: url('../../public/images/portal_landscape.png'); }
+  .backgroundLayer { background-image: url('../images/portal_landscape.png'); }
 }
 @media (orientation: portrait) {
   /* 👇 HÌNH CHO MOBILE (ĐỨNG) */
-  .backgroundLayer { background-image: url('../../public/images/portal_portrait.png'); }
+  .backgroundLayer { background-image: url('../images/portal_portrait.png'); }
 }
 
 /* Hiệu ứng mờ ảo vũ trụ overlay */
@@ -136,9 +136,9 @@
 @media screen and (max-width: 375px) and (orientation: portrait) {
   .title { top: 35%; font-size: 35px; letter-spacing: 2px; }
   /* ĐIỀU CHỈNH CỬA TRÁI (VÔ CỰC) */
-  .cardEndless { top: 54%; left: 12%; width: 30%; height: 25%; }
+  .cardEndless { top: 50%; left: 12%; width: 29.5%; height: 28%; }
   /* ĐIỀU CHỈNH CỬA PHẢI (CHIẾN DỊCH) */
-  .cardCampaign { top: 54%; right: 13%; width: 30%; height: 25%; }
+  .cardCampaign { top: 50%; right: 13%; width: 29.5%; height: 28%; }  
   .cardBanner { height: 40%; font-size: 35px; }
   .cardTitle { font-size: 16px; }
   /* .desc { display: none; } */
@@ -162,8 +162,8 @@
 /* --- 4.3. ĐIỆN THOẠI LỚN / PHABLET - MÀN DỌC --- */
 @media screen and (min-width: 431px) and (max-width: 600px) and (orientation: portrait) {
   .title { top: 30%; font-size: 55px; }
-  .cardEndless { top: 50%; left: 8%; width: 40%; height: 30%; }
-  .cardCampaign { top: 50%; right: 8%; width: 40%; height: 30%; }
+  .cardEndless { top: 50%; left: 12%; width: 29.5%; height: 28%; }
+  .cardCampaign { top: 50%; right: 13%; width: 29.5%; height: 28%; }
   .cardBanner { height: 45%; font-size: 50px; }
   .cardTitle { font-size: 20px; }
   .desc { display: block; font-size: 12px; }
@@ -173,8 +173,8 @@
 /* --- 4.4. MÁY TÍNH BẢNG (iPad) - MÀN DỌC --- */
 @media screen and (min-width: 601px) and (max-width: 1024px) and (orientation: portrait) {
   .title { top: 30%; font-size: 70px; }
-  .cardEndless { top: 48%; left: 13%; width: 35%; height: 30%; }
-  .cardCampaign { top: 48%; right: 13%; width: 35%; height: 30%; }
+  .cardEndless { top: 50%; left: 12%; width: 29.5%; height: 28%; }
+  .cardCampaign { top: 50%; right: 13%; width: 29.5%; height: 28%; }
   .cardBanner { height: 50%; font-size: 60px; }
   .cardTitle { font-size: 24px; }
   .desc { display: block; font-size: 16px; }
@@ -185,8 +185,8 @@
 @media screen and (max-height: 500px) and (orientation: landscape) {
   .topNav { top: 10px; }
   .title { top: 25%; font-size: 35px; }
-  .cardEndless { top: 40%; left: 22%; width: 25%; height: 45%; }
-  .cardCampaign { top: 40%; right: 22%; width: 25%; height: 45%; }
+  .cardEndless { top: 50%; left: 12%; width: 29.5%; height: 28%; }
+  .cardCampaign { top: 50%; right: 13%; width: 29.5%; height: 28%; }
   .cardBanner { height: 40%; font-size: 30px; margin-bottom: 2px;}
   .cardTitle { font-size: 14px; }
   /* .desc { display: none; } */
@@ -199,13 +199,13 @@
   .topNav { top: 25px; }
   .resourceHud { display: flex; gap: 30px; padding: 10px 25px; }
   .resItem { font-size: 24px; }
-  .title { top: 12%; font-size: 80px; letter-spacing: 5px; }
-  .cardEndless { top: 40%; left: 22%; width: 25%; height: 45%; max-width: 450px; }
-  .cardCampaign { top: 40%; right: 22%; width: 25%; height: 45%; max-width: 450px; }
+  .title { top: 15%; font-size: 80px; letter-spacing: 5px; }
+  .cardEndless { top: 40%; left: 16%; width: 22.5%; height: 44%; max-width: 450px; }
+  .cardCampaign { top: 40%; right: 16.2%; width: 23%; height: 44%; max-width: 450px; }
   .card { padding: 20px; }
-  .cardBanner { height: 40%; font-size: 70px; }
+  .cardBanner { height: 50%; font-size: 70px; }
   .cardTitle { font-size: 30px; margin-top: 10px;}
   .desc { display: block; font-size: 18px; }
-  .bottomAction { bottom: 8%; }
+  .bottomAction { bottom: 3%; }
   .actionBtn { padding: 10px 25px; font-size: 18px; }
 }

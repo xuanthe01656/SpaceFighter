@@ -15,6 +15,7 @@ export const SKINS = [
   { id: 'ocean', name: { vi: 'Đại Dương Xanh', en: 'Ocean' }, top: '#1a2a6c', bottom: '#b21f1f', type: 'bubbles', price: 550 },
   { id: 'hyperspace', name: { vi: 'Siêu Không Gian', en: 'Hyperspace' }, top: '#050510', bottom: '#1a1a2e', type: 'hyperspace', price: 700 },
   { id: 'sunset', name: { vi: 'Hoàng Hôn', en: 'Sunset' }, top: '#2c3e50', bottom: '#fd746c', type: 'fireflies', price: 1200 },
+  { id: 'bgAstro', name: { vi: 'Vũ Trụ Vô Tận', en: 'Endless Space' }, type: 'image', imgSrc: '/images/bgAstro.png', price: 2000 }
 ];
 // ==========================================
 // --- TỪ ĐIỂN DỮ LIỆU: CHẾ ĐỘ CHIẾN DỊCH ---

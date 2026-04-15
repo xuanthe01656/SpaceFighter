@@ -247,6 +247,13 @@ useEffect(() => {
         loadedImagesRef.current[skin.id] = img;
       }
     });
+    BACKGROUNDS.forEach(bg => {
+      if (bg.type === 'image' && bg.imgSrc) {
+        const img = new Image();
+        img.src = bg.imgSrc;
+        loadedImagesRef.current[bg.id] = img;
+      }
+    });
   }, []);
 // Xóa đếm ngược nếu người dùng thoát ra ngoài lúc đang đếm
   useEffect(() => {
@@ -300,8 +307,22 @@ useEffect(() => {
   // Socket.io setup
   const Sound = {
     playTone: (freq, type, duration, vol = 0.1) => {
-      if (gsRef.current.isMuted || !audioCtxRef.current) return;
-      if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+      // 1. Nếu đang tắt tiếng thì không phát
+      if (gsRef.current.isMuted) return;
+      // 2. KHỞI TẠO AudioContext NẾU CHƯA CÓ (Đây là mấu chốt)
+      if (!audioCtxRef.current) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) {
+          audioCtxRef.current = new AudioContext();
+        } else {
+          return; // Trình duyệt không hỗ trợ
+        }
+      }
+      // 3. Đánh thức AudioContext nếu nó bị trình duyệt cho ngủ (chính sách bảo mật)
+      if (audioCtxRef.current.state === 'suspended') {
+        audioCtxRef.current.resume();
+      }
+      // 4. Khối logic tạo âm thanh của bạn (giữ nguyên)
       const osc = audioCtxRef.current.createOscillator();
       const gain = audioCtxRef.current.createGain();
       osc.type = type;
@@ -707,6 +728,10 @@ useEffect(() => {
     gsRef.current.isPaused = true; // KHOÁ TRÒ CHƠI LẠI ĐỂ ĐẾM NGƯỢC
 
     setScreen('game');
+    if (!audioCtxRef.current) {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (AudioContext) audioCtxRef.current = new AudioContext();
+    }
     if (audioCtxRef.current?.state === 'suspended') audioCtxRef.current.resume();
 
     const canvas = canvasRef.current;
@@ -979,7 +1004,34 @@ useEffect(() => {
     const ctx = gs.ctx;
     const canvas = gs.canvas;
     const bg = BACKGROUNDS.find(b => b.id === gs.userSettings.bg) || BACKGROUNDS[0];
+    if (bg.type === 'image' && bg.imgSrc) {
+      const bgImg = getImage(bg.imgSrc); 
+      
+      if (bgImg && bgImg.complete && bgImg.naturalWidth !== 0) {
+        // Thuật toán co giãn ảnh vừa chiều cao màn hình và lặp vô tận chiều ngang
+        const scale = canvas.height / bgImg.naturalHeight;
+        const scaledWidth = bgImg.naturalWidth * scale; 
+        
+        // Tốc độ trôi của nền (0.4 là trôi chậm tạo cảm giác có chiều sâu)
+        let scrollSpeed = gs.gameSpeed * 0.4; 
+        
+        if (!gs.isGameOver) {
+          gs.bgX = (gs.bgX || 0) - scrollSpeed;
+          if (gs.bgX <= -scaledWidth) gs.bgX = 0;
+        }
 
+        const neededTiles = Math.ceil(canvas.width / scaledWidth) + 1;
+
+        for (let i = 0; i < neededTiles; i++) {
+          const drawX = (gs.bgX || 0) + (i * scaledWidth);
+          ctx.drawImage(bgImg, drawX, 0, scaledWidth, canvas.height);
+        }
+      } else {
+        ctx.fillStyle = '#0d0e15';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      return; // Cực kỳ quan trọng: Phải có return để không vẽ đè các hạt (particles) cũ
+    }
     // TỐI ƯU HÓA: Tạo Off-screen Canvas để cache background gradient
     if (!gs.cachedBg || gs.cachedBgId !== bg.id || gs.cachedBg.width !== canvas.width) {
       const offScreen = document.createElement('canvas');
@@ -1329,7 +1381,7 @@ useEffect(() => {
 
     const handleTouchOrMouse = (e) => {
       // THÊM '.leaderboard-scroll' VÀO ĐÂY ĐỂ CHO PHÉP VUỐT CUỘN
-      if (e.target && e.target.closest && e.target.closest('button, .btn, .shop-item, .control-btn, input, .tab-btn, .leaderboard-scroll, .scrollable-layer, .portal-card, .hq-interact')) {
+      if (e.target && e.target.closest && e.target.closest('button, .btn, .shop-item, .control-btn, input, .tab-btn, .leaderboard-scroll, .scrollable-layer, .portal-card, .hq-interact, portal-card')) {
         return;
       }
       if (e.type === 'touchstart' && e.cancelable) {
