@@ -28,7 +28,15 @@ export const PILOTS = [
 ];
 
 export const AIRCRAFTS = [
-  { id: 'ship_xwing', name: { vi: 'Tiêm Kích X-Wing', en: 'X-Wing Fighter' }, baseHp: 1000, baseAtk: 50, speed: 5 },
+  { 
+    id: 'ship_xwing', 
+    name: { vi: 'Tiêm Kích X-Wing', en: 'X-Wing Fighter' }, 
+    baseHp: 1000, 
+    baseAtk: 50, 
+    speed: 5,
+    imgHq: '/images/ship_xwing_hq.png', 
+    imgTop: '/images/ship_xwing_top.png'
+  },
   { id: 'ship_tank', name: { vi: 'Pháo Đài Bay', en: 'Flying Fortress' }, baseHp: 2500, baseAtk: 30, speed: 3 },
   { id: 'ship_phantom', name: { vi: 'Bóng Ma', en: 'Phantom' }, baseHp: 800, baseAtk: 80, speed: 7 }
 ];
@@ -40,13 +48,27 @@ export const GEAR_CATALOG = {
     { id: 'gun_spread', name: { vi: 'Súng Bắn Tỏa', en: 'Spread Gun' }, baseAtk: 20, fireRate: 0.8 }
   ],
   wingman: [
-    { id: 'wing_missile', name: { vi: 'Tên Lửa Tự Đoán', en: 'Homing Missile' }, baseAtk: 10 },
-    { id: 'wing_drone', name: { vi: 'Vệ Tinh Bắn Tỉa', en: 'Sniper Drone' }, baseAtk: 25 }
+    { 
+      id: 'wing_missile', 
+      name: { vi: 'Tên Lửa Cổ Điển', en: 'Classic Missile' }, 
+      baseAtk: 10, 
+      imgSrc: '/images/rocket_1.png' 
+    },
+    { 
+      id: 'wing_laser', 
+      name: { vi: 'Tên Lửa Hắc Ám', en: 'Dark Missile' }, 
+      baseAtk: 15, 
+      imgSrc: '/images/rocket_2.png' 
+    }
   ],
   armor: [
     { id: 'armor_light', name: { vi: 'Giáp Nhẹ', en: 'Light Armor' }, baseHp: 500 },
     { id: 'armor_heavy', name: { vi: 'Giáp Hợp Kim', en: 'Heavy Alloy Armor' }, baseHp: 1500 },
     { id: 'armor_shield', name: { vi: 'Khiên Năng Lượng', en: 'Energy Shield' }, baseHp: 800 }
+  ],
+  drone: [
+    { id: 'drone_sniper', name: { vi: 'Vệ Tinh Bắn Tỉa', en: 'Sniper Drone' }, baseAtk: 25 },
+    { id: 'drone_shield', name: { vi: 'Vệ Tinh Hộ Thể', en: 'Guardian Drone' }, baseAtk: 10 }
   ]
 };
   

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GEAR_CATALOG, AIRCRAFTS, PILOTS } from '../../constants';
 import styles from './Inventory.module.css';
@@ -13,8 +13,35 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
   if (!campaignData) return null;
 
   const { items, loadout, ownedPilots } = campaignData;
-  
-  // 🛑 BƯỚC SỬA LỖI QUAN TRỌNG: ÉP KIỂU VỀ NUMBER ĐỂ CHỐNG NaN
+
+  // ==============================================================
+  // 🚨 AUTO MIGRATION: BỘ LỌC TỰ ĐỘNG SỬA LỖI GEN CHO ĐỒ CŨ
+  // ==============================================================
+  useEffect(() => {
+    let needSave = false;
+    
+    // 1. Quét kho đồ, tìm các vệ tinh đời cũ (wing_drone) và sửa lại
+    Object.values(items).forEach(item => {
+      if (item.baseId === 'wing_drone') {
+        item.baseId = 'drone_sniper'; // Cập nhật ID mới
+        item.type = 'drone';          // Chuyển hộ khẩu sang mục Vệ tinh
+        needSave = true;
+      }
+    });
+
+    // 2. Nếu vệ tinh đang bị kẹt ở ô Súng Phụ, đá nó sang ô Vệ tinh
+    if (loadout.wingman && items[loadout.wingman] && items[loadout.wingman].type === 'drone') {
+      loadout.drone = loadout.wingman;
+      loadout.wingman = "";
+      needSave = true;
+    }
+
+    if (needSave) {
+      saveUserProfile(); // Lưu lại vào Database
+      setRefreshTick(t => t + 1); // Tải lại giao diện
+    }
+  }, [items, loadout, saveUserProfile]);
+
   const currentCoins = Number(gsRef.current.coins) || 0;
   const currentDiamonds = Number(gsRef.current.diamonds) || 0;
 
@@ -33,7 +60,7 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
     let totalAtk = aircraft.baseAtk;
     let totalHp = aircraft.baseHp;
 
-    ['mainGun', 'wingman', 'armor'].forEach(slot => {
+    ['mainGun', 'wingman', 'armor', 'drone'].forEach(slot => {
       const itemUuid = newLoadout[slot];
       if (itemUuid && items[itemUuid]) {
         const item = items[itemUuid];
@@ -68,7 +95,6 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
     if (!selectedItem) return;
     if (currentCoins < upgradeCost) return toast.error(lang === 'vi' ? 'Không đủ Xu!' : 'Not enough coins!');
 
-    // Tính toán bằng biến an toàn
     gsRef.current.coins = currentCoins - upgradeCost;
     gsRef.current.campaignData.items[selectedItem.uuid].level += 1;
     
@@ -82,10 +108,8 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
   };
 
   const handleGacha = (crateType) => {
-    // 1. HÒM PHI CÔNG ĐÃ ĐƯỢC BỌC THÉP
     if (crateType === 'pilot') {
       const pilotCost = 30; 
-      // Kiểm tra bằng currentDiamonds (Chắc chắn là một số >= 0)
       if (currentDiamonds < pilotCost) return toast.error(lang === 'vi' ? 'Thiếu Kim Cương!' : 'Not enough Diamonds!');
       
       gsRef.current.diamonds = currentDiamonds - pilotCost;
@@ -107,23 +131,15 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
       toast.success(lang === 'vi' 
         ? `Nhận: ${randomPilot.name.vi} ${isDuplicate ? '(Trùng: +1000 🪙)' : '(Mới)'}` 
         : `Got: ${randomPilot.name.en} ${isDuplicate ? '(Dupe: +1000 🪙)' : '(New)'}`, 
-      {
-        icon: '👨‍🚀', duration: 4000,
-        style: { border: `2px solid #00e5ff`, background: '#12161c', color: '#fff' }
-      });
+      { icon: '👨‍🚀', duration: 4000, style: { border: `2px solid #00e5ff`, background: '#12161c', color: '#fff' } });
       return;
     }
 
-    // 2. CÁC HÒM VŨ KHÍ CŨNG ĐƯỢC BỌC THÉP
     let cost = 0; let currency = 'coins'; let dropRates = {};
 
-    if (crateType === 'basic') {
-      cost = 100; currency = 'coins'; dropRates = {1: 50, 2: 35, 3: 12, 4: 3, 5: 0}; 
-    } else if (crateType === 'premium') {
-      cost = 500; currency = 'coins'; dropRates = {1: 0, 2: 40, 3: 40, 4: 15, 5: 5}; 
-    } else if (crateType === 'epic') {
-      cost = 50; currency = 'diamonds'; dropRates = {1: 0, 2: 0, 3: 50, 4: 35, 5: 15}; 
-    }
+    if (crateType === 'basic') { cost = 100; currency = 'coins'; dropRates = {1: 50, 2: 35, 3: 12, 4: 3, 5: 0}; } 
+    else if (crateType === 'premium') { cost = 500; currency = 'coins'; dropRates = {1: 0, 2: 40, 3: 40, 4: 15, 5: 5}; } 
+    else if (crateType === 'epic') { cost = 50; currency = 'diamonds'; dropRates = {1: 0, 2: 0, 3: 50, 4: 35, 5: 15}; }
 
     if (currency === 'coins' && currentCoins < cost) return toast.error(lang === 'vi' ? 'Thiếu Xu!' : 'Not enough Coins!');
     if (currency === 'diamonds' && currentDiamonds < cost) return toast.error(lang === 'vi' ? 'Thiếu Kim Cương!' : 'Not enough Diamonds!');
@@ -131,18 +147,14 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
     if (currency === 'coins') gsRef.current.coins = currentCoins - cost;
     if (currency === 'diamonds') gsRef.current.diamonds = currentDiamonds - cost;
     
-    const types = ['mainGun', 'wingman', 'armor'];
+    const types = ['mainGun', 'wingman', 'armor', 'drone'];
     const randomType = types[Math.floor(Math.random() * types.length)];
     const catalog = GEAR_CATALOG[randomType];
     const randomBaseItem = catalog[Math.floor(Math.random() * catalog.length)];
 
     const randRoll = Math.random() * 100;
-    let rarity = 1;
-    let cumulative = 0;
-    for (let r = 1; r <= 5; r++) {
-      cumulative += dropRates[r];
-      if (randRoll <= cumulative) { rarity = r; break; }
-    }
+    let rarity = 1; let cumulative = 0;
+    for (let r = 1; r <= 5; r++) { cumulative += dropRates[r]; if (randRoll <= cumulative) { rarity = r; break; } }
 
     const newUuid = 'item_' + Date.now() + Math.floor(Math.random() * 1000);
     gsRef.current.campaignData.items[newUuid] = { baseId: randomBaseItem.id, rarity: rarity, level: 1, type: randomType };
@@ -161,7 +173,6 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`${styles.container} scrollable-layer`}>
-      
       <div className={styles.contentWrapper}>
         <div className={styles.header}>
           <motion.button whileTap={{ scale: 0.9 }} className={styles.backBtn} onClick={() => setScreen('hq')}>
@@ -174,12 +185,8 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
         </div>
 
         <div className={styles.tabs}>
-          <button className={`${styles.tabBtn} ${activeTab === 'inventory' ? styles.active : ''}`} onClick={() => setActiveTab('inventory')}>
-            📦 {lang === 'vi' ? 'KHO ĐỒ' : 'INVENTORY'}
-          </button>
-          <button className={`${styles.tabBtn} ${activeTab === 'store' ? styles.active : ''}`} onClick={() => setActiveTab('store')}>
-            🚀 {lang === 'vi' ? 'TIẾP TẾ' : 'SUPPLY'}
-          </button>
+          <button className={`${styles.tabBtn} ${activeTab === 'inventory' ? styles.active : ''}`} onClick={() => setActiveTab('inventory')}>📦 {lang === 'vi' ? 'KHO ĐỒ' : 'INVENTORY'}</button>
+          <button className={`${styles.tabBtn} ${activeTab === 'store' ? styles.active : ''}`} onClick={() => setActiveTab('store')}>🚀 {lang === 'vi' ? 'TIẾP TẾ' : 'SUPPLY'}</button>
         </div>
 
         <AnimatePresence mode="wait">
@@ -193,7 +200,7 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
                     onClick={() => setSelectedId(item.uuid)} whileTap={{ scale: 0.9 }}
                   >
                     {loadout[item.type] === item.uuid && <span className={styles.equippedBadge}>E</span>}
-                    <span style={{ fontSize: '30px' }}>{item.type === 'mainGun' ? '🔫' : item.type === 'armor' ? '🛡️' : '🛸'}</span>
+                    <span style={{ fontSize: '30px' }}>{item.type === 'mainGun' ? '🔫' : item.type === 'armor' ? '🛡️' : item.type === 'drone' ? '🛰️' : '🛸'}</span>
                     <span style={{ fontSize: '12px', color: '#ccc', marginTop: '5px' }}>Lv.{item.level}</span>
                   </motion.div>
                 ))}
@@ -207,7 +214,6 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
                         {itemBaseInfo ? itemBaseInfo.name[lang] : "Trang bị ẩn"}
                       </h3>
                       <p style={{ margin: '0 0 10px 0', color: '#ffd700' }}>Lv.{selectedItem.level} {'⭐'.repeat(selectedItem.rarity)}</p>
-                      
                       <div style={{ background: 'rgba(0,0,0,0.5)', padding: '10px', borderRadius: '8px' }}>
                         {itemBaseInfo?.baseAtk && <p style={{ margin: '0 0 5px 0', color: '#ff4757', fontWeight: 'bold' }}>ATK: {itemBaseInfo.baseAtk + (selectedItem.level * 3) * selectedItem.rarity}</p>}
                         {itemBaseInfo?.baseHp && <p style={{ margin: '0', color: '#2ed573', fontWeight: 'bold' }}>HP: {itemBaseInfo.baseHp + (selectedItem.level * 15) * selectedItem.rarity}</p>}
@@ -218,72 +224,47 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
                       {(() => {
                         const isEquipped = loadout[selectedItem.type] === selectedItem.uuid;
                         return (
-                          <motion.button whileTap={{ scale: 0.95 }} onClick={toggleEquip}
-                            className={`${styles.btnAction} ${isEquipped ? styles.unequipBtn : styles.equipBtn}`} 
-                          >
+                          <motion.button whileTap={{ scale: 0.95 }} onClick={toggleEquip} className={`${styles.btnAction} ${isEquipped ? styles.unequipBtn : styles.equipBtn}`} >
                             {isEquipped ? (lang === 'vi' ? 'THÁO' : 'UNEQUIP') : (lang === 'vi' ? 'MẶC' : 'EQUIP')}
                           </motion.button>
                         );
                       })()}
-                      
-                      <motion.button whileTap={{ scale: 0.95 }} onClick={handleUpgrade}
-                        className={`${styles.btnAction} ${styles.upgradeBtn}`} 
-                        disabled={currentCoins < upgradeCost}
-                      >
+                      <motion.button whileTap={{ scale: 0.95 }} onClick={handleUpgrade} className={`${styles.btnAction} ${styles.upgradeBtn}`} disabled={currentCoins < upgradeCost}>
                         {lang === 'vi' ? 'RÈN' : 'UPGRADE'} <span style={{fontSize: '14px', display:'block'}}>(🪙 {upgradeCost})</span>
                       </motion.button>
                     </div>
                   </>
-                ) : (
-                  <p style={{ textAlign: 'center', color: '#888', margin: 'auto', fontSize: '18px' }}>
-                    {lang === 'vi' ? 'CHỌN TRANG BỊ' : 'SELECT AN ITEM'}
-                  </p>
-                )}
+                ) : (<p style={{ textAlign: 'center', color: '#888', margin: 'auto', fontSize: '18px' }}>{lang === 'vi' ? 'CHỌN TRANG BỊ' : 'SELECT AN ITEM'}</p>)}
               </div>
             </motion.div>
           )}
 
           {activeTab === 'store' && (
-            <motion.div key="store" variants={fadeVariants} initial="hidden" animate="visible" exit="hidden" className={styles.storeContainer}>
-              
+             <motion.div key="store" variants={fadeVariants} initial="hidden" animate="visible" exit="hidden" className={styles.storeContainer}>
               <div className={`${styles.crateCard} ${styles.cratePilot}`}>
                  <div className={styles.gachaIcon} style={{ filter: 'drop-shadow(0 0 20px #00e5ff)' }}>👨‍🚀</div>
                  <h3 style={{ color: '#00e5ff', margin: '0 0 10px 0' }}>{lang === 'vi' ? 'TUYỂN MỘ PHI CÔNG' : 'PILOT RECRUIT'}</h3>
-                 <p style={{ color: '#ccc', fontSize: '14px' }}>
-                   {lang === 'vi' ? 'Triệu hồi ngẫu nhiên 1 Phi công. Nếu trùng lặp sẽ quy đổi thành 1000 Xu.' : 'Summon 1 random Pilot. Duplicates convert to 1000 Coins.'}
-                 </p>
-                 <motion.button whileTap={{ scale: 0.9 }} className={styles.gachaBtn} style={{ background: '#00e5ff' }} onClick={() => handleGacha('pilot')}>
-                   MỞ: 30 💎
-                 </motion.button>
+                 <p style={{ color: '#ccc', fontSize: '14px' }}>{lang === 'vi' ? 'Triệu hồi ngẫu nhiên 1 Phi công. Nếu trùng lặp sẽ quy đổi thành 1000 Xu.' : 'Summon 1 random Pilot. Duplicates convert to 1000 Coins.'}</p>
+                 <motion.button whileTap={{ scale: 0.9 }} className={styles.gachaBtn} style={{ background: '#00e5ff' }} onClick={() => handleGacha('pilot')}>MỞ: 30 💎</motion.button>
               </div>
-
               <div className={`${styles.crateCard} ${styles.cratePremium}`}>
                  <div className={styles.gachaIcon}>💎</div>
                  <h3 style={{ color: '#9b59b6', margin: '0 0 10px 0' }}>{lang === 'vi' ? 'HÒM VŨ KHÍ CAO CẤP' : 'PREMIUM GEAR'}</h3>
                  <p style={{ color: '#ccc', fontSize: '14px' }}>{lang === 'vi' ? 'Đảm bảo Lục trở lên. Có tỷ lệ ra Vàng!' : 'Guaranteed Green+. Chance for Gold!'}</p>
-                 <motion.button whileTap={{ scale: 0.9 }} className={styles.gachaBtn} style={{ background: '#9b59b6', color: '#fff' }} onClick={() => handleGacha('premium')}>
-                   MỞ: 500 🪙
-                 </motion.button>
+                 <motion.button whileTap={{ scale: 0.9 }} className={styles.gachaBtn} style={{ background: '#9b59b6', color: '#fff' }} onClick={() => handleGacha('premium')}>MỞ: 500 🪙</motion.button>
               </div>
-
               <div className={`${styles.crateCard} ${styles.crateEpic}`}>
                  <div className={styles.gachaIcon} style={{ filter: 'drop-shadow(0 0 20px #f1c40f)' }}>👑</div>
                  <h3 style={{ color: '#f1c40f', margin: '0 0 10px 0' }}>{lang === 'vi' ? 'HÒM VŨ KHÍ HUYỀN THOẠI' : 'EPIC GEAR'}</h3>
                  <p style={{ color: '#ccc', fontSize: '14px' }}>{lang === 'vi' ? 'Chỉ rớt Lam, Tím, Vàng cực phẩm.' : 'Only drops Blue, Purple, Gold epics.'}</p>
-                 <motion.button whileTap={{ scale: 0.9 }} className={styles.gachaBtn} style={{ background: '#f1c40f' }} onClick={() => handleGacha('epic')}>
-                   MỞ: 50 💎
-                 </motion.button>
+                 <motion.button whileTap={{ scale: 0.9 }} className={styles.gachaBtn} style={{ background: '#f1c40f' }} onClick={() => handleGacha('epic')}>MỞ: 50 💎</motion.button>
               </div>
-
               <div className={`${styles.crateCard} ${styles.crateBasic}`}>
                  <div className={styles.gachaIcon}>📦</div>
                  <h3 style={{ color: '#3498db', margin: '0 0 10px 0' }}>{lang === 'vi' ? 'HÒM CƠ BẢN' : 'BASIC CRATE'}</h3>
                  <p style={{ color: '#ccc', fontSize: '14px' }}>{lang === 'vi' ? 'Rớt đồ Trắng, Lục, Lam.' : 'Drops White, Green, Blue gear.'}</p>
-                 <motion.button whileTap={{ scale: 0.9 }} className={styles.gachaBtn} style={{ background: '#3498db', color: '#fff' }} onClick={() => handleGacha('basic')}>
-                   MỞ: 100 🪙
-                 </motion.button>
+                 <motion.button whileTap={{ scale: 0.9 }} className={styles.gachaBtn} style={{ background: '#3498db', color: '#fff' }} onClick={() => handleGacha('basic')}>MỞ: 100 🪙</motion.button>
               </div>
-
             </motion.div>
           )}
         </AnimatePresence>

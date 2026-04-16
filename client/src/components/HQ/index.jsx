@@ -35,7 +35,11 @@ export default function HQ({ gsRef, setScreen, lang }) {
   // 3. ĐỌC GIÁP (ARMOR)
   const armorItem = items[loadout.armor];
   const currentArmor = armorItem ? GEAR_CATALOG.armor.find(g => g.id === armorItem.baseId) : null;
-
+  
+  // 4. ĐỌC VỆ TINH (DRONE)
+  const droneItem = items[loadout.drone];
+  const currentDrone = droneItem && GEAR_CATALOG.drone ? GEAR_CATALOG.drone.find(g => g.id === droneItem.baseId) : null;
+  
   const itemVariants = {
     hidden: { y: 20, opacity: 0 },
     visible: { y: 0, opacity: 1, transition: { type: 'spring', stiffness: 300, damping: 24 } }
@@ -86,8 +90,14 @@ export default function HQ({ gsRef, setScreen, lang }) {
         <motion.div variants={itemVariants} className={`${styles.glassPanel} ${styles.hangar}`}>
           <motion.div 
             animate={{ y: [0, -10, 0] }} transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
-            className={styles.shipIcon}
-          >🚀</motion.div>
+            style={{ marginBottom: '15px' }}
+          >
+            <img 
+              src={currentAircraft.imgHq || '/images/ship_xwing_hq.jpg'} 
+              alt={currentAircraft.name[lang]} 
+              style={{ width: 'clamp(150px, 35vw, 250px)', filter: 'drop-shadow(0 0 15px rgba(102, 252, 241, 0.4))' }} 
+            />
+          </motion.div>
           <h3 className={styles.shipName}>{currentAircraft.name[lang]}</h3>
           <div className={styles.shipStats}>
              <span style={{ color: '#2ed573' }}>HP: {currentAircraft.baseHp}</span>
@@ -100,7 +110,7 @@ export default function HQ({ gsRef, setScreen, lang }) {
           </div>
         </motion.div>
 
-        {/* TRANG BỊ ĐANG MẶC (ĐÃ CẬP NHẬT ĐẦY ĐỦ 3 SLOT) */}
+        {/* TRANG BỊ ĐANG MẶC (4 SLOT: SÚNG CHÍNH, SÚNG PHỤ, GIÁP, VỆ TINH) */}
         <motion.div variants={itemVariants} className={styles.loadoutSection} style={{ flexWrap: 'wrap' }}>
           
           {/* SLOT 1: SÚNG CHÍNH */}
@@ -117,12 +127,18 @@ export default function HQ({ gsRef, setScreen, lang }) {
              )}
           </motion.div>
 
-          {/* SLOT 2: SÚNG PHỤ (WINGMAN) */}
+          {/* 👇 SLOT 2: SÚNG PHỤ (WINGMAN) - ĐÃ CẬP NHẬT ẢNH ROCKET */}
           <motion.div whileTap={{ scale: 0.95 }} className={`${styles.loadoutSlot} hq-interact ${styles.glassPanel}`}>
              <p className={styles.loadoutLabel}>{lang === 'vi' ? 'SÚNG PHỤ' : 'WINGMAN'}</p>
              {currentWingman ? (
                <>
-                 <div style={{ fontSize: 'clamp(28px, 6vw, 35px)', marginBottom: '10px' }}>🛸</div>
+                 {currentWingman.imgSrc ? (
+                   // Hiển thị ảnh Rocket thật nếu có
+                   <img src={currentWingman.imgSrc} alt="Wingman" style={{ height: '45px', objectFit: 'contain', marginBottom: '5px', filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.6))' }} />
+                 ) : (
+                   // Hoặc dùng Emoji mặc định nếu không có ảnh
+                   <div style={{ fontSize: 'clamp(28px, 6vw, 35px)', marginBottom: '10px' }}>🛸</div>
+                 )}
                  <div style={{ color: '#fff', fontSize: '16px', fontWeight: 'bold' }}>{currentWingman.name[lang]}</div>
                  <div style={{ color: '#b388ff', fontSize: '14px', marginTop: '5px' }}>Lv.{wingmanItem.level} (ATK: {currentWingman.baseAtk})</div>
                </>
@@ -145,6 +161,24 @@ export default function HQ({ gsRef, setScreen, lang }) {
              )}
           </motion.div>
 
+          {/* 👇 SLOT 4: VỆ TINH (DRONE) - CŨNG ĐƯỢC HỖ TRỢ HIỂN THỊ ẢNH THẬT */}
+          <motion.div whileTap={{ scale: 0.95 }} className={`${styles.loadoutSlot} hq-interact ${styles.glassPanel}`}>
+             <p className={styles.loadoutLabel}>{lang === 'vi' ? 'VỆ TINH' : 'DRONE'}</p>
+             {currentDrone ? (
+               <>
+                 {currentDrone.imgSrc ? (
+                   <img src={currentDrone.imgSrc} alt="Drone" style={{ height: '45px', objectFit: 'contain', marginBottom: '5px', filter: 'drop-shadow(0 0 8px rgba(46, 204, 113, 0.6))' }} />
+                 ) : (
+                   <div style={{ fontSize: 'clamp(28px, 6vw, 35px)', marginBottom: '10px' }}>🛰️</div>
+                 )}
+                 <div style={{ color: '#fff', fontSize: '16px', fontWeight: 'bold' }}>{currentDrone.name[lang]}</div>
+                 <div style={{ color: '#2ecc71', fontSize: '14px', marginTop: '5px' }}>Lv.{droneItem.level} (ATK: {currentDrone.baseAtk})</div>
+               </>
+             ) : (
+               <div style={{ color: '#555', fontSize: '16px', marginTop: '20px' }}>[ TRỐNG ]</div>
+             )}
+          </motion.div>
+
         </motion.div>
 
         {/* DANH SÁCH TÍNH NĂNG */}
@@ -154,7 +188,7 @@ export default function HQ({ gsRef, setScreen, lang }) {
           </motion.button>
           <motion.button 
             whileTap={{ scale: 0.95 }} className={`${styles.btnBase} hq-interact`}
-            onClick={() => setScreen('pilots')} // 👇 Đổi từ hq sang pilots
+            onClick={() => setScreen('pilots')}
           >
             👨‍🚀 {lang === 'vi' ? 'NHÂN SỰ' : 'CREW'}
           </motion.button>
@@ -165,7 +199,7 @@ export default function HQ({ gsRef, setScreen, lang }) {
           <motion.button 
             whileTap={{ scale: 0.95 }} 
             className={`${styles.launchBtn} hq-interact`}
-            onClick={() => setScreen('campaign')} // 👇 THÊM DÒNG NÀY ĐỂ KÍCH HOẠT TRẬN ĐÁNH
+            onClick={() => setScreen('campaign')}
           >
             {lang === 'vi' ? `KHỞI ĐỘNG (ẢI ${progress.currentStage})` : `INITIATE STAGE ${progress.currentStage}`}
           </motion.button>

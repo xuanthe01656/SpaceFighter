@@ -62,7 +62,13 @@
 
 /* TRANG BỊ & NÚT BẤM */
 .loadoutSection { display: flex; gap: 15px; margin-bottom: 20px; flex-shrink: 0; }
-.loadoutSlot { flex: 1; padding: 15px 10px; border-radius: 10px; border: 1px solid rgba(102, 252, 241, 0.3); text-align: center; cursor: pointer; pointer-events: auto; background: linear-gradient(180deg, rgba(31,40,51,0.5), rgba(11,12,16,0.8)); }
+.loadoutSlot { 
+  flex: 1 1 40%;
+  min-width: 140px; 
+  padding: 15px 10px; border-radius: 10px; border: 1px solid rgba(102, 252, 241, 0.3); 
+  text-align: center; cursor: pointer; pointer-events: auto; position: relative;
+  background: linear-gradient(180deg, rgba(31,40,51,0.5) 0%, rgba(11,12,16,0.8) 100%);
+}
 .loadoutLabel { margin: 0 0 10px 0; color: #45a29e; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
 
 .actionBtns { display: flex; gap: 15px; flex-shrink: 0; margin-bottom: 20px; }
