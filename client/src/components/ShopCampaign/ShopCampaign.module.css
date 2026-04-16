@@ -1,0 +1,139 @@
+/* src/components/ShopCampaign/ShopCampaign.module.css */
+
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Share+Tech+Mono&display=swap');
+
+:root {
+  --bg-void:       #03060e;
+  --bg-deep:       #060c1a;
+  --bg-panel:      rgba(8, 14, 28, 0.88);
+  --bg-card:       rgba(10, 18, 36, 0.82);
+
+  --accent:        #38bdf8;
+  --accent-glow:   rgba(56, 189, 248, 0.35);
+  --accent-dim:    rgba(56, 189, 248, 0.12);
+  --accent-warm:   #fb923c;
+  --accent-warm-g: rgba(251, 146, 60, 0.3);
+  --accent-epic:   #c084fc;
+  --accent-epic-g: rgba(192, 132, 252, 0.3);
+
+  --text-primary:  #e2e8f0;
+  --text-dim:      #64748b;
+
+  --border-subtle: rgba(56, 189, 248, 0.15);
+  --border-base:   rgba(56, 189, 248, 0.28);
+
+  --font-ui:   'Barlow Condensed', sans-serif;
+  --font-data: 'Share Tech Mono', monospace;
+  --radius:    10px;
+}
+
+.container {
+  width: 100%; height: 100dvh;
+  background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(30, 60, 120, 0.3), transparent), var(--bg-void);
+  color: var(--text-primary); font-family: var(--font-ui);
+  display: flex; flex-direction: column; align-items: center;
+  padding: 12px 16px; box-sizing: border-box;
+  position: relative; z-index: 20; overflow: hidden;
+}
+
+.container::before {
+  content: ""; position: absolute; inset: 0;
+  background-image: linear-gradient(rgba(56, 189, 248, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(56, 189, 248, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px; pointer-events: none; z-index: 0;
+}
+
+.contentWrapper {
+  width: 100%; max-width: 1280px; display: flex; flex-direction: column;
+  flex: 1; height: 100%; gap: 20px; z-index: 10;
+}
+
+/* ── HEADER ── */
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-bottom: 12px; border-bottom: 1px solid var(--border-subtle); flex-shrink: 0;
+}
+
+.backBtn {
+  display: flex; align-items: center; gap: 8px; background: var(--bg-panel); color: var(--accent);
+  border: 1px solid var(--border-base); padding: 8px 18px 8px 12px; border-radius: 6px;
+  font-family: var(--font-ui); font-size: 18px; font-weight: 700; letter-spacing: 0.08em;
+  cursor: pointer; text-transform: uppercase; transition: all 0.2s; position: relative;
+}
+.backBtn::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); }
+.backBtn:hover { background: var(--accent-dim); box-shadow: 0 0 16px var(--accent-glow); }
+
+.headerTitle {
+  font-size: clamp(24px, 5vw, 32px); font-weight: 800; letter-spacing: 0.22em;
+  color: var(--text-primary); text-transform: uppercase; text-shadow: 0 0 20px var(--accent-glow);
+}
+
+.currencyBar { display: flex; gap: 10px; }
+.currencyChip {
+  display: flex; align-items: center; gap: 8px; background: var(--bg-panel); 
+  border: 1px solid var(--border-subtle); padding: 6px 14px; border-radius: 6px;
+}
+.currencyIcon { font-size: 16px; }
+.coinIcon { color: var(--accent-warm); }
+.gemIcon { color: var(--accent); }
+.currencyAmt { font-family: var(--font-data); font-size: 18px; color: var(--text-primary); }
+
+/* ── SHOP GRID ── */
+.shopGrid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px;
+  overflow-y: auto; padding: 10px 5px 30px 5px; align-content: start;
+}
+.shopGrid::-webkit-scrollbar { width: 6px; }
+.shopGrid::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
+.shopGrid::-webkit-scrollbar-thumb { background: var(--border-base); border-radius: 3px; }
+
+/* ── CRATE CARD ── */
+.crateCard {
+  background: var(--bg-card); border: 1px solid var(--border-base); border-radius: var(--radius);
+  padding: 24px; display: flex; flex-direction: column; align-items: center; text-align: center;
+  backdrop-filter: blur(12px); position: relative; overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.crateCard:hover { transform: translateY(-4px); }
+
+/* Phân loại viền theo Hòm */
+.crateBasic { border-color: var(--accent); box-shadow: inset 0 0 40px var(--accent-dim); }
+.crateBasic:hover { box-shadow: 0 8px 30px var(--accent-dim), inset 0 0 40px var(--accent-dim); }
+
+.cratePremium { border-color: var(--accent-epic); box-shadow: inset 0 0 40px var(--accent-epic-g); }
+.cratePremium:hover { box-shadow: 0 8px 30px var(--accent-epic-g), inset 0 0 40px var(--accent-epic-g); }
+
+.crateEpic { border-color: var(--accent-warm); box-shadow: inset 0 0 40px var(--accent-warm-g); }
+.crateEpic:hover { box-shadow: 0 8px 30px var(--accent-warm-g), inset 0 0 40px var(--accent-warm-g); }
+
+.cratePilot { border-color: #22c55e; box-shadow: inset 0 0 40px rgba(34, 197, 94, 0.15); }
+.cratePilot:hover { box-shadow: 0 8px 30px rgba(34, 197, 94, 0.2), inset 0 0 40px rgba(34, 197, 94, 0.15); }
+
+.crateIcon { font-size: 70px; line-height: 1; margin-bottom: 16px; filter: drop-shadow(0 0 16px rgba(255,255,255,0.2)); }
+.crateTitle { font-size: 26px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 10px 0; }
+.crateDesc { font-family: var(--font-data); font-size: 14px; color: var(--text-dim); line-height: 1.5; margin-bottom: 24px; flex: 1; }
+
+.buyBtn {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 12px; border: none; border-radius: 6px; font-family: var(--font-ui);
+  font-size: 20px; font-weight: 800; letter-spacing: 0.1em; cursor: pointer;
+  transition: all 0.2s ease; text-transform: uppercase;
+}
+.buyBtnCoin { background: rgba(56, 189, 248, 0.15); color: var(--accent); border: 1px solid var(--accent); }
+.buyBtnCoin:hover { background: var(--accent); color: var(--bg-void); box-shadow: 0 0 20px var(--accent-glow); }
+
+.buyBtnGem { background: rgba(251, 146, 60, 0.15); color: var(--accent-warm); border: 1px solid var(--accent-warm); }
+.buyBtnGem:hover { background: var(--accent-warm); color: var(--bg-void); box-shadow: 0 0 20px var(--accent-warm-g); }
+
+.costVal { font-family: var(--font-data); font-size: 18px; }
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+  .headerTitle { display: none; }
+  .shopGrid { grid-template-columns: 1fr; padding-bottom: 40px; }
+  .crateCard { padding: 20px; flex-direction: row; text-align: left; align-items: center; gap: 15px; }
+  .crateIcon { font-size: 50px; margin: 0; }
+  .crateInfo { flex: 1; display: flex; flex-direction: column; }
+  .crateTitle { font-size: 20px; margin-bottom: 4px; }
+  .crateDesc { font-size: 12px; margin-bottom: 10px; }
+  .buyBtn { padding: 8px; font-size: 16px; }
+}

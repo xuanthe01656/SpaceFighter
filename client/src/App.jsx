@@ -24,6 +24,9 @@ import HQ from './components/HQ';
 import Pilots from './components/Pilots';
 import Inventory from './components/Inventory';
 import CampaignEngine from './components/Campaign/CampaignEngine';
+import StageSelect from './components/StageSelect';
+import CampaignPortal from './components/CampaignPortal';
+import ShopCampaign from './components/ShopCampaign';
 import { secureStorage } from './utils/storageHelper';
 const imageCache = {};
 const getImage = (src) => {
@@ -1640,6 +1643,28 @@ useEffect(() => {
           setScreen={setScreen}
           lang={lang}
           saveUserProfile={saveUserProfile} // Truyền hàm lưu từ useAuth
+        />
+      )}
+      {screen === 'stage_select' && (
+        <StageSelect
+          gsRef={gsRef}
+          setScreen={setScreen}
+          lang={lang}
+        />
+      )}
+      {screen === 'campaign_portal' && (
+        <CampaignPortal
+          gsRef={gsRef}
+          setScreen={setScreen}
+          lang={lang}
+        />
+      )}
+      {screen === 'shop_campaign' && (
+        <ShopCampaign
+          gsRef={gsRef}
+          setScreen={setScreen}
+          lang={lang}
+          saveUserProfile={saveUserProfile}
         />
       )}
       {showRevivePopup && (

@@ -90,7 +90,7 @@ export default function Portal({
         {/* CỬA 2: CHIẾN DỊCH */}
         <div 
           className={`portal-card ${styles.card} ${styles.cardCampaign}`} 
-          onClick={() => setScreen('hq')}
+          onClick={() => setScreen('campaign_portal')}
         >
           <div className={`${styles.cardBanner} ${styles.bannerCampaign}`}>🚀</div>
           <h2 className={styles.cardTitle} style={{ color: '#b388ff' }}>CHIẾN DỊCH</h2>

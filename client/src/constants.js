@@ -66,9 +66,19 @@ export const GEAR_CATALOG = {
     { id: 'armor_heavy', name: { vi: 'Giáp Hợp Kim', en: 'Heavy Alloy Armor' }, baseHp: 1500 },
     { id: 'armor_shield', name: { vi: 'Khiên Năng Lượng', en: 'Energy Shield' }, baseHp: 800 }
   ],
-  drone: [
-    { id: 'drone_sniper', name: { vi: 'Vệ Tinh Bắn Tỉa', en: 'Sniper Drone' }, baseAtk: 25 },
-    { id: 'drone_shield', name: { vi: 'Vệ Tinh Hộ Thể', en: 'Guardian Drone' }, baseAtk: 10 }
+ drone: [
+    { 
+      id: 'drone_sniper', 
+      name: { vi: 'Vệ Tinh Bắn Tỉa', en: 'Sniper Drone' }, 
+      baseAtk: 25,
+      imgSrc: '/images/drone_top.png' // 👈 Ảnh Drone Xanh
+    },
+    { 
+      id: 'drone_shield', 
+      name: { vi: 'Vệ Tinh Hộ Thể', en: 'Guardian Drone' }, 
+      baseAtk: 10,
+      imgSrc: '/images/drone1_top.png' // 👈 Ảnh Drone Đỏ
+    }
   ]
 };
   

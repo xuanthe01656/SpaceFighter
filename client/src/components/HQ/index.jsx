@@ -21,6 +21,7 @@ export default function HQ({ gsRef, setScreen, lang }) {
   const isVIP = gsRef.current?.isVIP ?? false;
 
   const { progress, loadout, items } = campaignData;
+  const targetStage = progress.selectedStage || progress.currentStage || 1; 
   const currentPilot = PILOTS.find(p => p.id === loadout.pilot) || PILOTS[0];
   const currentAircraft = AIRCRAFTS.find(a => a.id === loadout.aircraft) || AIRCRAFTS[0];
   
@@ -55,8 +56,8 @@ export default function HQ({ gsRef, setScreen, lang }) {
         {/* HEADER & TÀI NGUYÊN */}
         <motion.div variants={itemVariants} className={styles.topSection}>
           <div className={styles.headerLeft}>
-            <motion.button whileTap={{ scale: 0.9 }} className={styles.backBtn} onClick={() => setScreen('portal')}>
-              ◀ {lang === 'vi' ? 'SẢNH' : 'PORTAL'}
+            <motion.button whileTap={{ scale: 0.9 }} className={styles.backBtn} onClick={() => setScreen('stage_select')}>
+              ◀ {lang === 'vi' ? 'BẢN ĐỒ' : 'MAP'}
             </motion.button>
             <h1 className={styles.title}>{lang === 'vi' ? 'TỔNG HÀNH DINH' : 'HQ CENTER'}</h1>
           </div>
@@ -193,15 +194,14 @@ export default function HQ({ gsRef, setScreen, lang }) {
             👨‍🚀 {lang === 'vi' ? 'NHÂN SỰ' : 'CREW'}
           </motion.button>
         </motion.div>
-
-        {/* NÚT XUẤT KÍCH */}
+       {/* NÚT XUẤT KÍCH */}
         <motion.div variants={itemVariants} style={{ display: 'flex', justifyContent: 'center' }}>
           <motion.button 
             whileTap={{ scale: 0.95 }} 
             className={`${styles.launchBtn} hq-interact`}
-            onClick={() => setScreen('campaign')}
+            onClick={() => setScreen('campaign')} 
           >
-            {lang === 'vi' ? `KHỞI ĐỘNG (ẢI ${progress.currentStage})` : `INITIATE STAGE ${progress.currentStage}`}
+            {lang === 'vi' ? `XUẤT KÍCH (ẢI ${targetStage})` : `LAUNCH STAGE ${targetStage}`}
           </motion.button>
         </motion.div>
       </div>

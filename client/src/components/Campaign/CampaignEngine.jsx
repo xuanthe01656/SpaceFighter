@@ -53,9 +53,9 @@ export default function CampaignEngine({ gsRef, setScreen, lang }) {
       
       {/* GIAO DIỆN REACT (UI) */}
       <button 
-        onClick={() => setScreen('hq')}
+        onClick={() => setScreen('stage_select')}
         style={{ 
-          position: 'absolute', top: 'calc(env(safe-area-inset-top) + 20px)', left: '20px', 
+          position: 'absolute', top: 'calc(env(safe-area-inset-top) + 40px)', left: '20px', 
           padding: '8px 15px', background: 'rgba(0,0,0,0.5)', color: '#64ffda', 
           border: '1px solid #64ffda', borderRadius: '5px', zIndex: 100, 
           fontFamily: "inherit", cursor: 'pointer', textTransform: 'uppercase' 
