@@ -9,7 +9,7 @@
 }
 
 body {
-    overflow: hidden; /* Chặn cuộn trang ngoài ý muốn */
+    overflow: auto; /* Chặn cuộn trang ngoài ý muốn */
     background-color: #0d0e15;
     font-family: 'VT323', monospace;
     touch-action: none; /* Chống pull-to-refresh trên mobile */

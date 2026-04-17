@@ -1,7 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
 
 body {
-    margin: 0; padding: 0; overflow: hidden;
+    margin: 0; padding: 0; overflow: auto;
     background-color: #0d0e15;
     font-family: 'VT323', monospace;
     touch-action: none; user-select: none;
