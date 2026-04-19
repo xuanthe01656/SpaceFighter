@@ -3,145 +3,345 @@
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Share+Tech+Mono&display=swap');
 
 :root {
-  --bg-void:       #03060e;
+  /* Bảng màu Core */
+  --bg-void:       #02040a;
   --bg-deep:       #060c1a;
-  --bg-panel:      rgba(8, 14, 28, 0.88);
-  --bg-element:    rgba(15, 24, 50, 0.7);
+  --bg-panel:      rgba(8, 14, 28, 0.65);
+  --bg-element:    rgba(15, 24, 50, 0.4);
 
-  --accent:        #38bdf8;
-  --accent-glow:   rgba(56, 189, 248, 0.35);
-  --accent-dim:    rgba(56, 189, 248, 0.12);
-  --accent-warm:   #fb923c;
-  --accent-warm-g: rgba(251, 146, 60, 0.3);
+  /* Neon Accents */
+  --accent-cyan:   #00f0ff;
+  --accent-cyan-g: rgba(0, 240, 255, 0.3);
+  --accent-purple: #b388ff;
+  --accent-orange: #ff3c00;
+  --accent-gold:   #facc15;
+  --accent-green:  #00ff88; /* Màu mới cho Bản vẽ nâng cấp */
 
-  --text-primary:  #e2e8f0;
-  --text-dim:      #64748b;
+  /* Text & Borders */
+  --text-main:     #e2e8f0;
+  --text-muted:    #64748b;
+  --border-dim:    rgba(0, 240, 255, 0.15);
+  --border-bright: rgba(0, 240, 255, 0.4);
 
-  --border-subtle: rgba(56, 189, 248, 0.15);
-  --border-base:   rgba(56, 189, 248, 0.28);
-
+  /* Typography */
   --font-ui:   'Barlow Condensed', sans-serif;
   --font-data: 'Share Tech Mono', monospace;
 
-  --radius:    10px;
-  --radius-sm: 6px;
+  /* Cyberpunk Clip-path (Cắt góc trên-trái và dưới-phải) */
+  --cyber-cut: polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px);
+  --cyber-cut-sm: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
 }
 
 .container {
-  width: 100%; height: 100dvh; display: flex; flex-direction: column;
-  background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(30, 60, 120, 0.3), transparent), var(--bg-void);
-  font-family: var(--font-ui); color: var(--text-primary); position: relative;
-  z-index: 10; pointer-events: auto; overflow: hidden; box-sizing: border-box;
+  width: 100%; 
+  height: 100dvh; 
+  display: flex; 
+  flex-direction: column;
+  background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(30, 60, 120, 0.2), transparent), var(--bg-void);
+  font-family: var(--font-ui); 
+  color: var(--text-main); 
+  position: relative;
+  overflow: hidden; 
+  box-sizing: border-box;
 }
 
-/* Lưới tọa độ 3D bọc xung quanh */
+/* Lưới không gian 3D */
 .container::before {
-  content: ""; position: absolute; inset: 0;
+  content: ""; 
+  position: absolute; 
+  inset: 0;
   background-image: 
-    linear-gradient(rgba(56, 189, 248, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(56, 189, 248, 0.03) 1px, transparent 1px);
-  background-size: 40px 40px; pointer-events: none; z-index: -1;
+    linear-gradient(var(--border-dim) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border-dim) 1px, transparent 1px);
+  background-size: clamp(30px, 4vw, 50px) clamp(30px, 4vw, 50px); 
+  pointer-events: none; 
+  z-index: 1;
+  opacity: 0.5;
 }
 
-/* HEADER CÔNG NGHỆ CAO (ĐỒNG BỘ INVENTORY) */
+/* Hiệu ứng Scanline mờ (Màn hình HUD) */
+.container::after {
+  content: ""; 
+  position: absolute; 
+  inset: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%);
+  background-size: 100% 4px; 
+  pointer-events: none; 
+  z-index: 2;
+}
+
+/* KHU VỰC TOP NAV */
 .topNav {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 20px; width: 100%; max-width: 1400px; margin: 0 auto; z-index: 100; box-sizing: border-box;
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center;
+  padding: clamp(10px, 2vh, 25px) clamp(15px, 3vw, 40px); 
+  width: 100%; 
+  z-index: 10; 
+  box-sizing: border-box;
 }
 
+/* Nút Back vạt góc */
 .backBtn {
-  display: flex; align-items: center; gap: 8px; background: var(--bg-element); color: var(--accent);
-  border: 1px solid var(--border-base); padding: 8px 18px 8px 12px; border-radius: var(--radius-sm);
-  font-family: var(--font-ui); font-size: 18px; font-weight: 700; letter-spacing: 0.08em;
-  cursor: pointer; text-transform: uppercase; transition: background 0.2s, box-shadow 0.2s; position: relative; overflow: hidden;
+  display: flex; 
+  align-items: center; 
+  gap: 8px; 
+  background: var(--bg-element); 
+  color: var(--accent-cyan);
+  border: none;
+  border-left: 3px solid var(--accent-cyan);
+  padding: 10px 20px 10px 15px; 
+  font-family: var(--font-ui); 
+  font-size: clamp(16px, 1.5vw, 20px); 
+  font-weight: 700; 
+  letter-spacing: 0.1em;
+  cursor: pointer; 
+  text-transform: uppercase; 
+  clip-path: var(--cyber-cut-sm);
+  transition: all 0.2s ease;
+  backdrop-filter: blur(4px);
 }
-.backBtn::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); }
-.backBtn:hover { background: var(--accent-dim); box-shadow: 0 0 16px var(--accent-glow); }
-.backArrow { font-size: 24px; line-height: 1; }
+.backBtn:hover { 
+  background: var(--accent-cyan-g); 
+  text-shadow: 0 0 8px var(--accent-cyan); 
+}
 
-.currencyBar { display: flex; gap: 10px; }
+/* Thanh Tài Nguyên */
+.currencyBar { 
+  display: flex; 
+  gap: clamp(8px, 1vw, 15px); 
+}
+
 .currencyChip {
-  display: flex; align-items: center; gap: 8px; background: var(--bg-element); 
-  border: 1px solid var(--border-subtle); padding: 6px 14px; border-radius: var(--radius-sm);
+  display: flex; 
+  align-items: center; 
+  gap: 8px; 
+  background: var(--bg-element); 
+  border: 1px solid var(--border-dim); 
+  padding: 6px clamp(10px, 1.5vw, 16px); 
+  clip-path: var(--cyber-cut-sm);
+  backdrop-filter: blur(4px);
 }
-.currencyIcon { font-size: 16px; }
-.currencyChip[data-type="energy"] .currencyIcon { color: #facc15; filter: drop-shadow(0 0 5px #facc15); }
-.currencyChip[data-type="coin"] .currencyIcon { color: var(--accent-warm); filter: drop-shadow(0 0 5px var(--accent-warm)); }
-.currencyChip[data-type="gem"] .currencyIcon { color: var(--accent); filter: drop-shadow(0 0 5px var(--accent)); }
-.currencyAmt { font-family: var(--font-data); font-size: 18px; font-weight: 400; color: var(--text-primary); }
 
-/* ========================================================
-   KHU VỰC TRUNG TÂM (LÕI CHIẾN DỊCH) - GIỮ NGUYÊN BẢN CŨ 
-   ======================================================== */
+.currencyIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(16px, 1.5vw, 20px);
+  height: clamp(16px, 1.5vw, 20px);
+}
+
+.currencyIcon svg { width: 100%; height: 100%; }
+
+.chipEnergy { color: var(--accent-gold); border-bottom: 2px solid var(--accent-gold); }
+.chipCoin { color: var(--accent-orange); border-bottom: 2px solid var(--accent-orange); }
+.chipGem { color: var(--accent-cyan); border-bottom: 2px solid var(--accent-cyan); }
+.chipBlueprint { color: var(--accent-green); border-bottom: 2px solid var(--accent-green); } /* Class mới cho Bản vẽ */
+
+.currencyAmt { 
+  font-family: var(--font-data); 
+  font-size: clamp(14px, 1.5vw, 18px); 
+  color: var(--text-main); 
+}
+
+/* KHU VỰC LÕI TRUNG TÂM */
 .centerDisplay {
-  flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; position: relative;
+  flex: 1; 
+  display: flex; 
+  flex-direction: column; 
+  justify-content: center; 
+  align-items: center; 
+  position: relative;
+  z-index: 10;
 }
 
+/* Vòng sáng phản ứng tự động co giãn */
 .hologramRing {
-  position: absolute; width: 350px; height: 350px; border-radius: 50%;
-  border: 2px dashed rgba(179, 136, 255, 0.3); animation: spin 20s linear infinite; pointer-events: none;
+  position: absolute; 
+  width: clamp(250px, 40vmin, 500px); 
+  height: clamp(250px, 40vmin, 500px); 
+  border-radius: 50%;
+  border: 2px dashed rgba(179, 136, 255, 0.4); 
+  animation: spin 25s linear infinite; 
+  pointer-events: none;
 }
 .hologramRingInner {
-  position: absolute; width: 280px; height: 280px; border-radius: 50%;
-  border: 4px solid rgba(179, 136, 255, 0.1); border-left-color: #b388ff; border-right-color: #b388ff;
-  animation: spin-reverse 15s linear infinite; pointer-events: none;
+  position: absolute; 
+  width: clamp(200px, 32vmin, 400px); 
+  height: clamp(200px, 32vmin, 400px); 
+  border-radius: 50%;
+  border: 4px solid rgba(0, 240, 255, 0.1); 
+  border-top-color: var(--accent-cyan); 
+  border-bottom-color: var(--accent-purple);
+  animation: spin-reverse 15s linear infinite; 
+  pointer-events: none;
 }
 
 @keyframes spin { 100% { transform: rotate(360deg); } }
 @keyframes spin-reverse { 100% { transform: rotate(-360deg); } }
 
+/* Nút LAUNCH */
 .launchBtn {
-  position: relative; width: 220px; height: 220px; border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, rgba(179, 136, 255, 0.2), rgba(0, 0, 0, 0.8));
-  border: 2px solid #b388ff; display: flex; flex-direction: column; justify-content: center; align-items: center;
-  cursor: pointer; box-shadow: 0 0 40px rgba(179, 136, 255, 0.4), inset 0 0 30px rgba(179, 136, 255, 0.4);
-  transition: all 0.3s ease; z-index: 10; overflow: hidden;
+  position: relative; 
+  width: clamp(160px, 25vmin, 300px); 
+  height: clamp(160px, 25vmin, 300px); 
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%, rgba(179, 136, 255, 0.1), rgba(0, 0, 0, 0.9));
+  border: 2px solid var(--accent-purple); 
+  display: flex; 
+  flex-direction: column; 
+  justify-content: center; 
+  align-items: center;
+  cursor: pointer; 
+  box-shadow: 0 0 40px rgba(179, 136, 255, 0.3), inset 0 0 30px rgba(179, 136, 255, 0.2);
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+  overflow: hidden;
+  gap: 10px;
 }
 
 .launchBtn::before {
-  content: ""; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
-  background: conic-gradient(transparent, rgba(179, 136, 255, 0.3), transparent 30%);
-  animation: spin 4s linear infinite; z-index: -1;
+  content: ""; 
+  position: absolute; 
+  inset: -50%;
+  background: conic-gradient(transparent, rgba(179, 136, 255, 0.4), transparent 40%);
+  animation: spin 3s linear infinite; 
+  z-index: -1;
 }
 
-.launchBtn:hover { transform: scale(1.05); box-shadow: 0 0 60px rgba(179, 136, 255, 0.8), inset 0 0 50px rgba(179, 136, 255, 0.6); }
-.launchIcon { font-size: 60px; filter: drop-shadow(0 0 10px #b388ff); margin-bottom: 5px; }
-.launchText { font-size: 28px; color: #fff; font-family: inherit; font-weight: bold; text-shadow: 0 0 10px #b388ff; letter-spacing: 2px;}
+.launchBtn:hover { 
+  transform: scale(1.08); 
+  box-shadow: 0 0 60px rgba(179, 136, 255, 0.6), inset 0 0 50px rgba(179, 136, 255, 0.4); 
+  border-color: var(--accent-cyan);
+}
 
-/* THANH DOCK ĐIỀU HƯỚNG BÊN DƯỚI (ĐỒNG BỘ AAA) */
+.launchIcon {
+  width: clamp(40px, 6vmin, 70px);
+  height: clamp(40px, 6vmin, 70px);
+  color: var(--accent-cyan);
+  filter: drop-shadow(0 0 10px var(--accent-cyan));
+}
+
+.launchText { 
+  font-size: clamp(18px, 3vmin, 32px); 
+  color: #fff; 
+  font-weight: 800; 
+  text-shadow: 0 0 10px var(--accent-purple); 
+  letter-spacing: 0.1em;
+}
+
+/* THANH DOCK ĐIỀU HƯỚNG BÊN DƯỚI */
 .bottomDock {
-  width: 100%; max-width: 1000px; margin: 0 auto 30px auto;
-  display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; z-index: 100;
+  width: 100%; 
+  padding: 0 clamp(10px, 2vw, 40px);
+  margin-bottom: clamp(15px, 3vh, 40px);
+  display: grid; 
+  grid-template-columns: repeat(auto-fit, minmax(clamp(140px, 20vw, 220px), 1fr));
+  gap: clamp(10px, 1.5vw, 20px); 
+  z-index: 10;
+  box-sizing: border-box;
 }
 
 .navBtn {
-  background: var(--bg-panel); border: 1px solid var(--border-subtle);
-  color: var(--text-primary); padding: 12px 24px; border-radius: var(--radius-sm);
-  font-family: var(--font-ui); font-size: clamp(18px, 4vw, 22px); font-weight: 700;
-  letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer;
-  display: flex; align-items: center; gap: 10px; transition: all 0.25s ease;
-  box-shadow: inset 0 0 20px rgba(0,0,0,0.5); min-width: 150px; justify-content: center;
+  background: var(--bg-panel); 
+  border: 1px solid var(--border-dim);
+  color: var(--text-main); 
+  padding: clamp(12px, 2vh, 18px) 15px; 
+  font-family: var(--font-ui); 
+  font-size: clamp(16px, 1.8vw, 22px); 
+  font-weight: 700;
+  letter-spacing: 0.1em; 
+  text-transform: uppercase; 
+  cursor: pointer;
+  display: flex; 
+  align-items: center; 
+  justify-content: center;
+  gap: 12px; 
+  transition: all 0.2s ease;
+  clip-path: var(--cyber-cut);
+  position: relative;
+}
+
+.navBtn::before {
+  content: "";
+  position: absolute;
+  left: 0; bottom: 0; width: 0; height: 3px;
+  background: var(--accent-cyan);
+  transition: width 0.3s ease;
 }
 
 .navBtn:hover {
-  background: rgba(56, 189, 248, 0.1); border-color: var(--accent);
-  box-shadow: 0 0 15px var(--accent-glow); transform: translateY(-4px);
+  background: rgba(0, 240, 255, 0.08);
+  border-color: var(--border-bright);
+  color: #fff;
 }
 
-.eventBtn { border-color: rgba(251, 146, 60, 0.3); color: var(--accent-warm); }
-.eventBtn:hover { background: rgba(251, 146, 60, 0.1); border-color: var(--accent-warm); box-shadow: 0 0 15px var(--accent-warm-g); }
+.navBtn:hover::before { width: 100%; }
 
-.navIcon { font-size: 24px; filter: drop-shadow(0 0 5px rgba(255,255,255,0.3)); }
-.eventBtn .navIcon { filter: drop-shadow(0 0 5px var(--accent-warm-g)); }
+.navIcon {
+  width: clamp(20px, 2.5vw, 28px);
+  height: clamp(20px, 2.5vw, 28px);
+  color: var(--text-muted);
+  transition: color 0.3s ease;
+}
 
-/* RESPONSIVE */
-@media (max-width: 768px) {
-  .topNav { flex-direction: column; align-items: center; gap: 15px; }
-  .bottomDock { gap: 10px; padding: 0 10px; }
-  .navBtn { padding: 10px 15px; font-size: 16px; flex: 1; min-width: calc(50% - 10px); }
-  .launchBtn { width: 180px; height: 180px; }
-  .hologramRing { width: 280px; height: 280px; }
-  .hologramRingInner { width: 220px; height: 220px; }
-  .launchIcon { font-size: 40px; }
-  .launchText { font-size: 22px; }
+.navBtn:hover .navIcon { color: var(--accent-cyan); filter: drop-shadow(0 0 8px var(--accent-cyan)); }
+
+.eventBtn { border-color: rgba(255, 60, 0, 0.3); }
+.eventBtn::before { background: var(--accent-orange); }
+.eventBtn:hover { background: rgba(255, 60, 0, 0.08); border-color: var(--accent-orange); }
+.eventBtn:hover .navIcon { color: var(--accent-orange); filter: drop-shadow(0 0 8px var(--accent-orange)); }
+
+/* Responsive tinh chỉnh cho Mobile dọc */
+@media (max-width: 600px) {
+  /* Ép toàn bộ lên 1 dòng, dãn đều 2 bên */
+  .topNav { 
+    flex-wrap: nowrap; 
+    justify-content: space-between; 
+    gap: 4px; 
+    padding: 10px 5px; 
+  }
+  
+  /* Thu nhỏ nút Back và ẩn chữ */
+  .backBtn {
+    padding: 6px 10px;
+    border-left-width: 2px;
+  }
+  .backText {
+    display: none; /* Ẩn chữ "Hệ Điều Hành" trên mobile */
+  }
+
+  /* Ép thanh tài nguyên lên 1 dòng, thu hẹp khoảng cách */
+  .currencyBar { 
+    width: auto; 
+    justify-content: flex-end; 
+    flex-wrap: nowrap; 
+    gap: 4px; 
+  } 
+
+  /* Ép nhỏ kích thước của từng tài nguyên */
+  .currencyChip {
+    padding: 4px 6px;
+    gap: 4px;
+  }
+  .currencyIcon {
+    width: 14px;
+    height: 14px;
+  }
+  .currencyAmt {
+    font-size: 11px; /* Nhỏ chữ số lại một chút để vừa 4 tài nguyên */
+  }
+
+  /* Chỉnh lại Dock bên dưới cho gọn */
+  .bottomDock { 
+    grid-template-columns: repeat(2, 1fr); 
+    gap: 8px;
+    padding: 0 10px;
+  }
+  .navBtn { 
+    flex-direction: column; 
+    gap: 5px; 
+    text-align: center; 
+    padding: 10px; 
+    font-size: 14px;
+  }
 }

@@ -51,7 +51,8 @@
     <string>Astro Cat cần quyền này để hiển thị quảng cáo phù hợp với sở thích của bạn, giúp chúng tôi có thêm kinh phí duy trì và phát triển game.</string>
 
     <key>GADApplicationIdentifier</key>
-    <string>ca-app-pub-3940256099942544~1458002511</string>
+    <string>ca-app-pub-8735238443425732~1834895842</string>
+	<!-- <string>ca-app-pub-3940256099942544~1458002511</string> -->
 	<key>CFBundleURLTypes</key>
     <array>
         <dict>

@@ -1,0 +1,113 @@
+/* src/components/ItemModal/ItemModal.module.css */
+.overlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100dvh;
+  background: rgba(3, 6, 14, 0.85); backdrop-filter: blur(8px);
+  display: flex; justify-content: center; align-items: center;
+  z-index: 9999; pointer-events: auto; padding: 20px;
+}
+
+.modal {
+  width: 100%; max-width: 900px; max-height: 90vh;
+  background: linear-gradient(135deg, rgba(10, 18, 36, 0.95), rgba(6, 12, 26, 0.95));
+  border: 1px solid var(--accent-dim, rgba(56,189,248,0.2));
+  border-radius: 16px; box-shadow: 0 0 40px rgba(0, 0, 0, 0.8), inset 0 0 20px rgba(56,189,248,0.05);
+  display: flex; flex-direction: column; overflow: hidden;
+  position: relative; font-family: 'VT323', monospace; color: #fff;
+  max-height: 95vh; 
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header & Nút Đóng */
+.header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.title { font-size: 24px; color: var(--accent, #38bdf8); margin: 0; text-transform: uppercase; letter-spacing: 2px; }
+.closeBtn { background: transparent; border: none; color: #aaa; font-size: 28px; cursor: pointer; transition: 0.2s; }
+.closeBtn:hover { color: #ff4757; transform: scale(1.1); }
+
+/* Bố cục nội dung */
+.content {
+  flex: 1;
+  overflow-y: auto; 
+  display: flex;
+  flex-direction: row;
+}
+.leftCol { flex: 1; min-width: 300px; padding: 20px; border-right: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.rightCol { flex: 1.5; min-width: 320px; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+
+/* Khu vực Avatar & Radar */
+.previewWrap { position: relative; width: 150px; height: 150px; display: flex; justify-content: center; align-items: center; margin-bottom: 30px; }
+.previewIcon { font-size: 80px; z-index: 2; }
+.radarContainer { width: 220px; height: 220px; margin-top: 20px; }
+
+/* Khu vực Chỉ số (Range Bars) */
+.statsBox { background: rgba(0,0,0,0.3); border-radius: 12px; padding: 15px; border: 1px solid rgba(255,255,255,0.05); }
+.statRow { margin-bottom: 12px; }
+.statHeader { display: flex; justify-content: space-between; font-family: 'Share Tech Mono', monospace; font-size: 14px; margin-bottom: 6px; color: #cbd5e1; }
+.statValue { color: #fff; font-weight: bold; }
+.statValue.up { color: #2ed573; margin-left: 8px; }
+
+/* Thiết kế thanh Range */
+.rangeTrack { width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; display: flex; }
+.rangeFill { height: 100%; background: var(--accent, #38bdf8); transition: width 0.3s ease; }
+.rangeBonus { height: 100%; background: #2ed573; transition: width 0.3s ease; box-shadow: 0 0 10px #2ed573; }
+
+/* Tabs Xưởng Rèn bên trong Modal */
+.forgeTabs { display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
+.fTab { flex: 1; background: transparent; border: 1px solid rgba(255,255,255,0.1); color: #888; padding: 10px; border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 16px; transition: 0.2s; }
+.fTab.active { background: rgba(56,189,248,0.1); border-color: var(--accent, #38bdf8); color: #fff; text-shadow: 0 0 10px var(--accent, #38bdf8); }
+
+/* Khu vực yêu cầu nguyên liệu */
+.requirements { display: flex; flex-direction: column; gap: 10px; background: rgba(0,0,0,0.4); padding: 15px; border-radius: 8px; }
+.reqItem { display: flex; align-items: center; gap: 10px; font-family: 'Share Tech Mono', monospace; font-size: 15px; }
+.reqIcon { display: flex; width: 20px; }
+.insufficient { color: #ff4757; }
+
+/* Nút Action linh hoạt */
+.actionZone { margin-top: auto; display: flex; gap: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.05); }
+.mainBtn { flex: 1; padding: 16px; border: none; border-radius: 8px; font-family: inherit; font-size: 18px; font-weight: bold; cursor: pointer; transition: 0.2s; color: #fff; text-transform: uppercase; }
+.mainBtn:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(100%); }
+
+.btnEquip { background: linear-gradient(90deg, #38bdf8, #3b82f6); box-shadow: 0 0 15px rgba(56,189,248,0.4); }
+.btnUnequip { background: transparent; border: 1px solid #ff4757; color: #ff4757; }
+.btnForge { background: transparent; border: 1px solid #facc15; color: #facc15; }
+.btnUpgrade { background: linear-gradient(90deg, #2ed573, #1e90ff); box-shadow: 0 0 15px rgba(46,213,115,0.4); }
+.btnStarUp { background: linear-gradient(90deg, #facc15, #ff6b81); box-shadow: 0 0 15px rgba(250,204,21,0.4); }
+.btnBuy { background: linear-gradient(90deg, #ff416c, #ff4b2b); box-shadow: 0 0 15px rgba(255,65,108,0.4); }
+
+@media (max-width: 768px) {
+  .content {
+    flex-direction: column; /* Chồng 2 cột lên nhau trên mobile */
+  }
+  
+  .leftCol {
+    padding: 10px;
+    border-right: none;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+
+  .previewWrap {
+    width: 100px;
+    height: 100px;
+  }
+
+  .radarContainer {
+    width: 160px;
+    height: 160px;
+  }
+}
+.statsGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Hiệu ứng thanh Range Bar đa sắc */
+.statRow:nth-child(1) .rangeFill { background: #ff4757; } /* ATK - Đỏ */
+.statRow:nth-child(2) .rangeFill { background: #38bdf8; } /* HP - Xanh dương */
+.statRow:nth-child(3) .rangeFill { background: #2ed573; } /* SPD - Lục */
+.statRow:nth-child(4) .rangeFill { background: #f1c40f; } /* CRT - Vàng */
+.statRow:nth-child(5) .rangeFill { background: #a29bfe; } /* RNG - Tím */
+
+.rangeFill {
+  box-shadow: 0 0 8px currentColor;
+}
