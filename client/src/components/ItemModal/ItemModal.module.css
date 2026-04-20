@@ -180,3 +180,64 @@
   background: rgba(250, 204, 21, 0.2);
   border-color: rgba(250, 204, 21, 0.5);
 }
+/* --- FO4 UPGRADE ANIMATION --- */
+.fo4Overlay {
+  position: absolute; inset: 0; background: rgba(0,0,0,0.85);
+  backdrop-filter: blur(10px); z-index: 999;
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column; color: #fff;
+}
+.fo4Content { display: flex; flex-direction: column; align-items: center; }
+.fo4Icon { width: 140px; height: 140px; margin-bottom: 30px; }
+.fo4Icon img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 0 20px #38bdf8); }
+
+.fo4Pulsing { animation: heartbeat 0.5s infinite alternate; }
+.fo4SuccessAnim { animation: itemWin 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; filter: drop-shadow(0 0 50px #facc15); }
+.fo4FailAnim { animation: itemLose 0.6s ease forwards; filter: grayscale(1) drop-shadow(0 0 15px #ff4757); }
+
+.fo4Text { font-family: 'Share Tech Mono', monospace; font-size: 20px; color: #38bdf8; letter-spacing: 2px; margin-bottom: 15px; animation: blink 1s infinite; }
+.fo4BarWrap { width: 350px; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; position: relative; border: 1px solid rgba(56,189,248,0.5); }
+.fo4BarFill { width: 0%; height: 100%; background: #38bdf8; animation: fillBar 3s cubic-bezier(0.2, 0, 0.8, 1) forwards; box-shadow: 0 0 10px #38bdf8; }
+
+.fo4ResultSuccess { font-size: 36px; font-weight: bold; color: #facc15; text-shadow: 0 0 30px #facc15; letter-spacing: 4px; animation: popIn 0.5s ease forwards; }
+.fo4ResultFail { font-size: 30px; font-weight: bold; color: #ff4757; text-shadow: 0 0 20px #ff4757; letter-spacing: 2px; animation: popIn 0.5s ease forwards; }
+
+@keyframes heartbeat { 0% { transform: scale(1); opacity: 0.8; } 100% { transform: scale(1.2); opacity: 1; filter: drop-shadow(0 0 40px #38bdf8); } }
+@keyframes fillBar { 0% { width: 0%; } 80% { width: 90%; } 100% { width: 100%; } }
+@keyframes itemWin { 0% { transform: scale(1); } 50% { transform: scale(1.6); filter: drop-shadow(0 0 80px #fff); } 100% { transform: scale(1.3); } }
+@keyframes itemLose { 0% { transform: scale(1); } 20% { transform: translateX(-15px) rotate(-10deg); } 40% { transform: translateX(15px) rotate(10deg); } 60% { transform: translateX(-15px) rotate(-10deg); } 100% { transform: scale(0.8) translateY(40px); opacity: 0.3; } }
+@keyframes popIn { 0% { transform: scale(0.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+/* Layout tiêu đề và Badges */
+.titleArea { display: flex; flex-direction: column; gap: 4px; }
+.itemBadges { display: flex; gap: 10px; align-items: center; }
+
+.lvlBadge {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: 'Share Tech Mono', monospace;
+  color: var(--accent);
+  border: 1px solid var(--accent-dim);
+}
+
+.rarityBadge {
+  color: #facc15;
+  letter-spacing: 2px;
+  text-shadow: 0 0 8px rgba(250, 204, 21, 0.5);
+}
+
+/* Hiệu ứng so sánh sao */
+.starPreviewHeader {
+  display: flex; justify-content: center; align-items: center;
+  gap: 20px; padding: 10px; background: rgba(250, 204, 21, 0.05);
+  border-radius: 8px; border: 1px dashed rgba(250, 204, 21, 0.3);
+  margin-bottom: 10px;
+}
+.oldStars { color: #888; font-size: 20px; }
+.newStars { color: #facc15; font-size: 24px; font-weight: bold; }
+.starArrow { color: var(--accent); animation: moveArrow 1s infinite; }
+
+@keyframes moveArrow {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(5px); }
+}

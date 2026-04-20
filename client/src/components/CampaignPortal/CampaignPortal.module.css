@@ -106,10 +106,12 @@
   text-shadow: 0 0 8px var(--accent-cyan); 
 }
 
-/* Thanh Tài Nguyên */
+/* Thanh Tài Nguyên (Đồng bộ 100% với Inventory & HQ) */
 .currencyBar { 
   display: flex; 
-  gap: clamp(8px, 1vw, 15px); 
+  gap: 10px; 
+  flex-wrap: wrap; 
+  justify-content: flex-end; 
 }
 
 .currencyChip {
@@ -118,8 +120,9 @@
   gap: 8px; 
   background: var(--bg-element); 
   border: 1px solid var(--border-dim); 
-  padding: 6px clamp(10px, 1.5vw, 16px); 
-  clip-path: var(--cyber-cut-sm);
+  padding: 6px 14px; 
+  border-radius: 6px; /* Thay clip-path cắt góc bằng viền bo tròn */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
   backdrop-filter: blur(4px);
 }
 
@@ -127,23 +130,28 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: clamp(16px, 1.5vw, 20px);
-  height: clamp(16px, 1.5vw, 20px);
+  width: 16px;
+  height: 16px;
 }
 
 .currencyIcon svg { width: 100%; height: 100%; }
 
-.chipEnergy { color: var(--accent-gold); border-bottom: 2px solid var(--accent-gold); }
-.chipCoin { color: var(--accent-orange); border-bottom: 2px solid var(--accent-orange); }
-.chipGem { color: var(--accent-cyan); border-bottom: 2px solid var(--accent-cyan); }
-.chipBlueprint { color: var(--accent-green); border-bottom: 2px solid var(--accent-green); } /* Class mới cho Bản vẽ */
+/* Đổ màu và hiệu ứng Glow chuẩn của toàn hệ thống */
+.chipEnergy    { color: #0abde3; border-bottom: 2px solid #0abde3; text-shadow: 0 0 8px rgba(10, 189, 227, 0.5); }
+.chipCoin      { color: #fb923c; border-bottom: 2px solid #fb923c; text-shadow: 0 0 8px rgba(251, 146, 60, 0.5); }
+.chipGem       { color: #38bdf8; border-bottom: 2px solid #38bdf8; text-shadow: 0 0 8px rgba(56, 189, 248, 0.5); }
+.chipBlueprint { color: #00ff88; border-bottom: 2px solid #00ff88; text-shadow: 0 0 8px rgba(0, 255, 136, 0.5); }
+.chipGear { 
+  color: #c084fc; 
+  border-bottom: 2px solid #c084fc; 
+  text-shadow: 0 0 8px rgba(192, 132, 252, 0.5); 
+}
 
 .currencyAmt { 
   font-family: var(--font-data); 
-  font-size: clamp(14px, 1.5vw, 18px); 
+  font-size: 18px; 
   color: var(--text-main); 
 }
-
 /* KHU VỰC LÕI TRUNG TÂM */
 .centerDisplay {
   flex: 1; 
@@ -309,26 +317,26 @@
   .backText {
     display: none; /* Ẩn chữ "Hệ Điều Hành" trên mobile */
   }
-
   /* Ép thanh tài nguyên lên 1 dòng, thu hẹp khoảng cách */
   .currencyBar { 
     width: auto; 
-    justify-content: flex-end; 
-    flex-wrap: nowrap; 
-    gap: 4px; 
+    justify-content: flex-end;
+    gap: 6px; 
   } 
 
-  /* Ép nhỏ kích thước của từng tài nguyên */
+  /* Cân đối lại kích thước khung và chữ trên Mobile */
   .currencyChip {
-    padding: 4px 6px;
-    gap: 4px;
+    padding: 5px 10px;
+    gap: 6px;
   }
+  
   .currencyIcon {
     width: 14px;
     height: 14px;
   }
+  
   .currencyAmt {
-    font-size: 11px; /* Nhỏ chữ số lại một chút để vừa 4 tài nguyên */
+    font-size: 15px; /* Chữ lớn hơn bản cũ một chút để dễ đọc */
   }
 
   /* Chỉnh lại Dock bên dưới cho gọn */

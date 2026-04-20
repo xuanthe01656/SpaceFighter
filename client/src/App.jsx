@@ -127,6 +127,7 @@ export default function Game() {
     gameSpeed: 3,
     coins: 0,
     lives: 10,
+    diamonds: 0,
     inventory: {
       skins: ['classic'], 
       bgs: ['deep']       

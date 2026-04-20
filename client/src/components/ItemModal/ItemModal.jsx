@@ -40,23 +40,29 @@ const RadarChart = ({ stats }) => {
 
 export default function ItemModal({ 
   isOpen, onClose, item, baseInfo, contextType, 
-  resources, // { coins, diamonds, blueprints, duplicateItems, crates }
-  actions,   
-  isEquipped, lang 
+  resources, actions, isEquipped, lang, starUpInfo 
 }) {
   const [forgeTab, setForgeTab] = useState('upgrade'); 
-  const [selectedSacrificeId, setSelectedSacrificeId] = useState(null); // State lưu phôi được chọn
+  const [selectedSacrifices, setSelectedSacrifices] = useState([]); // ĐÃ SỬA THÀNH MẢNG ĐỂ CHỌN NHIỀU PHÔI
+  const [upgradingState, setUpgradingState] = useState(0); 
 
-  // Tự động chọn phôi "cùi" nhất (đứng đầu danh sách) khi mở tab Đột Phá
+  // Reset tab và phôi khi mở Modal
   useEffect(() => { 
-    if (isOpen) setForgeTab('upgrade'); 
+    if (isOpen) {
+      setForgeTab('upgrade');
+      setSelectedSacrifices([]);
+    }
   }, [isOpen]);
 
+  // Tự động chọn sẵn phôi rác
   useEffect(() => {
-    if (forgeTab === 'starUp' && resources.duplicateItems?.length > 0) {
-      setSelectedSacrificeId(resources.duplicateItems[0].uuid);
+    if (forgeTab === 'starUp' && resources.duplicateItems?.length > 0 && starUpInfo?.reqDupes > 0) {
+      const autoSelect = resources.duplicateItems.slice(0, starUpInfo.reqDupes).map(i => i.uuid);
+      setSelectedSacrifices(autoSelect);
+    } else {
+      setSelectedSacrifices([]);
     }
-  }, [forgeTab, resources.duplicateItems]);
+  }, [forgeTab, resources.duplicateItems, starUpInfo]);
 
   if (!isOpen || !item) return null;
 
@@ -74,19 +80,88 @@ export default function ItemModal({
   const currentAtk = baseAtk + (item.level * 3);
   const currentHp  = baseHp + (item.level * 15);
 
+  // Khai báo đủ các biến chỉ số Nâng Cấp
+  const upAtkPlus = 5;
+  const upHpPlus = 25;
+  const upSpdPlus = 0; 
+  const upCrtPlus = 0;
+  const upRngPlus = 0;
+
+  // Khai báo đủ các biến chỉ số Đột Phá
+  const starAtkPlus = Math.round(currentAtk * 0.15);
+  const starHpPlus = Math.round(currentHp * 0.15);
+  const starSpdPlus = Math.round(curSpd * 0.15);
+  const starCrtPlus = Math.round(curCrt * 0.15);
+  const starRngPlus = Math.round(curRng * 0.15);
+
+  // Xác định số hiển thị "Next" dựa vào Tab đang mở
+  const isUpTab = contextType === 'forge' && forgeTab === 'upgrade';
+  const isStarTab = contextType === 'forge' && forgeTab === 'starUp';
+
+  const nextAtk = isUpTab ? currentAtk + upAtkPlus : (isStarTab ? currentAtk + starAtkPlus : null);
+  const nextHp = isStarTab ? currentHp + starHpPlus : (isUpTab ? currentHp + upHpPlus : null);
+  const nextSpd = isStarTab ? curSpd + starSpdPlus : (isUpTab ? curSpd + upSpdPlus : null);
+  const nextCrt = isStarTab ? curCrt + starCrtPlus : (isUpTab ? curCrt + upCrtPlus : null);
+  const nextRng = isStarTab ? curRng + starRngPlus : (isUpTab ? curRng + upRngPlus : null);
+  
   const radarStats = isCrate ? [50, 50, 50, 50, 50] : [
     Math.min(100, (currentAtk / 500) * 100), 
     Math.min(100, (currentHp / 2000) * 100), 
-    curSpd, curCrt * 2, curRng
+    nextSpd || curSpd, nextCrt || curCrt * 2, nextRng || curRng
   ];
 
+  // TÍNH TOÁN CHI PHÍ
   const upCoinCost = !isCrate ? item.level * 150 : 0;
+  const upGemCost = !isCrate ? Math.ceil(upCoinCost / 100) : 0;
   const upBpCost = !isCrate ? Math.ceil(item.level * 1.5) : 0;
-  const starGemCost = !isCrate ? (item.rarity || 1) * 100 : 0;
-  
-  const canUpgrade = resources.coins >= upCoinCost && resources.blueprints >= upBpCost;
-  // Cho phép đập sao khi đủ kim cương VÀ người chơi đã chọn 1 phôi
-  const canStarUp = resources.diamonds >= starGemCost && !!selectedSacrificeId;
+
+  // LOGIC OR (HOẶC XU HOẶC KIM CƯƠNG) CHO NÂNG CẤP
+  const hasEnoughCoinForUp = resources.coins >= upCoinCost;
+  const hasEnoughGemForUp = resources.diamonds >= upGemCost;
+  const hasEnoughCurrencyForUp = hasEnoughCoinForUp || hasEnoughGemForUp; 
+  const canUpgrade = hasEnoughCurrencyForUp && resources.blueprints >= upBpCost;
+
+  // LOGIC OR (HOẶC XU HOẶC KIM CƯƠNG) CHO ĐỘT PHÁ
+  const hasEnoughCoinForStar = resources.coins >= (starUpInfo?.coinCost || 0);
+  const hasEnoughGemForStar = resources.diamonds >= (starUpInfo?.gemCost || 0);
+  const hasEnoughCurrencyForStar = hasEnoughCoinForStar || hasEnoughGemForStar; 
+  const canStarUp = hasEnoughCurrencyForStar && selectedSacrifices.length === (starUpInfo?.reqDupes || 1);
+
+  // HÀM CHỌN PHÔI (Cho phép chọn nhiều)
+  const toggleSacrifice = (uuid) => {
+    setSelectedSacrifices(prev => {
+      if (prev.includes(uuid)) return prev.filter(id => id !== uuid);
+      if (prev.length < (starUpInfo?.reqDupes || 1)) return [...prev, uuid];
+      return prev;
+    });
+  };
+
+  // HÀM CHẠY ĐỘT PHÁ (FO4 Style)
+  const executeStarUp = () => {
+    let hasWarning = false;
+    for (const id of selectedSacrifices) {
+      const sac = resources.duplicateItems.find(i => i.uuid === id);
+      if (sac && ((sac.rarity || 1) >= (item.rarity || 1) || (sac.level || 1) > 1)) {
+        hasWarning = true; break;
+      }
+    }
+
+    if (hasWarning) {
+      const msg = lang === 'vi' ? `⚠️ CẢNH BÁO: Trong danh sách có phôi cấp cao hoặc độ hiếm cao. Chắc chắn hủy?` : `⚠️ WARNING: High tier items selected. Consume?`;
+      if (!window.confirm(msg)) return;
+    }
+
+    setUpgradingState(1);
+    setTimeout(() => {
+      const success = actions.onStarUp(selectedSacrifices); // Truyền MẢNG vào hàm xử lý
+      setUpgradingState(success ? 2 : 3);
+      setTimeout(() => {
+        setUpgradingState(0);
+        if (success) onClose();
+        else setSelectedSacrifices([]);
+      }, 2500);
+    }, 3000); 
+  };
 
   const renderRangeBar = (label, currentVal, nextVal, maxVal) => {
     const curPct = Math.min(100, (currentVal / maxVal) * 100);
@@ -115,13 +190,38 @@ export default function ItemModal({
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={styles.overlay}>
         <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }} className={styles.modal}>
           
+          {upgradingState > 0 && (
+            <div className={styles.fo4Overlay}>
+              <div className={styles.fo4Content}>
+                <div className={`${styles.fo4Icon} ${upgradingState === 1 ? styles.fo4Pulsing : ''} ${upgradingState === 2 ? styles.fo4SuccessAnim : ''} ${upgradingState === 3 ? styles.fo4FailAnim : ''}`}>
+                  <img src={baseInfo?.imgSrc} alt="upgrade" />
+                </div>
+                {upgradingState === 1 && (
+                  <>
+                    <div className={styles.fo4Text}>{lang === 'vi' ? 'ĐANG DUNG HỢP VẬT CHẤT...' : 'FUSING MATTER...'}</div>
+                    <div className={styles.fo4BarWrap}><div className={styles.fo4BarFill} /></div>
+                  </>
+                )}
+                {upgradingState === 2 && <div className={styles.fo4ResultSuccess}>{lang === 'vi' ? 'ĐỘT PHÁ THÀNH CÔNG!' : 'UPGRADE SUCCESS!'}</div>}
+                {upgradingState === 3 && <div className={styles.fo4ResultFail}>{lang === 'vi' ? 'THẤT BẠI - PHÔI BỊ PHÁ HỦY' : 'FAILED - SACRIFICE LOST'}</div>}
+              </div>
+            </div>
+          )}
+
           <div className={styles.header}>
-            <h2 className={styles.title}>{itemName}</h2>
+            <div className={styles.titleArea}>
+              <h2 className={styles.title}>{itemName}</h2>
+              {!isCrate && (
+                <div className={styles.itemBadges}>
+                  <span className={styles.lvlBadge}>LV.{item.level}</span>
+                  <span className={styles.rarityBadge}>{'★'.repeat(item.rarity || 1)}</span>
+                </div>
+              )}
+            </div>
             <button className={styles.closeBtn} onClick={onClose}>✕</button>
           </div>
 
           <div className={styles.content}>
-            {/* CỘT TRÁI */}
             <div className={styles.leftCol}>
               <div className={styles.previewWrap}>
                 <span className={styles.previewIcon}>{isCrate ? item.icon : (baseInfo?.imgSrc ? <img src={baseInfo.imgSrc} width="100%" /> : '🚀')}</span>
@@ -129,7 +229,6 @@ export default function ItemModal({
               <div className={styles.radarContainer}><RadarChart stats={radarStats} /></div>
             </div>
 
-            {/* CỘT PHẢI */}
             <div className={styles.rightCol}>
               
               {contextType === 'forge' && !isCrate && (
@@ -139,63 +238,97 @@ export default function ItemModal({
                 </div>
               )}
 
-              <div className={styles.statsBox}>
-                {isCrate ? (
-                    <p style={{ color: '#aaa', margin: 0 }}>{item.desc[lang]}</p>
-                ) : (
-                    <div className={styles.statsGrid}>
-                    {renderRangeBar(lang === 'vi' ? 'HỎA LỰC' : 'ATTACK', currentAtk, contextType === 'forge' && forgeTab === 'upgrade' ? currentAtk + 5 : null, 800)}
-                    {renderRangeBar(lang === 'vi' ? 'GIÁP TRỤ' : 'SHIELD', currentHp, contextType === 'forge' && forgeTab === 'upgrade' ? currentHp + 25 : null, 3000)}
-                    {renderRangeBar(lang === 'vi' ? 'TỐC ĐỘ' : 'SPEED', curSpd, null, 100)}
-                    {renderRangeBar(lang === 'vi' ? 'CHÍ MẠNG' : 'CRIT %', curCrt, null, 50)}
-                    {renderRangeBar(lang === 'vi' ? 'TẦM BẮN' : 'RANGE', curRng, null, 100)}
-                    </div>
-                )}
-              </div>
-
-              {contextType === 'forge' && forgeTab === 'upgrade' && (
-                <div className={styles.requirements}>
-                  <div className={`${styles.reqItem} ${resources.coins < upCoinCost ? styles.insufficient : ''}`}><span className={styles.reqIcon} style={{color:'#fb923c'}}><Icons.Coin/></span> Xu: {resources.coins.toLocaleString()} / {upCoinCost}</div>
-                  <div className={`${styles.reqItem} ${resources.blueprints < upBpCost ? styles.insufficient : ''}`}><span className={styles.reqIcon} style={{color:'#00ff88'}}><Icons.Blueprint/></span> Bản vẽ: {resources.blueprints.toLocaleString()} / {upBpCost}</div>
+              {isStarTab && (
+                <div className={styles.starPreviewHeader}>
+                   <span className={styles.oldStars}>{(item.rarity || 1)}★</span>
+                   <span className={styles.starArrow}>➞</span>
+                   <span className={styles.newStars}>{(item.rarity || 1) + 1}★</span>
                 </div>
               )}
 
-              {/* GIAO DIỆN CHỌN PHÔI ĐỘT PHÁ */}
+              <div className={styles.statsBox}>
+                <div className={styles.statsGrid}>
+                  {renderRangeBar(lang === 'vi' ? 'HỎA LỰC' : 'ATTACK', currentAtk, nextAtk, 1000)}
+                  {renderRangeBar(lang === 'vi' ? 'GIÁP TRỤ' : 'SHIELD', currentHp, nextHp, 3000)}
+                  {renderRangeBar(lang === 'vi' ? 'TỐC ĐỘ' : 'SPEED', curSpd, null, 100)}
+                  {renderRangeBar(lang === 'vi' ? 'CHÍ MẠNG' : 'CRIT %', curCrt, null, 50)}
+                  {renderRangeBar(lang === 'vi' ? 'TẦM BẮN' : 'RANGE', curRng, null, 100)}
+                </div>
+              </div>
+
+              {/* YÊU CẦU NÂNG CẤP */}
+              {contextType === 'forge' && forgeTab === 'upgrade' && (
+                <div className={styles.requirements}>
+                  <div className={`${styles.reqItem} ${!hasEnoughCurrencyForUp ? styles.insufficient : ''}`}>
+                    <span>{lang === 'vi' ? 'Chi phí:' : 'Cost:'}</span>
+                    <div style={{ display: 'flex', gap: '12px', marginTop: '5px', alignItems: 'center' }}>
+                      {/* Đã sửa hiển thị Dạng Hiện tại / Yêu cầu (VD: 5000 / 150) */}
+                      <span style={{ color: hasEnoughCoinForUp ? '#fb923c' : '#ff4757' }}>
+                        <span className={styles.reqIcon}><Icons.Coin/></span> {resources.coins.toLocaleString()} / {upCoinCost.toLocaleString()} 
+                      </span>
+                      <span style={{ color: '#888', fontSize: '11px' }}> HOẶC </span>
+                      <span style={{ color: (!hasEnoughCoinForUp && hasEnoughGemForUp) ? '#38bdf8' : '#888' }}>
+                        <span className={styles.reqIcon}><Icons.Gem/></span> {resources.diamonds.toLocaleString()} / {upGemCost.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className={`${styles.reqItem} ${resources.blueprints < upBpCost ? styles.insufficient : ''}`}>
+                    <span className={styles.reqIcon} style={{color:'#00ff88'}}><Icons.Blueprint/></span> Bản vẽ: {resources.blueprints.toLocaleString()} / {upBpCost.toLocaleString()}
+                  </div>
+                </div>
+              )}
+
+              {/* YÊU CẦU ĐỘT PHÁ */}
               {contextType === 'forge' && forgeTab === 'starUp' && (
                 <div className={styles.requirements}>
-                  <div className={`${styles.reqItem} ${resources.diamonds < starGemCost ? styles.insufficient : ''}`}>
-                    <span className={styles.reqIcon} style={{color:'#38bdf8'}}><Icons.Gem/></span> 
-                    Kim Cương: {resources.diamonds.toLocaleString()} / {starGemCost}
+                  <div className={styles.reqItem}>
+                    <span className={styles.reqIcon} style={{color:'#2ed573'}}>⚝</span> 
+                    {lang === 'vi' ? 'Tỷ lệ thành công:' : 'Success Rate:'} 
+                    <span className={styles.rateText} style={{marginLeft: '8px', color: starUpInfo?.rate === 100 ? '#2ed573' : (starUpInfo?.rate >= 50 ? '#facc15' : '#ff4757')}}>
+                      {starUpInfo?.rate}%
+                    </span>
+                  </div>
+                  
+                  <div className={`${styles.reqItem} ${!hasEnoughCurrencyForStar ? styles.insufficient : ''}`}>
+                    <span>{lang === 'vi' ? 'Chi phí:' : 'Cost:'}</span>
+                    <div style={{ display: 'flex', gap: '12px', marginTop: '5px', alignItems: 'center' }}>
+                      {/* Đã sửa hiển thị Dạng Hiện tại / Yêu cầu */}
+                      <span style={{ color: hasEnoughCoinForStar ? '#fb923c' : '#ff4757' }}>
+                        <span className={styles.reqIcon}><Icons.Coin/></span> {resources.coins.toLocaleString()} / {(starUpInfo?.coinCost || 0).toLocaleString()} 
+                      </span>
+                      <span style={{ color: '#888', fontSize: '11px' }}> HOẶC </span>
+                      <span style={{ color: (!hasEnoughCoinForStar && hasEnoughGemForStar) ? '#38bdf8' : '#888' }}>
+                        <span className={styles.reqIcon}><Icons.Gem/></span> {resources.diamonds.toLocaleString()} / {(starUpInfo?.gemCost || 0).toLocaleString()}
+                      </span>
+                    </div>
                   </div>
                   
                   <div className={styles.reqItem} style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
                     <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '5px' }}>
                       <span className={styles.reqIcon} style={{color:'#facc15'}}><Icons.Sacrifice/></span> 
-                      {lang === 'vi' ? 'Chọn 1 vật phẩm cùng loại để hiến tế:' : 'Select 1 duplicate to sacrifice:'}
+                      {lang === 'vi' ? `Chọn phôi (${selectedSacrifices.length}/${starUpInfo?.reqDupes}):` : `Sacrifices (${selectedSacrifices.length}/${starUpInfo?.reqDupes}):`}
                     </div>
                     
                     {resources.duplicateItems?.length > 0 ? (
                       <div className={styles.sacGrid}>
-                      {resources.duplicateItems.map(dup => (
-                        <div 
-                          key={dup.uuid} 
-                          className={`${styles.sacCard} ${selectedSacrificeId === dup.uuid ? styles.sacActive : ''}`}
-                          onClick={() => setSelectedSacrificeId(dup.uuid)}
-                        >
-                          {/* THÊM KHUNG HÌNH ẢNH VÀO ĐÂY */}
-                          <div className={styles.sacImageWrap}>
-                            {baseInfo?.imgSrc ? (
-                              <img src={baseInfo.imgSrc} alt="sacrifice" className={styles.sacImage} />
-                            ) : (
-                              <span>🚀</span>
-                            )}
-                          </div>
-                          
-                          <span className={styles.sacLv}>LV {dup.level}</span>
-                          <span className={styles.sacRarity}>{'★'.repeat(dup.rarity || 1)}</span>
-                        </div>
-                      ))}
-                    </div>
+                        {resources.duplicateItems.map(dup => {
+                          const isSelected = selectedSacrifices.includes(dup.uuid);
+                          return (
+                            <div 
+                              key={dup.uuid} 
+                              className={`${styles.sacCard} ${isSelected ? styles.sacActive : ''}`}
+                              onClick={() => toggleSacrifice(dup.uuid)}
+                            >
+                              <div className={styles.sacImageWrap}>
+                                {baseInfo?.imgSrc ? <img src={baseInfo.imgSrc} alt="sacrifice" className={styles.sacImage} /> : <span>🚀</span>}
+                              </div>
+                              <span className={styles.sacLv}>LV {dup.level}</span>
+                              <span className={styles.sacRarity}>{'★'.repeat(dup.rarity || 1)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
                     ) : (
                       <span className={styles.insufficient} style={{ fontSize: '13px', marginLeft: '30px' }}>
                         {lang === 'vi' ? '(Không tìm thấy vật phẩm cùng loại trong kho)' : '(No duplicate items found)'}
@@ -205,7 +338,6 @@ export default function ItemModal({
                 </div>
               )}
 
-              {/* CÁC NÚT BẤM (Gửi ID phôi lên khi bấm Đột phá) */}
               <div className={styles.actionZone}>
                 {contextType === 'bag' && (
                   <>
@@ -223,10 +355,13 @@ export default function ItemModal({
                     {forgeTab === 'upgrade' ? (
                        <button className={`${styles.mainBtn} ${styles.btnUpgrade}`} disabled={!canUpgrade} onClick={actions.onUpgrade}>⬆ {lang === 'vi' ? 'TIẾN HÀNH RÈN' : 'UPGRADE'}</button>
                     ) : (
-                       <button className={`${styles.mainBtn} ${styles.btnStarUp}`} disabled={!canStarUp || item.rarity >= 5} onClick={() => actions.onStarUp(selectedSacrificeId)}>
+                       <button className={`${styles.mainBtn} ${styles.btnStarUp}`} disabled={!canStarUp || item.rarity >= 5} onClick={executeStarUp}>
                          ★ {item.rarity >= 5 ? 'MAX SAO' : 'ĐỘT PHÁ'}
                        </button>
                     )}
+                    <button style={{flex: 1}} className={`${styles.mainBtn} ${styles.btnBuy}`} onClick={() => { if(actions.onGoToShop) actions.onGoToShop(); onClose(); }}>
+                        🛒 {lang === 'vi' ? 'MUA VẬT PHẨM' : 'BUY ITEMS'}
+                    </button>
                   </>
                 )}
 

@@ -29,6 +29,7 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
   const [forgeTab,    setForgeTab]    = useState('upgrade');
   const [selectedId,  setSelectedId]  = useState(null);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [gachaResults, setGachaResults] = useState(null);
 
   const campaignData = gsRef.current.campaignData;
   if (!campaignData) return null;
@@ -98,7 +99,17 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
   const upgradeBpCost   = (!isCrate && selectedItem) ? Math.ceil(selectedItem.level * 1.5) : 0;
   const canUpgrade = currentCoins >= upgradeCoinCost && currentBlueprints >= upgradeBpCost;
 
-  const starUpGemCost = (!isCrate && selectedItem) ? selectedItem.rarity * 100 : 0;
+  //const starUpGemCost = (!isCrate && selectedItem) ? selectedItem.rarity * 100 : 0;
+  const getStarUpInfo = (rarity) => {
+    switch(rarity) {
+      case 1: return { coinCost: 1000,  gemCost: 10,  reqDupes: 1, rate: 100 };
+      case 2: return { coinCost: 3000,  gemCost: 30,  reqDupes: 2, rate: 70 };
+      case 3: return { coinCost: 8000,  gemCost: 80,  reqDupes: 3, rate: 50 };
+      case 4: return { coinCost: 20000, gemCost: 200, reqDupes: 4, rate: 30 };
+      default: return { coinCost: 0, gemCost: 0, reqDupes: 0, rate: 0 };
+    }
+  };
+  const starUpInfo = getStarUpInfo(selectedItem?.rarity || 1);
   // --- TÌM PHÔI ĐỘT PHÁ (Không phân biệt Level/Độ hiếm) ---
   const duplicateItems = (!isCrate && selectedItem) ? inventoryList.filter(item => {
     return (
@@ -114,38 +125,47 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
     return (a.level || 1) - (b.level || 1);            // Level thấp xếp trước
   }) : [];
   const reqDuplicateAmount = 1;
-  const canStarUp = currentDiamonds >= starUpGemCost && duplicateItems.length >= reqDuplicateAmount;
+  //const canStarUp = currentDiamonds >= starUpGemCost && duplicateItems.length >= reqDuplicateAmount;
 
   // --- HÀM MỞ GACHA (RNG Tỷ lệ rớt đồ thực tế) ---
   const handleOpenCrate = (crate, amount) => {
     const currentCount = materials.crates[crate.id] || 0;
     if (currentCount < amount) return toast.error(lang === 'vi' ? 'Không đủ hòm trong kho!' : 'Not enough crates!');
+    
+    // 1. Trừ hòm (CHỈ TRỪ 1 LẦN)
+    gsRef.current.campaignData.materials.crates[crate.id] -= amount;
+    
+    const pullResults = []; // Mảng chứa kết quả để truyền cho Popup
 
-    // Trừ hòm
-    campaignData.materials.crates[crate.id] -= amount;
-
-    // Chạy Random
+    // 2. Chạy Vòng lặp Mở Hòm
     for (let i = 0; i < amount; i++) {
        let roll = Math.random() * 100;
        let cumulative = 0;
        let rolledRarity = 1;
 
-       // Lọc Rarity dựa trên Roll và Rate
+       // A. Tính toán Rarity (Sao) dựa trên tỷ lệ
        for (let r of [5, 4, 3, 2, 1]) {
            if (crate.dropRates[r] > 0) {
                cumulative += crate.dropRates[r];
                if (roll <= cumulative) {
-                   rolledRarity = r;
+                   rolledRarity = parseInt(r); // Đảm bảo r là số nguyên
                    break;
                }
            }
        }
 
+       let pulledItem = null; // Biến tạm chứa vật phẩm vừa quay được
+
+       // B. Tạo vật phẩm thực tế (Phi công hoặc Trang bị)
        if (crate.id === 'pilot_gacha') {
            const validPilots = PILOTS.filter(p => p.rarity === rolledRarity);
            if (validPilots.length > 0) {
                const p = validPilots[Math.floor(Math.random() * validPilots.length)];
-               campaignData.ownedPilots[p.id] = campaignData.ownedPilots[p.id] || { level: 1, stars: 1 };
+               // Lưu vào DB
+               gsRef.current.campaignData.ownedPilots[p.id] = gsRef.current.campaignData.ownedPilots[p.id] || { level: 1, stars: 1 };
+               
+               // Tạo object giả để hiện lên Popup
+               pulledItem = { baseId: p.id, rarity: rolledRarity, type: 'pilot', isNew: true };
            }
        } else {
            // Bốc random 1 món đồ theo Rarity đã quay trúng
@@ -154,14 +174,26 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
            const list = GEAR_CATALOG[rType];
            const g = list[Math.floor(Math.random() * list.length)];
 
-           const uuid = 'item_' + Date.now() + Math.floor(Math.random() * 1000) + i;
-           campaignData.items[uuid] = { baseId: g.id, rarity: rolledRarity, level: 1, type: rType };
+           const uuid = 'item_' + Date.now() + '_' + Math.floor(Math.random() * 10000) + '_' + i;
+           
+           pulledItem = { uuid: uuid, baseId: g.id, rarity: rolledRarity, level: 1, type: rType };
+           
+           // Lưu trang bị vào DB
+           gsRef.current.campaignData.items[uuid] = pulledItem;
+       }
+
+       // C. Nạp vật phẩm vừa tạo vào mảng kết quả Popup
+       if (pulledItem) {
+           pullResults.push(pulledItem);
        }
     }
 
+    // 3. Lưu và Hiển thị
     saveUserProfile();
     setRefreshTick(p => p + 1);
-    toast.success(lang === 'vi' ? `Đã mở ${amount} hòm! Đồ mới đã vào Túi.` : `Opened ${amount} crates! Check your loadout.`);
+    setSelectedId(null); // Đóng popup chi tiết hòm
+    setGachaResults(pullResults); // Kích hoạt Popup Gacha xịn xò
+    // (Bỏ Toast success đi vì Popup hiện lên đã đủ báo hiệu thành công rồi)
   };
 
   const renderIcon = (item, size) => {
@@ -201,51 +233,73 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
   };
 
   const handleUpgrade = () => {
-    if (!selectedItem || selectedItem.type === 'pilot') return;
-    gsRef.current.coins -= upgradeCoinCost;
-    gsRef.current.campaignData.materials.blueprints -= upgradeBpCost;
+    if (!selectedItem || selectedItem.type === 'pilot' || isCrate) return;
+    
+    const upCoinCost = selectedItem.level * 150;
+    const upGemCost = Math.ceil(upCoinCost / 100); // 100 Xu = 1 Kim Cương
+    const upBpCost = Math.ceil(selectedItem.level * 1.5);
+
+    const hasCoin = currentCoins >= upCoinCost;
+    const hasGem = currentDiamonds >= upGemCost;
+    const hasBp = currentBlueprints >= upBpCost;
+
+    // Phải có Bản vẽ VÀ (có Xu hoặc có Kim Cương)
+    if ((!hasCoin && !hasGem) || !hasBp) return;
+
+    // LOGIC THANH TOÁN: Ưu tiên Xu, hết Xu mới trừ Kim Cương
+    if (hasCoin) {
+      gsRef.current.coins -= upCoinCost;
+    } else {
+      gsRef.current.diamonds -= upGemCost;
+    }
+    
+    gsRef.current.campaignData.materials.blueprints -= upBpCost;
     gsRef.current.campaignData.items[selectedItem.uuid].level += 1;
-    saveUserProfile(); setRefreshTick(p => p + 1);
+    
+    saveUserProfile();
+    setRefreshTick(p => p + 1);
     toast.success(lang === 'vi' ? 'Nâng cấp thành công!' : 'Upgrade Success!');
   };
 
-  const handleStarUp = (sacrificeId) => {
-    // Thêm điều kiện: Phải có sacrificeId truyền lên từ Modal mới chạy
-    if (!selectedItem || selectedItem.type === 'pilot' || !sacrificeId) return;
+  const handleStarUp = (sacrificeIds) => {
+    if (!selectedItem || selectedItem.type === 'pilot' || !sacrificeIds || sacrificeIds.length !== starUpInfo.reqDupes) return false;
     
-    // Tìm đúng cái phôi mà người chơi vừa click chọn trên màn hình
-    const sacrificeItem = duplicateItems.find(i => i.uuid === sacrificeId); 
-    if (!sacrificeItem) return;
+    const hasCoin = currentCoins >= starUpInfo.coinCost;
+    const hasGem = currentDiamonds >= starUpInfo.gemCost;
 
-    // --- LOGIC CẢNH BÁO (POPUP) ---
-    const isHigherRarity = (sacrificeItem.rarity || 1) >= (selectedItem.rarity || 1);
-    const isUpgraded = (sacrificeItem.level || 1) > 1;
+    if (!hasCoin && !hasGem) return false;
 
-    // Cảnh báo nếu phôi cấp cao hoặc sao cao
-    if (isHigherRarity || isUpgraded) {
-      const confirmMsg = lang === 'vi'
-        ? `⚠️ CẢNH BÁO: Phôi này đang ở Cấp độ ${sacrificeItem.level} và có ${sacrificeItem.rarity}★. Bạn có CHẮC CHẮN muốn hiến tế nó để đột phá không?`
-        : `⚠️ WARNING: This sacrifice is Level ${sacrificeItem.level} and ${sacrificeItem.rarity}★. Are you SURE you want to consume it?`;
+    // LOGIC THANH TOÁN: Ưu tiên Xu, hết Xu mới trừ Kim Cương
+    if (hasCoin) {
+      gsRef.current.coins -= starUpInfo.coinCost;
+    } else {
+      gsRef.current.diamonds -= starUpInfo.gemCost;
+    }
 
-      if (!window.confirm(confirmMsg)) {
-        return; 
+    // Tiến hành xóa các phôi
+    sacrificeIds.forEach(sacId => {
+      const sacrificeItem = duplicateItems.find(i => i.uuid === sacId);
+      if (sacrificeItem) {
+        delete gsRef.current.campaignData.items[sacrificeItem.uuid];
+        if (gsRef.current.campaignData.loadout[sacrificeItem.type] === sacrificeItem.uuid) {
+            gsRef.current.campaignData.loadout[sacrificeItem.type] = '';
+        }
       }
+    });
+    
+    const roll = Math.random() * 100;
+    const isSuccess = roll <= starUpInfo.rate;
+
+    if (isSuccess) {
+      gsRef.current.campaignData.items[selectedItem.uuid].rarity += 1;
+      toast.success(lang === 'vi' ? 'Đột phá thành công!' : 'Star Up Success!');
+    } else {
+      toast.error(lang === 'vi' ? 'Đột phá thất bại! Phôi đã mất.' : 'Failed! Sacrifices lost.');
     }
-    // --- TIẾN HÀNH ĐỘT PHÁ ---
-    gsRef.current.diamonds -= starUpGemCost;
-    
-    delete gsRef.current.campaignData.items[sacrificeItem.uuid];
-    
-    if (gsRef.current.campaignData.loadout[sacrificeItem.type] === sacrificeItem.uuid) {
-        gsRef.current.campaignData.loadout[sacrificeItem.type] = '';
-    }
-    
-    gsRef.current.campaignData.items[selectedItem.uuid].rarity += 1;
     
     saveUserProfile(); 
     setRefreshTick(p => p + 1);
-    toast.success(lang === 'vi' ? 'Đột phá thành công!' : 'Star Up Success!');
-    setSelectedId(null); // Tự động đóng Modal sau khi đập thành công
+    return isSuccess; 
   };
 
   const handleEquipAircraft = (id) => {
@@ -411,6 +465,7 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
         contextType={isCrate ? 'crate' : (mainTab === 'forge' ? 'forge' : 'bag')}
         isEquipped={isEquipped}
         lang={lang}
+        starUpInfo={starUpInfo}
         resources={{
           coins: currentCoins,
           diamonds: currentDiamonds,
@@ -427,9 +482,65 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
           onUpgrade: handleUpgrade,
           onStarUp: handleStarUp,
           onOpen: (amount) => handleOpenCrate(selectedItem, amount),
-          onGoToForge: () => { setMainTab('forge'); }
+          onGoToForge: () => { setMainTab('forge'); },
+          onGoToShop: () => { setScreen('shop_campaign'); }
         }}
       />
+      {/* --- GACHA RESULT POPUP --- */}
+      <AnimatePresence>
+        {gachaResults && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={styles.gachaOverlay}>
+            <motion.div initial={{ scale: 0.8, y: 50 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.8, y: 50 }} className={styles.gachaModal}>
+              
+              <div className={styles.gachaHeader}>
+                <h2 className={styles.gachaTitle}>{lang === 'vi' ? 'KẾT QUẢ MỞ HÒM' : 'GACHA RESULTS'}</h2>
+                {/* Nút X để thoát */}
+                <button className={styles.gachaClose} onClick={() => setGachaResults(null)}>✕</button>
+              </div>
+
+              <div className={styles.gachaContent}>
+                {gachaResults.map((item, idx) => {
+                  // Lấy hình ảnh từ Catalog (Hỗ trợ cả Phi công nếu hòm có rớt phi công)
+                  let catalogInfo = item.type === 'pilot' 
+                    ? PILOTS.find(p => p.id === item.baseId)
+                    : GEAR_CATALOG[item.type]?.find(g => g.id === item.baseId);
+
+                  // Set màu viền theo Rarity
+                  const rarityColor = item.rarity === 5 ? '#facc15' : item.rarity === 4 ? '#c084fc' : item.rarity === 3 ? '#60a5fa' : item.rarity === 2 ? '#4ade80' : '#94a3b8';
+
+                  return (
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0.5 }} 
+                      animate={{ opacity: 1, scale: 1 }} 
+                      transition={{ delay: idx * 0.1 }} // Hiệu ứng nảy từng món một
+                      key={item.uuid || idx} 
+                      className={styles.gachaItemCard}
+                      style={{ borderColor: rarityColor, boxShadow: `0 0 15px ${rarityColor}40` }}
+                    >
+                      <div className={styles.gachaItemNew}>NEW</div>
+                      <img src={catalogInfo?.imgSrc} alt="item" className={styles.gachaItemImg} />
+                      <span className={styles.gachaItemRarity} style={{ color: rarityColor }}>
+                        {'★'.repeat(item.rarity || 1)}
+                      </span>
+                    </motion.div>
+                  );
+                })}
+              </div>
+
+              <div className={styles.gachaFooter}>
+                <button className={styles.btnBase} style={{ maxWidth: '200px' }} onClick={() => setGachaResults(null)}>
+                  {lang === 'vi' ? 'TIẾP TỤC MỞ' : 'CONTINUE'}
+                </button>
+                {/* Nút chuyển tab về Kho đồ */}
+                <button className={styles.launchBtn} style={{ maxWidth: '250px', margin: 0, padding: '12px' }} onClick={() => { setGachaResults(null); setMainTab('bag'); }}>
+                  {lang === 'vi' ? 'ĐẾN KHO ĐỒ' : 'GO TO BAG'}
+                </button>
+              </div>
+
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
     
   );

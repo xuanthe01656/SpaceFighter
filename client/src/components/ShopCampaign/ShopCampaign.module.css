@@ -181,7 +181,7 @@
   .backText { display: none; } /* Ẩn chữ "Chỉ Huy", giữ lại mũi tên */
   .headerTitle { display: none; } /* Ẩn tiêu đề to để nhường chỗ cho tài nguyên */
   
-  .currencyBar { flex-wrap: nowrap; gap: 6px; } /* Ép tài nguyên nằm ngang */
+  .currencyBar { gap: 6px; } /* Ép tài nguyên nằm ngang */
   .currencyChip { padding: 4px 8px; gap: 4px; }
   .currencyIcon { width: 14px; height: 14px; }
   .currencyAmt { font-size: 14px; }

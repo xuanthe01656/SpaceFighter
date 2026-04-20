@@ -1,4 +1,51 @@
 /* src/components/Portal/Portal.module.css */
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Share+Tech+Mono&display=swap');
+:root {
+     --bg-void:       #03060e;
+     --bg-deep:       #060c1a;
+     --bg-panel:      rgba(8, 14, 28, 0.88);
+     --bg-card:       rgba(10, 18, 36, 0.82);
+     --bg-element:    rgba(15, 24, 50, 0.7);
+   
+     --accent:        #38bdf8;
+     --accent-cool:   #60a5fa;
+     --accent-tertiary: #c084fc;
+      --accent-red:    #ff6b81;
+     --accent-glow:   rgba(56, 189, 248, 0.35);
+     --accent-dim:    rgba(56, 189, 248, 0.12);
+     --accent-warm:   #fb923c;
+     --accent-warm-g: rgba(251, 146, 60, 0.3);
+   
+     /* ── GOLD FORGE PALETTE ── */
+     --gold:          #f5c518;
+     --gold-bright:   #ffe066;
+     --gold-deep:     #b8860b;
+     --gold-glow:     rgba(245, 197, 24, 0.40);
+     --gold-dim:      rgba(245, 197, 24, 0.12);
+     --gold-border:   rgba(245, 197, 24, 0.35);
+   
+     --text-primary:  #e2e8f0;
+     --text-dim:      #64748b;
+     --text-faint:    #334155;
+   
+     --border-subtle: rgba(56, 189, 248, 0.15);
+     --border-base:   rgba(56, 189, 248, 0.28);
+     --border-active: rgba(56, 189, 248, 0.7);
+   
+     /* Rarity palette */
+     --r1: #94a3b8;   --r1-g: rgba(148, 163, 184, 0.2);
+     --r2: #4ade80;   --r2-g: rgba(74, 222, 128, 0.2);
+     --r3: #60a5fa;   --r3-g: rgba(96, 165, 250, 0.22);
+     --r4: #c084fc;   --r4-g: rgba(192, 132, 252, 0.25);
+     --r5: #fbbf24;   --r5-g: rgba(251, 191, 36, 0.28);
+   
+     --font-ui:   'Barlow Condensed', sans-serif;
+     --font-data: 'Share Tech Mono', monospace;
+   
+     --radius:    10px;
+     --radius-sm: 6px;
+     --gap:       14px;
+   }
 .container {
   width: 100%; height: 100dvh; display: flex; flex-direction: column;
   align-items: center; justify-content: flex-start; 
@@ -41,41 +88,71 @@
   display: flex; justify-content: space-between; align-items: flex-start; z-index: 100; pointer-events: auto; gap: 10px;
 }
 
-/* GÓC TRÁI: HỒ SƠ (Kính mờ, Viền Cyan Neon) */
+/* GÓC TRÁI: HỒ SƠ (Chuẩn hóa viền bo tròn) */
 .authSection { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; flex: 1; min-width: 0; max-width: 50%; }
 .userPill {
   display: flex; align-items: center; gap: 6px; 
-  background: rgba(10, 20, 40, 0.6); backdrop-filter: blur(12px); /* Glassmorphism */
-  padding: 5px 8px 5px 5px; border-radius: 12px;
-  border: 2px solid #00e5ff;
-  box-shadow: 0 0 15px rgba(0, 229, 255, 0.4), inset 0 0 10px rgba(0, 229, 255, 0.2);
+  background: rgba(10, 20, 40, 0.6); backdrop-filter: blur(12px); 
+  padding: 4px 8px 4px 4px; border-radius: 20px;
+  border: 1px solid rgba(0, 229, 255, 0.3);
+  border-bottom: 2px solid #00e5ff; /* Đồng bộ viền sáng đáy */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
   max-width: 100%; box-sizing: border-box;
 }
-.avatar { width: 30px; height: 30px; border-radius: 8px; border: 2px solid #00e5ff; flex-shrink: 0; }
+.avatar { width: 28px; height: 28px; border-radius: 50%; border: 1px solid #00e5ff; flex-shrink: 0; }
 .userName { 
-  color: #fff; font-size: clamp(12px, 3vw, 16px); font-weight: bold; text-transform: uppercase; 
+  color: #fff; font-size: clamp(12px, 3vw, 15px); font-weight: bold; text-transform: uppercase; 
   letter-spacing: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto;
 }
 .logoutBtn { background: transparent; color: #00e5ff; border: none; cursor: pointer; padding: 0 5px; font-family: inherit; font-size: 12px; flex-shrink: 0; text-decoration: underline; }
 .deleteBtn { background: transparent; color: #ff4757; border: none; text-decoration: underline; font-size: 10px; cursor: pointer; font-family: inherit; padding-left: 10px; opacity: 0.7; }
 
-/* GÓC PHẢI: TÀI NGUYÊN (Kính mờ, Viền Gold Neon) */
-.rightSection { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; max-width: 55%; }
-.resourceHud {
-  display: grid; grid-template-columns: auto auto; gap: 6px 12px; 
-  background: rgba(10, 20, 40, 0.6); backdrop-filter: blur(12px);
-  padding: 8px 12px; border-radius: 12px; 
-  border: 2px solid #FFD700;
-  box-shadow: 0 0 15px rgba(255, 215, 0, 0.4), inset 0 0 10px rgba(255, 215, 0, 0.2);
-  box-sizing: border-box; justify-content: flex-end;
+
+/* GÓC PHẢI: TÀI NGUYÊN (Đồng bộ với Kho đồ & HQ) */
+.rightSection { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; max-width: 60%; }
+
+.currencyBar { 
+  display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; 
 }
-.resItem { display: flex; align-items: center; gap: 5px; font-size: clamp(14px, 3.5vw, 18px); font-weight: bold; white-space: nowrap; }
-.resEnergy { color: #FFD700; text-shadow: 0 0 10px rgba(255,215,0,0.6); }
-.resCoin { color: #FFD700; text-shadow: 0 0 10px rgba(255,215,0,0.6); }
-.resDiamond { color: #00e5ff; text-shadow: 0 0 10px rgba(0,229,255,0.6); }
 
-.langBtn { background: rgba(10, 20, 40, 0.6); backdrop-filter: blur(10px); color: #FFD700; border: 1px solid #FFD700; border-radius: 8px; padding: 4px 10px; font-size: 12px; cursor: pointer; font-family: inherit; box-shadow: 0 0 10px rgba(255, 215, 0, 0.3); }
+.currencyChip {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(10, 20, 40, 0.6); backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
 
+.currencyIcon { 
+  width: 14px; height: 14px; 
+  display: flex; align-items: center; justify-content: center;
+}
+.currencyIcon svg { width: 100%; height: 100%; }
+
+.currencyAmt { 
+  font-family: 'Share Tech Mono', monospace; 
+  font-size: 16px; 
+  color: #fff; 
+}
+
+/* Đổ màu đặc trưng cho 4 loại tài nguyên */
+.chipEnergy { color: #0abde3; border-bottom: 2px solid #0abde3; text-shadow: 0 0 8px rgba(10, 189, 227, 0.5); }
+.chipCoin   { color: var(--accent-warm); border-bottom: 2px solid var(--accent-warm); text-shadow: 0 0 8px rgba(251, 146, 60, 0.5); }
+.chipHeart  { color: var(--accent-red); border-bottom: 2px solid var(--accent-red); text-shadow: 0 0 8px rgba(255, 107, 129, 0.5); }
+.chipGem    { color: var(--accent); border-bottom: 2px solid var(--accent); text-shadow: 0 0 8px rgba(56, 189, 248, 0.5); }
+.chipGear { 
+  color: #c084fc; 
+  border-bottom: 2px solid #c084fc; 
+  text-shadow: 0 0 8px rgba(192, 132, 252, 0.5); 
+}
+
+.langBtn { 
+  background: rgba(10, 20, 40, 0.6); backdrop-filter: blur(10px); 
+  color: #FFD700; border: 1px solid #FFD700; border-radius: 6px; 
+  padding: 4px 10px; font-size: 12px; cursor: pointer; font-family: inherit; 
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.3); 
+}
 /* TIÊU ĐỀ GAME (Cực sáng, Trung tâm) */
 .title {
   position: absolute; left: auto; transform: translateX(-50%); width: 100%; text-align: center;

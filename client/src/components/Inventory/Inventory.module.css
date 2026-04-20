@@ -15,8 +15,8 @@
      --bg-element:    rgba(15, 24, 50, 0.7);
    
      --accent:        #38bdf8;
-      --accent-cool:   #60a5fa;
-      --accent-tertiary: #c084fc;
+     --accent-cool:   #60a5fa;
+     --accent-tertiary: #c084fc;
      --accent-glow:   rgba(56, 189, 248, 0.35);
      --accent-dim:    rgba(56, 189, 248, 0.12);
      --accent-warm:   #fb923c;
@@ -191,13 +191,11 @@
      padding: 6px 14px;
      border-radius: var(--radius-sm);
    }
-   .currencyChip[data-type="coin"] .currencyIcon { color: var(--accent-warm); }
-   .currencyChip[data-type="gem"]  .currencyIcon { color: var(--accent); }
    .currencyIcon { font-size: 16px; }
    .chipCoin { color: var(--accent-warm); border-bottom: 2px solid var(--accent-warm); }
-  .chipGem { color: var(--accent); border-bottom: 2px solid var(--accent); }
-  .chipBlueprint { color: var(--accent-cool); border-bottom: 2px solid var(--accent-cool); }
-  .chipGear { color: var(--accent-tertiary); border-bottom: 2px solid var(--accent-tertiary); }
+   .chipGem { color: var(--accent); border-bottom: 2px solid var(--accent); }
+   .chipBlueprint { color: var(--accent-cool); border-bottom: 2px solid var(--accent-cool); }
+   .chipGear { color: var(--accent-tertiary); border-bottom: 2px solid var(--accent-tertiary); }
    .currencyAmt  { font-family: var(--font-data); font-size: 18px; color: var(--text-primary); }
    
    /* ═══════════════════════════════════════════
@@ -1034,4 +1032,61 @@
 @media (max-width: 480px) {
   .aircraftGrid { grid-template-columns: 1fr; } /* Mobile dọc thì hiện 1 cột cho rõ */
   .acName { font-size: 16px; }
+}
+/* --- GACHA RESULT MODAL --- */
+.gachaOverlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100dvh;
+  background: rgba(3, 6, 14, 0.95); backdrop-filter: blur(10px);
+  display: flex; justify-content: center; align-items: center;
+  z-index: 10000; padding: 20px; pointer-events: auto;
+}
+
+.gachaModal {
+  width: 100%; max-width: 800px;
+  background: linear-gradient(135deg, rgba(10, 18, 36, 0.95), rgba(6, 12, 26, 0.95));
+  border: 2px solid #facc15; border-radius: 16px;
+  box-shadow: 0 0 50px rgba(250, 204, 21, 0.3);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+
+.gachaHeader {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 15px 20px; border-bottom: 1px solid rgba(250, 204, 21, 0.3);
+  background: rgba(250, 204, 21, 0.1);
+}
+
+.gachaTitle { margin: 0; font-size: 28px; color: #facc15; letter-spacing: 2px; text-shadow: 0 0 15px rgba(250, 204, 21, 0.8); }
+.gachaClose { background: transparent; border: none; color: #fff; font-size: 24px; cursor: pointer; transition: 0.2s; }
+.gachaClose:hover { color: #ff4757; }
+
+.gachaContent {
+  padding: 30px; display: flex; flex-wrap: wrap; gap: 20px; 
+  justify-content: center; max-height: 60vh; overflow-y: auto;
+}
+
+.gachaItemCard {
+  width: 110px; padding: 15px; background: rgba(0,0,0,0.6);
+  border: 2px solid; border-radius: 12px;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  position: relative;
+}
+
+.gachaItemImg { width: 70px; height: 70px; object-fit: contain; filter: drop-shadow(0 0 10px rgba(255,255,255,0.5)); }
+.gachaItemRarity { font-size: 16px; letter-spacing: 2px; text-shadow: 0 0 5px currentColor; }
+.gachaItemNew {
+  position: absolute; top: -10px; right: -10px; 
+  background: linear-gradient(90deg, #ff416c, #ff4b2b); color: #fff; 
+  font-size: 12px; padding: 4px 8px; border-radius: 6px; font-weight: bold; 
+  box-shadow: 0 0 10px rgba(255, 65, 108, 0.8);
+  animation: pulseNew 1s infinite alternate;
+}
+
+.gachaFooter {
+  padding: 20px; display: flex; justify-content: center; gap: 20px; 
+  border-top: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.4);
+}
+
+@keyframes pulseNew {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.1); }
 }

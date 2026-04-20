@@ -1,4 +1,17 @@
 /* src/components/HQ/HQ.module.css */
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Share+Tech+Mono&display=swap');
+
+:root {
+  --bg-element: rgba(15, 24, 50, 0.7);
+  --accent: #38bdf8;
+  --accent-cool: #60a5fa;
+  --accent-tertiary: #c084fc;
+  --accent-red: #ff6b81;
+  --accent-warm: #fb923c;
+  --border-subtle: rgba(56, 189, 248, 0.15);
+  --radius-sm: 6px;
+}
+
 .container {
   width: 100%; height: 100dvh; 
   background: radial-gradient(circle at 50% 0%, #1a2a6c 0%, #0b0c10 70%); 
@@ -14,36 +27,61 @@
   background-size: 100% 4px; pointer-events: none; z-index: 100; opacity: 0.5;
 }
 
-/* KHUNG GIỚI HẠN TRUNG TÂM (Giúp giao diện không bị giãn ngoác trên PC) */
 .contentWrapper {
-  width: 100%; max-width: 800px; display: flex; flex-direction: column; flex: 1;
+  width: 100%; max-width: 800px; display: flex; flex-direction: column; flex: 1; padding-bottom: 30px;
 }
 
-/* HEADER & HUD (Khắc phục lỗi tràn viền) */
+/* HEADER & HUD */
 .topSection { 
   display: flex; justify-content: space-between; align-items: flex-start; 
   border-bottom: 2px solid rgba(102, 252, 241, 0.3); padding-bottom: 15px; 
   margin-bottom: 15px; gap: 10px; flex-wrap: wrap; width: 100%; flex-shrink: 0;
 }
 .headerLeft { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
-.backBtn { background: rgba(11, 12, 16, 0.8); color: #66fcf1; border: 1px solid #66fcf1; padding: 6px 15px; border-radius: 8px; font-family: inherit; font-size: 18px; cursor: pointer; pointer-events: auto; text-transform: uppercase; }
+.backBtn { background: rgba(11, 12, 16, 0.8); color: #66fcf1; border: 1px solid #66fcf1; padding: 6px 15px; border-radius: 8px; font-family: inherit; font-size: 18px; cursor: pointer; pointer-events: auto; text-transform: uppercase; transition: 0.2s; }
+.backBtn:hover { box-shadow: 0 0 15px rgba(102, 252, 241, 0.4); }
 .title { color: #fff; margin: 0; font-size: clamp(22px, 5vw, 32px); text-shadow: 0 0 10px #66fcf1, 0 0 20px #45a29e; letter-spacing: 2px; }
 
-/* BẢNG TÀI NGUYÊN HUD */
+/* BẢNG TÀI NGUYÊN HUD (Chuẩn hóa 100% theo Inventory) */
 .headerRight { display: flex; justify-content: flex-end; flex: 1; min-width: 150px; }
-.resourceHud {
-  display: grid; grid-template-columns: auto auto; gap: 6px 15px; /* Lưới 2x2 trên Mobile */
-  background: rgba(11, 12, 16, 0.8); backdrop-filter: blur(10px);
-  padding: 8px 12px; border-radius: 12px; border: 1px solid rgba(255, 215, 0, 0.3);
-  box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
-}
-.resItem { display: flex; align-items: center; gap: 6px; font-size: clamp(14px, 3.5vw, 18px); font-weight: bold; white-space: nowrap; }
-.resEnergy { color: #0abde3; text-shadow: 0 0 10px rgba(10, 189, 227, 0.8); }
-.resLife { color: #ff4757; text-shadow: 0 0 10px rgba(255, 71, 87, 0.8); }
-.resCoin { color: #FFD700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.8); }
-.resDiamond { color: #00d2d3; text-shadow: 0 0 10px rgba(0, 210, 211, 0.8); }
 
-/* LỰC CHIẾN & KHU VỰC TRƯNG BÀY */
+.currencyBar { 
+  display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; 
+}
+
+.currencyChip {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--bg-element);
+  border: 1px solid var(--border-subtle);
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  /* Lấy hiệu ứng viền gạch dưới của Inventory */
+}
+
+.currencyIcon { 
+  width: 16px; height: 16px; 
+  display: flex; align-items: center; justify-content: center;
+}
+.currencyIcon svg { width: 100%; height: 100%; }
+
+.currencyAmt { 
+  font-family: 'Share Tech Mono', monospace; 
+  font-size: 18px; 
+  color: var(--text-primary, #e2e8f0); 
+}
+
+/* Đổ màu đặc trưng cho 4 loại tài nguyên của HQ */
+.chipEnergy { color: #0abde3; border-bottom: 2px solid #0abde3; }
+.chipLife   { color: var(--accent-red); border-bottom: 2px solid var(--accent-red); }
+.chipCoin   { color: var(--accent-warm); border-bottom: 2px solid var(--accent-warm); }
+.chipGem    { color: var(--accent); border-bottom: 2px solid var(--accent); }
+
+@media (max-width: 768px) {
+  .currencyChip { padding: 5px 10px; gap: 6px; }
+  .currencyAmt { font-size: 15px; }
+}
+
+/* LỰC CHIẾN & KHU VỰC TRƯNG BÀY (HANGAR) */
 .cpSection { text-align: center; margin-bottom: 15px; flex-shrink: 0; }
 .cpTitle { margin: 0; color: #66fcf1; font-size: 16px; text-transform: uppercase; letter-spacing: 2px; opacity: 0.8; }
 .cpValue { margin: 0; color: #FFD700; font-size: clamp(40px, 8vw, 60px); text-shadow: 0 0 15px rgba(255, 215, 0, 0.6); font-weight: bold; }
@@ -54,31 +92,57 @@
   box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5), inset 0 0 15px rgba(69, 162, 158, 0.1);
   position: relative; overflow: hidden;
 }
-.hangar { padding: 20px; display: flex; flex-direction: column; align-items: center; flex-shrink: 0; margin-bottom: 20px; }
-.shipIcon { font-size: clamp(60px, 15vw, 90px); filter: drop-shadow(0 0 20px rgba(102, 252, 241, 0.6)); margin-bottom: 5px; }
-.shipName { color: #fff; margin: 0 0 10px 0; font-size: clamp(22px, 5vw, 28px); text-transform: uppercase; letter-spacing: 2px; }
+.hangar { padding: 20px; display: flex; flex-direction: column; align-items: center; margin-bottom: 20px; }
+.shipImage { width: clamp(150px, 35vw, 250px); filter: drop-shadow(0 0 15px rgba(102, 252, 241, 0.4)); object-fit: contain; }
+.shipName { color: #fff; margin: 0 0 10px 0; font-size: clamp(22px, 5vw, 28px); text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 10px rgba(255,255,255,0.3); }
 .shipStats { display: flex; gap: 20px; color: #fff; font-size: 16px; margin-bottom: 15px; background: rgba(0,0,0,0.5); padding: 5px 20px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); }
-.pilotBox { background: linear-gradient(90deg, rgba(31,40,51,0.8), rgba(11,12,16,0.8)); padding: 10px 15px; border-radius: 8px; border-left: 4px solid #66fcf1; width: 100%; box-sizing: border-box; }
+.pilotBox { background: linear-gradient(90deg, rgba(31,40,51,0.8), rgba(11,12,16,0.8)); padding: 12px 15px; border-radius: 8px; border-left: 4px solid #66fcf1; width: 100%; box-sizing: border-box; }
+.pilotRole { margin: 0 0 5px 0; font-size: 13px; color: #aaa; text-transform: uppercase; }
+.pilotName { margin: 0; font-size: 18px; font-weight: bold; color: #fff; }
+.pilotSkill { color: #FFD700; margin: 5px 0 0 0; font-size: 14px; font-family: 'Share Tech Mono', monospace; }
 
-/* TRANG BỊ & NÚT BẤM */
-.loadoutSection { display: flex; gap: 15px; margin-bottom: 20px; flex-shrink: 0; }
+/* --- GRID TRANG BỊ ĐANG MẶC --- */
+.loadoutSection { 
+  display: grid; 
+  grid-template-columns: repeat(2, 1fr); /* Ép hiển thị 2 cột vuông vức trên Mobile */
+  gap: 12px; 
+  margin-bottom: 20px; 
+}
 .loadoutSlot { 
-  flex: 1 1 40%;
-  min-width: 140px; 
   padding: 15px 10px; border-radius: 10px; border: 1px solid rgba(102, 252, 241, 0.3); 
   text-align: center; cursor: pointer; pointer-events: auto; position: relative;
   background: linear-gradient(180deg, rgba(31,40,51,0.5) 0%, rgba(11,12,16,0.8) 100%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  transition: transform 0.2s, box-shadow 0.2s;
 }
-.loadoutLabel { margin: 0 0 10px 0; color: #45a29e; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
+.loadoutSlot:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(102, 252, 241, 0.3); border-color: #66fcf1; }
+.loadoutLabel { margin: 0 0 10px 0; color: #45a29e; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; font-weight: bold; }
 
-.actionBtns { display: flex; gap: 15px; flex-shrink: 0; margin-bottom: 20px; }
-.btnBase { flex: 1; padding: 15px; background: rgba(31, 40, 51, 0.8); color: #fff; border: 1px solid #45a29e; border-radius: 8px; font-size: clamp(16px, 4vw, 20px); font-family: inherit; cursor: pointer; pointer-events: auto; backdrop-filter: blur(5px); }
+/* Định dạng các thành phần bên trong Slot */
+.slotImage { height: 45px; object-fit: contain; margin-bottom: 8px; filter: drop-shadow(0 0 8px rgba(255,255,255,0.5)); }
+.slotEmoji { font-size: clamp(28px, 6vw, 35px); margin-bottom: 8px; }
+.slotName { color: #fff; font-size: 15px; font-weight: bold; line-height: 1.2; text-shadow: 0 0 5px rgba(0,0,0,0.8); }
+.slotLevel { font-family: 'Share Tech Mono', monospace; font-size: 13px; margin-top: 5px; }
+.slotEmpty { color: #555; font-size: 15px; margin-top: 15px; font-style: italic; }
+
+/* MÀU THEO LOẠI */
+.colorGun { color: #0abde3; }
+.colorWing { color: #b388ff; }
+.colorArmor { color: #2ed573; }
+.colorDrone { color: #f1c40f; }
+
+/* NÚT BẤM */
+.actionBtns { display: flex; gap: 15px; margin-bottom: 20px; }
+.btnBase { flex: 1; padding: 12px; background: rgba(31, 40, 51, 0.8); color: #fff; border: 1px solid #45a29e; border-radius: 8px; font-size: clamp(16px, 4vw, 20px); font-family: inherit; cursor: pointer; pointer-events: auto; backdrop-filter: blur(5px); transition: 0.2s; }
+.btnBase:hover { background: rgba(69, 162, 158, 0.4); box-shadow: 0 0 15px rgba(102, 252, 241, 0.4); }
 
 .launchBtn { 
-  margin-top: auto; padding: 18px; width: 100%; font-size: clamp(22px, 5vw, 28px); font-family: inherit; 
+  width: 100%; padding: 18px; font-size: clamp(22px, 5vw, 28px); font-family: inherit; 
   background: linear-gradient(90deg, #ff416c, #ff4b2b); color: #fff; border: none; font-weight: bold; cursor: pointer; pointer-events: auto; letter-spacing: 2px; text-transform: uppercase;
-  clip-path: polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px); box-shadow: 0 0 20px rgba(255, 75, 43, 0.5);
+  clip-path: polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px); 
+  box-shadow: 0 0 20px rgba(255, 75, 43, 0.5); transition: 0.2s; margin-top: auto;
 }
+.launchBtn:hover { filter: brightness(1.2); box-shadow: 0 0 30px rgba(255, 75, 43, 0.8); transform: scale(0.98); }
 
 /* =========================================
    🚀 TỐI ƯU MÀN HÌNH LỚN (TABLET / PC)
@@ -86,9 +150,9 @@
 @media (min-width: 768px) {
   .topSection { flex-wrap: nowrap; align-items: center; }
   .headerLeft { flex-direction: row; align-items: center; gap: 20px; }
-  .resourceHud { display: flex; gap: 25px; padding: 10px 20px; } /* Trải ngang trên PC */
+  .resourceHud { display: flex; gap: 25px; padding: 10px 20px; } 
   .resItem { font-size: 20px; }
-  .loadoutSection { gap: 30px; }
+  .loadoutSection { grid-template-columns: repeat(4, 1fr); gap: 15px; } /* Trải dài 4 cột trên PC */
   .actionBtns { width: 80%; margin: 0 auto 20px auto; }
   .launchBtn { width: 80%; margin: auto auto 0 auto; }
 }

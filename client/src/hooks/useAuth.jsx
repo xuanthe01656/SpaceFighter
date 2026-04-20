@@ -32,7 +32,22 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
   };
 
   const saveUserProfile = async (specificUpdates = null) => {
-    if (!currentUser) return; 
+    const safeNum = (val, fallback) => (typeof val === 'number' && !isNaN(val)) ? val : fallback;
+    const safeStr = (val, fallback) => (typeof val === 'string') ? val : fallback;
+    let currentLives = gsRef.current.lives;
+    if (currentLives !== '∞') currentLives = safeNum(currentLives, 10);
+
+    // --- 1. SỬA LỖI KHÁCH KHÔNG LƯU ĐƯỢC ĐỒ (GUEST SAVE) ---
+    if (!currentUser) {
+      secureStorage.setItem('astro_guest_coins', safeNum(gsRef.current.coins, 0));
+      secureStorage.setItem('astro_guest_lives', currentLives);
+      if (gsRef.current.campaignData) {
+         secureStorage.setItem('astro_guest_campaign', JSON.stringify(gsRef.current.campaignData));
+      }
+      return; 
+    }
+
+    // --- 2. SỬA LỖI FIREBASE TỰ PHỤC HỒI ĐỒ BỊ XÓA (ZOMBIE DATA) ---
     try {
       const userRef = doc(db, "users", currentUser.uid);
       if (specificUpdates) {
@@ -40,14 +55,10 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
         return; 
       }
 
-      const safeNum = (val, fallback) => (typeof val === 'number' && !isNaN(val)) ? val : fallback;
-      const safeStr = (val, fallback) => (typeof val === 'string') ? val : fallback;
-      let currentLives = gsRef.current.lives;
-      if (currentLives !== '∞') currentLives = safeNum(currentLives, 10);
-
       const updateData = {
         highScore: safeNum(gsRef.current.bestScore, 0),
         coins: safeNum(gsRef.current.coins, 0),
+        diamonds: safeNum(gsRef.current.diamonds, 0),
         lives: currentLives,
         livesUpdatedAt: typeof gsRef.current.livesUpdatedAt === 'number' && !isNaN(gsRef.current.livesUpdatedAt) ? gsRef.current.livesUpdatedAt : null,
         isVIP: !!gsRef.current.isVIP,
@@ -56,14 +67,24 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
         hourlyCoinCount: safeNum(gsRef.current.hourlyCoinCount, 0),
         lastCoinHour: safeStr(gsRef.current.lastCoinHour, ''),
         inventory: gsRef.current.inventory || { skins: ['classic'], bgs: ['deep'] },
-        equipped: gsRef.current.userSettings || { skin: 'classic', bg: 'deep' },
-        campaignData: gsRef.current.campaignData
+        equipped: gsRef.current.userSettings || { skin: 'classic', bg: 'deep' }
+        // LƯU Ý QUAN TRỌNG: Đã cố tình bỏ campaignData ra khỏi cụm setDoc(merge) này
       };
 
       if (currentUser.displayName) updateData.displayName = currentUser.displayName;
       if (currentUser.photoURL) updateData.photoURL = currentUser.photoURL;
 
+      // Bước A: Lưu các chỉ số cơ bản bằng SetDoc (An toàn không mất data cũ)
       await setDoc(userRef, updateData, { merge: true });
+      
+      // Bước B: GHI ĐÈ TRỰC TIẾP TOÀN BỘ KHO ĐỒ BẰNG UpdateDoc
+      // Lệnh này ép Firebase không được gộp (merge), mà phải thay thế 100%. Phôi bị xóa sẽ biến mất vĩnh viễn!
+      if (gsRef.current.campaignData) {
+        await updateDoc(userRef, {
+          campaignData: gsRef.current.campaignData
+        });
+      }
+
     } catch (e) {
       console.error("Lỗi đồng bộ hồ sơ lên mây:", e);
     }
@@ -126,6 +147,7 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
         }, { merge: true }).catch(e => console.error("Lỗi update online:", e));
 
         gsRef.current.coins = (typeof data.coins === 'number' && !isNaN(data.coins)) ? data.coins : 0;
+        gsRef.current.diamonds = (typeof data.diamonds === 'number' && !isNaN(data.diamonds)) ? data.diamonds : 0; 
         gsRef.current.isVIP = data.isVIP || false;
         
         if (gsRef.current.isVIP) {
@@ -181,7 +203,7 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
         } catch (e) { console.error("Lỗi đồng bộ Auth:", e); }
       }
       
-      setUIUpdates(prev => ({ ...prev, coins: gsRef.current.coins, lives: gsRef.current.lives, isVIP: gsRef.current.isVIP, nextLifeTime: gsRef.current.isVIP ? null : prev.nextLifeTime, displayName: finalName, photoURL: finalPhoto }));
+      setUIUpdates(prev => ({ ...prev, coins: gsRef.current.coins, diamonds: gsRef.current.diamonds, lives: gsRef.current.lives, isVIP: gsRef.current.isVIP, nextLifeTime: gsRef.current.isVIP ? null : prev.nextLifeTime, displayName: finalName, photoURL: finalPhoto }));
     } catch (error) { console.error("Lỗi tải hồ sơ:", error); }
   };
 
@@ -296,22 +318,31 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
             }
           }
         });
-      } else {
+      }else {
         if (unsubSnapshot) unsubSnapshot(); 
         let savedLives = secureStorage.getItem('astro_guest_lives');
         let guestLives = savedLives !== null ? parseInt(savedLives) : 10; 
         let guestCoins = parseInt(secureStorage.getItem('astro_guest_coins')) || 0;
         
-        gsRef.current.lives = guestLives; gsRef.current.coins = guestCoins;
+        gsRef.current.lives = guestLives; 
+        gsRef.current.coins = guestCoins; 
+        // 👇 TÀI KHOẢN KHÁCH: Mặc định luôn là 0 Kim cương, không lưu hay tải từ máy
+        gsRef.current.diamonds = 0; 
+
         if (guestLives < 10) {
           let lastLost = secureStorage.getItem('astro_guest_last_lost');
           gsRef.current.livesUpdatedAt = lastLost ? parseInt(lastLost) : getRealTime();
           if (!lastLost) secureStorage.setItem('astro_guest_last_lost', gsRef.current.livesUpdatedAt);
         } else { gsRef.current.livesUpdatedAt = null; }
-        setUIUpdates(prev => ({ ...prev, lives: guestLives, coins: guestCoins }));
+        
+        // Cập nhật giao diện UI cho Khách
+        setUIUpdates(prev => ({ ...prev, lives: guestLives, coins: guestCoins, diamonds: 0 }));
 
-        // 👇 FIX LỖI KẸT LOADING MÀN HÌNH HQ CHO KHÁCH
-        if (!gsRef.current.campaignData) {
+        // Tải vật phẩm/kho đồ của Khách (Vẫn cho họ chơi trải nghiệm Chiến dịch bằng Xu)
+        let guestCampaign = secureStorage.getItem('astro_guest_campaign');
+        if (guestCampaign) {
+          gsRef.current.campaignData = JSON.parse(guestCampaign);
+        } else {
           gsRef.current.campaignData = JSON.parse(JSON.stringify(defaultCampaignData));
         }
       }

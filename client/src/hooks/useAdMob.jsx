@@ -96,25 +96,49 @@ export function useAdMob(gsRef, setUIUpdates, currentUser, screen, isVIP, langRe
     };
   }, []);
 
-  useEffect(() => {
-    const manageBanner = async () => {
-      if (!Capacitor.isNativePlatform() || !isAdInitialized) return;
-      try {
-        if (screen === 'game' || isVIP) {
-          if (isBannerCreatedRef.current) await AdMob.hideBanner();
-        } else {
-          if (!isBannerCreatedRef.current) {
-            await AdMob.showBanner({ adId: BANNER_ID, adSize: BannerAdSize.BANNER, position: BannerAdPosition.BOTTOM_CENTER, margin: 0, isTesting: IS_TESTING });
-            isBannerCreatedRef.current = true;
-          } else {
-            await AdMob.resumeBanner();
-          }
-        }
-      } catch (error) { console.error("Banner Error", error); }
-    };
-    manageBanner();
-  }, [screen, isAdInitialized, isVIP]);
+ // --- CÁC HÀM XỬ LÝ BANNER ---
+  const showBanner = async () => {
+    if (!Capacitor.isNativePlatform()) return;
+    try {
+      if (!isBannerCreatedRef.current) {
+        // Lần đầu tiên gọi: Tạo mới Banner
+        await AdMob.showBanner({
+          adId: BANNER_ID,
+          adSize: BannerAdSize.ADAPTIVE_BANNER,
+          position: BannerAdPosition.BOTTOM_CENTER,
+          margin: 0,
+          isTesting: IS_TESTING
+        });
+        isBannerCreatedRef.current = true;
+      } else {
+        // Những lần sau: Chỉ hiện lên lại (giảm giật lag)
+        await AdMob.resumeBanner(); 
+      }
+    } catch (e) { console.log("Lỗi hiện Banner:", e); }
+  };
 
+  const hideBanner = async () => {
+    if (!Capacitor.isNativePlatform() || !isBannerCreatedRef.current) return;
+    try {
+      await AdMob.hideBanner(); // Tạm ẩn Banner đi khi vào trận
+    } catch (e) { console.log("Lỗi ẩn Banner:", e); }
+  };
+
+  // --- LOGIC QUẢN LÝ ẨN/HIỆN BANNER (ĐÃ TỐI ƯU) ---
+  useEffect(() => {
+    // 1. Danh sách các màn hình ĐƯỢC PHÉP hiện Banner (Không có 'campaign')
+    const safeScreens = ['menu', 'lobby', 'shop', 'leaderboard'];
+    
+    // 2. Điều kiện hiển thị
+    const shouldShowBanner = safeScreens.includes(screen) && !isVIP && !isWatchingAd && isAdInitialized;
+
+    // 3. Thực thi
+    if (shouldShowBanner) {
+      showBanner();
+    } else {
+      hideBanner();
+    }
+  }, [screen, isVIP, isWatchingAd, isAdInitialized]);
   const watchAd = async (rewardType) => {
     if (!currentUser && rewardType !== 'revive') {
       return toast.error(t[langRef.current]?.reqLoginReward || "Vui lòng đăng nhập!");
