@@ -35,7 +35,7 @@
 .rightCol { flex: 1.5; min-width: 320px; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
 
 /* Khu vực Avatar & Radar */
-.previewWrap { position: relative; width: 150px; height: 150px; display: flex; justify-content: center; align-items: center; margin-bottom: 30px; }
+.previewWrap { position: relative; width: 260px; display: flex; justify-content: center; align-items: center; margin-bottom: 30px; }
 .previewIcon { font-size: 80px; z-index: 2; }
 .radarContainer { width: 220px; height: 220px; margin-top: 20px; }
 
@@ -86,8 +86,8 @@
   }
 
   .previewWrap {
-    width: 100px;
-    height: 100px;
+    width: 250px;
+    /* height: 100px; */
   }
 
   .radarContainer {
@@ -110,4 +110,73 @@
 
 .rangeFill {
   box-shadow: 0 0 8px currentColor;
+}
+/* --- GIAO DIỆN CHỌN PHÔI --- */
+.sacGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  padding-left: 30px;
+}
+
+.sacCard {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+  padding: 6px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  transition: 0.2s;
+  min-width: 60px;
+}
+
+.sacCard:hover {
+  background: rgba(255,255,255,0.05);
+}
+
+.sacActive {
+  background: rgba(250, 204, 21, 0.15);
+  border-color: #facc15;
+  box-shadow: 0 0 10px rgba(250, 204, 21, 0.4);
+}
+
+.sacLv {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 13px;
+  color: #fff;
+}
+
+.sacRarity {
+  color: #facc15;
+  font-size: 10px;
+  letter-spacing: 2px;
+}
+/* --- KHUNG HÌNH ẢNH PHÔI ĐỘT PHÁ --- */
+.sacImageWrap {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 6px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: all 0.2s ease;
+}
+
+.sacImage {
+  max-width: 85%;
+  max-height: 85%;
+  object-fit: contain;
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.2));
+}
+
+/* Đổi màu viền khung ảnh khi phôi được chọn */
+.sacActive .sacImageWrap {
+  background: rgba(250, 204, 21, 0.2);
+  border-color: rgba(250, 204, 21, 0.5);
 }

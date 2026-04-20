@@ -114,7 +114,7 @@ export const AIRCRAFTS = [
     speed: 6.0,
     imgHq: '/images/ships/ship_xwing_hq.png',
     imgTop: '/images/ships/ship_xwing_top.png',
-    imgSrc: '/images/ships/xwing.png',
+    imgSrc: '/images/ships/ship_xwing_hq.png',
     hitboxScale: 0.78,
     engineFlameScale: 1.0,
     engineFlameTint: 0x38bdf8,

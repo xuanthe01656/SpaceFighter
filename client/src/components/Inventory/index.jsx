@@ -99,9 +99,20 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
   const canUpgrade = currentCoins >= upgradeCoinCost && currentBlueprints >= upgradeBpCost;
 
   const starUpGemCost = (!isCrate && selectedItem) ? selectedItem.rarity * 100 : 0;
-  const duplicateItems = (!isCrate && selectedItem) ? inventoryList.filter(
-    item => item.baseId === selectedItem?.baseId && item.rarity === selectedItem?.rarity && item.uuid !== selectedItem?.uuid
-  ) : [];
+  // --- TÌM PHÔI ĐỘT PHÁ (Không phân biệt Level/Độ hiếm) ---
+  const duplicateItems = (!isCrate && selectedItem) ? inventoryList.filter(item => {
+    return (
+      item.baseId === selectedItem?.baseId && // Chỉ cần cùng loại (VD: cùng là súng laser)
+      item.type === selectedItem?.type &&     // Cùng category
+      item.uuid !== selectedItem?.uuid &&     // Không lấy chính nó
+      loadout[item.type] !== item.uuid        // Không lấy đồ đang mặc
+    );
+  }).sort((a, b) => {
+    const rarityA = a.rarity || 1;
+    const rarityB = b.rarity || 1;
+    if (rarityA !== rarityB) return rarityA - rarityB; // Rarity thấp xếp trước
+    return (a.level || 1) - (b.level || 1);            // Level thấp xếp trước
+  }) : [];
   const reqDuplicateAmount = 1;
   const canStarUp = currentDiamonds >= starUpGemCost && duplicateItems.length >= reqDuplicateAmount;
 
@@ -198,17 +209,43 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
     toast.success(lang === 'vi' ? 'Nâng cấp thành công!' : 'Upgrade Success!');
   };
 
-  const handleStarUp = () => {
-    if (!selectedItem || selectedItem.type === 'pilot') return;
+  const handleStarUp = (sacrificeId) => {
+    // Thêm điều kiện: Phải có sacrificeId truyền lên từ Modal mới chạy
+    if (!selectedItem || selectedItem.type === 'pilot' || !sacrificeId) return;
+    
+    // Tìm đúng cái phôi mà người chơi vừa click chọn trên màn hình
+    const sacrificeItem = duplicateItems.find(i => i.uuid === sacrificeId); 
+    if (!sacrificeItem) return;
+
+    // --- LOGIC CẢNH BÁO (POPUP) ---
+    const isHigherRarity = (sacrificeItem.rarity || 1) >= (selectedItem.rarity || 1);
+    const isUpgraded = (sacrificeItem.level || 1) > 1;
+
+    // Cảnh báo nếu phôi cấp cao hoặc sao cao
+    if (isHigherRarity || isUpgraded) {
+      const confirmMsg = lang === 'vi'
+        ? `⚠️ CẢNH BÁO: Phôi này đang ở Cấp độ ${sacrificeItem.level} và có ${sacrificeItem.rarity}★. Bạn có CHẮC CHẮN muốn hiến tế nó để đột phá không?`
+        : `⚠️ WARNING: This sacrifice is Level ${sacrificeItem.level} and ${sacrificeItem.rarity}★. Are you SURE you want to consume it?`;
+
+      if (!window.confirm(confirmMsg)) {
+        return; 
+      }
+    }
+    // --- TIẾN HÀNH ĐỘT PHÁ ---
     gsRef.current.diamonds -= starUpGemCost;
-    const sacrificeItem = duplicateItems[0];
+    
     delete gsRef.current.campaignData.items[sacrificeItem.uuid];
+    
     if (gsRef.current.campaignData.loadout[sacrificeItem.type] === sacrificeItem.uuid) {
         gsRef.current.campaignData.loadout[sacrificeItem.type] = '';
     }
+    
     gsRef.current.campaignData.items[selectedItem.uuid].rarity += 1;
-    saveUserProfile(); setRefreshTick(p => p + 1);
+    
+    saveUserProfile(); 
+    setRefreshTick(p => p + 1);
     toast.success(lang === 'vi' ? 'Đột phá thành công!' : 'Star Up Success!');
+    setSelectedId(null); // Tự động đóng Modal sau khi đập thành công
   };
 
   const handleEquipAircraft = (id) => {
@@ -378,6 +415,7 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
           coins: currentCoins,
           diamonds: currentDiamonds,
           blueprints: currentBlueprints,
+          duplicateItems: duplicateItems,
           duplicatesCount: duplicateItems.length,
           crates: isCrate ? (materials.crates[selectedItem?.id] || 0) : 0
         }}
