@@ -42,8 +42,8 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
   const { items, loadout, ownedPilots, materials, ownedAircrafts } = campaignData;
   const currentCoins      = Number(gsRef.current.coins)    || 0;
   const currentDiamonds   = Number(gsRef.current.diamonds) || 0;
-  const currentBlueprints = Number(materials.blueprints)   || 0;
-  const currentGears      = Number(materials.gears)        || 0;
+  const currentBlueprints = Number(materials?.blueprints)   || 0;
+  const currentGears      = Number(materials?.gears)        || 0;
 
   const isForge = mainTab === 'forge';
 
@@ -366,9 +366,25 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
       <div className={styles.contentWrapper}>
 
         <header className={styles.header}>
-          <motion.button whileTap={{ scale: 0.95 }} className={styles.backBtn} onClick={() => setScreen('campaign_portal')}>
+          <motion.button 
+            whileTap={{ scale: 0.95 }} 
+            className={styles.backBtn} 
+            onClick={() => {
+              // Kiểm tra xem có phải đi từ HQ sang không?
+              if (gsRef.current?.cameFromHQ) {
+                gsRef.current.cameFromHQ = false; // Gỡ cờ đi để lần sau không bị kẹt
+                setScreen('hq'); // Tên screen HQ của bạn (có thể là 'hq' hoặc 'HQ')
+              } else {
+                setScreen('campaign_portal'); // Mặc định về portal
+              }
+            }}
+          >
             <span className={styles.backArrow}>‹</span>
-            <span className={styles.backText}>{lang === 'vi' ? 'CHỈ HUY' : 'COMMAND'}</span>
+            <span className={styles.backText}>
+              {gsRef.current?.cameFromHQ 
+                ? (lang === 'vi' ? 'HÀNH DINH' : 'HQ') 
+                : (lang === 'vi' ? 'CHỈ HUY' : 'COMMAND')}
+            </span>
           </motion.button>
           <div className={styles.headerTitle}>
             {isForge ? (lang === 'vi' ? 'XƯỞNG RÈN' : 'FORGE CORE') : (lang === 'vi' ? 'KHO VŨ KHÍ' : 'ARMORY')}

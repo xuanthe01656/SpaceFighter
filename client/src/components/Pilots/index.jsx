@@ -92,8 +92,22 @@ export default function Pilots({ gsRef, setScreen, lang, saveUserProfile }) {
         
         {/* HEADER & VÍ TIỀN */}
         <div className={styles.header}>
-          <motion.button whileTap={{ scale: 0.9 }} className={styles.backBtn} onClick={() => setScreen('hq')}>
-            ◀ {lang === 'vi' ? 'HQ' : 'HQ'}
+          <motion.button 
+            whileTap={{ scale: 0.9 }} 
+            className={styles.backBtn} 
+            onClick={() => {
+              // Kiểm tra xem có phải đi từ HQ sang không?
+              if (gsRef.current?.cameFromHQ) {
+                gsRef.current.cameFromHQ = false; // Gỡ cờ đi
+                setScreen('hq'); 
+              } else {
+                setScreen('campaign_portal'); // Mặc định về portal/màn hình chính
+              }
+            }}
+          >
+            ◀ {gsRef.current?.cameFromHQ 
+                ? (lang === 'vi' ? 'HÀNH DINH' : 'HQ') 
+                : (lang === 'vi' ? 'CHỈ HUY' : 'COMMAND')}
           </motion.button>
           <div className={styles.wallet}>
             <span style={{ color: '#FFD700', textShadow: '0 0 10px rgba(255,215,0,0.5)' }}>🪙 {currentCoins}</span>

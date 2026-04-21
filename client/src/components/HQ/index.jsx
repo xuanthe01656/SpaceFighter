@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion'; 
 import { PILOTS, AIRCRAFTS, GEAR_CATALOG } from '../../constants'; 
 import styles from './HQ.module.css';
@@ -16,24 +16,27 @@ export default function HQ({ gsRef, setScreen, lang }) {
 
   // Khai báo Icon SVG
   const Icons = {
-    Heart: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21.35L10.55 20.03C5.4 15.36 2 12.28 2 8.5C2 5.42 4.42 3 7.5 3C9.24 3 10.91 3.81 12 5.09C13.09 3.81 14.76 3 16.5 3C19.58 3 22 5.42 22 8.5C22 12.28 18.6 15.36 13.45 20.03L12 21.35Z" /></svg>),
+    Heart: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21.35L10.55 20.03C5.4 15.36 2 12.28 2 8.5C2 5.42 4.42 3 7.5 3C9.24 3 10.91 3.81 12 5.09C13.09 3.81 14.76 3 16.5 3C19.58 3 22 5.42 22 8.5C22 12.28 18.6 15.36 13.45 20.03L12 21.35Z" /><line x1="2" y1="9" x2="22" y2="9" /><line x1="12" y1="22" x2="8" y2="9" /><line x1="12" y1="22" x2="16" y2="9" /><line x1="8" y1="9" x2="6" y2="2" /><line x1="16" y1="9" x2="18" y2="2" /></svg>),
     Energy: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>,
     Coin: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" /><line x1="12" y1="2" x2="12" y2="6" /><line x1="12" y1="18" x2="12" y2="22" /><line x1="2" y1="12" x2="6" y2="12" /><line x1="18" y1="12" x2="22" y2="12" /></svg>),
-    Diamond: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 22 2 9 6 2 18 2 22 9 12 22" /><line x1="2" y1="9" x2="22" y2="9" /><line x1="12" y1="22" x2="8" y2="9" /><line x1="12" y1="22" x2="16" y2="9" /><line x1="8" y1="9" x2="6" y2="2" /><line x1="16" y1="9" x2="18" y2="2" /></svg>)
+    Gem: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 22 2 9 6 2 18 2 22 9 12 22" /><line x1="2" y1="9" x2="22" y2="9" /><line x1="12" y1="22" x2="8" y2="9" /><line x1="12" y1="22" x2="16" y2="9" /><line x1="8" y1="9" x2="6" y2="2" /><line x1="16" y1="9" x2="18" y2="2" /></svg>),
+    Blueprint: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" /><circle cx="12" cy="7" r="1.5" /><path d="M12 8.5L8.5 17" /><path d="M12 8.5L15.5 17" /><path d="M10 14h4" /></svg>),
+    Sacrifice: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>,
+    Gear: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
   };
+ 
 
-  // Nạp tài nguyên
-  const energy = gsRef.current?.energy ?? 50;
-  const lives = gsRef.current?.lives ?? 10;
-  const coins = gsRef.current?.coins ?? 0;
-  const diamonds = gsRef.current?.diamonds ?? 0;
-  const isVIP = gsRef.current?.isVIP ?? false;
-
-  const { progress, loadout, items } = campaignData;
+  const { progress, loadout, items, materials } = campaignData;
   const targetStage = progress.selectedStage || progress.currentStage || 1; 
   const currentPilot = PILOTS.find(p => p.id === loadout.pilot) || PILOTS[0];
   const currentAircraft = AIRCRAFTS.find(a => a.id === loadout.aircraft) || AIRCRAFTS[0];
-  
+  // Nạp tài nguyên
+  //const materials = campaignData?.materials || {};
+  const energy = gsRef.current?.energy ?? 50;
+  const coins = gsRef.current?.coins ?? 0;
+  const diamonds = gsRef.current?.diamonds ?? 0;
+  const gear = Number(materials?.gears) || 0; 
+  const blueprints = Number(materials?.blueprints) || 0;
   // Nạp 4 ô trang bị
   const mainGunItem = items[loadout.mainGun];
   const currentMainGun = mainGunItem ? GEAR_CATALOG.mainGun.find(g => g.id === mainGunItem.baseId) : null;
@@ -75,22 +78,23 @@ export default function HQ({ gsRef, setScreen, lang }) {
                  <div className={styles.currencyIcon}><Icons.Energy /></div>
                  <span className={styles.currencyAmt}>{energy}</span>
               </div>
-              
-              <div className={`${styles.currencyChip} ${styles.chipLife}`} title={lang === 'vi' ? 'Mạng' : 'Lives'}>
-                 <div className={styles.currencyIcon}><Icons.Heart /></div>
-                 <span className={styles.currencyAmt}>{isVIP ? '∞' : lives}</span>
-              </div>
-              
               <div className={`${styles.currencyChip} ${styles.chipCoin}`} title={lang === 'vi' ? 'Xu' : 'Coins'}>
                  <div className={styles.currencyIcon}><Icons.Coin /></div>
                  <span className={styles.currencyAmt}>{coins.toLocaleString()}</span>
               </div>
               
               <div className={`${styles.currencyChip} ${styles.chipGem}`} title={lang === 'vi' ? 'Kim Cương' : 'Diamonds'}>
-                 <div className={styles.currencyIcon}><Icons.Diamond /></div>
+                 <div className={styles.currencyIcon}><Icons.Gem /></div>
                  <span className={styles.currencyAmt}>{diamonds.toLocaleString()}</span>
               </div>
-
+              <div className={`${styles.currencyChip} ${styles.chipBlueprint}`} title={lang === 'vi' ? 'Bản Vẽ' : 'Blueprint'}>
+                 <div className={styles.currencyIcon}><Icons.Blueprint /></div>
+                 <span className={styles.currencyAmt}>{blueprints.toLocaleString()}</span>
+              </div>
+              <div className={`${styles.currencyChip} ${styles.chipGear}`} title={lang === 'vi' ? 'Bản Vẽ' : 'Blueprint'}>
+                 <div className={styles.currencyIcon}><Icons.Gear /></div>
+                 <span className={styles.currencyAmt}>{gear.toLocaleString()}</span>
+              </div>
             </div>
           </div>
         </motion.div>
@@ -183,10 +187,10 @@ export default function HQ({ gsRef, setScreen, lang }) {
 
         {/* NÚT TÍNH NĂNG & XUẤT KÍCH */}
         <motion.div variants={itemVariants} className={styles.actionBtns}>
-          <motion.button whileTap={{ scale: 0.95 }} className={`${styles.btnBase} hq-interact`} onClick={() => setScreen('inventory')}>
+          <motion.button whileTap={{ scale: 0.95 }} className={`${styles.btnBase} hq-interact`} onClick={() => {gsRef.current.cameFromHQ = true; setScreen('inventory');}}>
             📦 {lang === 'vi' ? 'KHO ĐỒ' : 'INVENTORY'}
           </motion.button>
-          <motion.button whileTap={{ scale: 0.95 }} className={`${styles.btnBase} hq-interact`} onClick={() => setScreen('pilots')}>
+          <motion.button whileTap={{ scale: 0.95 }} className={`${styles.btnBase} hq-interact`} onClick={() => {gsRef.current.cameFromHQ = true; setScreen('pilots')}}>
             👨‍🚀 {lang === 'vi' ? 'NHÂN SỰ' : 'CREW'}
           </motion.button>
         </motion.div>

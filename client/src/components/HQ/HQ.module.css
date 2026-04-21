@@ -71,10 +71,12 @@
 }
 
 /* Đổ màu đặc trưng cho 4 loại tài nguyên của HQ */
-.chipEnergy { color: #0abde3; border-bottom: 2px solid #0abde3; }
-.chipLife   { color: var(--accent-red); border-bottom: 2px solid var(--accent-red); }
-.chipCoin   { color: var(--accent-warm); border-bottom: 2px solid var(--accent-warm); }
-.chipGem    { color: var(--accent); border-bottom: 2px solid var(--accent); }
+.chipEnergy    { color: #0abde3; border-bottom: 2px solid #0abde3; text-shadow: 0 0 8px rgba(10, 189, 227, 0.5); }
+.chipCoin { color: var(--accent-warm); border-bottom: 2px solid var(--accent-warm); }
+.chipGem { color: var(--accent); border-bottom: 2px solid var(--accent); }
+.chipBlueprint { color: var(--accent-cool); border-bottom: 2px solid var(--accent-cool); }
+.chipGear { color: var(--accent-tertiary); border-bottom: 2px solid var(--accent-tertiary); }
+.currencyAmt  { font-family: var(--font-data); font-size: 18px; color: var(--text-primary); }
 
 @media (max-width: 768px) {
   .currencyChip { padding: 5px 10px; gap: 6px; }
