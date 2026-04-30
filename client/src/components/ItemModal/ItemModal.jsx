@@ -1,381 +1,550 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import styles from './ItemModal.module.css';
+import { GEAR_CATALOG, AIRCRAFTS, PILOTS } from '../../constants';
 
-const Icons = {
-  Coin: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" /><line x1="12" y1="2" x2="12" y2="6" /><line x1="12" y1="18" x2="12" y2="22" /><line x1="2" y1="12" x2="6" y2="12" /><line x1="18" y1="12" x2="22" y2="12" /></svg>),
-  Gem: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 22 2 9 6 2 18 2 22 9 12 22" /><line x1="2" y1="9" x2="22" y2="9" /><line x1="12" y1="22" x2="8" y2="9" /><line x1="12" y1="22" x2="16" y2="9" /><line x1="8" y1="9" x2="6" y2="2" /><line x1="16" y1="9" x2="18" y2="2" /></svg>),
-  Blueprint: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" /><circle cx="12" cy="7" r="1.5" /><path d="M12 8.5L8.5 17" /><path d="M12 8.5L15.5 17" /><path d="M10 14h4" /></svg>),
-  Sacrifice: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>,
-  Gear: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+// ── Radar max values ──────────────────────────────────────────────
+const MAX_VALS = { atk: 1500, hp: 4000, armor: 400, speed: 12, fireRate: 0.1 };
+
+// ── Rarity system ─────────────────────────────────────────────────
+const RARITY_COLOR = {
+  1: '#94a3b8', 2: '#4ade80', 3: '#60a5fa', 4: '#c084fc', 5: '#fbbf24',
+};
+const RARITY_LABEL = {
+  1: 'COMMON', 2: 'UNCOMMON', 3: 'RARE', 4: 'EPIC', 5: 'LEGENDARY',
 };
 
-const RadarChart = ({ stats }) => {
-  const size = 200, center = size / 2, radius = 80;
-  const angles = [0, 72, 144, 216, 288].map(deg => (deg - 90) * (Math.PI / 180));
-  
-  const drawPolygon = (r) => {
-    const points = angles.map(a => `${center + r * Math.cos(a)},${center + r * Math.sin(a)}`).join(' ');
-    return <polygon points={points} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />;
+// ── Inline SVG Icons ──────────────────────────────────────────────
+const Icons = {
+  Coin: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+         strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" />
+      <line x1="12" y1="2" x2="12" y2="6" /><line x1="12" y1="18" x2="12" y2="22" />
+      <line x1="2" y1="12" x2="6" y2="12" /><line x1="18" y1="12" x2="22" y2="12" />
+    </svg>
+  ),
+  Blueprint: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+         strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="2" width="16" height="20" rx="2" />
+      <circle cx="12" cy="7" r="1.5" />
+      <path d="M12 8.5L8.5 17" /><path d="M12 8.5L15.5 17" /><path d="M10 14h4" />
+    </svg>
+  ),
+};
+
+// ── Level / star caps per rarity ──────────────────────────────────
+const getItemLimits = (item, baseInfo) => {
+  if (!item) return { maxLevel: 10, maxStar: 1 };
+  if (item.type === 'aircraft') {
+    const tier = baseInfo?.tier || 1;
+    return { maxLevel: { 1: 30, 2: 50, 3: 70, 4: 100 }[tier] || 30, maxStar: 5 };
+  }
+  return { 1: { maxLevel: 20, maxStar: 2 }, 2: { maxLevel: 40, maxStar: 3 },
+           3: { maxLevel: 60, maxStar: 4 }, 4: { maxLevel: 80, maxStar: 5 },
+           5: { maxLevel: 100, maxStar: 6 } }[item.rarity || 1] || { maxLevel: 20, maxStar: 2 };
+};
+
+// ─────────────────────────────────────────────────────────────────
+export default function ItemModal({
+  isOpen, onClose, item, baseInfo, contextType, isEquipped,
+  lang, starUpInfo, resources, actions
+}) {
+  // ── All hooks first ───────────────────────────────────────────
+  const [forgeTab,            setForgeTab]            = useState('upgrade');
+  const [selectedSacrifices,  setSelectedSacrifices]  = useState([]);
+
+  useEffect(() => {
+    if (isOpen) { setForgeTab('upgrade'); setSelectedSacrifices([]); }
+  }, [isOpen, item]);
+
+  // Stat calculation helpers
+  const getCoreStat = (base, lvl, star) => {
+    if (!base) return 0;
+    return base + ((lvl - 1) * Math.max(1, Math.round(base * 0.05)))
+                + ((star - 1) * Math.max(1, Math.round(base * 0.20)));
+  };
+  const getSpeedStat = (base, star) => {
+    if (!base) return 0;
+    return parseFloat((base + (star - 1) * Math.max(0.1, base * 0.10)).toFixed(1));
+  };
+  const getFireRateStat = (base, star) => {
+    if (!base) return 0;
+    const b = base > 20 ? base / 1000 : base;
+    return parseFloat(Math.max(0.05, b - (star - 1) * Math.max(0.01, b * 0.05)).toFixed(2));
   };
 
-  const dataPoints = stats.map((val, i) => {
-    const r = (val / 100) * radius;
-    return `${center + r * Math.cos(angles[i])},${center + r * Math.sin(angles[i])}`;
-  }).join(' ');
+  const currentLvl  = item?.level  || 1;
+  const currentStar = item?.stars  || item?.rarity || 1;
 
-  const labels = ['ATK', 'HP', 'SPD', 'CRT', 'RNG'];
+  const stats = useMemo(() => {
+    const isUp = forgeTab === 'upgrade';
+    const cur = {
+      atk: getCoreStat(baseInfo?.baseAtk,   currentLvl, currentStar),
+      hp:  getCoreStat(baseInfo?.baseHp,     currentLvl, currentStar),
+      arm: getCoreStat(baseInfo?.baseArmor,  currentLvl, currentStar),
+      spd: getSpeedStat(baseInfo?.speed,     currentStar),
+      fr:  getFireRateStat(baseInfo?.fireRate, currentStar),
+    };
+    const next = {
+      atk: isUp ? getCoreStat(baseInfo?.baseAtk,  currentLvl + 1, currentStar)
+                : getCoreStat(baseInfo?.baseAtk,  currentLvl, currentStar + 1),
+      hp:  isUp ? getCoreStat(baseInfo?.baseHp,   currentLvl + 1, currentStar)
+                : getCoreStat(baseInfo?.baseHp,   currentLvl, currentStar + 1),
+      arm: isUp ? getCoreStat(baseInfo?.baseArmor, currentLvl + 1, currentStar)
+                : getCoreStat(baseInfo?.baseArmor, currentLvl, currentStar + 1),
+      spd: isUp ? cur.spd : getSpeedStat(baseInfo?.speed, currentStar + 1),
+      fr:  isUp ? cur.fr  : getFireRateStat(baseInfo?.fireRate, currentStar + 1),
+    };
+    return { cur, next };
+  }, [baseInfo, currentLvl, currentStar, forgeTab]);
 
-  return (
-    <svg width="100%" height="100%" viewBox={`0 0 ${size} ${size}`}>
-      {[0.3, 0.6, 1].map(scale => drawPolygon(radius * scale))}
-      {angles.map((a, i) => <line key={i} x1={center} y1={center} x2={center + radius * Math.cos(a)} y2={center + radius * Math.sin(a)} stroke="rgba(255,255,255,0.1)" strokeWidth="1" />)}
-      <polygon points={dataPoints} fill="rgba(56, 189, 248, 0.4)" stroke="#38bdf8" strokeWidth="2" />
-      {angles.map((a, i) => (
-        <text key={`l-${i}`} x={center + (radius + 15) * Math.cos(a)} y={center + (radius + 15) * Math.sin(a)} fill="#888" fontSize="10" textAnchor="middle" alignmentBaseline="middle">{labels[i]}</text>
-      ))}
-    </svg>
-  );
-};
-
-export default function ItemModal({ 
-  isOpen, onClose, item, baseInfo, contextType, 
-  resources, actions, isEquipped, lang, starUpInfo 
-}) {
-  const [forgeTab, setForgeTab] = useState('upgrade'); 
-  const [selectedSacrifices, setSelectedSacrifices] = useState([]); // ĐÃ SỬA THÀNH MẢNG ĐỂ CHỌN NHIỀU PHÔI
-  const [upgradingState, setUpgradingState] = useState(0); 
-
-  // Reset tab và phôi khi mở Modal
-  useEffect(() => { 
-    if (isOpen) {
-      setForgeTab('upgrade');
-      setSelectedSacrifices([]);
-    }
-  }, [isOpen]);
-
-  // Tự động chọn sẵn phôi rác
-  useEffect(() => {
-    if (forgeTab === 'starUp' && resources.duplicateItems?.length > 0 && starUpInfo?.reqDupes > 0) {
-      const autoSelect = resources.duplicateItems.slice(0, starUpInfo.reqDupes).map(i => i.uuid);
-      setSelectedSacrifices(autoSelect);
-    } else {
-      setSelectedSacrifices([]);
-    }
-  }, [forgeTab, resources.duplicateItems, starUpInfo]);
-
+  // ── Early return after all hooks ──────────────────────────────
   if (!isOpen || !item) return null;
 
-  const isCrate = item.shopType === 'crate';
-  const itemName = isCrate ? item.title[lang] : baseInfo?.name?.[lang] || '???';
-  
-  // LOGIC TÍNH TOÁN 5 CHỈ SỐ THỰC TẾ
-  const isAircraft = item?.type === 'aircraft';
-  const baseAtk = baseInfo?.baseAtk || 0;
-  const baseHp  = baseInfo?.baseHp || 0;
-  const curSpd = baseInfo?.spd || (isAircraft ? 70 : 40);
-  const curCrt = baseInfo?.crt || (isAircraft ? 20 : 5);
-  const curRng = baseInfo?.rng || (isAircraft ? 80 : 50);
+  const isCrate   = item.shopType === 'crate';
+  const limits    = getItemLimits(item, baseInfo);
+  const isMaxLevel = currentLvl  >= limits.maxLevel;
+  const isMaxStar  = currentStar >= limits.maxStar;
 
-  const currentAtk = baseAtk + (item.level * 3);
-  const currentHp  = baseHp + (item.level * 15);
+  const calculateCP = s => Math.floor((s.atk * 5) + (s.hp * 0.5) + (s.arm * 10) + (s.spd * 20));
+  const currentCP   = calculateCP(stats.cur);
+  const nextCP      = calculateCP(stats.next);
+  const showPreview = contextType === 'forge' &&
+    ((forgeTab === 'upgrade' && !isMaxLevel) || (forgeTab === 'starup' && !isMaxStar));
 
-  // Khai báo đủ các biến chỉ số Nâng Cấp
-  const upAtkPlus = 5;
-  const upHpPlus = 25;
-  const upSpdPlus = 0; 
-  const upCrtPlus = 0;
-  const upRngPlus = 0;
+  const upCoinCost = currentLvl * 150;
+  const upBpCost   = Math.ceil(currentLvl * 1.5);
+  const canUpgrade = !isMaxLevel &&
+    (resources?.coins || 0) >= upCoinCost &&
+    (resources?.blueprints || 0) >= upBpCost;
 
-  // Khai báo đủ các biến chỉ số Đột Phá
-  const starAtkPlus = Math.round(currentAtk * 0.15);
-  const starHpPlus = Math.round(currentHp * 0.15);
-  const starSpdPlus = Math.round(curSpd * 0.15);
-  const starCrtPlus = Math.round(curCrt * 0.15);
-  const starRngPlus = Math.round(curRng * 0.15);
+  const hasStarUpFunds = (resources?.coins || 0) >= (starUpInfo?.coinCost || 0);
+  const canStarUp = !isMaxStar && hasStarUpFunds &&
+    selectedSacrifices.length === (starUpInfo?.reqDupes || 0);
 
-  // Xác định số hiển thị "Next" dựa vào Tab đang mở
-  const isUpTab = contextType === 'forge' && forgeTab === 'upgrade';
-  const isStarTab = contextType === 'forge' && forgeTab === 'starUp';
+  const rarityColor = RARITY_COLOR[item.rarity] || '#94a3b8';
 
-  const nextAtk = isUpTab ? currentAtk + upAtkPlus : (isStarTab ? currentAtk + starAtkPlus : null);
-  const nextHp = isStarTab ? currentHp + starHpPlus : (isUpTab ? currentHp + upHpPlus : null);
-  const nextSpd = isStarTab ? curSpd + starSpdPlus : (isUpTab ? curSpd + upSpdPlus : null);
-  const nextCrt = isStarTab ? curCrt + starCrtPlus : (isUpTab ? curCrt + upCrtPlus : null);
-  const nextRng = isStarTab ? curRng + starRngPlus : (isUpTab ? curRng + upRngPlus : null);
-  
-  const radarStats = isCrate ? [50, 50, 50, 50, 50] : [
-    Math.min(100, (currentAtk / 500) * 100), 
-    Math.min(100, (currentHp / 2000) * 100), 
-    nextSpd || curSpd, nextCrt || curCrt * 2, nextRng || curRng
-  ];
-
-  // TÍNH TOÁN CHI PHÍ
-  const upCoinCost = !isCrate ? item.level * 150 : 0;
-  const upGemCost = !isCrate ? Math.ceil(upCoinCost / 100) : 0;
-  const upBpCost = !isCrate ? Math.ceil(item.level * 1.5) : 0;
-
-  // LOGIC OR (HOẶC XU HOẶC KIM CƯƠNG) CHO NÂNG CẤP
-  const hasEnoughCoinForUp = resources.coins >= upCoinCost;
-  const hasEnoughGemForUp = resources.diamonds >= upGemCost;
-  const hasEnoughCurrencyForUp = hasEnoughCoinForUp || hasEnoughGemForUp; 
-  const canUpgrade = hasEnoughCurrencyForUp && resources.blueprints >= upBpCost;
-
-  // LOGIC OR (HOẶC XU HOẶC KIM CƯƠNG) CHO ĐỘT PHÁ
-  const hasEnoughCoinForStar = resources.coins >= (starUpInfo?.coinCost || 0);
-  const hasEnoughGemForStar = resources.diamonds >= (starUpInfo?.gemCost || 0);
-  const hasEnoughCurrencyForStar = hasEnoughCoinForStar || hasEnoughGemForStar; 
-  const canStarUp = hasEnoughCurrencyForStar && selectedSacrifices.length === (starUpInfo?.reqDupes || 1);
-
-  // HÀM CHỌN PHÔI (Cho phép chọn nhiều)
-  const toggleSacrifice = (uuid) => {
-    setSelectedSacrifices(prev => {
-      if (prev.includes(uuid)) return prev.filter(id => id !== uuid);
-      if (prev.length < (starUpInfo?.reqDupes || 1)) return [...prev, uuid];
-      return prev;
-    });
+  // CSS custom property for rarity accent
+  const modalStyle = {
+    '--modal-rc': isCrate ? '#38bdf8' : rarityColor,
   };
 
-  // HÀM CHẠY ĐỘT PHÁ (FO4 Style)
-  const executeStarUp = () => {
-    let hasWarning = false;
-    for (const id of selectedSacrifices) {
-      const sac = resources.duplicateItems.find(i => i.uuid === id);
-      if (sac && ((sac.rarity || 1) >= (item.rarity || 1) || (sac.level || 1) > 1)) {
-        hasWarning = true; break;
-      }
-    }
-
-    if (hasWarning) {
-      const msg = lang === 'vi' ? `⚠️ CẢNH BÁO: Trong danh sách có phôi cấp cao hoặc độ hiếm cao. Chắc chắn hủy?` : `⚠️ WARNING: High tier items selected. Consume?`;
-      if (!window.confirm(msg)) return;
-    }
-
-    setUpgradingState(1);
-    setTimeout(() => {
-      const success = actions.onStarUp(selectedSacrifices); // Truyền MẢNG vào hàm xử lý
-      setUpgradingState(success ? 2 : 3);
-      setTimeout(() => {
-        setUpgradingState(0);
-        if (success) onClose();
-        else setSelectedSacrifices([]);
-      }, 2500);
-    }, 3000); 
+  // ── Radar ─────────────────────────────────────────────────────
+  const getRadarRadius = (val, type) => {
+    if (!val) return 0;
+    if (type === 'fireRate') return Math.min(1, 0.1 / val);
+    return Math.min(1, val / MAX_VALS[type]);
   };
 
-  const renderRangeBar = (label, currentVal, nextVal, maxVal) => {
-    const curPct = Math.min(100, (currentVal / maxVal) * 100);
-    const nextPct = nextVal ? Math.min(100, ((nextVal - currentVal) / maxVal) * 100) : 0;
-    
+  const renderRadar = () => {
+    const r = 55, cx = 65;
+    const pts = s => [
+      [cx,     cx - r * getRadarRadius(s.atk, 'atk')],
+      [cx + r * getRadarRadius(s.hp,  'hp'),  cx],
+      [cx + r * getRadarRadius(s.arm, 'armor') * 0.7, cx + r * 0.7],
+      [cx - r * getRadarRadius(s.spd, 'speed') * 0.7, cx + r * 0.7],
+      [cx - r * getRadarRadius(s.fr,  'fireRate'),     cx - r * 0.2],
+    ].map(([x, y]) => `${x},${y}`).join(' ');
+
     return (
-      <div className={styles.statRow}>
-        <div className={styles.statHeader}>
+      <svg width="130" height="130" className={styles.radarSvg} overflow="visible">
+        {/* Grid circles */}
+        <circle cx={cx} cy={cx} r={r}     fill="none" stroke="rgba(56,189,248,0.12)" strokeWidth="1" />
+        <circle cx={cx} cy={cx} r={r*0.6} fill="none" stroke="rgba(56,189,248,0.08)" strokeWidth="1" strokeDasharray="3,3" />
+        <circle cx={cx} cy={cx} r={r*0.3} fill="none" stroke="rgba(56,189,248,0.06)" strokeWidth="1" />
+        {/* Current stats */}
+        <polygon points={pts(stats.cur)}
+          fill={`${rarityColor}28`} stroke={rarityColor} strokeWidth="1.5" />
+        {/* Preview (upgrade/starup) */}
+        {showPreview && (
+          <polygon points={pts(stats.next)}
+            fill="none" stroke="#fbbf24" strokeWidth="1.2" strokeDasharray="4,3" opacity="0.75" />
+        )}
+        {/* Center dot */}
+        <circle cx={cx} cy={cx} r="2.5" fill={rarityColor} />
+      </svg>
+    );
+  };
+
+  // ── Stat bars ─────────────────────────────────────────────────
+  const renderStatBar = (label, cur, next, max, unit = "", isReverse = false) => {
+    if (!cur) return null;
+    const improved = isReverse ? (next < cur) : (next > cur);
+    const diff = Math.abs(next - cur);
+    return (
+      <div className={styles.statBarRow} key={label}>
+        <div className={styles.statInfo}>
           <span>{label}</span>
-          <span className={styles.statValue}>
-            {currentVal} {nextVal && contextType === 'forge' && forgeTab === 'upgrade' && <span className={styles.up}>➞ {nextVal}</span>}
+          <span>
+            {cur}{unit}
+            {showPreview && improved && (
+              <span className={styles.statUp}>
+                {isReverse ? ' −' : ' +'}{diff.toFixed(unit ? 2 : 0)}{unit}
+              </span>
+            )}
           </span>
         </div>
-        <div className={styles.rangeTrack}>
-          <div className={styles.rangeFill} style={{ width: `${curPct}%` }} />
-          {nextVal && contextType === 'forge' && forgeTab === 'upgrade' && (
-            <div className={styles.rangeBonus} style={{ width: `${nextPct}%` }} />
+        <div className={styles.statBarBg}>
+          <div className={styles.statBarFill}
+               style={{ width: `${Math.min(100, (cur / max) * 100)}%` }} />
+          {showPreview && !isReverse && improved && (
+            <div className={styles.statBarGhost}
+                 style={{ width: `${Math.min(100, (next / max) * 100)}%` }} />
           )}
         </div>
       </div>
     );
   };
 
+  // ── Sacrifice toggle ──────────────────────────────────────────
+  const toggleSacrifice = (uuid) => {
+    if (selectedSacrifices.includes(uuid)) {
+      setSelectedSacrifices(p => p.filter(id => id !== uuid));
+    } else if (selectedSacrifices.length < (starUpInfo?.reqDupes || 0)) {
+      setSelectedSacrifices(p => [...p, uuid]);
+    }
+  };
+
+  const handleStarUpClick = () => {
+    const sacItems = (resources?.duplicateItems || []).filter(d => selectedSacrifices.includes(d.uuid));
+    const warn = sacItems.some(d => (d.level > currentLvl) || ((d.rarity || 1) > currentStar));
+    if (warn) {
+      const msg = lang === 'vi'
+        ? 'CẢNH BÁO: Phôi bạn chọn có Cấp/Phẩm chất CAO HƠN vật phẩm chính!\n\nXác nhận hy sinh?'
+        : 'WARNING: Selected materials have HIGHER Level/Rarity!\n\nConfirm sacrifice?';
+      if (!window.confirm(msg)) return;
+    }
+    actions.onStarUp(selectedSacrifices);
+    setSelectedSacrifices([]);
+  };
+
+  const handleBackdropClick = (e) => { if (e.target === e.currentTarget) onClose(); };
+
+  // ─────────────────────────────────────────────────────────────
   return (
     <AnimatePresence>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={styles.overlay}>
-        <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }} className={styles.modal}>
-          
-          {upgradingState > 0 && (
-            <div className={styles.fo4Overlay}>
-              <div className={styles.fo4Content}>
-                <div className={`${styles.fo4Icon} ${upgradingState === 1 ? styles.fo4Pulsing : ''} ${upgradingState === 2 ? styles.fo4SuccessAnim : ''} ${upgradingState === 3 ? styles.fo4FailAnim : ''}`}>
-                  <img src={baseInfo?.imgSrc} alt="upgrade" />
-                </div>
-                {upgradingState === 1 && (
-                  <>
-                    <div className={styles.fo4Text}>{lang === 'vi' ? 'ĐANG DUNG HỢP VẬT CHẤT...' : 'FUSING MATTER...'}</div>
-                    <div className={styles.fo4BarWrap}><div className={styles.fo4BarFill} /></div>
-                  </>
-                )}
-                {upgradingState === 2 && <div className={styles.fo4ResultSuccess}>{lang === 'vi' ? 'ĐỘT PHÁ THÀNH CÔNG!' : 'UPGRADE SUCCESS!'}</div>}
-                {upgradingState === 3 && <div className={styles.fo4ResultFail}>{lang === 'vi' ? 'THẤT BẠI - PHÔI BỊ PHÁ HỦY' : 'FAILED - SACRIFICE LOST'}</div>}
-              </div>
-            </div>
-          )}
+      <motion.div
+        className={styles.overlay}
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        onClick={handleBackdropClick}
+      >
+        <motion.div
+          className={styles.modal}
+          style={modalStyle}
+          initial={{ scale: 0.92, y: 24, opacity: 0 }}
+          animate={{ scale: 1,    y: 0,  opacity: 1 }}
+          exit={{ scale: 0.92, y: 16, opacity: 0 }}
+          transition={{ type: 'spring', damping: 26, stiffness: 320 }}
+        >
+          {/* ── Close ── */}
+          <button className={styles.closeBtn} onClick={onClose}>✕</button>
 
-          <div className={styles.header}>
-            <div className={styles.titleArea}>
-              <h2 className={styles.title}>{itemName}</h2>
-              {!isCrate && (
+          <div className={styles.modalContent}>
+
+            {/* ══ LEFT: IMAGE PANEL ══════════════════════════════ */}
+            <div
+              className={styles.imageSection}
+              style={{
+                borderRightColor: `${rarityColor}25`,
+                boxShadow: `inset 0 0 60px ${rarityColor}14`,
+              }}
+            >
+              {/* Ambient glow */}
+              <div
+                className={styles.glowBg}
+                style={{
+                  background: `radial-gradient(circle at center, ${rarityColor}35 0%, transparent 70%)`,
+                }}
+              />
+
+              {/* Image or crate icon */}
+              {isCrate
+                ? <div className={styles.crateIconWrap}>{item.icon}</div>
+                : <img
+                    src={baseInfo?.imgSrc || baseInfo?.imgHq || baseInfo?.imgTop}
+                    alt="item"
+                    className={styles.itemImage}
+                    style={{ filter: `drop-shadow(0 0 18px ${rarityColor}60)` }}
+                  />
+              }
+
+              {isEquipped && (
+                <div className={styles.equippedTag}>
+                  ✓ {lang === 'vi' ? 'ĐANG DÙNG' : 'EQUIPPED'}
+                </div>
+              )}
+            </div>
+
+            {/* ══ RIGHT: INFO PANEL ══════════════════════════════ */}
+            <div className={styles.infoSection}>
+
+              {/* Combat Power */}
+              {!isCrate && item.type !== 'pilot' && (
+                <div className={styles.cpBox}>
+                  <span className={styles.cpLabel}>COMBAT POWER</span>
+                  <span className={styles.cpValue}>{currentCP.toLocaleString()}</span>
+                  {showPreview && nextCP > currentCP && (
+                    <span className={styles.cpUp}>▲ +{(nextCP - currentCP).toLocaleString()}</span>
+                  )}
+                </div>
+              )}
+
+              {/* Title area */}
+              <div className={styles.titleArea}>
                 <div className={styles.itemBadges}>
-                  <span className={styles.lvlBadge}>LV.{item.level}</span>
-                  <span className={styles.rarityBadge}>{'★'.repeat(item.rarity || 1)}</span>
-                </div>
-              )}
-            </div>
-            <button className={styles.closeBtn} onClick={onClose}>✕</button>
-          </div>
-
-          <div className={styles.content}>
-            <div className={styles.leftCol}>
-              <div className={styles.previewWrap}>
-                <span className={styles.previewIcon}>{isCrate ? item.icon : (baseInfo?.imgSrc ? <img src={baseInfo.imgSrc} width="100%" /> : '🚀')}</span>
-              </div>
-              <div className={styles.radarContainer}><RadarChart stats={radarStats} /></div>
-            </div>
-
-            <div className={styles.rightCol}>
-              
-              {contextType === 'forge' && !isCrate && (
-                <div className={styles.forgeTabs}>
-                  <button className={`${styles.fTab} ${forgeTab === 'upgrade' ? styles.active : ''}`} onClick={() => setForgeTab('upgrade')}>⬆ NÂNG CẤP</button>
-                  <button className={`${styles.fTab} ${forgeTab === 'starUp' ? styles.active : ''}`} onClick={() => setForgeTab('starUp')}>★ ĐỘT PHÁ</button>
-                </div>
-              )}
-
-              {isStarTab && (
-                <div className={styles.starPreviewHeader}>
-                   <span className={styles.oldStars}>{(item.rarity || 1)}★</span>
-                   <span className={styles.starArrow}>➞</span>
-                   <span className={styles.newStars}>{(item.rarity || 1) + 1}★</span>
-                </div>
-              )}
-
-              <div className={styles.statsBox}>
-                <div className={styles.statsGrid}>
-                  {renderRangeBar(lang === 'vi' ? 'HỎA LỰC' : 'ATTACK', currentAtk, nextAtk, 1000)}
-                  {renderRangeBar(lang === 'vi' ? 'GIÁP TRỤ' : 'SHIELD', currentHp, nextHp, 3000)}
-                  {renderRangeBar(lang === 'vi' ? 'TỐC ĐỘ' : 'SPEED', curSpd, null, 100)}
-                  {renderRangeBar(lang === 'vi' ? 'CHÍ MẠNG' : 'CRIT %', curCrt, null, 50)}
-                  {renderRangeBar(lang === 'vi' ? 'TẦM BẮN' : 'RANGE', curRng, null, 100)}
-                </div>
-              </div>
-
-              {/* YÊU CẦU NÂNG CẤP */}
-              {contextType === 'forge' && forgeTab === 'upgrade' && (
-                <div className={styles.requirements}>
-                  <div className={`${styles.reqItem} ${!hasEnoughCurrencyForUp ? styles.insufficient : ''}`}>
-                    <span>{lang === 'vi' ? 'Chi phí:' : 'Cost:'}</span>
-                    <div style={{ display: 'flex', gap: '12px', marginTop: '5px', alignItems: 'center' }}>
-                      {/* Đã sửa hiển thị Dạng Hiện tại / Yêu cầu (VD: 5000 / 150) */}
-                      <span style={{ color: hasEnoughCoinForUp ? '#fb923c' : '#ff4757' }}>
-                        <span className={styles.reqIcon}><Icons.Coin/></span> {resources.coins.toLocaleString()} / {upCoinCost.toLocaleString()} 
-                      </span>
-                      <span style={{ color: '#888', fontSize: '11px' }}> HOẶC </span>
-                      <span style={{ color: (!hasEnoughCoinForUp && hasEnoughGemForUp) ? '#38bdf8' : '#888' }}>
-                        <span className={styles.reqIcon}><Icons.Gem/></span> {resources.diamonds.toLocaleString()} / {upGemCost.toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className={`${styles.reqItem} ${resources.blueprints < upBpCost ? styles.insufficient : ''}`}>
-                    <span className={styles.reqIcon} style={{color:'#00ff88'}}><Icons.Blueprint/></span> Bản vẽ: {resources.blueprints.toLocaleString()} / {upBpCost.toLocaleString()}
-                  </div>
-                </div>
-              )}
-
-              {/* YÊU CẦU ĐỘT PHÁ */}
-              {contextType === 'forge' && forgeTab === 'starUp' && (
-                <div className={styles.requirements}>
-                  <div className={styles.reqItem}>
-                    <span className={styles.reqIcon} style={{color:'#2ed573'}}>⚝</span> 
-                    {lang === 'vi' ? 'Tỷ lệ thành công:' : 'Success Rate:'} 
-                    <span className={styles.rateText} style={{marginLeft: '8px', color: starUpInfo?.rate === 100 ? '#2ed573' : (starUpInfo?.rate >= 50 ? '#facc15' : '#ff4757')}}>
-                      {starUpInfo?.rate}%
+                  {!isCrate && (
+                    <span className={styles.lvlBadge}>
+                      LV {currentLvl}/{limits.maxLevel}
                     </span>
-                  </div>
-                  
-                  <div className={`${styles.reqItem} ${!hasEnoughCurrencyForStar ? styles.insufficient : ''}`}>
-                    <span>{lang === 'vi' ? 'Chi phí:' : 'Cost:'}</span>
-                    <div style={{ display: 'flex', gap: '12px', marginTop: '5px', alignItems: 'center' }}>
-                      {/* Đã sửa hiển thị Dạng Hiện tại / Yêu cầu */}
-                      <span style={{ color: hasEnoughCoinForStar ? '#fb923c' : '#ff4757' }}>
-                        <span className={styles.reqIcon}><Icons.Coin/></span> {resources.coins.toLocaleString()} / {(starUpInfo?.coinCost || 0).toLocaleString()} 
-                      </span>
-                      <span style={{ color: '#888', fontSize: '11px' }}> HOẶC </span>
-                      <span style={{ color: (!hasEnoughCoinForStar && hasEnoughGemForStar) ? '#38bdf8' : '#888' }}>
-                        <span className={styles.reqIcon}><Icons.Gem/></span> {resources.diamonds.toLocaleString()} / {(starUpInfo?.gemCost || 0).toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-                  
-                  <div className={styles.reqItem} style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
-                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '5px' }}>
-                      <span className={styles.reqIcon} style={{color:'#facc15'}}><Icons.Sacrifice/></span> 
-                      {lang === 'vi' ? `Chọn phôi (${selectedSacrifices.length}/${starUpInfo?.reqDupes}):` : `Sacrifices (${selectedSacrifices.length}/${starUpInfo?.reqDupes}):`}
-                    </div>
-                    
-                    {resources.duplicateItems?.length > 0 ? (
-                      <div className={styles.sacGrid}>
-                        {resources.duplicateItems.map(dup => {
-                          const isSelected = selectedSacrifices.includes(dup.uuid);
-                          return (
-                            <div 
-                              key={dup.uuid} 
-                              className={`${styles.sacCard} ${isSelected ? styles.sacActive : ''}`}
-                              onClick={() => toggleSacrifice(dup.uuid)}
-                            >
-                              <div className={styles.sacImageWrap}>
-                                {baseInfo?.imgSrc ? <img src={baseInfo.imgSrc} alt="sacrifice" className={styles.sacImage} /> : <span>🚀</span>}
-                              </div>
-                              <span className={styles.sacLv}>LV {dup.level}</span>
-                              <span className={styles.sacRarity}>{'★'.repeat(dup.rarity || 1)}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <span className={styles.insufficient} style={{ fontSize: '13px', marginLeft: '30px' }}>
-                        {lang === 'vi' ? '(Không tìm thấy vật phẩm cùng loại trong kho)' : '(No duplicate items found)'}
-                      </span>
-                    )}
+                  )}
+                  <span
+                    className={styles.rarityBadge}
+                    style={{ color: rarityColor, textShadow: `0 0 10px ${rarityColor}` }}
+                  >
+                    {isCrate
+                      ? (lang === 'vi' ? 'HÒM TIẾP TẾ' : 'SUPPLY CRATE')
+                      : '★'.repeat(currentStar)}
+                  </span>
+                  {!isCrate && item.rarity && (
+                    <span style={{
+                      fontFamily: 'var(--font-data)', fontSize: 10,
+                      color: rarityColor, border: `1px solid ${rarityColor}`,
+                      borderRadius: 4, padding: '2px 7px', background: `${rarityColor}15`,
+                      letterSpacing: '1px',
+                    }}>
+                      {RARITY_LABEL[item.rarity]}
+                    </span>
+                  )}
+                </div>
+
+                <h2
+                  className={styles.itemName}
+                  style={{ color: isCrate ? 'var(--m-accent)' : '#fff' }}
+                >
+                  {isCrate
+                    ? item.title[lang]
+                    : baseInfo?.name?.[lang] || 'UNKNOWN ITEM'}
+                </h2>
+
+                <div className={styles.itemDescriptionBox}>
+                  {baseInfo?.description?.[lang] ||
+                   baseInfo?.skillDesc?.[lang]   ||
+                   item?.desc?.[lang]             || '…'}
+                </div>
+              </div>
+
+              {/* Radar + stat bars */}
+              {!isCrate && item.type !== 'pilot' && (
+                <div className={styles.visualSection}>
+                  <div className={styles.radarContainer}>{renderRadar()}</div>
+                  <div className={styles.statsDisplay}>
+                    {renderStatBar('ATK',       stats.cur.atk, stats.next.atk, MAX_VALS.atk)}
+                    {renderStatBar('HP',         stats.cur.hp,  stats.next.hp,  MAX_VALS.hp)}
+                    {renderStatBar('ARMOR',      stats.cur.arm, stats.next.arm, MAX_VALS.armor)}
+                    {renderStatBar('SPEED',      stats.cur.spd, stats.next.spd, MAX_VALS.speed)}
+                    {renderStatBar('FIRE RATE',  stats.cur.fr,  stats.next.fr,  MAX_VALS.fireRate, 's', true)}
                   </div>
                 </div>
               )}
 
-              <div className={styles.actionZone}>
+              {/* ── ACTION AREA ─────────────────────────────── */}
+              <div className={styles.actionArea}>
+
+                {/* BAG context */}
                 {contextType === 'bag' && (
-                  <>
-                    <button className={`${styles.mainBtn} ${isEquipped ? styles.btnUnequip : styles.btnEquip}`} onClick={() => { actions.onEquip(); onClose(); }}>
-                      {isEquipped ? (lang === 'vi' ? 'THÁO TRANG BỊ' : 'UNEQUIP') : (lang === 'vi' ? 'MẶC TRANG BỊ' : 'EQUIP')}
-                    </button>
-                    <button className={`${styles.mainBtn} ${styles.btnForge}`} onClick={() => { actions.onGoToForge(); onClose(); }}>
-                      ⟿ {lang === 'vi' ? 'ĐẾN XƯỞNG RÈN' : 'GO TO FORGE'}
-                    </button>
-                  </>
-                )}
-
-                {contextType === 'forge' && (
-                  <>
-                    {forgeTab === 'upgrade' ? (
-                       <button className={`${styles.mainBtn} ${styles.btnUpgrade}`} disabled={!canUpgrade} onClick={actions.onUpgrade}>⬆ {lang === 'vi' ? 'TIẾN HÀNH RÈN' : 'UPGRADE'}</button>
-                    ) : (
-                       <button className={`${styles.mainBtn} ${styles.btnStarUp}`} disabled={!canStarUp || item.rarity >= 5} onClick={executeStarUp}>
-                         ★ {item.rarity >= 5 ? 'MAX SAO' : 'ĐỘT PHÁ'}
-                       </button>
+                  <div className={styles.btnGroupRow}>
+                    {item.type !== 'aircraft' && (
+                      <button
+                        className={`${styles.mainBtn} ${isEquipped ? styles.btnRemove : styles.btnEquip}`}
+                        onClick={() => { actions.onEquip(); onClose(); }}
+                      >
+                        {isEquipped
+                          ? (lang === 'vi' ? 'THÁO RA' : 'UNEQUIP')
+                          : (lang === 'vi' ? 'TRANG BỊ' : 'EQUIP')}
+                      </button>
                     )}
-                    <button style={{flex: 1}} className={`${styles.mainBtn} ${styles.btnBuy}`} onClick={() => { if(actions.onGoToShop) actions.onGoToShop(); onClose(); }}>
-                        🛒 {lang === 'vi' ? 'MUA VẬT PHẨM' : 'BUY ITEMS'}
+                    {item.type === 'aircraft' && !isEquipped && (
+                      <button
+                        className={`${styles.mainBtn} ${styles.btnEquip}`}
+                        onClick={() => { actions.onEquip(); onClose(); }}
+                      >
+                        {lang === 'vi' ? 'ĐIỀU ĐỘNG' : 'DEPLOY'}
+                      </button>
+                    )}
+                    {item.type !== 'pilot' && (
+                      <button
+                        className={`${styles.mainBtn} ${styles.btnForge}`}
+                        onClick={() => { actions.onGoToForge(); onClose(); }}
+                      >
+                        ⚒ {lang === 'vi' ? 'XƯỞNG RÈN' : 'FORGE'}
+                      </button>
+                    )}
+                    <button className={styles.mainBtn} onClick={actions.onToggleLock}>
+                      {item.isLocked ? (lang === 'vi' ? 'MỞ KHÓA' : 'UNLOCK') : (lang === 'vi' ? 'KHÓA VẬT PHẨM' : 'LOCK ITEM')}
                     </button>
-                  </>
+                  </div>
                 )}
 
+                {/* FORGE context */}
+                {contextType === 'forge' && item.type !== 'pilot' && (
+                  <div className={styles.forgeWrapper}>
+                    {/* Sub-tabs */}
+                    <div className={styles.forgeTabs}>
+                      <button
+                        className={forgeTab === 'upgrade' ? styles.activeTab : ''}
+                        onClick={() => setForgeTab('upgrade')}
+                      >
+                        ⬆ {lang === 'vi' ? 'NÂNG CẤP' : 'UPGRADE'}
+                      </button>
+                      <button
+                        className={forgeTab === 'starup' ? styles.activeTab : ''}
+                        onClick={() => setForgeTab('starup')}
+                      >
+                        ★ {lang === 'vi' ? 'ĐỘT PHÁ' : 'STAR UP'}
+                      </button>
+                    </div>
+
+                    <div className={styles.forgeDetails}>
+                      {/* UPGRADE tab */}
+                      {forgeTab === 'upgrade' && (
+                        <>
+                          {isMaxLevel
+                            ? <div className={styles.maxReached}>
+                                {lang === 'vi' ? '✦ ĐÃ ĐẠT CẤP TỐI ĐA ✦' : '✦ MAX LEVEL REACHED ✦'}
+                              </div>
+                            : <div className={styles.costGrid}>
+                                <div className={styles.costItem}>
+                                  <span className={styles.costLabel}>
+                                    {lang === 'vi' ? 'Chi phí' : 'Cost'}
+                                  </span>
+                                  <span className={(resources?.coins || 0) >= upCoinCost ? styles.hasRes : styles.noRes}>
+                                    <Icons.Coin /> {upCoinCost.toLocaleString()}
+                                  </span>
+                                </div>
+                                <div className={styles.costItem}>
+                                  <span className={styles.costLabel}>
+                                    {lang === 'vi' ? 'Bản vẽ' : 'Blueprints'}
+                                  </span>
+                                  <span className={(resources?.blueprints || 0) >= upBpCost ? styles.hasRes : styles.noRes}>
+                                    <Icons.Blueprint /> {upBpCost} / {resources?.blueprints || 0}
+                                  </span>
+                                </div>
+                              </div>
+                          }
+                          <button
+                            className={`${styles.mainBtn} ${styles.btnUpgrade}`}
+                            disabled={!canUpgrade || isMaxLevel}
+                            onClick={actions.onUpgrade}
+                          >
+                            {lang === 'vi' ? 'TIẾN HÀNH RÈN' : 'EXECUTE UPGRADE'}
+                          </button>
+                        </>
+                      )}
+
+                      {/* STAR UP tab */}
+                      {forgeTab === 'starup' && (
+                        <>
+                          {isMaxStar
+                            ? <div className={styles.maxReached}>
+                                {lang === 'vi' ? '✦ ĐÃ ĐẠT SAO TỐI ĐA ✦' : '✦ MAX STAR REACHED ✦'}
+                              </div>
+                            : <div className={styles.costGrid}>
+                                <div className={styles.costItem}>
+                                  <span className={styles.costLabel}>
+                                    {lang === 'vi' ? 'Tỷ lệ' : 'Success Rate'}
+                                  </span>
+                                  <span className={styles.hasRes} style={{ color: '#4ade80' }}>
+                                    {starUpInfo?.rate}%
+                                  </span>
+                                </div>
+                                <div className={styles.costItem}>
+                                  <span className={styles.costLabel}>
+                                    {lang === 'vi' ? 'Chi phí' : 'Cost'}
+                                  </span>
+                                  <span className={(resources?.coins || 0) >= (starUpInfo?.coinCost || 0) ? styles.hasRes : styles.noRes}>
+                                    <Icons.Coin /> {starUpInfo?.coinCost}
+                                  </span>
+                                </div>
+                                <div className={styles.costItem}>
+                                  <span className={styles.costLabel}>
+                                    {lang === 'vi' ? 'Phôi cùng loại' : 'Materials'}
+                                  </span>
+                                  <span className={selectedSacrifices.length === (starUpInfo?.reqDupes || 0) ? styles.hasRes : styles.noRes}>
+                                    {selectedSacrifices.length} / {starUpInfo?.reqDupes}
+                                  </span>
+                                </div>
+
+                                {/* Sacrifice grid */}
+                                <div className={styles.sacrificeGrid}>
+                                  {(resources?.duplicateItems || []).map(dup => {
+                                    const isSel = selectedSacrifices.includes(dup.uuid);
+                                    const rc = RARITY_COLOR[dup.rarity] || '#94a3b8';
+                                    let src = '';
+                                    if (dup.type === 'aircraft')   src = AIRCRAFTS?.find(a => a.id === dup.id)?.imgSrc;
+                                    else if (dup.type === 'pilot') src = PILOTS?.find(p => p.id === dup.id)?.imgSrc;
+                                    else src = GEAR_CATALOG?.[dup.type]?.find(g => g.id === dup.baseId)?.imgSrc;
+                                    const emoji = { mainGun:'🔫', armor:'🛡️', drone:'🛰️', wingman:'🚀' }[dup.type] || '⚙️';
+                                    return (
+                                      <div
+                                        key={dup.uuid}
+                                        className={`${styles.sacrificeItem} ${isSel ? styles.selectedSac : ''}`}
+                                        style={{ borderColor: isSel ? '#fbbf24' : rc, color: rc }}
+                                        onClick={() => toggleSacrifice(dup.uuid)}
+                                      >
+                                        {src
+                                          ? <img src={src} alt="mat" style={{ width: '68%', height: '68%', objectFit: 'contain', filter: `drop-shadow(0 0 5px ${rc}80)` }} />
+                                          : <span style={{ fontSize: '26px' }}>{emoji}</span>}
+                                        <span className={styles.sacLvl} style={{ borderColor: rc }}>
+                                          Lv.{dup.level || 1}
+                                        </span>
+                                        {isSel && <div className={styles.sacCheck}>✓</div>}
+                                      </div>
+                                    );
+                                  })}
+                                  {(resources?.duplicateItems || []).length === 0 && (
+                                    <div className={styles.noSacrifice}>
+                                      {lang === 'vi' ? 'Không có vật liệu phù hợp' : 'No available materials'}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                          }
+                          <button
+                            className={`${styles.mainBtn} ${styles.btnStarUp}`}
+                            disabled={!canStarUp || isMaxStar}
+                            onClick={handleStarUpClick}
+                          >
+                            ★ {lang === 'vi' ? 'ĐỘT PHÁ' : 'STAR UP'}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* CRATE context */}
                 {contextType === 'crate' && (
-                  <>
-                    <button className={`${styles.mainBtn} ${styles.btnUpgrade}`} disabled={resources.crates < 1} onClick={() => actions.onOpen(1)}>MỞ x1</button>
-                    <button className={`${styles.mainBtn} ${styles.btnStarUp}`} disabled={resources.crates < 10} onClick={() => actions.onOpen(10)}>MỞ x10</button>
-                  </>
+                  <div className={styles.btnGroupRow}>
+                    <button
+                      className={`${styles.mainBtn} ${styles.btnUpgrade}`}
+                      disabled={(resources?.crates || 0) < 1}
+                      onClick={() => actions.onOpen(1)}
+                    >
+                      {lang === 'vi' ? 'MỞ x1' : 'OPEN x1'}
+                    </button>
+                    <button
+                      className={`${styles.mainBtn} ${styles.btnStarUp}`}
+                      disabled={(resources?.crates || 0) < 10}
+                      onClick={() => actions.onOpen(10)}
+                    >
+                      {lang === 'vi' ? 'MỞ x10' : 'OPEN x10'}
+                    </button>
+                  </div>
                 )}
-                {contextType === 'shop' && (
-                    <button className={`${styles.mainBtn} ${styles.btnBuy}`} disabled={!actions.canBuy} onClick={() => { actions.onBuy(); onClose(); }}>🛒 MUA NGAY</button>
-                )}
-              </div>
 
+              </div>
             </div>
           </div>
         </motion.div>

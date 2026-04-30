@@ -1,21 +1,4 @@
 // src/constants.js
-export const SKINS = [
-  { id: 'classic', name: { vi: 'Mèo Sầu Bi', en: 'Sad Cat' }, color: '#FFD700', imgAlive: '/images/cat_alive.png', imgDead: '/images/cat_dead.png', price: 0 },
-  { id: 'dog', name: { vi: 'Cún Tinh Nghịch', en: 'Playful Dog' }, color: '#FFD700', imgAlive: '/images/dog_alive.png', imgDead: '/images/dog_dead.png', price: 0 },
-  { id: 'evilFly', name: { vi: 'Ruồi Vui Vẻ', en: 'Happy Fly' }, color: '#FFD700', imgAlive: '/images/evil_fly_alive.png', imgDead: '/images/evil_fly_dead.png', price: 300 },
-  { id: 'ufo', name: { vi: 'Phi Thuyền UFO', en: 'UFO Spaceship' }, color: '#FFD700', imgAlive: '/images/ufo_alive.png', imgDead: '/images/ufo_dead.png', price: 500 },
-  { id: 'plane', name: { vi: 'Phi Công Trẻ', en: 'Young Pilot' }, color: '#FFD700', imgAlive: '/images/pilot_alive.png', imgDead: '/images/pilot_dead.png', price: 700 },
-  { id: 'astro_plane', name: { vi: 'Tàu Vũ Trụ', en: 'Space Plane' }, color: '#FFD700', imgAlive: '/images/astro_plane_alive.png', imgDead: '/images/astro_plane_dead.png', price: 2000 },
-];
- export const BACKGROUNDS = [
-  { id: 'deep', name: { vi: 'Không Gian Sâu', en: 'Deep Space' }, top: '#0d0e15', bottom: '#0d0e15', type: 'stars', price: 0 },
-  { id: 'forest', name: { vi: 'Đêm Tĩnh Lặng', en: 'Midnight' }, top: '#020024', bottom: '#101030', type: 'aurora', price: 150 },
-  { id: 'meteor', name: { vi: 'Vành Đai Đá', en: 'Meteor Belt' }, top: '#100a1c', bottom: '#000000', type: 'meteors', price: 350 },
-  { id: 'ocean', name: { vi: 'Đại Dương Xanh', en: 'Ocean' }, top: '#1a2a6c', bottom: '#b21f1f', type: 'bubbles', price: 550 },
-  { id: 'hyperspace', name: { vi: 'Siêu Không Gian', en: 'Hyperspace' }, top: '#050510', bottom: '#1a1a2e', type: 'hyperspace', price: 700 },
-  { id: 'sunset', name: { vi: 'Hoàng Hôn', en: 'Sunset' }, top: '#2c3e50', bottom: '#fd746c', type: 'fireflies', price: 1200 },
-  { id: 'bgAstro', name: { vi: 'Vũ Trụ Vô Tận', en: 'Endless Space' }, type: 'image', imgSrc: '/images/bgAstro.png', price: 2000 }
-];
 // ==========================================
 // --- TỪ ĐIỂN DỮ LIỆU: CHẾ ĐỘ CHIẾN DỊCH ---
 // ==========================================
@@ -194,7 +177,7 @@ export const AIRCRAFTS = [
     speed: 5.0,
     imgHq: '/images/ships/void_hq.png',
     imgTop: '/images/ships/void_top.png',
-    imgSrc: '/images/ships/void.png',
+    imgSrc: '/images/ships/void_hq.png',
     hitboxScale: 0.95,
     engineFlameScale: 1.25,
     engineFlameTint: 0x8e44ad,
@@ -214,7 +197,7 @@ export const AIRCRAFTS = [
     speed: 5.4,
     imgHq: '/images/ships/nebula_hq.png',
     imgTop: '/images/ships/nebula_top.png',
-    imgSrc: '/images/ships/nebula.png',
+    imgSrc: '/images/ships/nebula_hq.png',
     hitboxScale: 1.05,
     engineFlameScale: 1.12,
     engineFlameTint: 0x00e5ff,
@@ -234,7 +217,7 @@ export const AIRCRAFTS = [
     speed: 8.7,
     imgHq: '/images/ships/raptor_hq.png',
     imgTop: '/images/ships/raptor_top.png',
-    imgSrc: '/images/ships/raptor.png',
+    imgSrc: '/images/ships/raptor_hq.png',
     hitboxScale: 0.72,
     engineFlameScale: 0.98,
     engineFlameTint: 0xf1c40f,
@@ -255,7 +238,7 @@ export const AIRCRAFTS = [
     speed: 10.0,
     imgHq: '/images/ships/spectre_hq.png',
     imgTop: '/images/ships/spectre_top.png',
-    imgSrc: '/images/ships/spectre.png',
+    imgSrc: '/images/ships/spectre_hq.png',
     hitboxScale: 0.62,
     engineFlameScale: 0.85,
     engineFlameTint: 0x00ffcc,
@@ -275,7 +258,7 @@ export const AIRCRAFTS = [
     speed: 6.8,
     imgHq: '/images/ships/storm_hq.png',
     imgTop: '/images/ships/storm_top.png',
-    imgSrc: '/images/ships/storm.png',
+    imgSrc: '/images/ships/storm_hq.png',
     hitboxScale: 0.88,
     engineFlameScale: 1.35,
     engineFlameTint: 0x74b9ff,
@@ -295,7 +278,7 @@ export const AIRCRAFTS = [
     speed: 3.0,
     imgHq: '/images/ships/leviathan_hq.png',
     imgTop: '/images/ships/leviathan_top.png',
-    imgSrc: '/images/ships/leviathan.png',
+    imgSrc: '/images/ships/leviathan_hq.png',
     hitboxScale: 1.30,
     engineFlameScale: 1.70,
     engineFlameTint: 0xff4757,
@@ -315,7 +298,7 @@ export const AIRCRAFTS = [
     speed: 7.2,
     imgHq: '/images/ships/vortex_hq.png',
     imgTop: '/images/ships/vortex_top.png',
-    imgSrc: '/images/ships/vortex.png',
+    imgSrc: '/images/ships/vortex_hq.png',
     hitboxScale: 0.78,
     engineFlameScale: 1.18,
     engineFlameTint: 0xfd79a8,
@@ -336,7 +319,7 @@ export const AIRCRAFTS = [
     speed: 9.0,
     imgHq: '/images/ships/nova_hq.png',
     imgTop: '/images/ships/nova_top.png',
-    imgSrc: '/images/ships/nova.png',
+    imgSrc: '/images/ships/nova_hq.png',
     hitboxScale: 0.82,
     engineFlameScale: 1.45,
     engineFlameTint: 0xffff00,
@@ -356,7 +339,7 @@ export const AIRCRAFTS = [
     speed: 3.8,
     imgHq: '/images/ships/eternal_hq.png',
     imgTop: '/images/ships/eternal_top.png',
-    imgSrc: '/images/ships/eternal.png',
+    imgSrc: '/images/ships/eternal_hq.png',
     hitboxScale: 1.38,
     engineFlameScale: 1.85,
     engineFlameTint: 0x2ecc71,
@@ -376,7 +359,7 @@ export const AIRCRAFTS = [
     speed: 10.8,
     imgHq: '/images/ships/abyss_hq.png',
     imgTop: '/images/ships/abyss_top.png',
-    imgSrc: '/images/ships/abyss.png',
+    imgSrc: '/images/ships/abyss_hq.png',
     hitboxScale: 0.60,
     engineFlameScale: 0.78,
     engineFlameTint: 0x6c5ce7,
@@ -396,7 +379,7 @@ export const AIRCRAFTS = [
     speed: 2.7,
     imgHq: '/images/ships/titanforge_hq.png',
     imgTop: '/images/ships/titanforge_top.png',
-    imgSrc: '/images/ships/titanforge.png',
+    imgSrc: '/images/ships/titanforge_hq.png',
     hitboxScale: 1.48,
     engineFlameScale: 2.1,
     engineFlameTint: 0xe17055,
@@ -416,7 +399,7 @@ export const AIRCRAFTS = [
     speed: 7.2,
     imgHq: '/images/ships/celestial_hq.png',
     imgTop: '/images/ships/celestial_top.png',
-    imgSrc: '/images/ships/celestial.png',
+    imgSrc: '/images/ships/celestial_hq.png',
     hitboxScale: 0.95,
     engineFlameScale: 1.40,
     engineFlameTint: 0xfff200,
@@ -787,6 +770,85 @@ export const CRATE_CONFIGS = [
   { id: 'epic',        shopType: 'crate', rarity: 5, icon: '👑', title: { vi: 'HÒM HUYỀN THOẠI', en: 'EPIC CACHE' }, desc: { vi: 'Tinh hoa vũ trụ. Chỉ rớt Lam, Tím, Vàng.', en: 'Galactic apex.' }, cost: 50, currency: 'diamonds', dropRates: { 1: 0, 2: 0, 3: 50, 4: 35, 5: 15 } },
   { id: 'pilot_gacha', shopType: 'crate', rarity: 4, icon: '📡', title: { vi: 'VÉ TUYỂN MỘ', en: 'RECRUIT TICKET' }, desc: { vi: 'Phát tín hiệu triệu hồi phi công ngẫu nhiên.', en: 'Broadcast SOS.' }, cost: 30, currency: 'diamonds', dropRates: { 1: 30, 2: 28, 3: 22, 4: 14, 5: 6 } },
 ];
+// ==========================================
+// --- CẤU HÌNH THIÊN HÀ (GALAXY MAP) ---
+// ==========================================
+// Thay đổi trong constants.js
+export const PLANET_CONFIG = {
+  1: { 
+    id: 1, name: { vi: 'Trạm Tiền Tiêu Alpha', en: 'Outpost Alpha' }, 
+    envDesc: { vi: 'Bình thường', en: 'Normal' },
+    speedDebuff: 0, enemyHpBuff: 1.0, color: '#2ecc71', icon: '🪐',
+    imgSrc: '/images/planet_base.png' // <--- Thêm đường dẫn ảnh
+  },
+  2: { 
+    id: 2, name: { vi: 'Tinh Vân Băng Giá', en: 'Cryo-7 Nebula' }, 
+    envDesc: { vi: 'Tốc độ tàu giảm 20%', en: 'Ship speed -20%' },
+    speedDebuff: 0.2, enemyHpBuff: 1.5, color: '#38bdf8', icon: '☄️',
+    imgSrc: '/images/planet_ice.png' // <--- Thêm đường dẫn ảnh
+  },
+  3: { 
+    id: 3, name: { vi: 'Hỏa Ngục Prime', en: 'Inferno Prime' }, 
+    envDesc: { vi: 'Quái trâu gấp đôi', en: 'Enemy HP x2' },
+    speedDebuff: 0, enemyHpBuff: 2.0, color: '#ff4757', icon: '🔥',
+    imgSrc: '/images/planet_fire.png' // <--- Thêm đường dẫn ảnh
+  }
+};
+
+// Cấu trúc chuẩn cho 10 ải của MỌI tinh cầu
+export const STAGE_CONFIG = {
+  1: { waves: 5, baseEnemies: 5, timeLimit: 90 },      
+  2: { waves: 5, baseEnemies: 8, timeLimit: 100 },     
+  3: { waves: 7, baseEnemies: 10, timeLimit: 120 },
+  4: { waves: 7, baseEnemies: 15, timeLimit: 140 },
+  5: { waves: 10, baseEnemies: 20, hasBoss: true, bossType: 'mech', timeLimit: 180 },
+  6: { waves: 8, baseEnemies: 22, timeLimit: 150 },
+  7: { waves: 8, baseEnemies: 25, timeLimit: 160 },
+  8: { waves: 10, baseEnemies: 28, timeLimit: 180 },
+  9: { waves: 12, baseEnemies: 35, timeLimit: 210 },
+  10: { waves: 15, baseEnemies: 40, hasBoss: true, bossType: 'alien', timeLimit: 240 } 
+};
+// ==========================================
+// --- CẤU HÌNH QUÁI VẬT & TRÙM THEO TINH CẦU ---
+// ==========================================
+export const PLANET_ENEMIES = {
+  // Quái của Tinh cầu 1 (Trạm Tiền Tiêu Alpha)
+  1: [
+    { id: 'p1_small', tier: 1, baseHp: 30, speedMin: 50, speedMax: 150, score: 1, imgSrc: '' }, 
+    { id: 'p1_medium', tier: 2, baseHp: 90, speedMin: 40, speedMax: 120, score: 3, imgSrc: '' },
+    { id: 'p1_large', tier: 3, baseHp: 240, speedMin: 30, speedMax: 90, score: 6, imgSrc: '' },
+    { id: 'p1_kami', tier: 4, baseHp: 60, speedMin: 250, speedMax: 400, score: 4, imgSrc: '' }
+  ],
+  // Quái của Tinh cầu 2 (Tinh Vân Băng Giá)
+  2: [
+    { id: 'p2_small', tier: 1, baseHp: 50, speedMin: 40, speedMax: 100, score: 2, imgSrc: '' },
+    { id: 'p2_medium', tier: 2, baseHp: 150, speedMin: 30, speedMax: 90, score: 4, imgSrc: '' },
+    { id: 'p2_large', tier: 3, baseHp: 400, speedMin: 20, speedMax: 70, score: 8, imgSrc: '' },
+    { id: 'p2_kami', tier: 4, baseHp: 100, speedMin: 200, speedMax: 300, score: 5, imgSrc: '' }
+  ],
+  // Quái của Tinh cầu 3 (Hỏa Ngục Prime)
+  3: [
+    { id: 'p3_small', tier: 1, baseHp: 80, speedMin: 60, speedMax: 160, score: 3, imgSrc: '' },
+    { id: 'p3_medium', tier: 2, baseHp: 220, speedMin: 50, speedMax: 130, score: 6, imgSrc: '' },
+    { id: 'p3_large', tier: 3, baseHp: 600, speedMin: 40, speedMax: 100, score: 12, imgSrc: '' },
+    { id: 'p3_kami', tier: 4, baseHp: 150, speedMin: 300, speedMax: 500, score: 8, imgSrc: '' }
+  ]
+};
+
+export const PLANET_BOSSES = {
+  1: {
+    mech: { id: 'p1_boss_mech', baseHp: 25000, scale: 1.5, hitboxW: 80, score: 100, imgSrc: '' },
+    alien: { id: 'p1_boss_alien', baseHp: 80000, scale: 1.8, hitboxW: 100, score: 100, imgSrc: '' }
+  },
+  2: {
+    mech: { id: 'p2_boss_ice', baseHp: 45000, scale: 1.6, hitboxW: 90, score: 200, imgSrc: '' },
+    alien: { id: 'p2_boss_dragon', baseHp: 120000, scale: 2.0, hitboxW: 120, score: 250, imgSrc: '' }
+  },
+  3: {
+    mech: { id: 'p3_boss_fire', baseHp: 75000, scale: 1.7, hitboxW: 95, score: 300, imgSrc: '' },
+    alien: { id: 'p3_boss_demon', baseHp: 200000, scale: 2.2, hitboxW: 140, score: 400, imgSrc: '' }
+  }
+};
   export const PIPE_DIST_DESKTOP = 250;
   export const PIPE_DIST_MOBILE = 200;
   export const MAX_Y_DIFF = 180;

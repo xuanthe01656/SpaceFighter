@@ -1,243 +1,497 @@
-/* src/components/ItemModal/ItemModal.module.css */
+/* ============================================================
+   ItemModal.module.css  —  Item Detail Sheet  AAA HUD
+   Same design tokens as Inventory / Shop / CampaignPortal
+   Barlow Condensed (UI) + Share Tech Mono (data/numbers)
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Share+Tech+Mono&display=swap');
+
+/* ── TOKENS (mirrors global system) ── */
+:root {
+  --m-void:    #03060e;
+  --m-deep:    #060c1a;
+  --m-panel:   rgba(6, 12, 26, 0.96);
+  --m-card:    rgba(10, 18, 36, 0.88);
+  --m-elem:    rgba(14, 22, 46, 0.80);
+
+  --m-accent:     #38bdf8;
+  --m-accent-g:   rgba(56, 189, 248, 0.32);
+  --m-accent-dim: rgba(56, 189, 248, 0.12);
+  --m-warm:       #fb923c;
+  --m-warm-g:     rgba(251, 146, 60, 0.28);
+  --m-gold:       #fbbf24;
+  --m-gold-g:     rgba(251, 191, 36, 0.30);
+  --m-gold-dim:   rgba(251, 191, 36, 0.12);
+  --m-green:      #4ade80;
+  --m-green-g:    rgba(74, 222, 128, 0.28);
+  --m-red:        #f87171;
+  --m-red-g:      rgba(248, 113, 113, 0.25);
+  --m-purple:     #c084fc;
+  --m-purple-g:   rgba(192, 132, 252, 0.25);
+
+  --m-text:   #e2e8f0;
+  --m-dim:    #64748b;
+  --m-faint:  #334155;
+
+  --m-border:     rgba(56, 189, 248, 0.16);
+  --m-border2:    rgba(56, 189, 248, 0.30);
+
+  --font-ui:   'Barlow Condensed', sans-serif;
+  --font-data: 'Share Tech Mono', monospace;
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+}
+
+/* ═══════════════════════════════════════════
+   OVERLAY
+   ═══════════════════════════════════════════ */
 .overlay {
-  position: fixed; top: 0; left: 0; width: 100%; height: 100dvh;
-  background: rgba(3, 6, 14, 0.85); backdrop-filter: blur(8px);
+  position: fixed; inset: 0;
+  background: rgba(3, 6, 14, 0.82);
+  backdrop-filter: blur(10px);
   display: flex; justify-content: center; align-items: center;
-  z-index: 9999; pointer-events: auto; padding: 20px;
+  z-index: 9999; pointer-events: auto;
+  padding: 16px; box-sizing: border-box;
 }
 
+/* ═══════════════════════════════════════════
+   MODAL SHELL
+   ═══════════════════════════════════════════ */
 .modal {
-  width: 100%; max-width: 900px; max-height: 90vh;
-  background: linear-gradient(135deg, rgba(10, 18, 36, 0.95), rgba(6, 12, 26, 0.95));
-  border: 1px solid var(--accent-dim, rgba(56,189,248,0.2));
-  border-radius: 16px; box-shadow: 0 0 40px rgba(0, 0, 0, 0.8), inset 0 0 20px rgba(56,189,248,0.05);
-  display: flex; flex-direction: column; overflow: hidden;
-  position: relative; font-family: 'VT323', monospace; color: #fff;
-  max-height: 95vh; 
-  display: flex;
-  flex-direction: column;
+  width: 100%; max-width: 860px;
+  max-height: calc(100dvh - 32px);
+  background: var(--m-panel);
+  border: 1px solid var(--m-border2);
+  border-radius: var(--r-lg);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.03),
+    0 24px 60px rgba(0,0,0,0.75),
+    inset 0 0 40px rgba(0,0,0,0.6);
+  display: flex; flex-direction: column;
+  overflow: hidden; position: relative;
+  font-family: var(--font-ui); color: var(--m-text);
 }
 
-/* Header & Nút Đóng */
-.header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); }
-.title { font-size: 24px; color: var(--accent, #38bdf8); margin: 0; text-transform: uppercase; letter-spacing: 2px; }
-.closeBtn { background: transparent; border: none; color: #aaa; font-size: 28px; cursor: pointer; transition: 0.2s; }
-.closeBtn:hover { color: #ff4757; transform: scale(1.1); }
-
-/* Bố cục nội dung */
-.content {
-  flex: 1;
-  overflow-y: auto; 
-  display: flex;
-  flex-direction: row;
-}
-.leftCol { flex: 1; min-width: 300px; padding: 20px; border-right: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; align-items: center; justify-content: center; }
-.rightCol { flex: 1.5; min-width: 320px; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
-
-/* Khu vực Avatar & Radar */
-.previewWrap { position: relative; width: 260px; display: flex; justify-content: center; align-items: center; margin-bottom: 30px; }
-.previewIcon { font-size: 80px; z-index: 2; }
-.radarContainer { width: 220px; height: 220px; margin-top: 20px; }
-
-/* Khu vực Chỉ số (Range Bars) */
-.statsBox { background: rgba(0,0,0,0.3); border-radius: 12px; padding: 15px; border: 1px solid rgba(255,255,255,0.05); }
-.statRow { margin-bottom: 12px; }
-.statHeader { display: flex; justify-content: space-between; font-family: 'Share Tech Mono', monospace; font-size: 14px; margin-bottom: 6px; color: #cbd5e1; }
-.statValue { color: #fff; font-weight: bold; }
-.statValue.up { color: #2ed573; margin-left: 8px; }
-
-/* Thiết kế thanh Range */
-.rangeTrack { width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; display: flex; }
-.rangeFill { height: 100%; background: var(--accent, #38bdf8); transition: width 0.3s ease; }
-.rangeBonus { height: 100%; background: #2ed573; transition: width 0.3s ease; box-shadow: 0 0 10px #2ed573; }
-
-/* Tabs Xưởng Rèn bên trong Modal */
-.forgeTabs { display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
-.fTab { flex: 1; background: transparent; border: 1px solid rgba(255,255,255,0.1); color: #888; padding: 10px; border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 16px; transition: 0.2s; }
-.fTab.active { background: rgba(56,189,248,0.1); border-color: var(--accent, #38bdf8); color: #fff; text-shadow: 0 0 10px var(--accent, #38bdf8); }
-
-/* Khu vực yêu cầu nguyên liệu */
-.requirements { display: flex; flex-direction: column; gap: 10px; background: rgba(0,0,0,0.4); padding: 15px; border-radius: 8px; }
-.reqItem { display: flex; align-items: center; gap: 10px; font-family: 'Share Tech Mono', monospace; font-size: 15px; }
-.reqIcon { display: flex; width: 20px; }
-.insufficient { color: #ff4757; }
-
-/* Nút Action linh hoạt */
-.actionZone { margin-top: auto; display: flex; gap: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.05); }
-.mainBtn { flex: 1; padding: 16px; border: none; border-radius: 8px; font-family: inherit; font-size: 18px; font-weight: bold; cursor: pointer; transition: 0.2s; color: #fff; text-transform: uppercase; }
-.mainBtn:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(100%); }
-
-.btnEquip { background: linear-gradient(90deg, #38bdf8, #3b82f6); box-shadow: 0 0 15px rgba(56,189,248,0.4); }
-.btnUnequip { background: transparent; border: 1px solid #ff4757; color: #ff4757; }
-.btnForge { background: transparent; border: 1px solid #facc15; color: #facc15; }
-.btnUpgrade { background: linear-gradient(90deg, #2ed573, #1e90ff); box-shadow: 0 0 15px rgba(46,213,115,0.4); }
-.btnStarUp { background: linear-gradient(90deg, #facc15, #ff6b81); box-shadow: 0 0 15px rgba(250,204,21,0.4); }
-.btnBuy { background: linear-gradient(90deg, #ff416c, #ff4b2b); box-shadow: 0 0 15px rgba(255,65,108,0.4); }
-
-@media (max-width: 768px) {
-  .content {
-    flex-direction: column; /* Chồng 2 cột lên nhau trên mobile */
-  }
-  
-  .leftCol {
-    padding: 10px;
-    border-right: none;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-  }
-
-  .previewWrap {
-    width: 250px;
-    /* height: 100px; */
-  }
-
-  .radarContainer {
-    width: 160px;
-    height: 160px;
-  }
-}
-.statsGrid {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+/* Top rarity accent line */
+.modal::before {
+  content: ''; position: absolute;
+  top: 0; left: 0; right: 0; height: 2px;
+  background: var(--modal-rc, var(--m-accent));
+  box-shadow: 0 0 20px var(--modal-rc, var(--m-accent));
+  z-index: 10;
 }
 
-/* Hiệu ứng thanh Range Bar đa sắc */
-.statRow:nth-child(1) .rangeFill { background: #ff4757; } /* ATK - Đỏ */
-.statRow:nth-child(2) .rangeFill { background: #38bdf8; } /* HP - Xanh dương */
-.statRow:nth-child(3) .rangeFill { background: #2ed573; } /* SPD - Lục */
-.statRow:nth-child(4) .rangeFill { background: #f1c40f; } /* CRT - Vàng */
-.statRow:nth-child(5) .rangeFill { background: #a29bfe; } /* RNG - Tím */
-
-.rangeFill {
-  box-shadow: 0 0 8px currentColor;
-}
-/* --- GIAO DIỆN CHỌN PHÔI --- */
-.sacGrid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  width: 100%;
-  padding-left: 30px;
-}
-
-.sacCard {
-  background: rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 6px;
-  padding: 6px 12px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  cursor: pointer;
-  transition: 0.2s;
-  min-width: 60px;
-}
-
-.sacCard:hover {
-  background: rgba(255,255,255,0.05);
-}
-
-.sacActive {
-  background: rgba(250, 204, 21, 0.15);
-  border-color: #facc15;
-  box-shadow: 0 0 10px rgba(250, 204, 21, 0.4);
-}
-
-.sacLv {
-  font-family: 'Share Tech Mono', monospace;
-  font-size: 13px;
-  color: #fff;
-}
-
-.sacRarity {
-  color: #facc15;
-  font-size: 10px;
-  letter-spacing: 2px;
-}
-/* --- KHUNG HÌNH ẢNH PHÔI ĐỘT PHÁ --- */
-.sacImageWrap {
-  width: 44px;
-  height: 44px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin-bottom: 6px;
-  background: rgba(0, 0, 0, 0.4);
-  border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  transition: all 0.2s ease;
-}
-
-.sacImage {
-  max-width: 85%;
-  max-height: 85%;
-  object-fit: contain;
-  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.2));
-}
-
-/* Đổi màu viền khung ảnh khi phôi được chọn */
-.sacActive .sacImageWrap {
-  background: rgba(250, 204, 21, 0.2);
-  border-color: rgba(250, 204, 21, 0.5);
-}
-/* --- FO4 UPGRADE ANIMATION --- */
-.fo4Overlay {
-  position: absolute; inset: 0; background: rgba(0,0,0,0.85);
-  backdrop-filter: blur(10px); z-index: 999;
+/* ── CLOSE BUTTON ── */
+.closeBtn {
+  position: absolute; top: 14px; right: 16px;
+  width: 32px; height: 32px;
+  background: rgba(255,255,255,0.04); color: var(--m-dim);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--r-sm); font-size: 16px;
   display: flex; align-items: center; justify-content: center;
-  flex-direction: column; color: #fff;
+  cursor: pointer; z-index: 20;
+  transition: background 0.18s, color 0.18s, border-color 0.18s;
 }
-.fo4Content { display: flex; flex-direction: column; align-items: center; }
-.fo4Icon { width: 140px; height: 140px; margin-bottom: 30px; }
-.fo4Icon img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 0 20px #38bdf8); }
+.closeBtn:hover {
+  background: rgba(248,113,113,0.15); color: var(--m-red);
+  border-color: var(--m-red); box-shadow: 0 0 10px var(--m-red-g);
+}
 
-.fo4Pulsing { animation: heartbeat 0.5s infinite alternate; }
-.fo4SuccessAnim { animation: itemWin 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; filter: drop-shadow(0 0 50px #facc15); }
-.fo4FailAnim { animation: itemLose 0.6s ease forwards; filter: grayscale(1) drop-shadow(0 0 15px #ff4757); }
+/* ═══════════════════════════════════════════
+   TWO-COLUMN LAYOUT
+   ═══════════════════════════════════════════ */
+.modalContent {
+  display: flex; flex-direction: row;
+  flex: 1; overflow: hidden;
+  min-height: 0;
+}
 
-.fo4Text { font-family: 'Share Tech Mono', monospace; font-size: 20px; color: #38bdf8; letter-spacing: 2px; margin-bottom: 15px; animation: blink 1s infinite; }
-.fo4BarWrap { width: 350px; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; position: relative; border: 1px solid rgba(56,189,248,0.5); }
-.fo4BarFill { width: 0%; height: 100%; background: #38bdf8; animation: fillBar 3s cubic-bezier(0.2, 0, 0.8, 1) forwards; box-shadow: 0 0 10px #38bdf8; }
+/* ── LEFT: IMAGE SECTION ── */
+.imageSection {
+  flex: 0 0 38%; max-width: 38%;
+  display: flex; flex-direction: column;
+  justify-content: center; align-items: center;
+  position: relative; overflow: hidden;
+  padding: 32px 24px;
+  border-right: 1px solid var(--m-border);
+  background: rgba(3, 6, 14, 0.50);
+}
 
-.fo4ResultSuccess { font-size: 36px; font-weight: bold; color: #facc15; text-shadow: 0 0 30px #facc15; letter-spacing: 4px; animation: popIn 0.5s ease forwards; }
-.fo4ResultFail { font-size: 30px; font-weight: bold; color: #ff4757; text-shadow: 0 0 20px #ff4757; letter-spacing: 2px; animation: popIn 0.5s ease forwards; }
+.glowBg {
+  position: absolute; inset: 0;
+  pointer-events: none; z-index: 0;
+  transition: background 0.4s;
+}
 
-@keyframes heartbeat { 0% { transform: scale(1); opacity: 0.8; } 100% { transform: scale(1.2); opacity: 1; filter: drop-shadow(0 0 40px #38bdf8); } }
-@keyframes fillBar { 0% { width: 0%; } 80% { width: 90%; } 100% { width: 100%; } }
-@keyframes itemWin { 0% { transform: scale(1); } 50% { transform: scale(1.6); filter: drop-shadow(0 0 80px #fff); } 100% { transform: scale(1.3); } }
-@keyframes itemLose { 0% { transform: scale(1); } 20% { transform: translateX(-15px) rotate(-10deg); } 40% { transform: translateX(15px) rotate(10deg); } 60% { transform: translateX(-15px) rotate(-10deg); } 100% { transform: scale(0.8) translateY(40px); opacity: 0.3; } }
-@keyframes popIn { 0% { transform: scale(0.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
-/* Layout tiêu đề và Badges */
-.titleArea { display: flex; flex-direction: column; gap: 4px; }
-.itemBadges { display: flex; gap: 10px; align-items: center; }
+/* Corner marks on image section */
+.imageSection::before,
+.imageSection::after {
+  content: ''; position: absolute;
+  width: 18px; height: 18px;
+  border-color: var(--modal-rc, var(--m-accent));
+  border-style: solid; opacity: 0.45;
+}
+.imageSection::before {
+  top: 12px; left: 12px;
+  border-width: 1px 0 0 1px;
+}
+.imageSection::after {
+  bottom: 12px; right: 12px;
+  border-width: 0 1px 1px 0;
+}
+
+.crateIconWrap {
+  font-size: 80px;
+  filter: drop-shadow(0 0 22px rgba(255,255,255,0.45));
+  z-index: 1; line-height: 1;
+}
+
+.itemImage {
+  width: 100%; max-width: 200px; max-height: 200px;
+  object-fit: contain; z-index: 1;
+  filter: drop-shadow(0 0 18px rgba(255,255,255,0.20));
+  transition: filter 0.3s;
+}
+
+.equippedTag {
+  position: absolute; top: 14px; left: 14px;
+  display: flex; align-items: center; gap: 5px;
+  background: rgba(74, 222, 128, 0.15);
+  color: var(--m-green);
+  border: 1px solid rgba(74, 222, 128, 0.40);
+  padding: 4px 11px; border-radius: var(--r-sm);
+  font-family: var(--font-data); font-size: 10px;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  box-shadow: 0 0 10px var(--m-green-g);
+  animation: eqGlow 2s ease-in-out infinite;
+}
+@keyframes eqGlow {
+  0%,100% { box-shadow: 0 0 8px var(--m-green-g); }
+  50%      { box-shadow: 0 0 18px var(--m-green-g); }
+}
+
+/* ── RIGHT: INFO SECTION ── */
+.infoSection {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column;
+  overflow-y: auto; padding: 22px 24px 20px;
+  gap: 16px;
+}
+.infoSection::-webkit-scrollbar { width: 3px; }
+.infoSection::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+
+/* ═══════════════════════════════════════════
+   TITLE AREA
+   ═══════════════════════════════════════════ */
+.titleArea { display: flex; flex-direction: column; gap: 8px; }
+
+.itemBadges { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 .lvlBadge {
-  background: rgba(255, 255, 255, 0.1);
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-family: 'Share Tech Mono', monospace;
-  color: var(--accent);
-  border: 1px solid var(--accent-dim);
+  font-family: var(--font-data); font-size: 11px;
+  padding: 3px 10px; border-radius: var(--r-sm);
+  color: var(--m-accent); border: 1px solid var(--m-accent);
+  background: var(--m-accent-dim); letter-spacing: 0.08em;
 }
 
 .rarityBadge {
-  color: #facc15;
-  letter-spacing: 2px;
-  text-shadow: 0 0 8px rgba(250, 204, 21, 0.5);
+  font-size: 16px; letter-spacing: 3px;
+  transition: text-shadow 0.3s;
 }
 
-/* Hiệu ứng so sánh sao */
-.starPreviewHeader {
+.itemName {
+  margin: 0; font-size: 28px; font-weight: 800;
+  letter-spacing: 0.07em; text-transform: uppercase;
+  color: #fff; line-height: 1.1;
+}
+
+.itemDescriptionBox {
+  background: rgba(56, 189, 248, 0.04);
+  border-left: 2px solid var(--modal-rc, var(--m-accent));
+  padding: 9px 13px; border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  font-style: italic; color: #94a3b8;
+  line-height: 1.55; font-size: 14px;
+  font-family: var(--font-data);
+}
+
+/* ═══════════════════════════════════════════
+   COMBAT POWER BOX
+   ═══════════════════════════════════════════ */
+.cpBox {
+  display: flex; align-items: center; gap: 10px;
+  background: linear-gradient(90deg, rgba(251,191,36,0.14), transparent);
+  border: 1px solid rgba(251,191,36,0.20);
+  border-left: 2px solid var(--m-gold);
+  padding: 7px 14px; border-radius: var(--r-sm);
+}
+.cpLabel {
+  font-family: var(--font-data); font-size: 9px;
+  letter-spacing: 2px; color: var(--m-gold); text-transform: uppercase;
+}
+.cpValue {
+  font-family: var(--font-data); font-size: 22px; color: #fff; font-weight: 700;
+}
+.cpUp {
+  font-family: var(--font-data); font-size: 13px; color: var(--m-green);
+  text-shadow: 0 0 8px var(--m-green-g);
+}
+
+/* ═══════════════════════════════════════════
+   VISUAL SECTION (Radar + Stat Bars)
+   ═══════════════════════════════════════════ */
+.visualSection {
+  display: flex; gap: 18px; align-items: flex-start;
+  background: var(--m-elem);
+  border: 1px solid var(--m-border);
+  border-radius: var(--r-md); padding: 14px;
+}
+
+.radarContainer {
+  width: 130px; height: 130px; flex-shrink: 0;
   display: flex; justify-content: center; align-items: center;
-  gap: 20px; padding: 10px; background: rgba(250, 204, 21, 0.05);
-  border-radius: 8px; border: 1px dashed rgba(250, 204, 21, 0.3);
-  margin-bottom: 10px;
 }
-.oldStars { color: #888; font-size: 20px; }
-.newStars { color: #facc15; font-size: 24px; font-weight: bold; }
-.starArrow { color: var(--accent); animation: moveArrow 1s infinite; }
 
-@keyframes moveArrow {
-  0%, 100% { transform: translateX(0); }
-  50% { transform: translateX(5px); }
+.statsDisplay {
+  flex: 1; display: flex; flex-direction: column;
+  gap: 10px; justify-content: center; min-width: 0;
+}
+
+.statBarRow { display: flex; flex-direction: column; gap: 5px; }
+
+.statInfo {
+  display: flex; justify-content: space-between; align-items: center;
+  font-family: var(--font-data); font-size: 11px; color: var(--m-dim);
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+
+.statUp {
+  color: var(--m-green); font-size: 10px;
+  text-shadow: 0 0 6px var(--m-green-g); margin-left: 4px;
+}
+
+.statBarBg {
+  height: 5px; background: rgba(255,255,255,0.05);
+  border-radius: 3px; overflow: hidden; position: relative;
+}
+
+.statBarFill {
+  position: absolute; inset-block: 0; left: 0;
+  background: var(--modal-rc, var(--m-accent));
+  box-shadow: 0 0 8px var(--modal-rc, var(--m-accent));
+  border-radius: 3px; z-index: 2;
+  transition: width 0.35s cubic-bezier(0.4,0,0.2,1);
+}
+
+.statBarGhost {
+  position: absolute; inset-block: 0; left: 0;
+  background: var(--m-gold); opacity: 0.45;
+  border-radius: 3px; z-index: 1;
+  transition: width 0.35s cubic-bezier(0.4,0,0.2,1);
+}
+
+/* ═══════════════════════════════════════════
+   ACTION AREA
+   ═══════════════════════════════════════════ */
+.actionArea {
+  margin-top: auto; display: flex;
+  flex-direction: column; gap: 12px; flex-shrink: 0;
+}
+
+.btnGroupRow { display: flex; gap: 10px; }
+
+.mainBtn {
+  flex: 1; padding: 11px 16px;
+  font-family: var(--font-ui); font-size: 17px; font-weight: 800;
+  letter-spacing: 0.10em; text-transform: uppercase;
+  border: none; border-radius: var(--r-sm); cursor: pointer;
+  display: flex; justify-content: center; align-items: center; gap: 8px;
+  transition: all 0.18s ease; position: relative; overflow: hidden;
+}
+.mainBtn:disabled { opacity: 0.32; cursor: not-allowed; filter: grayscale(60%); }
+
+.btnEquip { background: var(--m-accent-dim); color: var(--m-accent); border: 1px solid var(--m-accent); }
+.btnEquip:hover:not(:disabled) { background: var(--m-accent); color: #000; box-shadow: 0 0 20px var(--m-accent-g); }
+
+.btnRemove { background: var(--m-red-g); color: var(--m-red); border: 1px solid var(--m-red); }
+.btnRemove:hover:not(:disabled) { background: var(--m-red); color: #fff; box-shadow: 0 0 20px var(--m-red-g); }
+
+.btnForge { background: var(--m-gold-dim); color: var(--m-gold); border: 1px solid rgba(251,191,36,0.45); }
+.btnForge:hover:not(:disabled) { background: linear-gradient(135deg, rgba(180,130,0,0.5), rgba(251,191,36,0.25)); border-color: var(--m-gold); box-shadow: 0 0 20px var(--m-gold-g); }
+
+.btnUpgrade { background: var(--m-accent); color: #000; box-shadow: 0 0 14px var(--m-accent-g); font-size: 18px; }
+.btnUpgrade:hover:not(:disabled) { filter: brightness(1.12); box-shadow: 0 0 26px var(--m-accent-g); }
+
+.btnStarUp { background: linear-gradient(135deg, rgba(180,130,0,0.5), var(--m-gold)); color: #1a1000; border: 1px solid var(--m-gold); box-shadow: 0 0 14px var(--m-gold-g); font-size: 18px; }
+.btnStarUp:hover:not(:disabled) { filter: brightness(1.1); box-shadow: 0 0 28px var(--m-gold-g); }
+
+/* ═══════════════════════════════════════════
+   FORGE WRAPPER
+   ═══════════════════════════════════════════ */
+.forgeWrapper { display: flex; flex-direction: column; gap: 12px; }
+
+.forgeTabs { display: flex; gap: 8px; }
+.forgeTabs button {
+  flex: 1; background: rgba(20,14,2,0.75); color: var(--m-dim);
+  border: 1px solid rgba(251,191,36,0.14);
+  border-radius: var(--r-sm); font-family: var(--font-ui);
+  font-size: 16px; font-weight: 700;
+  padding: 8px 10px; cursor: pointer; letter-spacing: 0.08em;
+  text-transform: uppercase; transition: all 0.2s ease; opacity: 0.65;
+}
+.forgeTabs button:hover { color: var(--m-gold); background: var(--m-gold-dim); opacity: 0.9; }
+.forgeTabs button.activeTab {
+  color: #fff; background: rgba(251,191,36,0.14);
+  border-color: var(--m-gold);
+  box-shadow: 0 0 12px var(--m-gold-g), inset 0 0 10px rgba(251,191,36,0.07);
+  text-shadow: 0 0 8px var(--m-gold); opacity: 1;
+}
+
+.forgeDetails {
+  background: var(--m-elem); border: 1px solid rgba(251,191,36,0.16);
+  border-radius: var(--r-md); padding: 14px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+
+.costGrid { display: flex; flex-direction: column; gap: 8px; }
+.costItem { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.costItem:last-child { border-bottom: none; }
+.costLabel { font-size: 14px; letter-spacing: 0.06em; color: var(--m-dim); text-transform: uppercase; font-weight: 600; }
+
+.hasRes { display: flex; align-items: center; gap: 5px; font-family: var(--font-data); font-size: 15px; color: #fff; }
+.hasRes svg { width: 14px; height: 14px; color: var(--m-gold); }
+
+.noRes { display: flex; align-items: center; gap: 5px; font-family: var(--font-data); font-size: 15px; color: var(--m-red); }
+.noRes svg { width: 14px; height: 14px; color: var(--m-red); }
+
+.maxReached {
+  text-align: center; color: var(--m-gold);
+  font-size: 18px; font-weight: 800; letter-spacing: 0.14em;
+  padding: 12px; border: 1px dashed rgba(251,191,36,0.40);
+  border-radius: var(--r-sm); background: var(--m-gold-dim);
+  text-shadow: 0 0 12px var(--m-gold-g); text-transform: uppercase;
+}
+
+/* ═══════════════════════════════════════════
+   SACRIFICE GRID (Star Up materials)
+   ═══════════════════════════════════════════ */
+.sacrificeGrid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+  gap: 10px; margin-top: 6px; max-height: 165px; overflow-y: auto; padding: 4px;
+}
+.sacrificeGrid::-webkit-scrollbar { width: 3px; }
+.sacrificeGrid::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+
+.sacrificeItem {
+  aspect-ratio: 1; background: rgba(3,6,14,0.70);
+  border: 1px solid; border-radius: var(--r-sm);
+  display: flex; justify-content: center; align-items: center;
+  position: relative; cursor: pointer;
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
+}
+.sacrificeItem:hover { transform: translateY(-2px); }
+.selectedSac { border-color: var(--m-gold) !important; background: rgba(251,191,36,0.15) !important; box-shadow: 0 0 14px var(--m-gold-g); }
+
+.sacLvl {
+  position: absolute; bottom: -7px; font-size: 9px; color: #fff;
+  font-family: var(--font-data); background: rgba(3,6,14,0.90);
+  padding: 1px 5px; border-radius: 3px; border: 1px solid currentColor;
+}
+
+.sacCheck {
+  position: absolute; top: -7px; right: -7px;
+  background: var(--m-gold); color: #000;
+  width: 18px; height: 18px; border-radius: 50%;
+  font-size: 11px; font-weight: 800;
+  display: flex; justify-content: center; align-items: center;
+  box-shadow: 0 0 8px var(--m-gold-g);
+}
+
+.noSacrifice {
+  grid-column: 1 / -1; text-align: center;
+  color: var(--m-red); font-size: 13px;
+  font-family: var(--font-data); letter-spacing: 0.04em;
+  padding: 14px; font-style: italic;
+}
+
+/* ═══════════════════════════════════════════
+   RESPONSIVE — MOBILE (≤ 640px)
+   Tối ưu hóa UI theo dạng Bottom Sheet Game AAA
+   ═══════════════════════════════════════════ */
+@media (max-width: 640px) {
+  .overlay { padding: 0; align-items: flex-end; }
+
+  /* 1. Trở thành Bottom Sheet cong mềm mại */
+  .modal {
+    max-width: 100%; width: 100%;
+    max-height: 92dvh;
+    border-radius: 24px 24px 0 0;
+    border-bottom: none; border-left: none; border-right: none;
+  }
+
+  .modalContent { flex-direction: column; overflow-y: auto; }
+
+  /* 2. Banner chứa vũ khí Căn Giữa ngang thay vì nằm lệch trái */
+  .imageSection {
+    flex: none; max-width: 100%; width: 100%;
+    flex-direction: row; justify-content: center; align-items: center;
+    padding: 24px 16px; gap: 16px;
+    border-right: none; border-bottom: 1px solid var(--m-border);
+    min-height: auto;
+  }
+  .imageSection::before { top: 12px; left: 12px; }
+  .imageSection::after  { bottom: 12px; right: 12px; }
+
+  .itemImage       { max-width: 110px; max-height: 110px; }
+  .crateIconWrap   { font-size: 70px; }
+
+  /* 3. Ghim chặt Tag "ĐANG DÙNG" về góc trái, KHÔNG ĐẨY ẢNH */
+  .equippedTag {
+    position: absolute; top: 12px; left: 12px;
+    font-size: 10px; padding: 4px 8px; align-self: auto;
+  }
+
+  /* 4. Tăng Safe Area dưới cùng để nút không dính vào vuốt màn hình */
+  .infoSection { 
+    padding: 20px 16px calc(24px + env(safe-area-inset-bottom)); 
+    gap: 16px; overflow-y: visible; 
+  }
+
+  /* 5. Căn giữa Title Area (Tên, CP, Badge) cho giống Card */
+  .titleArea { align-items: center; text-align: center; }
+  .itemBadges { justify-content: center; }
+  .itemName    { font-size: 26px; }
+  .itemDescriptionBox { text-align: center; width: 100%; }
+
+  .cpBox { justify-content: center; width: 100%; }
+
+  /* 6. Radar căn giữa, còn thanh Range thì tràn mép ngang (100%) */
+  .visualSection  { flex-direction: column; align-items: center; gap: 16px; padding: 16px; }
+  .radarContainer { width: 130px; height: 130px; }
+  .statsDisplay   { width: 100%; }
+
+  /* Tinh chỉnh Nút / Tab to hơn để ngón tay dễ bấm */
+  .forgeTabs button { font-size: 16px; padding: 10px 8px; }
+  .sacrificeGrid { grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 10px; max-height: 160px; }
+  
+  .mainBtn { font-size: 16px; padding: 12px; }
+  .btnGroupRow { flex-wrap: wrap; }
+  .btnGroupRow .mainBtn { flex: 1 1 calc(50% - 5px); min-width: 0; }
+}
+
+/* ── Tablet mid ── */
+@media (max-width: 768px) and (min-width: 641px) {
+  .imageSection { flex: 0 0 34%; max-width: 34%; }
+  .itemImage    { max-width: 150px; }
+  .itemName     { font-size: 24px; }
+  .radarContainer { width: 115px; height: 115px; transform: scale(0.9); }
+}
+
+/* ── Short screens (Xoay ngang điện thoại) ── */
+@media (max-height: 600px) {
+  .modal    { max-height: 100dvh; border-radius: 0; }
+  .overlay  { padding: 0; }
+  .radarContainer { width: 100px; height: 100px; }
+  .sacrificeGrid  { max-height: 110px; }
+  .infoSection    { gap: 10px; padding: 12px 16px; }
 }

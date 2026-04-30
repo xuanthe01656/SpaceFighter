@@ -1,114 +1,71 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { PLANET_CONFIG } from '../../constants';
 import styles from './StageSelect.module.css';
 
 export default function StageSelect({ gsRef, setScreen, lang }) {
   const progress = gsRef.current?.campaignData?.progress;
-  if (!progress) return null;
+  if (!progress || !progress.currentPlanet) return null;
 
-  // Cấp độ cao nhất mà người chơi đã mở khóa
-  const unlockedStage = progress.currentStage || 1;
+  const planetId = progress.currentPlanet;
+  const planetData = PLANET_CONFIG[planetId];
+  const pProgress = progress.planets[planetId] || { highestStage: 1, stars: {} };
+  
+  // Ải cao nhất mở được trong TINH CẦU NÀY
+  const unlockedStage = pProgress.highestStage || 1;
 
-  const stages = [
-    { id: 1, name: { vi: 'Trạm Tiền Tiêu', en: 'Outpost Alpha' }, icon: '🪐' },
-    { id: 2, name: { vi: 'Vành Đai Đá', en: 'Asteroid Belt' }, icon: '☄️' },
-    { id: 3, name: { vi: 'Căn Cứ Bỏ Hoang', en: 'Abandoned Base' }, icon: '🛰️' },
-    { id: 4, name: { vi: 'Hạm Đội Địch', en: 'Enemy Fleet' }, icon: '🛸' },
-    { id: 5, name: { vi: 'Sào Huyệt Trùm', en: 'Boss Lair' }, isBoss: true, icon: '💀' },
-  ];
+  // Tạo mảng 10 ải ảo
+  const stages = Array.from({ length: 10 }, (_, i) => ({
+    id: i + 1,
+    isBoss: i + 1 === 5 || i + 1 === 10
+  }));
 
   const handleSelectStage = (stageId) => {
     if (stageId <= unlockedStage) {
-      // Lưu Ải được chọn để Tổng Hành Dinh đọc
       progress.selectedStage = stageId; 
-      // Chuyển tới Tổng Hành Dinh (HQ)
       setScreen('hq'); 
     }
   };
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: { opacity: 1, transition: { staggerChildren: 0.15 } }
-  };
-
-  const itemVariants = {
-    hidden: { x: -50, opacity: 0 },
-    visible: { x: 0, opacity: 1, transition: { type: 'spring', stiffness: 200, damping: 20 } }
-  };
-
   return (
-    <motion.div 
-      className={`${styles.container} scrollable-layer`}
-      initial="hidden" animate="visible" variants={containerVariants}
-    >
+    <motion.div className={`${styles.container} scrollable-layer`} initial={{opacity:0}} animate={{opacity:1}}>
       <div className={styles.contentWrapper}>
-        
-        {/* HEADER & NÚT TRỞ VỀ HOME */}
-        <motion.div variants={itemVariants} className={styles.header}>
-          <button className={styles.backBtn} onClick={() => setScreen('campaign_portal')}>
-            ◀ {lang === 'vi' ? 'SẢNH' : 'PORTAL'}
+        <div className={styles.header}>
+          <button className={styles.backBtn} onClick={() => setScreen('galaxy_map')}>
+            ◀ {lang === 'vi' ? 'THIÊN HÀ' : 'GALAXY'}
           </button>
-          <h1 className={styles.title}>
-            {lang === 'vi' ? 'BẢN ĐỒ KHU VỰC' : 'SECTOR MAP'}
-          </h1>
-        </motion.div>
+          <h1 className={styles.title}>{planetData.name[lang]}</h1>
+        </div>
 
-        {/* DANH SÁCH ẢI (DẠNG ĐƯỜNG RAY TIMELINE) */}
         <div className={styles.mapContainer}>
-          {/* Sợi dây năng lượng kết nối các hành tinh */}
           <div className={styles.pathLine}></div>
 
           {stages.map((stage) => {
             const isUnlocked = stage.id <= unlockedStage;
-            const isBoss = stage.isBoss;
+            const stars = pProgress.stars[stage.id] || 0;
             
-            // Phân loại CSS class dựa trên trạng thái của Ải
-            let cardClass = styles.stageLocked;
-            let iconClass = '';
-            
-            if (isUnlocked) {
-              if (isBoss) {
-                cardClass = `${styles.stageUnlocked} ${styles.stageBoss}`;
-                iconClass = styles.bossIcon;
-              } else {
-                cardClass = styles.stageUnlocked;
-                iconClass = styles.unlockedIcon;
-              }
-            }
+            let cardClass = isUnlocked ? (stage.isBoss ? `${styles.stageUnlocked} ${styles.stageBoss}` : styles.stageUnlocked) : styles.stageLocked;
+            let iconClass = isUnlocked ? (stage.isBoss ? styles.bossIcon : styles.unlockedIcon) : '';
 
             return (
-              <motion.div 
-                key={stage.id} variants={itemVariants}
-                className={`${styles.stageCard} ${cardClass}`}
-                onClick={() => handleSelectStage(stage.id)}
-                whileTap={isUnlocked ? { scale: 0.95 } : {}}
-              >
-                {/* Biểu tượng Hành tinh / Boss */}
-                <div className={`${styles.planetIcon} ${iconClass}`}>
-                  {stage.icon}
-                </div>
-
-                {/* Thông tin Ải */}
+              <motion.div key={stage.id} className={`${styles.stageCard} ${cardClass}`} onClick={() => handleSelectStage(stage.id)} whileTap={isUnlocked ? { scale: 0.95 } : {}}>
+                <div className={`${styles.planetIcon} ${iconClass}`}>{stage.isBoss ? '💀' : '🛰️'}</div>
                 <div className={styles.stageInfo}>
-                  <h2 className={`${styles.stageName} ${isBoss && isUnlocked ? styles.bossName : ''}`}>
-                    {lang === 'vi' ? `ẢI ${stage.id}: ` : `STAGE ${stage.id}: `} {stage.name[lang]}
+                  <h2 className={`${styles.stageName} ${stage.isBoss && isUnlocked ? styles.bossName : ''}`}>
+                    {lang === 'vi' ? `ẢI ${stage.id}` : `STAGE ${stage.id}`}
                   </h2>
-                  
                   {isUnlocked ? (
-                    <p className={`${styles.stageStatus} ${styles.statusReady}`}>
-                      ▶ {lang === 'vi' ? 'Đã mở - Nhấn để cập bến' : 'Unlocked - Tap to dock'}
-                    </p>
+                    <div style={{ color: '#facc15', fontSize: '20px', marginTop: '5px' }}>
+                      {stars >= 1 ? '★' : '☆'}{stars >= 2 ? '★' : '☆'}{stars >= 3 ? '★' : '☆'}
+                    </div>
                   ) : (
-                    <p className={styles.stageStatus}>
-                      🔒 {lang === 'vi' ? 'Đang bị phong tỏa' : 'Sector Locked'}
-                    </p>
+                    <p className={styles.stageStatus}>🔒 {lang === 'vi' ? 'Phong tỏa' : 'Locked'}</p>
                   )}
                 </div>
               </motion.div>
             );
           })}
         </div>
-
       </div>
     </motion.div>
   );

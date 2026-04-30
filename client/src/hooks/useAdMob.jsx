@@ -4,7 +4,8 @@ import { Capacitor } from '@capacitor/core';
 import toast from 'react-hot-toast';
 import { t } from '../utils/translations';
 
-export function useAdMob(gsRef, setUIUpdates, currentUser, screen, isVIP, langRef, saveUserProfile, revivePlayer, getRealTime) {
+// Đã gỡ bỏ revivePlayer vì Campaign không xài hồi sinh kiểu cũ
+export function useAdMob(gsRef, setUIUpdates, currentUser, screen, isVIP, langRef, saveUserProfile, getRealTime) {
   const [isWatchingAd, setIsWatchingAd] = useState(false);
   const [isAdInitialized, setIsAdInitialized] = useState(false);
 
@@ -12,11 +13,8 @@ export function useAdMob(gsRef, setUIUpdates, currentUser, screen, isVIP, langRe
   const adReadyRef = useRef(false);
   const isBannerCreatedRef = useRef(false);
 
-  // Bảo vệ các hàm callback khỏi bị Stale Closure
   const saveUserProfileRef = useRef(saveUserProfile);
   useEffect(() => { saveUserProfileRef.current = saveUserProfile; }, [saveUserProfile]);
-  const revivePlayerRef = useRef(revivePlayer);
-  useEffect(() => { revivePlayerRef.current = revivePlayer; }, [revivePlayer]);
 
   const IS_TESTING = true; 
   const isIOS = Capacitor.getPlatform() === 'ios';
@@ -60,16 +58,14 @@ export function useAdMob(gsRef, setUIUpdates, currentUser, screen, isVIP, langRe
           adReadyRef.current = false;
           if (earnedReward) {
             if (earnedReward === 'coin') {
-              gsRef.current.coins += 50; 
+              gsRef.current.coins = (gsRef.current.coins || 0) + 1000; 
               gsRef.current.hourlyCoinCount += 1;
               setUIUpdates(prev => ({ ...prev, coins: gsRef.current.coins }));
-              toast.success(t[langRef.current]?.rewardCoin);
-            } else if (earnedReward === 'life') {
-              gsRef.current.lives += 1;  
-              setUIUpdates(prev => ({ ...prev, lives: gsRef.current.lives }));
-              toast.success(t[langRef.current]?.rewardLife);
-            } else if (earnedReward === 'revive') {
-              if (revivePlayerRef.current) revivePlayerRef.current();
+              toast.success(langRef.current === 'vi' ? '+1000 Xu' : '+1000 Coins');
+            } else if (earnedReward === 'energy') {
+              gsRef.current.energy = Math.min(100, (gsRef.current.energy || 50) + 20);  
+              setUIUpdates(prev => ({ ...prev, energy: gsRef.current.energy }));
+              toast.success(langRef.current === 'vi' ? '+20 Năng lượng' : '+20 Energy');
             }
             if (saveUserProfileRef.current) saveUserProfileRef.current(); 
             earnedReward = null; 
@@ -96,12 +92,10 @@ export function useAdMob(gsRef, setUIUpdates, currentUser, screen, isVIP, langRe
     };
   }, []);
 
- // --- CÁC HÀM XỬ LÝ BANNER ---
   const showBanner = async () => {
     if (!Capacitor.isNativePlatform()) return;
     try {
       if (!isBannerCreatedRef.current) {
-        // Lần đầu tiên gọi: Tạo mới Banner
         await AdMob.showBanner({
           adId: BANNER_ID,
           adSize: BannerAdSize.ADAPTIVE_BANNER,
@@ -111,7 +105,6 @@ export function useAdMob(gsRef, setUIUpdates, currentUser, screen, isVIP, langRe
         });
         isBannerCreatedRef.current = true;
       } else {
-        // Những lần sau: Chỉ hiện lên lại (giảm giật lag)
         await AdMob.resumeBanner(); 
       }
     } catch (e) { console.log("Lỗi hiện Banner:", e); }
@@ -120,42 +113,33 @@ export function useAdMob(gsRef, setUIUpdates, currentUser, screen, isVIP, langRe
   const hideBanner = async () => {
     if (!Capacitor.isNativePlatform() || !isBannerCreatedRef.current) return;
     try {
-      await AdMob.hideBanner(); // Tạm ẩn Banner đi khi vào trận
+      await AdMob.hideBanner(); 
     } catch (e) { console.log("Lỗi ẩn Banner:", e); }
   };
 
-  // --- LOGIC QUẢN LÝ ẨN/HIỆN BANNER (ĐÃ TỐI ƯU) ---
   useEffect(() => {
-    // 1. Danh sách các màn hình ĐƯỢC PHÉP hiện Banner (Không có 'campaign')
-    const safeScreens = ['menu', 'lobby', 'shop', 'leaderboard'];
-    
-    // 2. Điều kiện hiển thị
+    // CHỈ CHO PHÉP BANNER Ở CÁC MÀN HÌNH SẢNH CHỜ CHIẾN DỊCH
+    const safeScreens = ['portal', 'campaign_portal', 'hq', 'shop_campaign', 'inventory', 'pilots', 'stage_select'];
     const shouldShowBanner = safeScreens.includes(screen) && !isVIP && !isWatchingAd && isAdInitialized;
 
-    // 3. Thực thi
-    if (shouldShowBanner) {
-      showBanner();
-    } else {
-      hideBanner();
-    }
+    if (shouldShowBanner) showBanner();
+    else hideBanner();
   }, [screen, isVIP, isWatchingAd, isAdInitialized]);
+
   const watchAd = async (rewardType) => {
-    if (!currentUser && rewardType !== 'revive') {
+    if (!currentUser) {
       return toast.error(t[langRef.current]?.reqLoginReward || "Vui lòng đăng nhập!");
     }
-    if (rewardType === 'life' && gsRef.current.lives >= 10) {
-      return toast.error(t[langRef.current]?.errLifeFullAd);
+    
+    // Giới hạn xem nhận thưởng
+    const realTimeNow = new Date(getRealTime());
+    const currentHourStr = `${realTimeNow.getFullYear()}-${realTimeNow.getMonth() + 1}-${realTimeNow.getDate()}-${realTimeNow.getHours()}`;
+    if (gsRef.current.lastCoinHour !== currentHourStr) {
+      gsRef.current.hourlyCoinCount = 0;
+      gsRef.current.lastCoinHour = currentHourStr;
     }
-    if (rewardType === 'coin') {
-      const realTimeNow = new Date(getRealTime());
-      const currentHourStr = `${realTimeNow.getFullYear()}-${realTimeNow.getMonth() + 1}-${realTimeNow.getDate()}-${realTimeNow.getHours()}`;
-      if (gsRef.current.lastCoinHour !== currentHourStr) {
-        gsRef.current.hourlyCoinCount = 0;
-        gsRef.current.lastCoinHour = currentHourStr;
-      }
-      if (gsRef.current.hourlyCoinCount >= 15) {
-        return toast.error(t[langRef.current]?.errCoinHourlyLimitAd || "Đã đạt giới hạn 15 lần/giờ.");
-      }
+    if (gsRef.current.hourlyCoinCount >= 20) {
+      return toast.error(langRef.current === 'vi' ? "Đã đạt giới hạn quảng cáo giờ này." : "Hourly ad limit reached.");
     }
     
     if (isWatchingAd) return;

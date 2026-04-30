@@ -74,17 +74,15 @@
      box-sizing: border-box;
      position: relative;
      z-index: 20;
-     /* ✅ Cho phép scroll dọc khi nội dung tràn (màn hình thấp) */
      overflow-y: auto;
      overflow-x: hidden;
      pointer-events: auto;
-     /* Smooth momentum scroll trên iOS */
      -webkit-overflow-scrolling: touch;
    }
    
    .container::before {
      content: "";
-     position: fixed; /* fixed để grid không scroll cùng */
+     position: fixed; 
      inset: 0;
      background-image:
        linear-gradient(rgba(56, 189, 248, 0.03) 1px, transparent 1px),
@@ -127,7 +125,6 @@
      flex-direction: column;
      gap: var(--gap);
      z-index: 10;
-     /* ✅ Chiếm toàn bộ chiều cao trên màn hình cao */
      flex: 1;
      min-height: 0;
    }
@@ -192,6 +189,7 @@
      border-radius: var(--radius-sm);
    }
    .currencyIcon { font-size: 16px; }
+   .chipEnergy { color: #2ed573; }
    .chipCoin { color: var(--accent-warm); border-bottom: 2px solid var(--accent-warm); }
    .chipGem { color: var(--accent); border-bottom: 2px solid var(--accent); }
    .chipBlueprint { color: var(--accent-cool); border-bottom: 2px solid var(--accent-cool); }
@@ -214,7 +212,6 @@
      font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
      cursor: pointer; transition: all 0.25s ease; overflow: hidden;
    }
-   /* Bag tab active: cyan */
    .mainTabBtn.active {
      color: #fff;
      background: rgba(56, 189, 248, 0.10);
@@ -222,7 +219,6 @@
      box-shadow: 0 0 20px var(--accent-glow), inset 0 0 20px rgba(56, 189, 248, 0.05);
      text-shadow: 0 0 12px var(--accent);
    }
-   /* Forge tab active: gold override */
    .mainTabBtn[data-tab="forge"].active {
      color: var(--gold-bright);
      background: rgba(245, 197, 24, 0.10);
@@ -236,30 +232,61 @@
      position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
      background: linear-gradient(90deg, transparent, var(--accent), transparent);
    }
-   /* Gold underline for forge */
    .forgeMode .tabUnderline {
      background: linear-gradient(90deg, transparent, var(--gold), transparent);
    }
    
    /* ═══════════════════════════════════════════
-      WORKSPACE  (chiều cao linh hoạt)
+      WORKSPACE 
       ═══════════════════════════════════════════ */
    .workspace {
      display: flex;
      flex-direction: column;
      flex: 1;
      gap: var(--gap);
-     /* ✅ Trên màn hình cao: overflow hidden, nội dung con tự scroll */
      min-height: 0;
-     /* overflow: hidden; */
+   }
+
+   /* ═══════════════════════════════════════════
+      BỘ SƯU TẬP (COLLECTION BOARD)
+      ═══════════════════════════════════════════ */
+   .collectionBoard {
+     flex: 1; display: flex; flex-direction: column; gap: 20px;
+     overflow-y: auto; overflow-x: hidden;
+     background: var(--bg-panel); border: 1px solid var(--border-subtle);
+     border-radius: var(--radius); padding: 20px;
+     box-shadow: inset 0 0 40px rgba(0,0,0,0.6);
+   }
+   .collectionBoard::-webkit-scrollbar { width: 4px; }
+   .collectionBoard::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+   
+   .collectionSection { display: flex; flex-direction: column; gap: 12px; }
+   .collectionHeader {
+     font-size: 18px; font-weight: 800; letter-spacing: 0.1em;
+     color: var(--accent); text-transform: uppercase;
+     border-bottom: 1px solid rgba(56,189,248,0.2);
+     padding-bottom: 8px; display: flex; align-items: center; gap: 8px;
+   }
+   .collectionHeader::before { content: "◈"; }
+   
+   .collectionGrid {
+     display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+     gap: 10px;
+   }
+
+   .capacityText {
+     font-family: var(--font-data); font-size: 14px;
+     color: var(--accent-warm); margin-left: auto; letter-spacing: 0.05em;
+     text-shadow: 0 0 10px var(--accent-warm-g);
    }
    
    /* ═══════════════════════════════════════════
-      AIRCRAFT SECTION
+      AIRCRAFT SECTION 
       ═══════════════════════════════════════════ */
    .aircraftSection {
      flex-shrink: 0;
-     height: 160px;
+     height: auto;
+     max-height: 350px; 
      background: var(--bg-panel);
      border: 1px solid var(--border-subtle);
      border-radius: var(--radius);
@@ -275,37 +302,20 @@
      display: flex; align-items: center; gap: 8px; flex-shrink: 0;
    }
    .sectionHeader::before { content: "◈"; }
-   .aircraftEquipped {
-     border-color: var(--accent);
-     background: linear-gradient(135deg, rgba(56,189,248,0.10), rgba(10,18,36,0.8));
-     box-shadow: 0 0 15px var(--accent-glow), inset 0 0 15px rgba(56,189,248,0.10);
-   }
-   .acImageWrap {
-     width: 72px; height: 72px;
-     display: flex; justify-content: center; align-items: center;
-     margin-right: 12px;
-     filter: drop-shadow(0 0 10px rgba(56,189,248,0.3));
-   }
-   .acImage { max-width: 100%; max-height: 100%; object-fit: contain; }
-   .acInfo { flex: 1; display: flex; flex-direction: column; justify-content: center; }
-   .acName {
-     font-size: 20px; font-weight: 800; color: #fff;
-     text-transform: uppercase; letter-spacing: 0.05em;
-     line-height: 1; margin-bottom: 8px;
-   }
-   .acStats {
-     font-family: var(--font-data); font-size: 12px;
-     color: var(--accent-warm); display: flex; flex-direction: column; gap: 2px;
-   }
-   .acBadge {
-     position: absolute; top: 6px; right: 6px;
-     background: var(--accent); color: var(--bg-void);
-     font-size: 10px; font-weight: 800; padding: 2px 6px;
-     border-radius: 4px; letter-spacing: 0.1em;
-     box-shadow: 0 0 8px var(--accent-glow);
-     animation: pulse 2s infinite;
-   }
    
+   .aircraftGrid {
+     display: grid;
+     grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+     grid-auto-rows: max-content;
+     gap: 10px;
+     width: 100%;
+     padding: 5px;
+     overflow-y: auto;
+   }
+   .aircraftGrid::-webkit-scrollbar { width: 4px; }
+   .aircraftGrid::-webkit-scrollbar-track { background: transparent; }
+   .aircraftGrid::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 4px; }
+
    /* ═══════════════════════════════════════════
       LOWER WORKSPACE (Grid + Detail)
       ═══════════════════════════════════════════ */
@@ -314,7 +324,6 @@
      flex: 1;
      gap: var(--gap);
      min-height: 0;
-     /* overflow: hidden; */
    }
    
    /* ═══════════════════════════════════════════
@@ -352,7 +361,6 @@
    .sideTabBtn:hover { color: var(--text-primary); background: rgba(56,189,248,0.05); }
    .sideTabBtn.active { color: var(--accent); background: var(--accent-dim); box-shadow: inset 3px 0 0 var(--accent); }
    
-   /* Forge mode: gold side tabs */
    .forgeMode .sideTabBtn:hover { background: rgba(245,197,24,0.05); }
    .forgeMode .sideTabBtn.active {
      color: var(--gold);
@@ -417,6 +425,20 @@
      border-color: var(--gold);
      box-shadow: 0 0 20px var(--gold-glow), 0 0 6px var(--gold);
    }
+
+   /* --- CSS CHƯA SỞ HỮU (LOCKED) --- */
+   .lockedItem {
+      filter: grayscale(100%) brightness(0.4);
+      opacity: 0.6;
+   }
+   .lockedItem:hover {
+      filter: grayscale(80%) brightness(0.6);
+      opacity: 0.8;
+   }
+   .lockedItem.selected {
+      filter: grayscale(0%) brightness(1);
+      opacity: 1;
+   }
    
    .itemGlow {
      position: absolute; inset: 0; opacity: 0.3;
@@ -463,634 +485,213 @@
    .emptyIcon { font-size: 40px; opacity: 0.3; }
    
    /* ═══════════════════════════════════════════
-      DETAIL PANEL
-      ═══════════════════════════════════════════ */
-   .detailPanel {
-     width: 270px; flex-shrink: 0;
-     background: var(--bg-panel);
-     border: 1px solid var(--border-subtle);
-     border-radius: var(--radius);
-     backdrop-filter: blur(12px);
-     display: flex; flex-direction: column;
-     overflow: hidden;
-     box-shadow: inset 0 0 40px rgba(0,0,0,0.6);
-     position: relative;
-   }
-   /* Forge mode: vàng viền detail panel */
-   .forgeMode .detailPanel {
-     border-color: var(--gold-border);
-     box-shadow: inset 0 0 40px rgba(0,0,0,0.6), 0 0 20px rgba(245,197,24,0.08);
-   }
-   
-   .detailInner {
-     display: flex; flex-direction: column;
-     height: 100%; padding: 16px; gap: 14px;
-     overflow-y: auto;
-   }
-   .detailInner::-webkit-scrollbar { width: 3px; }
-   .detailInner::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
-   
-   .scanLine {
-     position: absolute; left: 0; right: 0; height: 2px;
-     background: linear-gradient(90deg, transparent, var(--accent), transparent);
-     z-index: 10; pointer-events: none;
-     animation: scanAnim 0.5s ease-out forwards;
-   }
-   @keyframes scanAnim { from { top: 0; opacity: 1; } to { top: 100%; opacity: 0; } }
-   
-   /* Preview box */
-   .previewBox {
-     width: 100%; aspect-ratio: 1.6 / 1;
-     display: flex; flex-direction: column; align-items: center; justify-content: center;
-     background: rgba(3,6,14,0.8);
-     border-radius: var(--radius-sm);
-     border: 1px solid rgba(255,255,255,0.06);
-     position: relative; 
-     /* overflow: hidden; gap: 8px; */
-   }
-   .previewBox.r1 { border-color: rgba(148,163,184,0.3); }
-   .previewBox.r2 { border-color: rgba(74,222,128,0.3); }
-   .previewBox.r3 { border-color: rgba(96,165,250,0.3); }
-   .previewBox.r4 { border-color: rgba(192,132,252,0.3); }
-   .previewBox.r5 { border-color: rgba(251,191,36,0.4); box-shadow: 0 0 20px var(--r5-g); }
-   
-   .previewGlow {
-     position: absolute; inset: 0;
-     background: radial-gradient(circle at 50% 80%, rgba(56,189,248,0.08), transparent 70%);
-     pointer-events: none;
-   }
-   /* Gold glow in forge mode */
-   .forgeMode .previewGlow {
-     background: radial-gradient(circle at 50% 80%, rgba(245,197,24,0.10), transparent 70%);
-   }
-   
-   .previewIcon { filter: drop-shadow(0 0 12px rgba(255,255,255,0.3)); z-index: 1; }
-   .rarityBadge { font-family: var(--font-data); font-size: 13px; z-index: 1; letter-spacing: 0.05em; }
-   .rarityBadge[data-rarity="1"] { color: var(--r1); }
-   .rarityBadge[data-rarity="2"] { color: var(--r2); }
-   .rarityBadge[data-rarity="3"] { color: var(--r3); }
-   .rarityBadge[data-rarity="4"] { color: var(--r4); }
-   .rarityBadge[data-rarity="5"] { color: var(--r5); text-shadow: 0 0 10px var(--r5); }
-   
-   /* Item identity */
-   .itemIdentity { display: flex; flex-direction: column; gap: 6px; }
-   .itemName {
-     margin: 0; font-size: 22px; font-weight: 800;
-     letter-spacing: 0.06em; text-transform: uppercase;
-     color: #fff; line-height: 1.1;
-   }
-   .itemMeta { display: flex; align-items: center; gap: 8px; }
-   .rarityLabel {
-     font-family: var(--font-data); font-size: 11px;
-     letter-spacing: 0.12em; text-transform: uppercase;
-     padding: 2px 8px; border-radius: 3px;
-   }
-   .rarityLabel[data-rarity="1"] { color: var(--r1); border: 1px solid var(--r1); background: var(--r1-g); }
-   .rarityLabel[data-rarity="2"] { color: var(--r2); border: 1px solid var(--r2); background: var(--r2-g); }
-   .rarityLabel[data-rarity="3"] { color: var(--r3); border: 1px solid var(--r3); background: var(--r3-g); }
-   .rarityLabel[data-rarity="4"] { color: var(--r4); border: 1px solid var(--r4); background: var(--r4-g); }
-   .rarityLabel[data-rarity="5"] { color: var(--r5); border: 1px solid var(--r5); background: var(--r5-g); }
-   .levelBadge { font-family: var(--font-data); font-size: 13px; color: var(--text-dim); letter-spacing: 0.08em; }
-   
-   /* Stats */
-   .statsBlock {
-     display: flex; flex-direction: column; gap: 10px;
-     background: rgba(3,6,14,0.6);
-     border: 1px solid var(--border-subtle);
-     border-radius: var(--radius-sm); padding: 12px;
-   }
-   .forgeMode .statsBlock { border-color: var(--gold-border); }
-   
-   .statRow { display: flex; align-items: center; gap: 8px; }
-   .statLabel {
-     font-size: 12px; font-weight: 700; letter-spacing: 0.08em;
-     text-transform: uppercase; color: var(--text-dim);
-     width: 80px; flex-shrink: 0;
-   }
-   .statBarTrack { flex: 1; height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; }
-   .statBarFill   { height: 100%; border-radius: 3px; }
-   .statValue { font-family: var(--font-data); font-size: 14px; color: var(--text-primary); flex-shrink: 0; }
-   
-   /* Stat upgrade arrow + upgraded value (forge) */
-   .statArrow { color: var(--gold); margin: 0 4px; font-size: 13px; }
-   .statValue.up { color: var(--gold-bright); font-weight: 700; text-shadow: 0 0 8px var(--gold-glow); }
-   
-   .pilotSkill { margin: 0; font-size: 16px; font-style: italic; color: var(--r4); line-height: 1.5; display: flex; gap: 8px; }
-   .pilotSkillIcon { font-size: 18px; flex-shrink: 0; color: var(--r4); }
-   
-   /* ═══════════════════════════════════════════
-      ACTION BUTTONS
-      ═══════════════════════════════════════════ */
-   .actionGroup { margin-top: auto; display: flex; flex-direction: column; gap: 8px; }
-   
-   .actionBtn {
-     width: 100%; padding: 12px 16px; border: none;
-     border-radius: var(--radius-sm);
-     font-family: var(--font-ui); font-size: 17px; font-weight: 800;
-     letter-spacing: 0.1em; text-transform: uppercase;
-     cursor: pointer; transition: opacity 0.2s, box-shadow 0.2s;
-     display: flex; align-items: center; justify-content: center; gap: 8px;
-   }
-   .equipBtn   { background: var(--accent); color: var(--bg-void); box-shadow: 0 0 16px var(--accent-glow); }
-   .equipBtn:hover { box-shadow: 0 0 24px var(--accent-glow); }
-   .unequipBtn { background: transparent; color: #f87171; border: 1px solid #f87171; box-shadow: 0 0 10px rgba(248,113,113,0.25); }
-   .unequipBtn:hover { background: rgba(248,113,113,0.10); }
-   
-   /* ── GO TO FORGE button (trong bag detail) ── */
-   .gotoForgeBtn {
-     background: transparent;
-     color: var(--gold);
-     border: 1px solid var(--gold-border);
-     box-shadow: 0 0 10px rgba(245,197,24,0.15);
-     font-size: 15px;
-   }
-   .gotoForgeBtn:hover {
-     background: var(--gold-dim);
-     box-shadow: 0 0 18px var(--gold-glow);
-   }
-   
-   /* ── EXECUTE UPGRADE button ── */
-   .execUpgradeBtn {
-     background: linear-gradient(135deg, var(--gold-deep), var(--gold));
-     color: #1a1000;
-     font-size: 18px;
-     box-shadow: 0 0 20px var(--gold-glow), inset 0 1px 0 rgba(255,255,255,0.15);
-     border: 1px solid var(--gold-bright);
-     letter-spacing: 0.12em;
-     transition: all 0.2s ease;
-   }
-   .execUpgradeBtn:hover:not(:disabled) {
-     background: linear-gradient(135deg, var(--gold), var(--gold-bright));
-     box-shadow: 0 0 30px var(--gold-glow);
-     transform: translateY(-1px);
-   }
-   .execUpgradeBtn:disabled {
-     background: rgba(100, 80, 0, 0.25);
-     color: #5a4a00;
-     border-color: rgba(245,197,24,0.15);
-     box-shadow: none;
-     cursor: not-allowed;
-     opacity: 0.6;
-   }
-   
-   /* ── UPGRADE / GOTO FORGE legacy button ── */
-   .upgradeBtn {
-     display: flex; align-items: center; justify-content: center; gap: 8px;
-     width: 100%; padding: 10px 16px;
-     background: rgba(251,146,60,0.12);
-     border: 1px solid rgba(251,146,60,0.4);
-     color: var(--accent-warm);
-     border-radius: var(--radius-sm);
-     font-family: var(--font-ui); font-size: 16px; font-weight: 700;
-     letter-spacing: 0.08em; text-transform: uppercase;
-     cursor: pointer; transition: background 0.2s, box-shadow 0.2s;
-   }
-   .upgradeBtn:hover { background: rgba(251,146,60,0.22); box-shadow: 0 0 16px rgba(251,146,60,0.3); }
-   .upgradeCost { font-family: var(--font-data); font-size: 13px; opacity: 0.75; }
-   
-   /* ═══════════════════════════════════════════
-      FORGE TOP TABS (Upgrade / Star Up)
-      ═══════════════════════════════════════════ */
-   .forgeTopTabs {
-     display: flex; gap: 8px; flex-shrink: 0;
-   }
-   .forgeTopBtn {
-     flex: 1; padding: 8px 10px;
-     background: rgba(20, 14, 2, 0.75);
-     color: var(--text-dim);
-     border: 1px solid var(--gold-border);
-     border-radius: var(--radius-sm);
-     font-family: var(--font-ui); font-size: 15px; font-weight: 700;
-     letter-spacing: 0.08em; text-transform: uppercase;
-     cursor: pointer; transition: all 0.2s ease;
-     opacity: 0.6;
-   }
-   .forgeTopBtn:hover {
-     color: var(--gold);
-     background: var(--gold-dim);
-     opacity: 0.85;
-   }
-   .forgeTopBtn.active {
-     color: var(--gold-bright);
-     background: rgba(245, 197, 24, 0.15);
-     border-color: var(--gold);
-     box-shadow: 0 0 14px var(--gold-glow), inset 0 0 12px rgba(245,197,24,0.07);
-     text-shadow: 0 0 10px var(--gold);
-     opacity: 1;
-   }
-   
-   /* ═══════════════════════════════════════════
-      MATERIAL REQUIREMENTS
-      ═══════════════════════════════════════════ */
-   .materialReqs {
-     display: flex; gap: 10px;
-     background: rgba(20, 14, 2, 0.6);
-     border: 1px solid var(--gold-border);
-     border-radius: var(--radius-sm);
-     padding: 10px 14px;
-   }
-   .matItem {
-     display: flex; align-items: center; gap: 6px;
-     font-family: var(--font-data); font-size: 14px;
-     color: var(--text-primary);
-     flex: 1;
-   }
-   .matIcon { font-size: 16px; }
-   .matItem.insufficient { color: #f87171; }
-   .matItem.insufficient .matIcon { text-shadow: 0 0 8px rgba(248,113,113,0.5); }
-   
-   /* ═══════════════════════════════════════════
-      EMPTY DETAIL STATE
-      ═══════════════════════════════════════════ */
-   .detailEmpty {
-     height: 100%;
-     display: flex; flex-direction: column; align-items: center; justify-content: center;
-     gap: 12px; color: var(--text-faint);
-     text-align: center; font-size: 14px;
-     letter-spacing: 0.12em; text-transform: uppercase;
-   }
-   .detailEmptyIcon {
-     font-size: 36px; opacity: 0.2;
-     animation: pulse 3s ease-in-out infinite;
-   }
-   @keyframes pulse {
-     0%, 100% { opacity: 0.15; transform: scale(1); }
-     50%       { opacity: 0.35; transform: scale(1.08); }
-   }
-   
-   /* ═══════════════════════════════════════════
       RESPONSIVE — MOBILE (≤768px)
-      Màn hình nhỏ: layout dọc
       ═══════════════════════════════════════════ */
    @media (max-width: 768px) {
-     /* .lowerWorkspace  { flex-direction: column; } */
      .inventoryBoard  { min-height: 0; flex: 1; }
    
-     .aircraftSection { height: auto; padding: 10px; }
-     .acImageWrap     { width: 56px; height: 56px; margin-right: 8px; }
-     .acName          { font-size: 16px; }
-     .acStats         { font-size: 11px; }
-   
+     .aircraftSection { height: auto; max-height: 280px; padding: 10px; }
+     
      .verticalTabs    { width: 72px; }
      .sideTabBtn      { flex-direction: column; justify-content: center; padding: 10px 4px; gap: 4px; }
      .sideIcon        { font-size: 22px; }
      .sideLabel       { font-size: 10px; text-align: center; letter-spacing: 0; }
    
-     .gridArea        { grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 8px; padding: 10px; }
-   
-     .detailPanel     { width: 100%; height: auto; flex-shrink: 0; }
-     .detailInner     { height: auto; flex-direction: row; flex-wrap: wrap; overflow-x: hidden; padding: 10px; }
-     .previewBox      { width: 100px; aspect-ratio: 1; flex-shrink: 0; }
-     .itemIdentity    { flex: 1; min-width: 120px; }
-     .statsBlock      { flex: 1 1 100%; padding: 8px; }
-     .actionGroup     { flex: 1 1 100%; flex-direction: row; }
-     .actionBtn       { font-size: 14px; padding: 8px; }
-     .upgradeBtn      { font-size: 14px; padding: 8px; }
-     .forgeTopTabs    { width: 100%; flex: 1 1 100%; }
-     .materialReqs    { flex: 1 1 100%; }
+     .gridArea, .aircraftGrid, .collectionGrid { 
+        grid-template-columns: repeat(4, 1fr) !important; 
+        gap: 8px; 
+        padding: 10px; 
+     }
+
+     .collectionBoard { padding: 12px; gap: 16px; }
    
      .headerTitle     { display: none; }
      .currencyChip    { padding: 5px 10px; }
+     .backText        { display: none; }
+     .currencyBar     { flex-wrap: wrap; justify-content: flex-end; }
    }
    
-   /* ═══════════════════════════════════════════
-      RESPONSIVE — NHỎ CHIỀU CAO (max-height: 640px)
-      Toàn bộ trang scroll dọc, bỏ fixed height
-      ═══════════════════════════════════════════ */
    @media (max-height: 640px) {
-     /* Container tự mở rộng theo nội dung */
-     .container {
-      height: auto;
-      min-height: 100dvh;
-      overflow-y: auto;     /* ← Thêm dòng này */
-    }
-   
-     /* Workspace không còn giới hạn chiều cao */
-     .workspace {
-       overflow: visible;
-       min-height: 480px;
-     }
-   
-     /* Aircraft section nhỏ hơn */
-     .aircraftSection {
-       height: auto;
-     }
-   
-     /* Lower workspace tự xếp dọc */
-     .lowerWorkspace {
-       flex-direction: column;
-       overflow: visible;
-       min-height: 0;
-     }
-   
-     /* Inventory board không bị ép chiều cao */
-     .inventoryBoard {
-       min-height: 280px;
-       overflow: hidden; /* giữ scroll nội bộ */
-     }
-   
-     /* Grid vẫn scroll nội bộ, nhưng có chiều cao tối thiểu */
-     .gridArea {
-       max-height: 240px;
-       overflow-y: auto;
-     }
-   
-     /* Detail panel rớt xuống dưới, chiều cao tự động */
-     .detailPanel {
-       width: 100%;
-       height: auto;
-       min-height: 180px;
-       flex-shrink: 0;
-       overflow: visible;
-     }
-     .detailInner {
-       height: auto;
-       overflow: visible;
-       flex-direction: row;
-       flex-wrap: wrap;
-     }
-     .previewBox   { width: 90px; aspect-ratio: 1; flex-shrink: 0; }
-     .itemIdentity { flex: 1; min-width: 110px; }
-     .statsBlock   { flex: 1 1 100%; }
-     .actionGroup  { flex: 1 1 100%; flex-direction: row; }
-     .actionBtn    { font-size: 13px; padding: 7px; }
-   
-     /* Header compact */
+     .container { height: auto; min-height: 100dvh; overflow-y: auto; }
+     .workspace { overflow: visible; min-height: 480px; }
+     .aircraftSection { height: auto; }
+     .lowerWorkspace { flex-direction: column; overflow: visible; min-height: 0; }
+     .inventoryBoard { min-height: 280px; overflow: hidden; }
+     .gridArea { max-height: 240px; overflow-y: auto; }
      .backBtn    { padding: 5px 12px 5px 8px; font-size: 16px; }
      .headerTitle{ font-size: 18px; }
      .currencyAmt{ font-size: 15px; }
    }
    
-   /* ═══════════════════════════════════════════
-      RESPONSIVE — RẤT NHỎ (max-height: 480px)
-      ═══════════════════════════════════════════ */
    @media (max-height: 480px) {
-     .aircraftSection { display: none; } /* ẩn fleet khi quá chật */
+     .aircraftSection { display: none; } 
      .gridArea         { max-height: 200px; }
-     .detailPanel      { min-height: 160px; }
    }
-   /* ============================================================
-   BỔ SUNG STYLE CHO ICON SVG VÀ GIAO DIỆN ĐỘT PHÁ (STAR UP)
-   (Paste vào cuối file, không xóa code cũ)
-   ============================================================ */
 
-/* Chỉnh kích thước icon SVG trên thanh tài nguyên */
-.currencyIcon {
-  width: 16px; 
-  height: 16px; 
-  display: flex; 
-  align-items: center; 
-  justify-content: center;
-}
+.currencyIcon { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; }
 .currencyIcon svg { width: 100%; height: 100%; }
-
-/* Style cho loại chip Blueprint mới */
-.currencyChip[data-type="blueprint"] {
-  border-bottom: 2px solid var(--accent-green, #00ff88);
-}
-
-/* Chỉnh kích thước icon SVG trong phần yêu cầu nguyên liệu (Xưởng rèn) */
-.matIcon { 
-  width: 18px; 
-  height: 18px; 
-  display: inline-flex; 
-  align-items: center; 
-  justify-content: center;
-}
+.currencyChip[data-type="blueprint"] { border-bottom: 2px solid var(--accent-green, #00ff88); }
+.matIcon { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; }
 .matIcon svg { width: 100%; height: 100%; }
 
-/* --- GIAO DIỆN YÊU CẦU ĐỘT PHÁ SAO --- */
-.starUpReqs {
-  display: flex; flex-direction: column; gap: 8px;
-  background: rgba(20, 14, 2, 0.6);
-  border: 1px dashed var(--r4); /* Viền màu tím để phân biệt với rèn vàng */
-  border-radius: var(--radius-sm);
-  padding: 10px 14px;
-}
-.starUpLabel { 
-  font-size: 12px; 
-  color: var(--text-dim); 
-  text-transform: uppercase; 
-  letter-spacing: 0.05em; 
-}
-.sacrificialSlot {
-  display: flex; align-items: center; gap: 8px;
-  background: rgba(0,0,0,0.5); 
-  padding: 8px; 
-  border-radius: 4px;
-  font-family: var(--font-data); 
-  font-size: 13px; 
-  color: var(--text-primary);
-}
+.starUpReqs { display: flex; flex-direction: column; gap: 8px; background: rgba(20, 14, 2, 0.6); border: 1px dashed var(--r4); border-radius: var(--radius-sm); padding: 10px 14px; }
+.starUpLabel { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+.sacrificialSlot { display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 4px; font-family: var(--font-data); font-size: 13px; color: var(--text-primary); }
 .sacrificeText { flex: 1; }
 .reqMet { color: var(--r2); font-weight: bold; }
 .reqMissing { color: #f87171; font-weight: bold; }
 .gemCost { margin-top: 4px; font-size: 13px; justify-content: flex-end; }
-
-/* Nút bấm Đột Phá - Màu Tím (Gacha theme) */
-.execStarUpBtn {
-  background: linear-gradient(135deg, #7e22ce, #c084fc);
-  color: #fff;
-  font-size: 18px;
-  box-shadow: 0 0 20px rgba(192, 132, 252, 0.4), inset 0 1px 0 rgba(255,255,255,0.2);
-  border: 1px solid #d8b4fe;
-  letter-spacing: 0.12em;
-  transition: all 0.2s ease;
-}
-.execStarUpBtn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #9333ea, #d8b4fe);
-  box-shadow: 0 0 30px rgba(192, 132, 252, 0.6);
-  transform: translateY(-1px);
-}
-.execStarUpBtn:disabled {
-  background: rgba(126, 34, 206, 0.3);
-  color: #a8a29e;
-  border-color: rgba(192, 132, 252, 0.2);
-  box-shadow: none; 
-  cursor: not-allowed; 
-  opacity: 0.6;
+.execStarUpBtn { background: linear-gradient(135deg, #7e22ce, #c084fc); color: #fff; font-size: 18px; box-shadow: 0 0 20px rgba(192, 132, 252, 0.4), inset 0 1px 0 rgba(255,255,255,0.2); border: 1px solid #d8b4fe; letter-spacing: 0.12em; transition: all 0.2s ease; }
+.execStarUpBtn:hover:not(:disabled) { background: linear-gradient(135deg, #9333ea, #d8b4fe); box-shadow: 0 0 30px rgba(192, 132, 252, 0.6); transform: translateY(-1px); }
+.execStarUpBtn:disabled { background: rgba(126, 34, 206, 0.3); color: #a8a29e; border-color: rgba(192, 132, 252, 0.2); box-shadow: none; cursor: not-allowed; opacity: 0.6; }
+/* ═══════════════════════════════════════════
+   CHẾ ĐỘ CHỌN NHIỀU, BÁN VÀ KHÓA VẬT PHẨM
+   ═══════════════════════════════════════════ */
+.itemSlot {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
-/* Fix mobile để chữ và icon khỏi tràn */
-@media (max-width: 768px) {
-  .backText { display: none; } /* Ẩn chữ Chỉ Huy trên mobile */
-  .currencyBar { flex-wrap: wrap; justify-content: flex-end; }
-  .sacrificialSlot { flex-direction: column; text-align: center; }
-  .sacrificeText { font-size: 12px; }
-}
-/* ============================================================
-   BỔ SUNG CHO TAB GACHA TRONG INVENTORY
-   ============================================================ */
-
-.dropRateSection { 
-  border-top: 1px solid rgba(255,255,255,0.1); 
-  padding-top: 8px; 
-  margin-top: 4px; 
-}
-.dropTitle { 
-  font-size: 12px; 
-  color: var(--accent); 
-  margin-bottom: 6px; 
-  font-weight: bold; 
-}
-.dropRow { 
-  display: flex; 
-  justify-content: space-between; 
-  font-family: var(--font-data); 
-  font-size: 12px; 
-  margin-bottom: 4px; 
-}
-.dropPct { color: #fff; }
-
-.gachaBtnRow { 
-  display: flex; 
-  gap: 8px; 
-  width: 100%; 
-}
-.gachaBtnRow button { flex: 1; }
-.gachaBtn {
-  background: linear-gradient(135deg, rgba(56,189,248,0.2), rgba(56,189,248,0.05));
-  color: var(--accent);
-  border: 1px solid var(--accent);
-}
-.gachaBtn:hover:not(:disabled) {
-  background: var(--accent); 
-  color: #000; 
-  box-shadow: 0 0 15px var(--accent-glow);
-}
-.gachaBtn:disabled { 
-  opacity: 0.5; 
-  filter: grayscale(1); 
-  cursor: not-allowed; 
-}
-/* --- GRID PHI CƠ CAO CẤP --- */
-.aircraftGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 15px;
-  width: 100%;
-  padding: 5px;
+.lockIconBadge {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  font-size: 12px;
+  background: rgba(0,0,0,0.6);
+  padding: 2px 4px;
+  border-radius: 4px;
+  z-index: 5;
+  border: 1px solid rgba(255,255,255,0.2);
 }
 
-.aircraftCard {
-  position: relative;
-  width: 100% !important;
-  margin: 0 !important;
-  background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(30, 41, 59, 0.7));
-  border: 1px solid rgba(56, 189, 248, 0.2);
-  border-radius: 12px;
+.checkboxOverlay {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 22px;
+  height: 22px;
+  background: rgba(0, 0, 0, 0.7);
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-radius: 4px;
+  z-index: 10;
   display: flex;
-  padding: 12px;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.checkboxOverlay.checked {
+  background: var(--accent);
+  border-color: #fff;
+  color: #000;
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+.checkboxOverlay.checked::after {
+  content: '✓';
+  font-family: var(--font-data);
+  font-weight: bold;
+  font-size: 14px;
+}
+
+/* Thanh công cụ nổi ở đáy màn hình */
+.sellActionBar {
+  position: absolute;
+  bottom: 25px;
+  transform: translateX(-50%);
+  background: rgba(10, 18, 36, 0.95);
+  border: 2px solid #f87171;
+  border-radius: 30px;
+  padding: 10px 20px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.8), 0 0 20px rgba(248, 113, 113, 0.3);
+  z-index: 100;
+  backdrop-filter: blur(10px);
+  box-sizing: border-box;
+}
+
+.sellBtn {
+  background: #f87171;
+  color: #fff;
+  border: none;
+  padding: 8px 18px;
+  border-radius: 20px;
+  font-family: var(--font-ui);
+  font-size: 16px;
+  font-weight: bold;
+  letter-spacing: 1px;
   cursor: pointer;
-  overflow: hidden;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 0 15px rgba(248, 113, 113, 0.4);
+  transition: 0.2s;
 }
-
-.aircraftCard::before {
-  content: ""; position: absolute; inset: 0;
-  background: linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px);
-  background-size: 100% 3px;
-  pointer-events: none; opacity: 0.3;
+.sellBtn:hover:not(:disabled) {
+  background: #ef4444;
+  box-shadow: 0 0 25px rgba(248, 113, 113, 0.6);
 }
+.sellBtn:disabled { background: #64748b; box-shadow: none; cursor: not-allowed; opacity: 0.5; }
 
-.aircraftCard:hover {
-  border-color: var(--accent);
-  background: rgba(56, 189, 248, 0.05);
-  transform: translateY(-2px);
+/* Thêm nút Xóa mới */
+.deleteBtn {
+  background: transparent;
+  color: #f87171;
+  border: 1px solid #f87171;
+  padding: 8px 18px;
+  border-radius: 20px;
+  font-family: var(--font-ui);
+  font-size: 16px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: 0.2s;
 }
-
-.aircraftCard.selected {
-  border-color: var(--accent);
-  box-shadow: 0 0 20px var(--accent-glow), inset 0 0 10px var(--accent-glow);
+.deleteBtn:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.1);
+  box-shadow: 0 0 15px rgba(248, 113, 113, 0.4);
 }
+.deleteBtn:disabled { color: #64748b; border-color: #64748b; cursor: not-allowed; opacity: 0.5; }
 
-.aircraftCard.aircraftEquipped {
-  border-left: 4px solid var(--accent);
+.sellActionSubBtn {
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  cursor: pointer;
 }
+.sellActionSubBtn:hover { background: rgba(255,255,255,0.1); }
 
-/* Hiệu ứng hào quang cho phi cơ đang chọn */
-.cardGlow {
-  position: absolute; bottom: -20px; right: -20px;
-  width: 80px; height: 80px;
-  background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
-  opacity: 0.5; pointer-events: none;
-}
+/* BẢN VÁ MOBILE: Tránh cắt góc và xếp lưới 2x2 cho 4 nút */
+@media (max-width: 640px) {
+  .sellActionBar {
+    bottom: calc(15px + env(safe-area-inset-bottom));
+    width: 95%; 
+    max-width: 400px;
+    padding: 12px;
+    gap: 10px;
+    display: grid;
+    grid-auto-flow: column;
+    grid-template-columns: 1fr 1fr;
+    border-radius: 16px; 
+  }
 
-.acImageWrap {
-  width: 64px; height: 64px; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
-  background: rgba(0,0,0,0.3); border-radius: 8px;
-  margin-right: 15px; border: 1px solid rgba(255,255,255,0.05);
-}
-
-.acName {
-  font-size: 18px; font-weight: 800; color: #fff;
-  text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px;
-}
-
-.acStats {
-  font-family: var(--font-data); font-size: 12px;
-  color: var(--accent-cool); display: flex; gap: 10px;
-}
-
-@media (max-width: 480px) {
-  .aircraftGrid { grid-template-columns: 1fr; } /* Mobile dọc thì hiện 1 cột cho rõ */
-  .acName { font-size: 16px; }
-}
-/* --- GACHA RESULT MODAL --- */
-.gachaOverlay {
-  position: fixed; top: 0; left: 0; width: 100%; height: 100dvh;
-  background: rgba(3, 6, 14, 0.95); backdrop-filter: blur(10px);
-  display: flex; justify-content: center; align-items: center;
-  z-index: 10000; padding: 20px; pointer-events: auto;
-}
-
-.gachaModal {
-  width: 100%; max-width: 800px;
-  background: linear-gradient(135deg, rgba(10, 18, 36, 0.95), rgba(6, 12, 26, 0.95));
-  border: 2px solid #facc15; border-radius: 16px;
-  box-shadow: 0 0 50px rgba(250, 204, 21, 0.3);
-  display: flex; flex-direction: column; overflow: hidden;
-}
-
-.gachaHeader {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 15px 20px; border-bottom: 1px solid rgba(250, 204, 21, 0.3);
-  background: rgba(250, 204, 21, 0.1);
-}
-
-.gachaTitle { margin: 0; font-size: 28px; color: #facc15; letter-spacing: 2px; text-shadow: 0 0 15px rgba(250, 204, 21, 0.8); }
-.gachaClose { background: transparent; border: none; color: #fff; font-size: 24px; cursor: pointer; transition: 0.2s; }
-.gachaClose:hover { color: #ff4757; }
-
-.gachaContent {
-  padding: 30px; display: flex; flex-wrap: wrap; gap: 20px; 
-  justify-content: center; max-height: 60vh; overflow-y: auto;
-}
-
-.gachaItemCard {
-  width: 110px; padding: 15px; background: rgba(0,0,0,0.6);
-  border: 2px solid; border-radius: 12px;
-  display: flex; flex-direction: column; align-items: center; gap: 10px;
-  position: relative;
-}
-
-.gachaItemImg { width: 70px; height: 70px; object-fit: contain; filter: drop-shadow(0 0 10px rgba(255,255,255,0.5)); }
-.gachaItemRarity { font-size: 16px; letter-spacing: 2px; text-shadow: 0 0 5px currentColor; }
-.gachaItemNew {
-  position: absolute; top: -10px; right: -10px; 
-  background: linear-gradient(90deg, #ff416c, #ff4b2b); color: #fff; 
-  font-size: 12px; padding: 4px 8px; border-radius: 6px; font-weight: bold; 
-  box-shadow: 0 0 10px rgba(255, 65, 108, 0.8);
-  animation: pulseNew 1s infinite alternate;
-}
-
-.gachaFooter {
-  padding: 20px; display: flex; justify-content: center; gap: 20px; 
-  border-top: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.4);
-}
-
-@keyframes pulseNew {
-  0% { transform: scale(1); }
-  100% { transform: scale(1.1); }
+  .sellBtn, 
+  .deleteBtn, 
+  .sellActionSubBtn { 
+    width: 100%;
+    font-size: 13px; 
+    padding: 12px 5px; 
+    justify-content: center;
+    margin: 0;
+    border-radius: 10px; /* Bo góc đồng bộ cho các nút con */
+  }
 }

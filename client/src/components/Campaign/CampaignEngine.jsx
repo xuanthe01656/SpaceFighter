@@ -2,20 +2,19 @@ import React, { useEffect, useRef } from 'react';
 import * as Phaser from 'phaser';
 import CampaignScene from './CampaignScene';
 
-export default function CampaignEngine({ gsRef, setScreen, lang }) {
+export default function CampaignEngine({ gsRef, setScreen, lang, saveUserProfile }) {
   const containerRef = useRef(null);
   const gameRef = useRef(null);
 
   useEffect(() => {
-    // Đảm bảo thẻ div đã được render mới cho Phaser chạy
     if (!containerRef.current) return;
 
     const config = {
       type: Phaser.AUTO, 
       width: window.innerWidth,
       height: window.innerHeight,
-      parent: containerRef.current, // 👇 ÉP PHASER VÀO REACT REF
-      backgroundColor: '#020c1b',   // Trám nền đen xanh tối luôn cho Phaser
+      parent: containerRef.current,
+      backgroundColor: '#020c1b',
       physics: {
         default: 'arcade',
         arcade: { gravity: { y: 0 }, debug: false }
@@ -33,10 +32,10 @@ export default function CampaignEngine({ gsRef, setScreen, lang }) {
     game.registry.set('gsRef', gsRef);
     game.registry.set('setScreen', setScreen);
     game.registry.set('lang', lang);
+    game.registry.set('saveUserProfile', saveUserProfile); // 👇 NẠP HÀM LƯU DỮ LIỆU
 
     gameRef.current = game;
 
-    // Dọn rác khi thoát màn hình
     return () => {
       if (gameRef.current) {
         gameRef.current.destroy(true);
@@ -47,11 +46,7 @@ export default function CampaignEngine({ gsRef, setScreen, lang }) {
 
   return (
     <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: '#020c1b', zIndex: 50, overflow: 'hidden' }}>
-      
-      {/* VÙNG ĐẤT CỦA PHASER */}
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
-      
-      {/* GIAO DIỆN REACT (UI) */}
       <button 
         onClick={() => setScreen('stage_select')}
         style={{ 
@@ -63,7 +58,6 @@ export default function CampaignEngine({ gsRef, setScreen, lang }) {
       >
         ◀ {lang === 'vi' ? 'RÚT LUI' : 'RETREAT'}
       </button>
-      
     </div>
   );
 }

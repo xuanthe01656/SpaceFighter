@@ -3,353 +3,225 @@
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Share+Tech+Mono&display=swap');
 
 :root {
-  /* Bảng màu Core */
-  --bg-void:       #02040a;
-  --bg-deep:       #060c1a;
-  --bg-panel:      rgba(8, 14, 28, 0.65);
-  --bg-element:    rgba(15, 24, 50, 0.4);
-
-  /* Neon Accents */
+  --bg-element:    rgba(10, 15, 30, 0.7);
   --accent-cyan:   #00f0ff;
-  --accent-cyan-g: rgba(0, 240, 255, 0.3);
   --accent-purple: #b388ff;
   --accent-orange: #ff3c00;
   --accent-gold:   #facc15;
-  --accent-green:  #00ff88; /* Màu mới cho Bản vẽ nâng cấp */
-
-  /* Text & Borders */
+  --accent-pink:   #ff47a3;
   --text-main:     #e2e8f0;
-  --text-muted:    #64748b;
-  --border-dim:    rgba(0, 240, 255, 0.15);
-  --border-bright: rgba(0, 240, 255, 0.4);
+  --border-dim:    rgba(0, 240, 255, 0.2);
 
-  /* Typography */
   --font-ui:   'Barlow Condensed', sans-serif;
   --font-data: 'Share Tech Mono', monospace;
-
-  /* Cyberpunk Clip-path (Cắt góc trên-trái và dưới-phải) */
-  --cyber-cut: polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px);
-  --cyber-cut-sm: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  --cyber-cut: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
 }
 
 .container {
   width: 100%; 
   height: 100dvh; 
-  display: flex; 
-  flex-direction: column;
-  background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(30, 60, 120, 0.2), transparent), var(--bg-void);
+  position: relative;
   font-family: var(--font-ui); 
   color: var(--text-main); 
-  position: relative;
   overflow: hidden; 
   box-sizing: border-box;
+  /* Chờ ảnh nền của bạn. Mặc định là dải màu sâu */
+  background: url('/images/potal_bg169.png') no-repeat center center;
+  background-size: cover;
+  background-position: center;
 }
 
-/* Lưới không gian 3D */
-.container::before {
-  content: ""; 
-  position: absolute; 
-  inset: 0;
-  background-image: 
-    linear-gradient(var(--border-dim) 1px, transparent 1px),
-    linear-gradient(90deg, var(--border-dim) 1px, transparent 1px);
-  background-size: clamp(30px, 4vw, 50px) clamp(30px, 4vw, 50px); 
-  pointer-events: none; 
-  z-index: 1;
-  opacity: 0.5;
-}
-
-/* Hiệu ứng Scanline mờ (Màn hình HUD) */
+/* Hiệu ứng Scanline (Lưới HUD) */
 .container::after {
   content: ""; 
   position: absolute; 
   inset: 0;
-  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%);
+  background-image: linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px);
   background-size: 100% 4px; 
   pointer-events: none; 
-  z-index: 2;
+  z-index: 1;
 }
 
-/* KHU VỰC TOP NAV */
+/* ==========================================
+   1. TOP NAVIGATION
+========================================== */
 .topNav {
+  position: absolute;
+  top: 0; left: 0; right: 0;
   display: flex; 
   justify-content: space-between; 
-  align-items: center;
-  padding: clamp(10px, 2vh, 25px) clamp(15px, 3vw, 40px); 
-  width: 100%; 
+  align-items: flex-start;
+  padding: 15px 25px; 
   z-index: 10; 
-  box-sizing: border-box;
 }
 
-/* Nút Back vạt góc */
 .backBtn {
-  display: flex; 
-  align-items: center; 
-  gap: 8px; 
-  background: var(--bg-element); 
-  color: var(--accent-cyan);
-  border: none;
-  border-left: 3px solid var(--accent-cyan);
-  padding: 10px 20px 10px 15px; 
-  font-family: var(--font-ui); 
-  font-size: clamp(16px, 1.5vw, 20px); 
-  font-weight: 700; 
-  letter-spacing: 0.1em;
-  cursor: pointer; 
-  text-transform: uppercase; 
-  clip-path: var(--cyber-cut-sm);
-  transition: all 0.2s ease;
-  backdrop-filter: blur(4px);
+  display: flex; align-items: center; gap: 8px; 
+  background: var(--bg-element); color: var(--accent-cyan);
+  border: none; border-left: 4px solid var(--accent-cyan);
+  padding: 8px 20px; 
+  font-family: var(--font-ui); font-size: 20px; font-weight: 700; 
+  cursor: pointer; text-transform: uppercase; 
+  clip-path: var(--cyber-cut); backdrop-filter: blur(5px);
+  transition: 0.2s;
 }
-.backBtn:hover { 
-  background: var(--accent-cyan-g); 
-  text-shadow: 0 0 8px var(--accent-cyan); 
-}
+.backBtn:hover { background: rgba(0, 240, 255, 0.15); text-shadow: 0 0 8px var(--accent-cyan); }
 
-/* Thanh Tài Nguyên (Đồng bộ 100% với Inventory & HQ) */
-.currencyBar { 
-  display: flex; 
-  gap: 10px; 
-  flex-wrap: wrap; 
-  justify-content: flex-end; 
-}
-
+.currencyBar { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .currencyChip {
-  display: flex; 
-  align-items: center; 
-  gap: 8px; 
-  background: var(--bg-element); 
-  border: 1px solid var(--border-dim); 
-  padding: 6px 14px; 
-  border-radius: 6px; /* Thay clip-path cắt góc bằng viền bo tròn */
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(4px);
+  display: flex; align-items: center; gap: 6px; 
+  background: var(--bg-element); border: 1px solid var(--border-dim); 
+  padding: 4px 12px; border-radius: 6px; 
+  backdrop-filter: blur(5px); box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
 }
-
-.currencyIcon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-}
-
+.currencyIcon { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; }
 .currencyIcon svg { width: 100%; height: 100%; }
 
-/* Đổ màu và hiệu ứng Glow chuẩn của toàn hệ thống */
-.chipEnergy    { color: #0abde3; border-bottom: 2px solid #0abde3; text-shadow: 0 0 8px rgba(10, 189, 227, 0.5); }
-.chipCoin      { color: #fb923c; border-bottom: 2px solid #fb923c; text-shadow: 0 0 8px rgba(251, 146, 60, 0.5); }
-.chipGem       { color: #38bdf8; border-bottom: 2px solid #38bdf8; text-shadow: 0 0 8px rgba(56, 189, 248, 0.5); }
-.chipBlueprint { color: #00ff88; border-bottom: 2px solid #00ff88; text-shadow: 0 0 8px rgba(0, 255, 136, 0.5); }
-.chipGear { 
-  color: #c084fc; 
-  border-bottom: 2px solid #c084fc; 
-  text-shadow: 0 0 8px rgba(192, 132, 252, 0.5); 
-}
+.chipEnergy    { color: #0abde3; border-bottom: 2px solid #0abde3; }
+.chipCoin      { color: #fb923c; border-bottom: 2px solid #fb923c; }
+.chipGem       { color: #38bdf8; border-bottom: 2px solid #38bdf8; }
+.chipBlueprint { color: #00ff88; border-bottom: 2px solid #00ff88; }
+.chipGear      { color: #c084fc; border-bottom: 2px solid #c084fc; }
 
-.currencyAmt { 
-  font-family: var(--font-data); 
-  font-size: 18px; 
-  color: var(--text-main); 
-}
-/* KHU VỰC LÕI TRUNG TÂM */
-.centerDisplay {
-  flex: 1; 
-  display: flex; 
-  flex-direction: column; 
-  justify-content: center; 
-  align-items: center; 
-  position: relative;
+.currencyAmt { font-family: var(--font-data); font-size: 16px; color: #fff; }
+
+/* ==========================================
+   2. LEFT SIDEBAR (Tính năng Sự kiện)
+========================================== */
+.leftSidebar {
+  position: absolute;
+  top: 90px; left: 25px;
+  display: flex; flex-direction: column; gap: 15px;
   z-index: 10;
 }
 
-/* Vòng sáng phản ứng tự động co giãn */
-.hologramRing {
-  position: absolute; 
-  width: clamp(250px, 40vmin, 500px); 
-  height: clamp(250px, 40vmin, 500px); 
-  border-radius: 50%;
-  border: 2px dashed rgba(179, 136, 255, 0.4); 
-  animation: spin 25s linear infinite; 
-  pointer-events: none;
+.sideBtn {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--bg-element); border: 1px solid var(--border-dim);
+  padding: 10px 20px 10px 15px; border-radius: 8px;
+  color: var(--text-main); font-family: var(--font-ui); font-size: 18px; font-weight: 700;
+  cursor: pointer; backdrop-filter: blur(5px); transition: 0.2s;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.3);
 }
-.hologramRingInner {
-  position: absolute; 
-  width: clamp(200px, 32vmin, 400px); 
-  height: clamp(200px, 32vmin, 400px); 
-  border-radius: 50%;
-  border: 4px solid rgba(0, 240, 255, 0.1); 
-  border-top-color: var(--accent-cyan); 
-  border-bottom-color: var(--accent-purple);
-  animation: spin-reverse 15s linear infinite; 
-  pointer-events: none;
-}
+.sideBtn:hover { background: rgba(255,255,255,0.1); transform: translateX(5px); }
 
-@keyframes spin { 100% { transform: rotate(360deg); } }
-@keyframes spin-reverse { 100% { transform: rotate(-360deg); } }
+.sideIcon { width: 22px; height: 22px; color: var(--accent-cyan); }
+.sideIcon svg { width: 100%; height: 100%; }
 
-/* Nút LAUNCH */
-.launchBtn {
-  position: relative; 
-  width: clamp(160px, 25vmin, 300px); 
-  height: clamp(160px, 25vmin, 300px); 
-  border-radius: 50%;
-  background: radial-gradient(circle at 50% 50%, rgba(179, 136, 255, 0.1), rgba(0, 0, 0, 0.9));
-  border: 2px solid var(--accent-purple); 
-  display: flex; 
-  flex-direction: column; 
-  justify-content: center; 
-  align-items: center;
-  cursor: pointer; 
-  box-shadow: 0 0 40px rgba(179, 136, 255, 0.3), inset 0 0 30px rgba(179, 136, 255, 0.2);
-  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
-  overflow: hidden;
-  gap: 10px;
-}
+/* Nạp Đầu - Hiệu ứng đặc biệt */
+.topupBtn { border-color: var(--accent-pink); background: rgba(255, 71, 163, 0.1); }
+.topupBtn .sideIcon { color: var(--accent-pink); filter: drop-shadow(0 0 8px var(--accent-pink)); }
+.topupBtn:hover { box-shadow: 0 0 15px rgba(255, 71, 163, 0.4); }
 
-.launchBtn::before {
-  content: ""; 
-  position: absolute; 
-  inset: -50%;
-  background: conic-gradient(transparent, rgba(179, 136, 255, 0.4), transparent 40%);
-  animation: spin 3s linear infinite; 
-  z-index: -1;
-}
+.eventBtn .sideIcon { color: var(--accent-gold); filter: drop-shadow(0 0 5px var(--accent-gold)); }
 
-.launchBtn:hover { 
-  transform: scale(1.08); 
-  box-shadow: 0 0 60px rgba(179, 136, 255, 0.6), inset 0 0 50px rgba(179, 136, 255, 0.4); 
-  border-color: var(--accent-cyan);
-}
-
-.launchIcon {
-  width: clamp(40px, 6vmin, 70px);
-  height: clamp(40px, 6vmin, 70px);
-  color: var(--accent-cyan);
-  filter: drop-shadow(0 0 10px var(--accent-cyan));
-}
-
-.launchText { 
-  font-size: clamp(18px, 3vmin, 32px); 
-  color: #fff; 
-  font-weight: 800; 
-  text-shadow: 0 0 10px var(--accent-purple); 
-  letter-spacing: 0.1em;
-}
-
-/* THANH DOCK ĐIỀU HƯỚNG BÊN DƯỚI */
-.bottomDock {
-  width: 100%; 
-  padding: 0 clamp(10px, 2vw, 40px);
-  margin-bottom: clamp(15px, 3vh, 40px);
-  display: grid; 
-  grid-template-columns: repeat(auto-fit, minmax(clamp(140px, 20vw, 220px), 1fr));
-  gap: clamp(10px, 1.5vw, 20px); 
+/* ==========================================
+   3. BOTTOM NAVIGATION (Kho, Trại, Cửa Hàng)
+========================================== */
+.bottomNav {
+  position: absolute;
+  bottom: 30px; left: 25px;
+  display: flex; gap: 15px;
   z-index: 10;
-  box-sizing: border-box;
 }
 
 .navBtn {
-  background: var(--bg-panel); 
-  border: 1px solid var(--border-dim);
-  color: var(--text-main); 
-  padding: clamp(12px, 2vh, 18px) 15px; 
-  font-family: var(--font-ui); 
-  font-size: clamp(16px, 1.8vw, 22px); 
-  font-weight: 700;
-  letter-spacing: 0.1em; 
-  text-transform: uppercase; 
-  cursor: pointer;
-  display: flex; 
-  align-items: center; 
-  justify-content: center;
-  gap: 12px; 
-  transition: all 0.2s ease;
-  clip-path: var(--cyber-cut);
-  position: relative;
+  display: flex; align-items: center; gap: 10px;
+  background: var(--bg-element); border: 1px solid var(--border-dim);
+  color: var(--text-main); padding: 12px 25px; 
+  font-family: var(--font-ui); font-size: 20px; font-weight: 700; letter-spacing: 0.05em;
+  cursor: pointer; clip-path: var(--cyber-cut); backdrop-filter: blur(5px);
+  transition: 0.2s; position: relative;
 }
+.navBtn::after {
+  content: ""; position: absolute; bottom: 0; left: 0; width: 0; height: 3px;
+  background: var(--accent-cyan); transition: 0.3s;
+}
+.navBtn:hover { background: rgba(0, 240, 255, 0.1); color: #fff; }
+.navBtn:hover::after { width: 100%; }
+.navIcon { width: 22px; height: 22px; color: #94a3b8; transition: 0.2s; }
+.navBtn:hover .navIcon { color: var(--accent-cyan); }
 
-.navBtn::before {
-  content: "";
+/* ==========================================
+   4. BOTTOM RIGHT (Combat Action)
+========================================== */
+.actionArea {
   position: absolute;
-  left: 0; bottom: 0; width: 0; height: 3px;
-  background: var(--accent-cyan);
-  transition: width 0.3s ease;
+  bottom: 30px; right: 30px;
+  display: flex; align-items: flex-end; gap: 20px;
+  z-index: 10;
 }
 
-.navBtn:hover {
-  background: rgba(0, 240, 255, 0.08);
-  border-color: var(--border-bright);
-  color: #fff;
+/* Nút Phó Bản */
+.subModeBtn {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  background: var(--bg-element); border: 1px solid rgba(250, 204, 21, 0.3);
+  padding: 15px; border-radius: 50%; width: 75px; height: 75px;
+  color: var(--accent-gold); font-family: var(--font-ui); font-size: 14px; font-weight: bold;
+  cursor: pointer; backdrop-filter: blur(5px); transition: 0.2s;
+  box-shadow: 0 0 15px rgba(250, 204, 21, 0.1);
+}
+.subModeBtn:hover { background: rgba(250, 204, 21, 0.2); transform: scale(1.05); }
+.subModeIcon { width: 28px; height: 28px; }
+.subModeIcon svg { width: 100%; height: 100%; }
+
+/* Nút CHIẾN DỊCH KHỔNG LỒ */
+.mainLaunchBtn {
+  display: flex; align-items: center; gap: 15px;
+  background: linear-gradient(135deg, rgba(0, 240, 255, 0.2) 0%, rgba(0, 100, 255, 0.4) 100%);
+  border: 2px solid var(--accent-cyan);
+  padding: 15px 30px 15px 15px; border-radius: 60px;
+  cursor: pointer; backdrop-filter: blur(8px);
+  box-shadow: 0 0 30px rgba(0, 240, 255, 0.3), inset 0 0 20px rgba(0, 240, 255, 0.2);
+  transition: 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.mainLaunchBtn:hover {
+  transform: scale(1.05);
+  background: linear-gradient(135deg, rgba(0, 240, 255, 0.3) 0%, rgba(0, 100, 255, 0.6) 100%);
+  box-shadow: 0 0 50px rgba(0, 240, 255, 0.5), inset 0 0 30px rgba(0, 240, 255, 0.4);
 }
 
-.navBtn:hover::before { width: 100%; }
-
-.navIcon {
-  width: clamp(20px, 2.5vw, 28px);
-  height: clamp(20px, 2.5vw, 28px);
-  color: var(--text-muted);
-  transition: color 0.3s ease;
+.launchIconBg {
+  background: var(--accent-cyan); color: #000;
+  width: 60px; height: 60px; border-radius: 50%;
+  display: flex; justify-content: center; align-items: center;
+  box-shadow: 0 0 20px var(--accent-cyan);
 }
+.launchIconBg svg { width: 35px; height: 35px; }
 
-.navBtn:hover .navIcon { color: var(--accent-cyan); filter: drop-shadow(0 0 8px var(--accent-cyan)); }
+.launchContent { display: flex; flex-direction: column; align-items: flex-start; }
+.launchTitle { color: #fff; font-family: var(--font-ui); font-size: 32px; font-weight: 800; letter-spacing: 2px; text-shadow: 0 0 10px var(--accent-cyan); line-height: 1; }
+.launchSub { color: var(--accent-cyan); font-family: var(--font-data); font-size: 14px; letter-spacing: 1px; margin-top: 5px; }
 
-.eventBtn { border-color: rgba(255, 60, 0, 0.3); }
-.eventBtn::before { background: var(--accent-orange); }
-.eventBtn:hover { background: rgba(255, 60, 0, 0.08); border-color: var(--accent-orange); }
-.eventBtn:hover .navIcon { color: var(--accent-orange); filter: drop-shadow(0 0 8px var(--accent-orange)); }
 
-/* Responsive tinh chỉnh cho Mobile dọc */
-@media (max-width: 600px) {
-  /* Ép toàn bộ lên 1 dòng, dãn đều 2 bên */
-  .topNav { 
-    flex-wrap: nowrap; 
-    justify-content: space-between; 
-    gap: 4px; 
-    padding: 10px 5px; 
+/* ==========================================
+   RESPONSIVE (ĐIỆN THOẠI DỌC)
+========================================== */
+@media (max-width: 768px) {
+  .container {
+    background: url('/images/potal_bg916.png') no-repeat center center;
+    background-size: cover;
   }
+  .topNav { padding: 10px; flex-wrap: wrap; gap: 10px; }
+  .backText { display: none; } /* Ẩn chữ Hệ điều hành cho đỡ chật */
+  .currencyBar { width: 100%; justify-content: center; }
   
-  /* Thu nhỏ nút Back và ẩn chữ */
-  .backBtn {
-    padding: 6px 10px;
-    border-left-width: 2px;
-  }
-  .backText {
-    display: none; /* Ẩn chữ "Hệ Điều Hành" trên mobile */
-  }
-  /* Ép thanh tài nguyên lên 1 dòng, thu hẹp khoảng cách */
-  .currencyBar { 
-    width: auto; 
-    justify-content: flex-end;
-    gap: 6px; 
-  } 
-
-  /* Cân đối lại kích thước khung và chữ trên Mobile */
-  .currencyChip {
-    padding: 5px 10px;
-    gap: 6px;
-  }
+  .leftSidebar { top: 95px; left: 10px; gap: 10px; }
+  .sideBtn { padding: 8px 12px; font-size: 15px; }
   
-  .currencyIcon {
-    width: 14px;
-    height: 14px;
+  /* Gom 3 nút quản lý xuống sát nút Combat */
+  .bottomNav {
+    bottom: 110px; left: 50%; transform: translateX(-50%);
+    width: max-content; gap: 8px;
   }
+  .navBtn { padding: 8px 12px; font-size: 14px; flex-direction: column; gap: 4px; }
+  .navBtn span { display: none; } /* Chỉ hiện icon trên mobile */
   
-  .currencyAmt {
-    font-size: 15px; /* Chữ lớn hơn bản cũ một chút để dễ đọc */
-  }
-
-  /* Chỉnh lại Dock bên dưới cho gọn */
-  .bottomDock { 
-    grid-template-columns: repeat(2, 1fr); 
-    gap: 8px;
-    padding: 0 10px;
-  }
-  .navBtn { 
-    flex-direction: column; 
-    gap: 5px; 
-    text-align: center; 
-    padding: 10px; 
-    font-size: 14px;
-  }
+  .actionArea { bottom: 20px; right: 10px; gap: 10px; }
+  .subModeBtn { width: 60px; height: 60px; padding: 10px; }
+  .subModeBtn span { display: none; }
+  
+  .mainLaunchBtn { padding: 10px 20px 10px 10px; }
+  .launchIconBg { width: 50px; height: 50px; }
+  .launchTitle { font-size: 24px; }
 }

@@ -1,107 +1,179 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GEAR_CATALOG, AIRCRAFTS, PILOTS } from '../../constants';
 import styles from './Inventory.module.css';
 import toast from 'react-hot-toast';
 import ItemModal from '../ItemModal/ItemModal';
-// --- HỆ THỐNG SVG ICONS SCI-FI ---
-const Icons = {
-  Coin: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" /><line x1="12" y1="2" x2="12" y2="6" /><line x1="12" y1="18" x2="12" y2="22" /><line x1="2" y1="12" x2="6" y2="12" /><line x1="18" y1="12" x2="22" y2="12" /></svg>),
-  Gem: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 22 2 9 6 2 18 2 22 9 12 22" /><line x1="2" y1="9" x2="22" y2="9" /><line x1="12" y1="22" x2="8" y2="9" /><line x1="12" y1="22" x2="16" y2="9" /><line x1="8" y1="9" x2="6" y2="2" /><line x1="16" y1="9" x2="18" y2="2" /></svg>),
-  Blueprint: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" /><circle cx="12" cy="7" r="1.5" /><path d="M12 8.5L8.5 17" /><path d="M12 8.5L15.5 17" /><path d="M10 14h4" /></svg>),
-  Sacrifice: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>,
-  Gear: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+
+ const Icons = {
+    Energy: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>,
+    Coin: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" /><line x1="12" y1="2" x2="12" y2="6" /><line x1="12" y1="18" x2="12" y2="22" /><line x1="2" y1="12" x2="6" y2="12" /><line x1="18" y1="12" x2="22" y2="12" /></svg>),
+    Gem: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 22 2 9 6 2 18 2 22 9 12 22" /><line x1="2" y1="9" x2="22" y2="9" /><line x1="12" y1="22" x2="8" y2="9" /><line x1="12" y1="22" x2="16" y2="9" /><line x1="8" y1="9" x2="6" y2="2" /><line x1="16" y1="9" x2="18" y2="2" /></svg>),
+    Blueprint: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" /><circle cx="12" cy="7" r="1.5" /><path d="M12 8.5L8.5 17" /><path d="M12 8.5L15.5 17" /><path d="M10 14h4" /></svg>),
+    Gear: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>,
+    Trash: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+  };
+
+const getItemLimits = (item) => {
+  if (!item) return { maxLevel: 10, maxStar: 1 };
+  if (item.type === 'aircraft') {
+    const tier = AIRCRAFTS.find(a => a.id === item.id)?.tier || 1;
+    const tierCaps = { 1: 30, 2: 50, 3: 70, 4: 100 };
+    return { maxLevel: tierCaps[tier] || 30, maxStar: 5 }; 
+  }
+  const rarity = item.rarity || 1;
+  switch (rarity) {
+    case 1: return { maxLevel: 20, maxStar: 2 };
+    case 2: return { maxLevel: 40, maxStar: 3 };
+    case 3: return { maxLevel: 60, maxStar: 4 };
+    case 4: return { maxLevel: 80, maxStar: 5 };
+    case 5: return { maxLevel: 100, maxStar: 6 };
+    default: return { maxLevel: 20, maxStar: 2 };
+  }
 };
 
-const RARITY_LABELS = { 1: 'COMMON', 2: 'UNCOMMON', 3: 'RARE', 4: 'EPIC', 5: 'LEGENDARY' };
-
-// ── DATA HÒM GACHA ──
-const CRATE_CONFIGS = [
-  { id: 'basic',       shopType: 'crate', rarity: 1, icon: '📦', title: { vi: 'HÒM CƠ BẢN', en: 'STANDARD CRATE' }, desc: { vi: 'Trang bị tàn tích. Rớt đồ Trắng, Lục, Lam.', en: 'Salvaged parts.' }, dropRates: { 1: 50, 2: 35, 3: 12, 4: 3, 5: 0 } },
-  { id: 'premium',     shopType: 'crate', rarity: 3, icon: '🔮', title: { vi: 'HÒM CAO CẤP', en: 'PREMIUM CRATE' }, desc: { vi: 'Công nghệ quân sự. Đảm bảo Lục+. Có tỷ lệ Vàng!', en: 'Military tech.' }, dropRates: { 1: 0, 2: 40, 3: 40, 4: 15, 5: 5 } },
-  { id: 'epic',        shopType: 'crate', rarity: 5, icon: '👑', title: { vi: 'HÒM HUYỀN THOẠI', en: 'EPIC CACHE' }, desc: { vi: 'Tinh hoa vũ trụ. Chỉ rớt Lam, Tím, Vàng.', en: 'Galactic apex.' }, dropRates: { 1: 0, 2: 0, 3: 50, 4: 35, 5: 15 } },
-  { id: 'pilot_gacha', shopType: 'crate', rarity: 4, icon: '📡', title: { vi: 'VÉ TUYỂN MỘ', en: 'RECRUIT TICKET' }, desc: { vi: 'Phát tín hiệu triệu hồi phi công ngẫu nhiên.', en: 'Broadcast SOS.' }, dropRates: { 1: 30, 2: 28, 3: 22, 4: 14, 5: 6 } },
-];
+const getTabLabel = (type, lang) => {
+  const labels = {
+    mainGun: { vi: 'Súng chính', en: 'MAIN GUNS' },
+    wingman: { vi: 'Súng phụ', en: 'WINGMEN' },
+    armor: { vi: 'Phụ trợ', en: 'ARMOR' },
+    drone: { vi: 'Vệ tinh', en: 'DRONES' }
+  };
+  return labels[type]?.[lang] || type;
+};
 
 export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
   const [mainTab,     setMainTab]     = useState('bag');
   const [bagFilter,   setBagFilter]   = useState('all');
-  const [forgeTab,    setForgeTab]    = useState('upgrade');
   const [selectedId,  setSelectedId]  = useState(null);
   const [refreshTick, setRefreshTick] = useState(0);
-  const [gachaResults, setGachaResults] = useState(null);
+
+  const [isSelectMode, setIsSelectMode] = useState(false);
+  const [sellSelection, setSellSelection] = useState([]);
+  const pressTimer = useRef(null);
 
   const campaignData = gsRef.current.campaignData;
   if (!campaignData) return null;
 
-  // Đảm bảo cấu trúc data an toàn
-  if (!campaignData.materials) campaignData.materials = { parts: 150, blueprints: 10 };
+  if (!campaignData.materials) campaignData.materials = { parts: 150, blueprints: 10, gears: 5};
   if (campaignData.materials.blueprints === undefined) campaignData.materials.blueprints = 0;
-  if (!campaignData.materials.crates) campaignData.materials.crates = { basic: 0, premium: 0, epic: 0, pilot_gacha: 0 };
+  if (campaignData.materials.gears === undefined) campaignData.materials.gears = 0;
+  if (campaignData.materials.crate === undefined) campaignData.materials.crate = 0;
+
+  if (!campaignData.ownedAircrafts) {
+      campaignData.ownedAircrafts = { 'ship_xwing': { level: 1, stars: 1 } }; 
+  }
 
   const { items, loadout, ownedPilots, materials, ownedAircrafts } = campaignData;
   const currentCoins      = Number(gsRef.current.coins)    || 0;
   const currentDiamonds   = Number(gsRef.current.diamonds) || 0;
   const currentBlueprints = Number(materials?.blueprints)   || 0;
   const currentGears      = Number(materials?.gears)        || 0;
+  const currentCrates     = Number(materials?.crates)       || 0;
+  const currentEnergy     = Number(gsRef.current.energy)   || 50;
 
   const isForge = mainTab === 'forge';
 
-  // --- CHUYỂN GACHA THÀNH TAB DỌC ---
   const sideTabs = [
     { id: 'all',     icon: '◈', label: { vi: 'Tất cả',    en: 'ALL'   } },
-    { id: 'crates',  icon: '🎰', label: { vi: 'Hòm Gacha', en: 'CRATES'} }, // Tab Gacha mới nằm ngay sau Tất cả
     { id: 'mainGun', icon: '⊕', label: { vi: 'Súng chính', en: 'GUN'  } },
     { id: 'wingman', icon: '◎', label: { vi: 'Súng phụ',   en: 'WING' } },
     { id: 'armor',   icon: '◇', label: { vi: 'Phụ trợ',    en: 'ARMOR'} },
     { id: 'drone',   icon: '⊛', label: { vi: 'Vệ tinh',    en: 'DRONE'} },
     { id: 'pilot',   icon: '◉', label: { vi: 'Phi công',   en: 'PILOT'} },
-  ].filter(tab => isForge ? (tab.id !== 'pilot' && tab.id !== 'crates') : true); // Xưởng rèn ẩn Phi công và Hòm
+  ].filter(tab => isForge ? (tab.id !== 'pilot') : true); 
 
-  // Đảm bảo không bị kẹt ở tab không hợp lệ khi chuyển sang Xưởng Rèn
-  if (isForge && (bagFilter === 'pilot' || bagFilter === 'crates')) {
+  if (isForge && bagFilter === 'pilot') {
     setBagFilter('all');
     setSelectedId(null);
   }
 
-  const inventoryList = Object.keys(items).map(uuid => ({ uuid, id: uuid, ...items[uuid] }));
+  const inventoryList = Object.keys(items).map(uuid => ({ uuid, id: uuid, isOwned: true, ...items[uuid] }));
+  
+  const bagAircrafts = AIRCRAFTS.filter(ac => ownedAircrafts[ac.id]).map(ac => {
+    const acData = ownedAircrafts[ac.id];
+    const baseRarity = ac.tier || ac.rarity || 1;
+    return { ...acData, id: ac.id, uuid: ac.id, type: 'aircraft', isOwned: true, rarity: acData.stars || baseRarity };
+  });
 
-  let displayList = [];
-  if (bagFilter === 'crates') {
-    displayList = CRATE_CONFIGS.map(c => ({...c, uuid: c.id}));
-  } else if (bagFilter === 'pilot' && !isForge) {
-    displayList = Object.keys(ownedPilots).map(pId => ({
-      uuid: pId, id: pId, type: 'pilot', ...ownedPilots[pId],
-      rarity: PILOTS.find(p => p.id === pId)?.rarity || 1,
-    }));
+  let gridItems = [];
+  if (bagFilter === 'pilot') {
+      gridItems = PILOTS.filter(p => ownedPilots[p.id]).map(p => {
+          const pData = ownedPilots[p.id];
+          return { ...pData, id: p.id, uuid: p.id, type: 'pilot', isOwned: true, rarity: p.rarity || 1 };
+      });
   } else {
-    displayList = inventoryList
-      .filter(item => bagFilter === 'all' || item.type === bagFilter)
-      .sort((a, b) => b.rarity - a.rarity);
+      gridItems = inventoryList.filter(item => bagFilter === 'all' || item.type === bagFilter);
+      gridItems.sort((a,b) => (b.rarity||1) - (a.rarity||1));
   }
 
- const selectedItem = displayList.find(i => i.uuid === selectedId) || 
-                     (ownedAircrafts?.[selectedId] ? { id: selectedId, uuid: selectedId, type: 'aircraft', ...ownedAircrafts[selectedId] } : null);
-  const isCrate = selectedItem?.shopType === 'crate';
-  
-  const itemBaseInfo = selectedItem
-  ? (isCrate 
-      ? selectedItem 
-      : (selectedItem.type === 'pilot'
-         ? PILOTS.find(p => p.id === selectedItem.id)
-         : (selectedItem.type === 'aircraft' 
-            ? AIRCRAFTS.find(a => a.id === selectedItem.id) // Thêm check cho Phi cơ
-            : GEAR_CATALOG[selectedItem.type]?.find(g => g.id === selectedItem.baseId))))
-  : null;
+  const collectionData = [
+    {
+      id: 'aircraft', title: lang === 'vi' ? 'HẠM ĐỘI PHI CƠ' : 'AIRCRAFTS',
+      items: AIRCRAFTS.map(ac => {
+        const isOwned = !!ownedAircrafts[ac.id];
+        const acData = ownedAircrafts[ac.id] || {};
+        const baseRarity = ac.tier || ac.rarity || 1;
+        return { ...acData, id: ac.id, uuid: ac.id, type: 'aircraft', isOwned, rarity: isOwned ? (acData.stars || baseRarity) : baseRarity, level: acData.level || 1 };
+      })
+    },
+    {
+      id: 'pilot', title: lang === 'vi' ? 'PHI CÔNG CHIẾN THUẬT' : 'PILOTS',
+      items: PILOTS.map(p => {
+        const isOwned = !!ownedPilots[p.id];
+        const pData = ownedPilots[p.id] || {};
+        return { ...pData, id: p.id, uuid: p.id, type: 'pilot', isOwned, rarity: p.rarity || 1, level: pData.level || 1 };
+      })
+    },
+    ...['mainGun', 'wingman', 'armor', 'drone'].map(type => ({
+      id: type, title: getTabLabel(type, lang),
+      items: (GEAR_CATALOG[type] || []).map(baseGear => {
+        const ownedVersions = inventoryList.filter(i => i.baseId === baseGear.id);
+        const isOwned = ownedVersions.length > 0;
+        const bestVersion = isOwned ? ownedVersions.reduce((prev, curr) => (prev.rarity > curr.rarity) ? prev : curr) : {};
+        return {
+           uuid: isOwned ? bestVersion.uuid : 'unowned_' + baseGear.id,
+           baseId: baseGear.id, type: type, isOwned,
+           rarity: isOwned ? bestVersion.rarity : (baseGear.rarity || baseGear.tier || 1),
+           level: isOwned ? bestVersion.level : 1, id: isOwned ? bestVersion.id : undefined,
+           isLocked: isOwned ? bestVersion.isLocked : false
+        };
+      }).sort((a,b) => (b.rarity||1) - (a.rarity||1))
+    }))
+  ];
 
-  // --- LOGIC NÂNG CẤP & ĐỘT PHÁ ---
-  const upgradeCoinCost = (!isCrate && selectedItem) ? selectedItem.level * 150 : 0;
-  const upgradeBpCost   = (!isCrate && selectedItem) ? Math.ceil(selectedItem.level * 1.5) : 0;
-  const canUpgrade = currentCoins >= upgradeCoinCost && currentBlueprints >= upgradeBpCost;
+  let selectedItem = null;
+  if (selectedId) {
+      const ac = AIRCRAFTS.find(a => a.id === selectedId);
+      if (ac) {
+          const acData = ownedAircrafts?.[selectedId];
+          const baseRarity = ac.tier || ac.rarity || 1;
+          selectedItem = { id: selectedId, uuid: selectedId, type: 'aircraft', isOwned: !!acData, rarity: acData ? (acData.stars || baseRarity) : baseRarity, ...(acData || { level: 1, stars: baseRarity }) };
+      }
+      if (!selectedItem) {
+          const p = PILOTS.find(x => x.id === selectedId);
+          if (p) {
+             const pData = ownedPilots?.[selectedId];
+             selectedItem = { id: p.id, uuid: p.id, type: 'pilot', isOwned: !!pData, level: pData?.level || 1, stars: pData?.stars || p.rarity || 1, rarity: p.rarity || 1, ...pData };
+          }
+      }
+      if (!selectedItem) {
+          selectedItem = inventoryList.find(i => i.uuid === selectedId);
+          if (selectedItem) selectedItem.isOwned = true;
+      }
+      if (!selectedItem) {
+          ['mainGun', 'wingman', 'armor', 'drone'].forEach(type => {
+             if (selectedItem) return;
+             const g = GEAR_CATALOG[type]?.find(x => 'unowned_' + x.id === selectedId);
+             if (g) selectedItem = { uuid: 'unowned_' + g.id, baseId: g.id, type: type, isOwned: false, rarity: g.rarity || g.tier || 1, level: 1 };
+          });
+      }
+  }
 
-  //const starUpGemCost = (!isCrate && selectedItem) ? selectedItem.rarity * 100 : 0;
-  const getStarUpInfo = (rarity) => {
-    switch(rarity) {
+  const itemBaseInfo = selectedItem ? (selectedItem.type === 'pilot' ? PILOTS.find(p => p.id === selectedItem.id) : (selectedItem.type === 'aircraft' ? AIRCRAFTS.find(a => a.id === selectedItem.id) : GEAR_CATALOG[selectedItem.type]?.find(g => g.id === selectedItem.baseId))) : null;
+
+  const getStarUpInfo = (stars) => {
+    switch(stars) {
       case 1: return { coinCost: 1000,  gemCost: 10,  reqDupes: 1, rate: 100 };
       case 2: return { coinCost: 3000,  gemCost: 30,  reqDupes: 2, rate: 70 };
       case 3: return { coinCost: 8000,  gemCost: 80,  reqDupes: 3, rate: 50 };
@@ -109,116 +181,243 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
       default: return { coinCost: 0, gemCost: 0, reqDupes: 0, rate: 0 };
     }
   };
-  const starUpInfo = getStarUpInfo(selectedItem?.rarity || 1);
-  // --- TÌM PHÔI ĐỘT PHÁ (Không phân biệt Level/Độ hiếm) ---
-  const duplicateItems = (!isCrate && selectedItem) ? inventoryList.filter(item => {
-    return (
-      item.baseId === selectedItem?.baseId && // Chỉ cần cùng loại (VD: cùng là súng laser)
-      item.type === selectedItem?.type &&     // Cùng category
-      item.uuid !== selectedItem?.uuid &&     // Không lấy chính nó
-      loadout[item.type] !== item.uuid        // Không lấy đồ đang mặc
-    );
+  
+  const currentStarLevel = selectedItem?.stars || selectedItem?.rarity || 1;
+  const starUpInfo = getStarUpInfo(currentStarLevel);
+
+  const duplicateItems = (selectedItem && selectedItem.type !== 'pilot') ? inventoryList.filter(item => {
+    return (item.type === selectedItem?.type && item.uuid !== selectedItem?.uuid && loadout[item.type] !== item.uuid);
   }).sort((a, b) => {
-    const rarityA = a.rarity || 1;
-    const rarityB = b.rarity || 1;
-    if (rarityA !== rarityB) return rarityA - rarityB; // Rarity thấp xếp trước
-    return (a.level || 1) - (b.level || 1);            // Level thấp xếp trước
+    if ((a.rarity || 1) !== (b.rarity || 1)) return (a.rarity || 1) - (b.rarity || 1); 
+    return (a.level || 1) - (b.level || 1);            
   }) : [];
-  const reqDuplicateAmount = 1;
-  //const canStarUp = currentDiamonds >= starUpGemCost && duplicateItems.length >= reqDuplicateAmount;
 
-  // --- HÀM MỞ GACHA (RNG Tỷ lệ rớt đồ thực tế) ---
-  const handleOpenCrate = (crate, amount) => {
-    const currentCount = materials.crates[crate.id] || 0;
-    if (currentCount < amount) return toast.error(lang === 'vi' ? 'Không đủ hòm trong kho!' : 'Not enough crates!');
+  // ====================================================================
+  // LOGIC ẤN GIỮ ĐỂ BÁN/XÓA HÀNG LOẠT (SELECTION MODE)
+  // ====================================================================
+
+  const handlePressStart = (item) => {
+    if (mainTab === 'collection' || !item.isOwned) return;
+    const isEq = loadout[item.type] === item.uuid || loadout.pilot === item.id || loadout.aircraft === item.id;
+    if (isEq) return; 
+
+    pressTimer.current = setTimeout(() => {
+        setIsSelectMode(true);
+        if (!item.isLocked) {
+            setSellSelection([item.uuid]);
+        }
+        if (navigator.vibrate) navigator.vibrate(50);
+    }, 500); 
+  };
+
+  const handlePressEnd = () => {
+    if (pressTimer.current) clearTimeout(pressTimer.current);
+  };
+
+  const handleItemClick = (item) => {
+    if (isSelectMode) {
+      if (!item.isOwned) return;
+      const isEq = loadout[item.type] === item.uuid || loadout.pilot === item.id || loadout.aircraft === item.id;
+      if (isEq) {
+        toast.error(lang === 'vi' ? 'Không thể chọn đồ đang dùng!' : 'Cannot select equipped item!');
+        return;
+      }
+      if (item.isLocked) {
+        toast.error(lang === 'vi' ? 'Vật phẩm đã bị khóa!' : 'Item is locked!');
+        return;
+      }
+      setSellSelection(prev => prev.includes(item.uuid) ? prev.filter(id => id !== item.uuid) : [...prev, item.uuid]);
+      return;
+    }
     
-    // 1. Trừ hòm (CHỈ TRỪ 1 LẦN)
-    gsRef.current.campaignData.materials.crates[crate.id] -= amount;
+    setSelectedId(item.uuid);
+    if (window.innerWidth <= 768) {
+      setTimeout(() => { const el = document.getElementById('detail-panel'); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 20, behavior: 'smooth' }); }, 50);
+    }
+  };
+
+  const handleSelectAll = () => {
+    const selectableIds = gridItems.filter(item => {
+        const isEq = loadout[item.type] === item.uuid || loadout.pilot === item.id || loadout.aircraft === item.id;
+        return item.isOwned && !isEq && !item.isLocked;
+    }).map(i => i.uuid);
     
-    const pullResults = []; // Mảng chứa kết quả để truyền cho Popup
+    if (mainTab === 'bag' && bagFilter === 'all') {
+      bagAircrafts.forEach(ac => {
+        if (loadout.aircraft !== ac.id && !ac.isLocked) selectableIds.push(ac.uuid);
+      });
+    }
+    setSellSelection(selectableIds);
+  };
 
-    // 2. Chạy Vòng lặp Mở Hòm
-    for (let i = 0; i < amount; i++) {
-       let roll = Math.random() * 100;
-       let cumulative = 0;
-       let rolledRarity = 1;
+  // --- HÀM BÁN ĐỒ LẤY XU ---
+  const executeSell = () => {
+    if (sellSelection.length === 0) return;
 
-       // A. Tính toán Rarity (Sao) dựa trên tỷ lệ
-       for (let r of [5, 4, 3, 2, 1]) {
-           if (crate.dropRates[r] > 0) {
-               cumulative += crate.dropRates[r];
-               if (roll <= cumulative) {
-                   rolledRarity = parseInt(r); // Đảm bảo r là số nguyên
-                   break;
-               }
-           }
+    const itemsToProcess = [];
+    sellSelection.forEach(uuid => {
+       let found = inventoryList.find(i => i.uuid === uuid);
+       if (found) itemsToProcess.push(found);
+       else {
+         const p = PILOTS.find(x => x.id === uuid && ownedPilots[x.id]);
+         if (p) itemsToProcess.push({ ...ownedPilots[p.id], id: p.id, uuid: p.id, type: 'pilot', rarity: p.rarity });
+         else {
+           const ac = AIRCRAFTS.find(x => x.id === uuid && ownedAircrafts[x.id]);
+           if (ac) itemsToProcess.push({ ...ownedAircrafts[ac.id], id: ac.id, uuid: ac.id, type: 'aircraft', rarity: ownedAircrafts[ac.id].stars || ac.tier || 1 });
+         }
        }
+    });
 
-       let pulledItem = null; // Biến tạm chứa vật phẩm vừa quay được
-
-       // B. Tạo vật phẩm thực tế (Phi công hoặc Trang bị)
-       if (crate.id === 'pilot_gacha') {
-           const validPilots = PILOTS.filter(p => p.rarity === rolledRarity);
-           if (validPilots.length > 0) {
-               const p = validPilots[Math.floor(Math.random() * validPilots.length)];
-               // Lưu vào DB
-               gsRef.current.campaignData.ownedPilots[p.id] = gsRef.current.campaignData.ownedPilots[p.id] || { level: 1, stars: 1 };
-               
-               // Tạo object giả để hiện lên Popup
-               pulledItem = { baseId: p.id, rarity: rolledRarity, type: 'pilot', isNew: true };
-           }
-       } else {
-           // Bốc random 1 món đồ theo Rarity đã quay trúng
-           const gearTypes = ['mainGun', 'wingman', 'armor', 'drone'];
-           const rType = gearTypes[Math.floor(Math.random() * gearTypes.length)];
-           const list = GEAR_CATALOG[rType];
-           const g = list[Math.floor(Math.random() * list.length)];
-
-           const uuid = 'item_' + Date.now() + '_' + Math.floor(Math.random() * 10000) + '_' + i;
-           
-           pulledItem = { uuid: uuid, baseId: g.id, rarity: rolledRarity, level: 1, type: rType };
-           
-           // Lưu trang bị vào DB
-           gsRef.current.campaignData.items[uuid] = pulledItem;
-       }
-
-       // C. Nạp vật phẩm vừa tạo vào mảng kết quả Popup
-       if (pulledItem) {
-           pullResults.push(pulledItem);
-       }
+    const hasHighValue = itemsToProcess.some(i => (i.rarity || 1) >= 3 || (i.level || 1) > 1);
+    if (hasHighValue) {
+        const confirmMsg = lang === 'vi' 
+          ? 'CẢNH BÁO: Trong danh sách bán có chứa vật phẩm Cấp cao hoặc Độ hiếm cao! Bạn chắc chắn muốn phân rã?' 
+          : 'WARNING: Contains High Value items! Are you sure?';
+        if (!window.confirm(confirmMsg)) return;
     }
 
-    // 3. Lưu và Hiển thị
+    let earnedCoins = 0;
+    itemsToProcess.forEach(item => {
+        const r = item.rarity || 1;
+        earnedCoins += Math.min(10, r * 2); // Rarity * 2 (max 10 xu)
+
+        if (item.type === 'pilot') delete gsRef.current.campaignData.ownedPilots[item.id];
+        else if (item.type === 'aircraft') delete gsRef.current.campaignData.ownedAircrafts[item.id];
+        else delete gsRef.current.campaignData.items[item.uuid];
+    });
+
+    gsRef.current.coins = currentCoins + earnedCoins;
+    
+    // GỌI FIREBASE SYNC
     saveUserProfile();
     setRefreshTick(p => p + 1);
-    setSelectedId(null); // Đóng popup chi tiết hòm
-    setGachaResults(pullResults); // Kích hoạt Popup Gacha xịn xò
-    // (Bỏ Toast success đi vì Popup hiện lên đã đủ báo hiệu thành công rồi)
+    setIsSelectMode(false);
+    setSellSelection([]);
+    toast.success(lang === 'vi' ? `Đã phân rã! Thu được ${earnedCoins} Xu.` : `Salvaged! Earned ${earnedCoins} Coins.`);
+  };
+
+  // --- HÀM XÓA VĨNH VIỄN (KHÔNG NHẬN LẠI GÌ) ---
+  const executeDelete = () => {
+    if (sellSelection.length === 0) return;
+
+    const itemsToProcess = [];
+    sellSelection.forEach(uuid => {
+       let found = inventoryList.find(i => i.uuid === uuid);
+       if (found) itemsToProcess.push(found);
+       else {
+         const p = PILOTS.find(x => x.id === uuid && ownedPilots[x.id]);
+         if (p) itemsToProcess.push({ ...ownedPilots[p.id], id: p.id, uuid: p.id, type: 'pilot', rarity: p.rarity });
+         else {
+           const ac = AIRCRAFTS.find(x => x.id === uuid && ownedAircrafts[x.id]);
+           if (ac) itemsToProcess.push({ ...ownedAircrafts[ac.id], id: ac.id, uuid: ac.id, type: 'aircraft', rarity: ownedAircrafts[ac.id].stars || ac.tier || 1 });
+         }
+       }
+    });
+
+    const hasHighValue = itemsToProcess.some(i => (i.rarity || 1) >= 3 || (i.level || 1) > 1);
+    const confirmMsg = hasHighValue
+      ? (lang === 'vi' ? 'CẢNH BÁO NGUY HIỂM: Trong danh sách XÓA có chứa vật phẩm Cấp cao/Độ hiếm cao! BẠN SẼ KHÔNG NHẬN ĐƯỢC XU NÀO. Bạn chắc chắn muốn xóa vĩnh viễn?' : 'WARNING: Contains High Value items! Permanently DELETE with NO return?')
+      : (lang === 'vi' ? 'Bạn chắc chắn muốn xóa vĩnh viễn các vật phẩm này? (Không nhận lại Xu)' : 'Are you sure you want to permanently delete these items?');
+
+    if (!window.confirm(confirmMsg)) return;
+
+    itemsToProcess.forEach(item => {
+        if (item.type === 'pilot') delete gsRef.current.campaignData.ownedPilots[item.id];
+        else if (item.type === 'aircraft') delete gsRef.current.campaignData.ownedAircrafts[item.id];
+        else delete gsRef.current.campaignData.items[item.uuid];
+    });
+
+    // GỌI FIREBASE SYNC
+    saveUserProfile();
+    setRefreshTick(p => p + 1);
+    setIsSelectMode(false);
+    setSellSelection([]);
+    toast.success(lang === 'vi' ? `Đã xóa vĩnh viễn ${itemsToProcess.length} vật phẩm.` : `Deleted ${itemsToProcess.length} items.`);
+  };
+
+  const toggleLock = () => {
+    if (!selectedItem || !selectedItem.isOwned) return;
+    const isCurrentlyLocked = !!selectedItem.isLocked;
+    
+    if (selectedItem.type === 'pilot') {
+        gsRef.current.campaignData.ownedPilots[selectedItem.id].isLocked = !isCurrentlyLocked;
+    } else if (selectedItem.type === 'aircraft') {
+        gsRef.current.campaignData.ownedAircrafts[selectedItem.id].isLocked = !isCurrentlyLocked;
+    } else {
+        gsRef.current.campaignData.items[selectedItem.uuid].isLocked = !isCurrentlyLocked;
+    }
+    
+    saveUserProfile(); // GỌI FIREBASE SYNC KHI KHÓA
+    setRefreshTick(p => p + 1);
+    toast.success(lang === 'vi' ? (isCurrentlyLocked ? 'Đã mở khóa vật phẩm!' : 'Đã khóa an toàn!') : (isCurrentlyLocked ? 'Item Unlocked!' : 'Item Locked!'));
+  };
+
+  const handleUpgrade = () => {
+    if (!selectedItem || selectedItem.type === 'pilot') return;
+    if (selectedItem.isOwned === false) return toast.error(lang === 'vi' ? 'Bạn chưa sở hữu vật phẩm này!' : 'Item not owned!');
+    const currentLvl = selectedItem.level || 1;
+    const limits = getItemLimits(selectedItem);
+    if (currentLvl >= limits.maxLevel) return toast.error(lang === 'vi' ? 'Đã đạt cấp tối đa!' : 'Max Level Reached!');
+
+    const upCoinCost = currentLvl * 150;
+    const upGemCost = Math.ceil(upCoinCost / 100); 
+    const upBpCost = Math.ceil(currentLvl * 1.5);
+
+    const hasCoin = currentCoins >= upCoinCost;
+    const hasGem = currentDiamonds >= upGemCost;
+    if ((!hasCoin && !hasGem) || currentBlueprints < upBpCost) return;
+
+    if (hasCoin) gsRef.current.coins -= upCoinCost; else gsRef.current.diamonds -= upGemCost;
+    gsRef.current.campaignData.materials.blueprints -= upBpCost;
+
+    if (selectedItem.type === 'aircraft') gsRef.current.campaignData.ownedAircrafts[selectedItem.id].level = currentLvl + 1;
+    else gsRef.current.campaignData.items[selectedItem.uuid].level = currentLvl + 1;
+    
+    saveUserProfile(); setRefreshTick(p => p + 1); toast.success(lang === 'vi' ? 'Nâng cấp thành công!' : 'Upgrade Success!');
+  };
+
+  const handleStarUp = (sacrificeIds) => {
+    if (!selectedItem || selectedItem.type === 'pilot' || !sacrificeIds) return false;
+    if (selectedItem.isOwned === false) { toast.error(lang === 'vi' ? 'Bạn chưa sở hữu vật phẩm này!' : 'Item not owned!'); return false; }
+    if (sacrificeIds.length !== (starUpInfo?.reqDupes || 0)) { toast.error(lang === 'vi' ? 'Vui lòng chọn đủ phôi!' : 'Select enough materials!'); return false; }
+
+    const limits = getItemLimits(selectedItem);
+    if (currentStarLevel >= limits.maxStar) { toast.error(lang === 'vi' ? 'Trang bị đã đạt Sao tối đa!' : 'Max Star Reached!'); return false; }
+
+    const hasCoin = currentCoins >= starUpInfo.coinCost;
+    const hasGem = currentDiamonds >= starUpInfo.gemCost;
+    if (!hasCoin && !hasGem) return false;
+
+    if (hasCoin) gsRef.current.coins -= starUpInfo.coinCost; else gsRef.current.diamonds -= starUpInfo.gemCost;
+
+    sacrificeIds.forEach(sacId => {
+      const sacrificeItem = duplicateItems.find(i => i.uuid === sacId);
+      if (sacrificeItem) {
+        delete gsRef.current.campaignData.items[sacrificeItem.uuid];
+        if (gsRef.current.campaignData.loadout[sacrificeItem.type] === sacrificeItem.uuid) gsRef.current.campaignData.loadout[sacrificeItem.type] = '';
+      }
+    });
+    
+    const isSuccess = (Math.random() * 100) <= starUpInfo.rate;
+    if (isSuccess) {
+      if (selectedItem.type === 'aircraft') gsRef.current.campaignData.ownedAircrafts[selectedItem.id].stars = currentStarLevel + 1;
+      else gsRef.current.campaignData.items[selectedItem.uuid].rarity = currentStarLevel + 1;
+      toast.success(lang === 'vi' ? 'Đột phá thành công!' : 'Star Up Success!');
+    } else toast.error(lang === 'vi' ? 'Đột phá thất bại! Phôi đã mất.' : 'Failed! Sacrifices lost.');
+    
+    saveUserProfile(); setRefreshTick(p => p + 1); return isSuccess; 
   };
 
   const renderIcon = (item, size) => {
-    if (item.shopType === 'crate') return <span style={{ fontSize: size }}>{item.icon}</span>;
     const baseInfo = item.type === 'pilot' ? PILOTS.find(p => p.id === item.id) : GEAR_CATALOG[item.type]?.find(g => g.id === item.baseId);
     if (baseInfo?.imgSrc) return <img src={baseInfo.imgSrc} alt="icon" style={{ maxWidth: size, objectFit: 'contain' }} />;
     const emoji = { mainGun: '🔫', armor: '🛡️', drone: '🛰️', pilot: '👨‍🚀', wingman: '🚀' }[item.type] || '🚀';
     return <span style={{ fontSize: size }}>{emoji}</span>;
   };
 
-  const handleSelectItem = (uuid) => {
-    setSelectedId(uuid);
-    if (window.innerWidth <= 768) {
-      setTimeout(() => {
-        const el = document.getElementById('detail-panel');
-        if (el) {
-          const y = el.getBoundingClientRect().top + window.scrollY - 20;
-          window.scrollTo({ top: y, behavior: 'smooth' });
-        }
-      }, 50);
-    }
-  };
-
   const toggleEquip = () => {
     if (!selectedItem) return;
+    if (selectedItem.isOwned === false) return toast.error(lang === 'vi' ? 'Bạn chưa sở hữu trang bị này!' : 'Item not owned!');
     if (selectedItem.type === 'pilot') {
       const eq = loadout.pilot === selectedItem.id;
       gsRef.current.campaignData.loadout.pilot = eq ? PILOTS[0].id : selectedItem.id;
@@ -228,336 +427,181 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
       gsRef.current.campaignData.loadout[selectedItem.type] = eq ? '' : selectedItem.uuid;
       toast.success(lang === 'vi' ? (eq ? 'Đã tháo trang bị!' : 'Đã gắn trang bị!') : 'Gear Updated!');
     }
-    saveUserProfile();
-    setRefreshTick(p => p + 1);
-  };
-
-  const handleUpgrade = () => {
-    if (!selectedItem || selectedItem.type === 'pilot' || isCrate) return;
-    
-    const upCoinCost = selectedItem.level * 150;
-    const upGemCost = Math.ceil(upCoinCost / 100); // 100 Xu = 1 Kim Cương
-    const upBpCost = Math.ceil(selectedItem.level * 1.5);
-
-    const hasCoin = currentCoins >= upCoinCost;
-    const hasGem = currentDiamonds >= upGemCost;
-    const hasBp = currentBlueprints >= upBpCost;
-
-    // Phải có Bản vẽ VÀ (có Xu hoặc có Kim Cương)
-    if ((!hasCoin && !hasGem) || !hasBp) return;
-
-    // LOGIC THANH TOÁN: Ưu tiên Xu, hết Xu mới trừ Kim Cương
-    if (hasCoin) {
-      gsRef.current.coins -= upCoinCost;
-    } else {
-      gsRef.current.diamonds -= upGemCost;
-    }
-    
-    gsRef.current.campaignData.materials.blueprints -= upBpCost;
-    gsRef.current.campaignData.items[selectedItem.uuid].level += 1;
-    
-    saveUserProfile();
-    setRefreshTick(p => p + 1);
-    toast.success(lang === 'vi' ? 'Nâng cấp thành công!' : 'Upgrade Success!');
-  };
-
-  const handleStarUp = (sacrificeIds) => {
-    if (!selectedItem || selectedItem.type === 'pilot' || !sacrificeIds || sacrificeIds.length !== starUpInfo.reqDupes) return false;
-    
-    const hasCoin = currentCoins >= starUpInfo.coinCost;
-    const hasGem = currentDiamonds >= starUpInfo.gemCost;
-
-    if (!hasCoin && !hasGem) return false;
-
-    // LOGIC THANH TOÁN: Ưu tiên Xu, hết Xu mới trừ Kim Cương
-    if (hasCoin) {
-      gsRef.current.coins -= starUpInfo.coinCost;
-    } else {
-      gsRef.current.diamonds -= starUpInfo.gemCost;
-    }
-
-    // Tiến hành xóa các phôi
-    sacrificeIds.forEach(sacId => {
-      const sacrificeItem = duplicateItems.find(i => i.uuid === sacId);
-      if (sacrificeItem) {
-        delete gsRef.current.campaignData.items[sacrificeItem.uuid];
-        if (gsRef.current.campaignData.loadout[sacrificeItem.type] === sacrificeItem.uuid) {
-            gsRef.current.campaignData.loadout[sacrificeItem.type] = '';
-        }
-      }
-    });
-    
-    const roll = Math.random() * 100;
-    const isSuccess = roll <= starUpInfo.rate;
-
-    if (isSuccess) {
-      gsRef.current.campaignData.items[selectedItem.uuid].rarity += 1;
-      toast.success(lang === 'vi' ? 'Đột phá thành công!' : 'Star Up Success!');
-    } else {
-      toast.error(lang === 'vi' ? 'Đột phá thất bại! Phôi đã mất.' : 'Failed! Sacrifices lost.');
-    }
-    
-    saveUserProfile(); 
-    setRefreshTick(p => p + 1);
-    return isSuccess; 
+    saveUserProfile(); setRefreshTick(p => p + 1);
   };
 
   const handleEquipAircraft = (id) => {
+    if (!ownedAircrafts?.[id]) return toast.error(lang === 'vi' ? 'Bạn chưa sở hữu Phi cơ này!' : 'Aircraft not owned!');
     gsRef.current.campaignData.loadout.aircraft = id;
-    saveUserProfile();
-    setRefreshTick(t => t + 1);
-    toast.success(lang === 'vi' ? 'Đã đổi Phi cơ!' : 'Aircraft Equipped!');
+    saveUserProfile(); setRefreshTick(t => t + 1); toast.success(lang === 'vi' ? 'Đã đổi Phi cơ!' : 'Aircraft Equipped!');
   };
 
-  const renderGrid = () => (
-    <div className={styles.inventoryBoard}>
-      <div className={styles.verticalTabs}>
-        {sideTabs.map(tab => (
-          <button
-            key={tab.id}
-            className={`${styles.sideTabBtn} ${bagFilter === tab.id ? styles.active : ''}`}
-            onClick={() => { setBagFilter(tab.id); setSelectedId(null); }}
-          >
-            <span className={styles.sideIcon}>{tab.icon}</span>
-            <span className={styles.sideLabel}>{tab.label[lang]}</span>
-            {bagFilter === tab.id && <motion.div className={styles.sideActivePip} layoutId="sidePip" />}
-          </button>
-        ))}
-      </div>
+  const isEquipped = (selectedItem && selectedItem.isOwned !== false) && (loadout[selectedItem.type] === selectedItem.uuid || loadout.pilot === selectedItem.id);
 
-      <div className={styles.gridArea}>
-        {displayList.length === 0 ? (
-          <div className={styles.emptyState}>
-            <span className={styles.emptyIcon}>⊡</span>
-            <span>{lang === 'vi' ? 'KHOANG CHỨA RỖNG' : 'STORAGE EMPTY'}</span>
-          </div>
-        ) : (
-          displayList.map((item, i) => (
-            <motion.div
-              key={item.uuid}
-              initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: i * 0.012, duration: 0.2 }}
-              className={`${styles.itemSlot} ${styles['r' + item.rarity]} ${selectedId === item.uuid ? styles.selected : ''}`}
-              onClick={() => handleSelectItem(item.uuid)}
-              whileTap={{ scale: 0.92 }}
-            >
-              <div className={styles.itemGlow} />
-              {(!isCrate && (loadout[item.type] === item.uuid || loadout.pilot === item.id)) && (
-                <div className={styles.equippedBadge}><span>✓</span></div>
-              )}
-              <div className={styles.itemIconWrap}>{renderIcon(item, isForge ? '36px' : '40px')}</div>
-              <div className={styles.itemFooter}>
-                 <span className={styles.itemLevel}>
-                    {item.shopType === 'crate' ? `SL: ${materials.crates[item.id] || 0}` : `LV ${item.level}`}
-                 </span>
-              </div>
-            </motion.div>
-          ))
+  // HELPER RENDER TỪNG Ô VẬT PHẨM (Có Checkbox & Lock Icon)
+  const renderItemSlot = (item, idx, isForgeMode = false) => {
+    const isEq = item.isOwned && (loadout[item.type] === item.uuid || loadout.pilot === item.id || loadout.aircraft === item.id);
+    const isChecked = sellSelection.includes(item.uuid);
+    
+    return (
+      <motion.div 
+        key={item.uuid} initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: Math.min(idx * 0.012, 0.2), duration: 0.2 }}
+        className={`${styles.itemSlot} ${styles['r' + Math.min(5, item.rarity)]} ${selectedId === item.uuid ? styles.selected : ''} ${!item.isOwned ? styles.lockedItem : ''}`} 
+        onClick={() => handleItemClick(item)} 
+        onPointerDown={() => handlePressStart(item)}
+        onPointerUp={handlePressEnd}
+        onPointerLeave={handlePressEnd}
+        whileTap={(!isSelectMode && item.isOwned) ? { scale: 0.92 } : {}}
+      >
+        <div className={styles.itemGlow} />
+        {isEq && <div className={styles.equippedBadge}><span>✓</span></div>}
+        
+        {/* HIỂN THỊ ICON Ổ KHÓA */}
+        {item.isLocked && <div className={styles.lockIconBadge}>🔒</div>}
+
+        {/* HIỂN THỊ CHECKBOX */}
+        {isSelectMode && item.isOwned && !isEq && !item.isLocked && mainTab !== 'collection' && (
+           <div className={`${styles.checkboxOverlay} ${isChecked ? styles.checked : ''}`} />
         )}
-      </div>
-    </div>
-  );
-  const isEquipped = (!isCrate && selectedItem) && (loadout[selectedItem.type] === selectedItem.uuid || loadout.pilot === selectedItem.id);
-  return (
-    <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }}
-      className={`${styles.container} ${isForge ? styles.forgeMode : ''} scrollable-layer`}
-    >
-      <div className={styles.contentWrapper}>
 
+        <div className={styles.itemIconWrap}>
+           {item.type === 'aircraft' ? (
+              <img src={AIRCRAFTS.find(a=>a.id===item.id)?.imgHq || '/images/ship_xwing_hq.png'} alt="aircraft" style={{ maxWidth: isForgeMode ? '36px' : '40px', objectFit: 'contain' }} />
+           ) : renderIcon(item, isForgeMode ? '36px' : '40px')}
+        </div>
+        <div className={styles.itemFooter}><span className={styles.itemLevel}>{item.isOwned ? `LV ${item.level || 1}` : '🔒'}</span></div>
+      </motion.div>
+    );
+  };
+  
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }} className={`${styles.container} ${isForge ? styles.forgeMode : ''} scrollable-layer`}>
+      <div className={styles.contentWrapper}>
         <header className={styles.header}>
-          <motion.button 
-            whileTap={{ scale: 0.95 }} 
-            className={styles.backBtn} 
-            onClick={() => {
-              // Kiểm tra xem có phải đi từ HQ sang không?
-              if (gsRef.current?.cameFromHQ) {
-                gsRef.current.cameFromHQ = false; // Gỡ cờ đi để lần sau không bị kẹt
-                setScreen('hq'); // Tên screen HQ của bạn (có thể là 'hq' hoặc 'HQ')
-              } else {
-                setScreen('campaign_portal'); // Mặc định về portal
-              }
-            }}
-          >
-            <span className={styles.backArrow}>‹</span>
-            <span className={styles.backText}>
-              {gsRef.current?.cameFromHQ 
-                ? (lang === 'vi' ? 'HÀNH DINH' : 'HQ') 
-                : (lang === 'vi' ? 'CHỈ HUY' : 'COMMAND')}
-            </span>
+          <motion.button whileTap={{ scale: 0.95 }} className={styles.backBtn} onClick={() => { gsRef.current?.cameFromHQ ? setScreen('hq') : setScreen('campaign_portal'); gsRef.current.cameFromHQ = false; }}>
+            <span className={styles.backArrow}>‹</span><span className={styles.backText}>{gsRef.current?.cameFromHQ ? (lang === 'vi' ? 'HÀNH DINH' : 'HQ') : (lang === 'vi' ? 'CHỈ HUY' : 'COMMAND')}</span>
           </motion.button>
-          <div className={styles.headerTitle}>
-            {isForge ? (lang === 'vi' ? 'XƯỞNG RÈN' : 'FORGE CORE') : (lang === 'vi' ? 'KHO VŨ KHÍ' : 'ARMORY')}
-          </div>
+          <div className={styles.headerTitle}>{mainTab === 'collection' ? (lang === 'vi' ? 'BỘ SƯU TẬP' : 'COLLECTION') : (isForge ? (lang === 'vi' ? 'XƯỞNG RÈN' : 'FORGE CORE') : (lang === 'vi' ? 'KHO VŨ KHÍ' : 'ARMORY'))}</div>
           <div className={styles.currencyBar}>
-            <div className={`${styles.currencyChip} ${styles.chipCoin}`}>
-              <div className={styles.currencyIcon}><Icons.Coin /></div>
-              <span className={styles.currencyAmt}>{currentCoins.toLocaleString()}</span>
-            </div>
-            <div className={`${styles.currencyChip} ${styles.chipGem}`}>
-              <div className={styles.currencyIcon}><Icons.Gem /></div>
-              <span className={styles.currencyAmt}>{currentDiamonds.toLocaleString()}</span>
-            </div>
-            <div className={`${styles.currencyChip} ${styles.chipBlueprint}`}>
-              <div className={styles.currencyIcon}><Icons.Blueprint /></div>
-              <span className={styles.currencyAmt}>{currentBlueprints.toLocaleString()}</span>
-            </div>
-            <div className={`${styles.currencyChip} ${styles.chipGear}`}>
-              <div className={styles.currencyIcon}><Icons.Gear /></div>
-              <span className={styles.currencyAmt}>{currentGears.toLocaleString()}</span>
-            </div>
+            <div className={`${styles.currencyChip} ${styles.chipEnergy}`}><div className={styles.currencyIcon}><Icons.Energy /></div><span className={styles.currencyAmt}>{currentEnergy.toLocaleString()}</span></div>
+            <div className={`${styles.currencyChip} ${styles.chipCoin}`}><div className={styles.currencyIcon}><Icons.Coin /></div><span className={styles.currencyAmt}>{currentCoins.toLocaleString()}</span></div>
+            <div className={`${styles.currencyChip} ${styles.chipGem}`}><div className={styles.currencyIcon}><Icons.Gem /></div><span className={styles.currencyAmt}>{currentDiamonds.toLocaleString()}</span></div>
+            <div className={`${styles.currencyChip} ${styles.chipBlueprint}`}><div className={styles.currencyIcon}><Icons.Blueprint /></div><span className={styles.currencyAmt}>{currentBlueprints.toLocaleString()}</span></div>
+            <div className={`${styles.currencyChip} ${styles.chipGear}`}><div className={styles.currencyIcon}><Icons.Gear /></div><span className={styles.currencyAmt}>{currentGears.toLocaleString()}</span></div>
           </div>
         </header>
 
-        {/* --- CHỈ CÒN 2 TAB CHÍNH TRÊN CÙNG --- */}
         <nav className={styles.mainTabs}>
           {[
-            { id: 'bag',   icon: '⊞', label: { vi: 'TÚI TRANG BỊ', en: 'LOADOUT BAY' } },
-            { id: 'forge', icon: '⊗', label: { vi: 'XƯỞNG RÈN',    en: 'FORGE CORE'  } },
+            { id: 'bag', icon: '⊞', label: { vi: 'TÚI TRANG BỊ', en: 'LOADOUT' } }, 
+            { id: 'collection', icon: '📖', label: { vi: 'BỘ SƯU TẬP', en: 'COLLECTION' } },
+            { id: 'forge', icon: '⊗', label: { vi: 'XƯỞNG RÈN', en: 'FORGE CORE' } }
           ].map(tab => (
-            <button
-              key={tab.id} data-tab={tab.id}
-              className={`${styles.mainTabBtn} ${mainTab === tab.id ? styles.active : ''}`}
-              onClick={() => { setMainTab(tab.id); setSelectedId(null); setBagFilter('all'); }}
-            >
-              <span className={styles.tabIcon}>{tab.icon}</span>
-              {tab.label[lang]}
-              {mainTab === tab.id && <motion.div className={styles.tabUnderline} layoutId="mainUnderline" />}
+            <button key={tab.id} data-tab={tab.id} className={`${styles.mainTabBtn} ${mainTab === tab.id ? styles.active : ''}`} onClick={() => { setMainTab(tab.id); setSelectedId(null); setBagFilter('all'); setIsSelectMode(false); }}>
+              <span className={styles.tabIcon}>{tab.icon}</span>{tab.label[lang]}{mainTab === tab.id && <motion.div className={styles.tabUnderline} layoutId="mainUnderline" />}
             </button>
           ))}
         </nav>
 
         <AnimatePresence mode="wait">
-          <motion.div 
-            key={mainTab} 
-            initial={{ opacity: 0, y: 12 }} 
-            animate={{ opacity: 1, y: 0 }} 
-            exit={{ opacity: 0, y: -8 }} 
-            transition={{ duration: 0.25 }} 
-            className={styles.workspace}
-          >
-            {/* PHẦN PHI CƠ: Luôn hiện ở trên đầu của cả 2 tab */}
-            <div className={styles.aircraftSection}>
-              <div className={styles.sectionHeader}>
-                {lang === 'vi' ? 'HẠM ĐỘI PHI CƠ' : 'AIRCRAFT FLEET'}
-              </div>
-              <div className={styles.aircraftGrid}>
-                {AIRCRAFTS.filter(ac => !!ownedAircrafts?.[ac.id]).map(ac => (
-                  <motion.div 
-                    key={ac.id} 
-                    className={`${styles.aircraftCard} ${loadout.aircraft === ac.id ? styles.aircraftEquipped : ''} ${selectedId === ac.id ? styles.selected : ''}`} 
-                    onClick={() => setSelectedId(ac.id)}
-                    whileTap={{ scale: 0.95 }}
-                  >
-                    <div className={styles.acImageWrap}>
-                      <img src={ac.imgHq || ac.imgTop || '/images/ship_xwing_hq.jpg'} alt="Ship" className={styles.acImage} />
+          <motion.div key={mainTab} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.25 }} className={styles.workspace}>
+            
+            {mainTab === 'collection' && (
+              <div className={styles.collectionBoard}>
+                {collectionData.map(section => (
+                  <div key={section.id} className={styles.collectionSection}>
+                    <div className={styles.collectionHeader}>{section.title}</div>
+                    <div className={styles.collectionGrid}>
+                      {section.items.map((item, idx) => renderItemSlot(item, idx, false))}
                     </div>
-                    <div className={styles.acInfo}>
-                      <div className={styles.acName}>{ac.name[lang]}</div>
-                      <div className={styles.acStats}>
-                        <span>ATK: {ac.baseAtk}</span>
-                        <span>SHIELD: {ac.baseHp}</span>
-                      </div>
-                    </div>
-                    {loadout.aircraft === ac.id && <div className={styles.acBadge}>ACTIVE</div>}
-                    <div className={styles.cardGlow} />
-                  </motion.div>
+                  </div>
                 ))}
               </div>
-            </div>
+            )}
 
-            {/* PHẦN LƯỚI TRANG BỊ: Tự động thay đổi theo Tab */}
-            <div className={styles.lowerWorkspace}>
-              {renderGrid()}
-            </div>
+            {mainTab !== 'collection' && (
+              <>
+                <div className={styles.aircraftSection}>
+                  <div className={styles.sectionHeader}>
+                    {lang === 'vi' ? 'HẠM ĐỘI PHI CƠ' : 'AIRCRAFT FLEET'}
+                    {mainTab === 'bag' && <span className={styles.capacityText}> {bagAircrafts.length}/100</span>}
+                  </div>
+                  <div className={styles.aircraftGrid}>
+                    {bagAircrafts.map((ac, idx) => renderItemSlot(ac, idx, isForge))}
+                  </div>
+                </div>
+
+                <div className={styles.lowerWorkspace}>
+                  <div className={styles.inventoryBoard}>
+                    <div className={styles.verticalTabs}>
+                      {sideTabs.map(tab => (
+                        <button key={tab.id} className={`${styles.sideTabBtn} ${bagFilter === tab.id ? styles.active : ''}`} onClick={() => { setBagFilter(tab.id); setSelectedId(null); setIsSelectMode(false); }}>
+                          <span className={styles.sideIcon}>{tab.icon}</span><span className={styles.sideLabel}>{tab.label[lang]}</span>
+                          {bagFilter === tab.id && <motion.div className={styles.sideActivePip} layoutId="sidePip" />}
+                        </button>
+                      ))}
+                    </div>
+                    <div className={styles.gridArea}>
+                      {mainTab === 'bag' && bagFilter === 'all' && (
+                          <div style={{ gridColumn: '1 / -1', fontFamily: 'Share Tech Mono, monospace', color: '#fb923c', padding: '0 5px 10px', fontSize: '15px' }}>
+                             {lang === 'vi' ? `SỨC CHỨA: ${inventoryList.length}/100` : `CAPACITY: ${inventoryList.length}/100`}
+                          </div>
+                      )}
+                      {gridItems.length === 0 ? (
+                        <div className={styles.emptyState}><span className={styles.emptyIcon}>⊡</span><span>{lang === 'vi' ? 'KHOANG CHỨA RỖNG' : 'STORAGE EMPTY'}</span></div>
+                      ) : (
+                        gridItems.map((item, idx) => renderItemSlot(item, idx, isForge))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
           </motion.div>
         </AnimatePresence>
       </div>
-      <ItemModal 
-        isOpen={!!selectedId}
-        onClose={() => setSelectedId(null)}
-        item={selectedItem}
-        baseInfo={itemBaseInfo}
-        contextType={isCrate ? 'crate' : (mainTab === 'forge' ? 'forge' : 'bag')}
-        isEquipped={isEquipped}
-        lang={lang}
-        starUpInfo={starUpInfo}
-        resources={{
-          coins: currentCoins,
-          diamonds: currentDiamonds,
-          blueprints: currentBlueprints,
-          duplicateItems: duplicateItems,
-          duplicatesCount: duplicateItems.length,
-          crates: isCrate ? (materials.crates[selectedItem?.id] || 0) : 0
-        }}
-        actions={{
-          // Cập nhật logic Equip để nhận diện cả Phi cơ
-          onEquip: selectedItem?.type === 'aircraft' 
-                  ? () => handleEquipAircraft(selectedItem.id) 
-                  : toggleEquip,
-          onUpgrade: handleUpgrade,
-          onStarUp: handleStarUp,
-          onOpen: (amount) => handleOpenCrate(selectedItem, amount),
-          onGoToForge: () => { setMainTab('forge'); },
-          onGoToShop: () => { setScreen('shop_campaign'); }
-        }}
-      />
-      {/* --- GACHA RESULT POPUP --- */}
+
+      {/* THANH CÔNG CỤ BÁN/XÓA VẬT PHẨM NỔI LÊN KHI ẤN GIỮ */}
       <AnimatePresence>
-        {gachaResults && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={styles.gachaOverlay}>
-            <motion.div initial={{ scale: 0.8, y: 50 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.8, y: 50 }} className={styles.gachaModal}>
-              
-              <div className={styles.gachaHeader}>
-                <h2 className={styles.gachaTitle}>{lang === 'vi' ? 'KẾT QUẢ MỞ HÒM' : 'GACHA RESULTS'}</h2>
-                {/* Nút X để thoát */}
-                <button className={styles.gachaClose} onClick={() => setGachaResults(null)}>✕</button>
-              </div>
-
-              <div className={styles.gachaContent}>
-                {gachaResults.map((item, idx) => {
-                  // Lấy hình ảnh từ Catalog (Hỗ trợ cả Phi công nếu hòm có rớt phi công)
-                  let catalogInfo = item.type === 'pilot' 
-                    ? PILOTS.find(p => p.id === item.baseId)
-                    : GEAR_CATALOG[item.type]?.find(g => g.id === item.baseId);
-
-                  // Set màu viền theo Rarity
-                  const rarityColor = item.rarity === 5 ? '#facc15' : item.rarity === 4 ? '#c084fc' : item.rarity === 3 ? '#60a5fa' : item.rarity === 2 ? '#4ade80' : '#94a3b8';
-
-                  return (
-                    <motion.div 
-                      initial={{ opacity: 0, scale: 0.5 }} 
-                      animate={{ opacity: 1, scale: 1 }} 
-                      transition={{ delay: idx * 0.1 }} // Hiệu ứng nảy từng món một
-                      key={item.uuid || idx} 
-                      className={styles.gachaItemCard}
-                      style={{ borderColor: rarityColor, boxShadow: `0 0 15px ${rarityColor}40` }}
-                    >
-                      <div className={styles.gachaItemNew}>NEW</div>
-                      <img src={catalogInfo?.imgSrc} alt="item" className={styles.gachaItemImg} />
-                      <span className={styles.gachaItemRarity} style={{ color: rarityColor }}>
-                        {'★'.repeat(item.rarity || 1)}
-                      </span>
-                    </motion.div>
-                  );
-                })}
-              </div>
-
-              <div className={styles.gachaFooter}>
-                <button className={styles.btnBase} style={{ maxWidth: '200px' }} onClick={() => setGachaResults(null)}>
-                  {lang === 'vi' ? 'TIẾP TỤC MỞ' : 'CONTINUE'}
-                </button>
-                {/* Nút chuyển tab về Kho đồ */}
-                <button className={styles.launchBtn} style={{ maxWidth: '250px', margin: 0, padding: '12px' }} onClick={() => { setGachaResults(null); setMainTab('bag'); }}>
-                  {lang === 'vi' ? 'ĐẾN KHO ĐỒ' : 'GO TO BAG'}
-                </button>
-              </div>
-
-            </motion.div>
+        {isSelectMode && (
+          <motion.div 
+            initial={{ y: 100, opacity: 0 }} 
+            animate={{ y: 0, opacity: 1 }} 
+            exit={{ y: 100, opacity: 0 }}
+            className={styles.sellActionBar}
+          >
+            <button className={styles.sellActionSubBtn} onClick={() => { setIsSelectMode(false); setSellSelection([]); }}>
+               {lang === 'vi' ? 'HỦY' : 'CANCEL'}
+            </button>
+            <button className={styles.sellActionSubBtn} onClick={handleSelectAll}>
+               {lang === 'vi' ? 'CHỌN TẤT CẢ' : 'SELECT ALL'}
+            </button>
+            <button className={styles.deleteBtn} disabled={sellSelection.length === 0} onClick={executeDelete}>
+               <Icons.Trash /> {lang === 'vi' ? `XÓA (${sellSelection.length})` : `DEL (${sellSelection.length})`}
+            </button>
+            <button className={styles.sellBtn} disabled={sellSelection.length === 0} onClick={executeSell}>
+               <Icons.Coin /> {lang === 'vi' ? `BÁN (${sellSelection.length})` : `SELL (${sellSelection.length})`}
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
+      
+      {!isSelectMode && (
+        <ItemModal 
+          isOpen={!!selectedId} onClose={() => setSelectedId(null)} item={selectedItem} baseInfo={itemBaseInfo}
+          contextType={mainTab === 'forge' ? 'forge' : 'bag'} isEquipped={isEquipped} lang={lang} starUpInfo={starUpInfo}
+          resources={{ coins: currentCoins, diamonds: currentDiamonds, blueprints: currentBlueprints, duplicateItems: duplicateItems, duplicatesCount: duplicateItems.length }}
+          actions={{ 
+            onEquip: selectedItem?.type === 'aircraft' ? () => handleEquipAircraft(selectedItem.id) : toggleEquip, 
+            onUpgrade: handleUpgrade, 
+            onStarUp: handleStarUp, 
+            onToggleLock: toggleLock, // Gửi hàm khóa qua Modal
+            onGoToForge: () => { setMainTab('forge'); setSelectedId(null); }, 
+            onGoToShop: () => { setScreen('shop_campaign'); } 
+          }}
+        />
+      )}
     </motion.div>
-    
   );
 }
