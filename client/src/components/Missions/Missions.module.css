@@ -1,0 +1,120 @@
+/* src/components/Missions/Missions.module.css */
+.container {
+  width: 100%; height: 100dvh; 
+  background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(30, 60, 120, 0.30), transparent), #03060e;
+  color: #e2e8f0; font-family: 'Barlow Condensed', sans-serif;
+  display: flex; flex-direction: column; align-items: center;
+  box-sizing: border-box; position: relative; overflow: hidden;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+}
+.container::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background-image: linear-gradient(rgba(56, 189, 248, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(56, 189, 248, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px; z-index: 0;
+}
+
+.contentWrapper { width: 100%; max-width: 900px; display: flex; flex-direction: column; gap: 12px; z-index: 10; flex: 1; min-height: 0; }
+
+.header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px; border-bottom: 1px solid rgba(56, 189, 248, 0.15); flex-shrink: 0; padding-inline: 4px; flex-wrap: wrap; gap: 10px;}
+.backBtn { display: flex; align-items: center; gap: 6px; background: rgba(15, 24, 50, 0.7); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.15); padding: 8px 12px; border-radius: 6px; font-family: inherit; font-size: 16px; font-weight: 700; cursor: pointer; text-transform: uppercase; transition: 0.2s; position: relative; overflow: hidden; }
+.backBtn::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: #38bdf8; }
+.backBtn:hover { background: rgba(56, 189, 248, 0.12); box-shadow: 0 0 16px rgba(56, 189, 248, 0.35); }
+.backArrow { font-size: 20px; line-height: 1; }
+.headerTitle { font-size: clamp(18px, 4vw, 24px); font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; text-shadow: 0 0 20px rgba(56, 189, 248, 0.35); }
+
+.loreBox { background: rgba(0,0,0,0.4); border: 1px dashed rgba(56,189,248,0.3); padding: 6px 12px; border-radius: 4px; display: flex; align-items: center; gap: 8px; }
+.loreText { font-family: 'Share Tech Mono', monospace; font-size: 13px; color: #94a3b8; }
+
+.mainTabs { display: flex; gap: 8px; flex-shrink: 0; margin-bottom: 5px; overflow-x: auto; padding-bottom: 5px;}
+.mainTabBtn { position: relative; flex: 1; min-width: 150px; display: flex; align-items: center; justify-content: center; padding: 12px; background: rgba(15, 24, 50, 0.7); color: #64748b; border: 1px solid rgba(56, 189, 248, 0.15); border-radius: 8px; font-family: inherit; font-size: clamp(14px, 3.5vw, 18px); font-weight: 700; letter-spacing: 0.05em; cursor: pointer; transition: 0.2s; overflow: hidden; white-space: nowrap;}
+.mainTabBtn.active { color: #fff; background: rgba(56, 189, 248, 0.15); border-color: #38bdf8; box-shadow: 0 0 15px rgba(56, 189, 248, 0.35); text-shadow: 0 0 10px #38bdf8; }
+.tabUnderline { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, transparent, #38bdf8, transparent); }
+
+.missionList { flex: 1; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; padding: 5px; }
+.missionList::-webkit-scrollbar { width: 4px; }
+.missionList::-webkit-scrollbar-thumb { background: rgba(56,189,248,0.3); border-radius: 4px; }
+
+.missionCard { background: rgba(10, 18, 36, 0.85); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 12px; padding: 16px; display: flex; justify-content: space-between; align-items: center; gap: 20px; transition: 0.3s; position: relative; overflow: hidden;}
+.missionCard::before { content: ""; position: absolute; top:0; left:0; bottom:0; width: 4px; background: #38bdf8; opacity: 0.5;}
+.missionCard:hover { background: rgba(15, 24, 50, 0.95); transform: translateX(4px); box-shadow: 0 5px 20px rgba(0,0,0,0.5); }
+.missionCard.claimed { filter: grayscale(100%) opacity(0.5); border-color: #334155; }
+.missionCard.claimed::before { background: #64748b; }
+
+.mInfo { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.mTitle { margin: 0; font-size: 20px; font-weight: 800; color: #fff; letter-spacing: 1px; }
+.mDesc { margin: 0; font-family: 'Share Tech Mono', monospace; font-size: 14px; color: #94a3b8; }
+
+.mProgressWrap { display: flex; align-items: center; gap: 10px; margin-top: 5px; }
+.mProgressText { font-family: 'Share Tech Mono', monospace; font-size: 13px; color: #38bdf8; width: 60px;}
+.mProgressBarBg { flex: 1; height: 6px; background: rgba(0,0,0,0.6); border-radius: 3px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1);}
+.mProgressBarFill { height: 100%; transition: width 0.5s ease; box-shadow: 0 0 10px currentColor;}
+
+.mAction { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; min-width: 120px;}
+.mReward { display: flex; align-items: center; gap: 6px; font-family: 'Share Tech Mono', monospace; font-size: 18px; font-weight: bold; text-shadow: 0 0 10px currentColor;}
+.mRewardIcon { width: 24px; height: 24px; display: flex; align-items: center;}
+.mRewardIcon svg { width: 100%; height: 100%; }
+
+.mBtn { padding: 10px 15px; border: none; border-radius: 6px; font-family: inherit; font-size: 16px; font-weight: bold; cursor: pointer; letter-spacing: 1px; transition: 0.2s; width: 100%;}
+.mBtnReady { background: #4ade80; color: #000; box-shadow: 0 0 15px rgba(74, 222, 128, 0.4); animation: pulseBtn 2s infinite;}
+.mBtnReady:hover { background: #22c55e; transform: scale(1.05); }
+.mBtnNotReady { background: rgba(255,255,255,0.1); color: #64748b; cursor: not-allowed; }
+.mBtnClaimed { padding: 10px 15px; border: 1px solid #334155; border-radius: 6px; background: transparent; color: #64748b; font-family: inherit; font-size: 16px; font-weight: bold; width: 100%;}
+
+@keyframes pulseBtn { 0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(74, 222, 128, 0); } 100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); } }
+
+@media (max-width: 600px) {
+  .missionCard { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .mAction { flex-direction: row; justify-content: space-between; width: 100%; align-items: center; }
+  .mBtn, .mBtnClaimed { width: auto; flex: 1; margin-left: 15px; }
+  .loreBox { display: none; }
+}
+.mBtnProceed { 
+  background: rgba(56, 189, 248, 0.2); 
+  color: #38bdf8; 
+  border: 1px solid #38bdf8; 
+}
+.mBtnProceed:hover { 
+  background: #38bdf8; 
+  color: #000; 
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.5); 
+}
+/* Thêm vào dưới cùng của CampaignPortal.module.css VÀ Missions.module.css */
+.notiBadge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background: #ff4757;
+  color: #fff;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  font-weight: bold;
+  height: 20px;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 0 8px rgba(255, 71, 87, 0.8);
+  pointer-events: none;
+  z-index: 10;
+  animation: pulseBadge 2s infinite;
+}
+
+.tabBadge {
+  background: #ff4757;
+  color: #fff;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: 8px;
+  box-shadow: 0 0 8px rgba(255, 71, 87, 0.8);
+}
+
+@keyframes pulseBadge {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}

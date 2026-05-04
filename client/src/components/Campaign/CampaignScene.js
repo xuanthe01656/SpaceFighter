@@ -380,6 +380,9 @@ export default class CampaignScene extends Phaser.Scene {
     const emitter = this.add.particles(cx, cy, 'flare', { speed: 150, scale: { start: 0.4, end: 0 }, blendMode: 'ADD', tint: 0xfacc15, lifespan: 1500, quantity: 1, frequency: 100 }).setDepth(299);
 
     const stageBonus = this.isReplay ? 10 : (50 + (this.currentStage * 50));
+    const baseExp = this.stageConfig.expReward || 100;
+    const earnedExp = this.isReplay ? Math.floor(baseExp * 0) : baseExp; 
+    
     const totalCoins = stageBonus + this.score + this.collectedCoins;
 
     const titleFontSize = isMobile ? '26px' : '32px';
@@ -416,9 +419,9 @@ export default class CampaignScene extends Phaser.Scene {
     const valTime = this.add.text(innerXRight, tY0, timeString, { ...styleValue, color: '#fff' }).setOrigin(1, 0.5).setDepth(302).setAlpha(0).setY(tY0 + 20);
 
     const tY1 = cy + 20;
-    const txtBase = this.add.text(innerXLeft, tY1, this.lang === 'vi' ? 'Thưởng vượt ải:' : 'Stage Bonus:', styleLabel).setOrigin(0, 0.5).setDepth(302).setAlpha(0).setY(tY1 + 20);
-    const valBase = this.add.text(innerXRight, tY1, `+${stageBonus}`, styleValue).setOrigin(1, 0.5).setDepth(302).setAlpha(0).setY(tY1 + 20);
-
+    const txtExp = this.add.text(innerXLeft, tY1, this.lang === 'vi' ? 'Kinh nghiệm (EXP):' : 'EXP Gained:', styleLabel).setOrigin(0, 0.5).setDepth(302).setAlpha(0).setY(tY1 + 20);
+    const valExp = this.add.text(innerXRight, tY1, `+${earnedExp}`, { ...styleValue, color: '#00ffcc' }).setOrigin(1, 0.5).setDepth(302).setAlpha(0).setY(tY1 + 20);
+    
     const tY2 = cy + 60;
     const txtScore = this.add.text(innerXLeft, tY2, this.lang === 'vi' ? 'Điểm tác chiến:' : 'Combat Score:', styleLabel).setOrigin(0, 0.5).setDepth(302).setAlpha(0).setY(tY2 + 20);
     const valScore = this.add.text(innerXRight, tY2, `+${this.score}`, styleValue).setOrigin(1, 0.5).setDepth(302).setAlpha(0).setY(tY2 + 20);
@@ -444,7 +447,7 @@ export default class CampaignScene extends Phaser.Scene {
     const btnZone = this.add.zone(cx, btnY, btnW, btnH).setOrigin(0.5).setDepth(306).setInteractive({ useHandCursor: true });
 
     // CẬP NHẬT LẠI MẢNG ANIMATION (THÊM COND VÀ TIME VÀO)
-    const uiElements = [overlay, panel, title, starsTxt, cond1, cond2, cond3, txtTime, valTime, txtBase, valBase, txtScore, valScore, txtLoot, valLoot, line, txtTotal, valTotal, btnContainer];
+    const uiElements = [overlay, panel, title, starsTxt, cond1, cond2, cond3, txtTime, valTime, txtExp, valExp, txtScore, valScore, txtLoot, valLoot, line, txtTotal, valTotal, btnContainer];
     this.tweens.add({ targets: uiElements, alpha: 1, y: '-=20', duration: 400, ease: 'Cubic.easeOut', delay: this.tweens.stagger(120) });
 
    // DÙNG 'once' THAY VÌ 'on' ĐỂ CHỐNG SPAM CLICK LÀM LOẠN DATA
@@ -454,11 +457,11 @@ export default class CampaignScene extends Phaser.Scene {
         const gsRef = this.registry.get('gsRef');
         const progress = gsRef.current.campaignData.progress;
         
-        // 1. LẤY CHUẨN XÁC VỊ TRÍ TỪ gsRef (Triệt tiêu hoàn toàn lỗi undefined của 'this')
+        // 1. LẤY CHUẨN XÁC VỊ TRÍ TỪ gsRef
         const pId = Number(progress.currentPlanet) || 1;
         const currStage = Number(progress.selectedStage) || 1;
 
-        // 2. BẢO HIỂM CẤU TRÚC FIREBASE
+        // 2. BẢO HIỂM CẤU TRÚC
         if (!progress.planets) progress.planets = {};
         if (!progress.planets[pId]) progress.planets[pId] = { highestStage: 1, stars: {} };
         if (!progress.planets[pId].stars) progress.planets[pId].stars = {};
@@ -467,35 +470,43 @@ export default class CampaignScene extends Phaser.Scene {
         const oldStars = Number(progress.planets[pId].stars[currStage]) || 0;
         progress.planets[pId].stars[currStage] = Math.max(oldStars, earnedStars);
 
-        // 4. MỞ KHÓA ẢI TIẾP THEO (Lưu đúng số, không bị cộng thành chuỗi 51)
+        // 4. MỞ KHÓA ẢI TIẾP THEO (Chỉ khi chơi đúng ải cao nhất hiện tại)
         const currentHighest = Number(progress.planets[pId].highestStage) || 1;
-        if (currStage >= currentHighest && currStage < 10) {
+        if (currStage === currentHighest && currStage < 10) {
             progress.planets[pId].highestStage = currStage + 1;
+            // Tự động đẩy selectedStage sang ải mới để người chơi bấm chơi tiếp luôn
             progress.selectedStage = currStage + 1;
         }
 
         // 5. CHUYỂN TINH CẦU MỚI KHI QUA ẢI 10
-        if (currStage === 10 && pId >= (Number(progress.highestPlanet) || 1) && pId < Object.keys(PLANET_CONFIG).length) {
-            progress.highestPlanet = pId + 1;
-            if (!progress.planets[pId + 1]) progress.planets[pId + 1] = { highestStage: 1, stars: {} };
-            progress.currentPlanet = pId + 1;
-            progress.selectedStage = 1;
+        if (currStage === 10 && currStage === currentHighest) {
+            const nextPlanetId = pId + 1;
+            if (nextPlanetId <= Object.keys(PLANET_CONFIG).length) {
+               progress.highestPlanet = Math.max(Number(progress.highestPlanet) || 1, nextPlanetId);
+               if (!progress.planets[nextPlanetId]) progress.planets[nextPlanetId] = { highestStage: 1, stars: {} };
+               
+               // Cập nhật selectedStage thành Ải 1 của Tinh cầu mới
+               progress.currentPlanet = nextPlanetId;
+               progress.selectedStage = 1;
+            }
         }
         
-        // 6. CỘNG VÀNG THỰC TẾ
+        // 6. CỘNG EXP VÀ VÀNG THỰC TẾ
+        if (progress.exp === undefined) progress.exp = 0; 
+        progress.exp += earnedExp;                        
         gsRef.current.coins = (Number(gsRef.current.coins) || 0) + totalCoins;
         
-        // 7. GỌI HÀM LƯU (Gọi y hệt như bên Inventory, KHÔNG nhét thêm tham số)
+        // 7. ÉP LƯU DATA LÊN FIREBASE NGAY LẬP TỨC 
         const saveUserProfile = this.registry.get('saveUserProfile');
-        if (typeof saveUserProfile === 'function') {
-            saveUserProfile(); 
+        if (saveUserProfile) {
+            saveUserProfile(); // Gọi hàm lưu của React
         }
 
         // 8. BẢO HIỂM TÀI KHOẢN KHÁCH (Lưu đúng key hệ thống astro_guest_campaign)
         try {
             window.localStorage.setItem('astro_guest_campaign', JSON.stringify(gsRef.current.campaignData));
             window.localStorage.setItem('astro_guest_coins', gsRef.current.coins.toString());
-        } catch(e) {}
+        } catch(e) { console.error("Lỗi lưu LocalStorage", e); }
 
         // 9. CHUYỂN MÀN
         this.time.delayedCall(200, () => {
@@ -504,7 +515,6 @@ export default class CampaignScene extends Phaser.Scene {
         });
     });
   }
-
   spawnEnemy() {
     const enemy = this.enemies.get(Phaser.Math.Between(40, this.scale.width - 40), -50);
     if (!enemy) return;

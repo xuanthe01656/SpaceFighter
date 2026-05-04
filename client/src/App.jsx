@@ -16,7 +16,9 @@ import StageSelect from './components/StageSelect';
 import CampaignPortal from './components/CampaignPortal';
 import ShopCampaign from './components/ShopCampaign';
 import GalaxyMap from './components/GalaxyMap';
+import Missions from './components/Missions';
 import { secureStorage } from './utils/storageHelper';
+import { DEFAULT_CAMPAIGN_DATA } from './constants';
 
 export default function Game() {
   const [screen, setScreen] = useState('portal');
@@ -34,16 +36,27 @@ export default function Game() {
     langRef.current = lang;
   }, [lang]);
 
-  // CHỈ GIỮ LẠI DỮ LIỆU CẦN THIẾT CHO CHIẾN DỊCH & HỆ THỐNG
+  // ==========================================
+  // BẢN ĐỒNG BỘ GSREF MỚI NHẤT (Khớp 100% với DB Firestore mới)
+  // ==========================================
   const gsRef = useRef({
+    // Tài nguyên
     coins: 0,
     diamonds: 0,
-    isVIP: false,
+    energy: 50,
+    vipPoints: 0,
+    
+    // Tracking
     lastCoinDate: '',
     hourlyCoinCount: 0,
     lastCoinHour: '',
+    
+    // Hệ thống
     timeOffset: 0,
-    deviceId: 'unknown'
+    deviceId: 'unknown',
+    myName: 'Player',
+    // Nạp sẵn Dữ liệu Chiến dịch để các component con load an toàn
+    campaignData: JSON.parse(JSON.stringify(DEFAULT_CAMPAIGN_DATA))
   });
 
   const getRealTime = () => Date.now() + (gsRef.current.timeOffset || 0);
@@ -167,9 +180,11 @@ export default function Game() {
       )}
       
       {screen === 'campaign_portal' && (
-        <CampaignPortal gsRef={gsRef} setScreen={setScreen} lang={lang} />
+        <CampaignPortal gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} currentUser={currentUser} logout={logout} deleteAccount={deleteAccount} loginWithGoogle={loginWithGoogle} loginWithApple={loginWithApple} toggleLanguage={toggleLanguage} setLang={setLang} />
       )}
-      
+      {screen === 'missions' && (
+        <Missions gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} />
+      )}
       {screen === 'shop_campaign' && (
         <ShopCampaign gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} />
       )}

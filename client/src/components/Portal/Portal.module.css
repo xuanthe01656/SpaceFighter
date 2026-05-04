@@ -1,61 +1,17 @@
-/* src/components/Portal/Portal.module.css */
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Share+Tech+Mono&display=swap');
-:root {
-     --bg-void:       #03060e;
-     --bg-deep:       #060c1a;
-     --bg-panel:      rgba(8, 14, 28, 0.88);
-     --bg-card:       rgba(10, 18, 36, 0.82);
-     --bg-element:    rgba(15, 24, 50, 0.7);
-   
-     --accent:        #38bdf8;
-     --accent-cool:   #60a5fa;
-     --accent-tertiary: #c084fc;
-      --accent-red:    #ff6b81;
-     --accent-glow:   rgba(56, 189, 248, 0.35);
-     --accent-dim:    rgba(56, 189, 248, 0.12);
-     --accent-warm:   #fb923c;
-     --accent-warm-g: rgba(251, 146, 60, 0.3);
-   
-     /* ── GOLD FORGE PALETTE ── */
-     --gold:          #f5c518;
-     --gold-bright:   #ffe066;
-     --gold-deep:     #b8860b;
-     --gold-glow:     rgba(245, 197, 24, 0.40);
-     --gold-dim:      rgba(245, 197, 24, 0.12);
-     --gold-border:   rgba(245, 197, 24, 0.35);
-   
-     --text-primary:  #e2e8f0;
-     --text-dim:      #64748b;
-     --text-faint:    #334155;
-   
-     --border-subtle: rgba(56, 189, 248, 0.15);
-     --border-base:   rgba(56, 189, 248, 0.28);
-     --border-active: rgba(56, 189, 248, 0.7);
-   
-     /* Rarity palette */
-     --r1: #94a3b8;   --r1-g: rgba(148, 163, 184, 0.2);
-     --r2: #4ade80;   --r2-g: rgba(74, 222, 128, 0.2);
-     --r3: #60a5fa;   --r3-g: rgba(96, 165, 250, 0.22);
-     --r4: #c084fc;   --r4-g: rgba(192, 132, 252, 0.25);
-     --r5: #fbbf24;   --r5-g: rgba(251, 191, 36, 0.28);
-   
-     --font-ui:   'Barlow Condensed', sans-serif;
-     --font-data: 'Share Tech Mono', monospace;
-   
-     --radius:    10px;
-     --radius-sm: 6px;
-     --gap:       14px;
-   }
+
 .container {
   width: 100%; height: 100dvh; display: flex; flex-direction: column;
-  align-items: center; justify-content: flex-start; 
-  /* Nền mặc định (Màu tối của vũ trụ tinh vân) */
-  background: radial-gradient(circle at 50% 50%, #20002c 0%, #12001e 50%, #000000 100%);
+  align-items: center; justify-content: center; 
+  background: radial-gradient(circle at 50% 50%, #0a1128 0%, #010308 100%);
   font-family: 'VT323', monospace; color: white; position: relative;
-  z-index: 10; pointer-events: auto; overflow: hidden;
+  z-index: 10; overflow: hidden;
+  padding-top: max(12px, env(safe-area-inset-top));
+  padding-right: max(16px, env(safe-area-inset-right));
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  padding-left: max(16px, env(safe-area-inset-left));
 }
 
-/* LỚP NỀN HÌNH ẢNH VŨ TRỤ (CHỐNG NaN LỖI KHI XỬ LÝ ẢNH TRƯỚC) */
 .backgroundLayer {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%;
   background-size: 100% 100% !important; 
@@ -64,225 +20,88 @@
   z-index: -1; pointer-events: none;
 }
 
-/* Logic tự động đổi hình nền theo hướng màn hình (Responsive) */
-@media (orientation: landscape) {
-  /* 👇 HÌNH CHO PC, MÁY TÍNH BẢNG (NGANG) */
-  .backgroundLayer { background-image: url('../images/portal_landscape.png'); }
-}
-@media (orientation: portrait) {
-  /* 👇 HÌNH CHO MOBILE (ĐỨNG) */
-  .backgroundLayer { background-image: url('../images/portal_portrait.png'); }
-}
+@media (orientation: landscape) { .backgroundLayer { background-image: url('../images/portal_landscape.png'); } }
+@media (orientation: portrait) { .backgroundLayer { background-image: url('../images/portal_portrait.png'); } }
 
-/* Hiệu ứng mờ ảo vũ trụ overlay */
-.container::after {
-  content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-  background: radial-gradient(circle at 20% 30%, rgba(0, 229, 255, 0.15) 0%, transparent 40%),
-              radial-gradient(circle at 80% 70%, rgba(179, 136, 255, 0.15) 0%, transparent 40%);
-  pointer-events: none; z-index: -1;
-}
-
-/* THANH ĐIỀU HƯỚNG TRÊN CÙNG (Cực mỏng) */
 .topNav {
-  position: absolute; top: calc(env(safe-area-inset-top) + 10px); width: 95%; max-width: 1200px;
-  display: flex; justify-content: space-between; align-items: flex-start; z-index: 100; pointer-events: auto; gap: 10px;
+  position: absolute; top: calc(env(safe-area-inset-top) + 15px); width: 100%; 
+  display: flex; justify-content: space-between; padding: 0 20px; z-index: 100; box-sizing: border-box;
 }
 
-/* GÓC TRÁI: HỒ SƠ (Chuẩn hóa viền bo tròn) */
-.authSection { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; flex: 1; min-width: 0; max-width: 50%; }
-.userPill {
-  display: flex; align-items: center; gap: 6px; 
-  background: rgba(10, 20, 40, 0.6); backdrop-filter: blur(12px); 
-  padding: 4px 8px 4px 4px; border-radius: 20px;
-  border: 1px solid rgba(0, 229, 255, 0.3);
-  border-bottom: 2px solid #00e5ff; /* Đồng bộ viền sáng đáy */
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-  max-width: 100%; box-sizing: border-box;
-}
-.avatar { width: 28px; height: 28px; border-radius: 50%; border: 1px solid #00e5ff; flex-shrink: 0; }
-.userName { 
-  color: #fff; font-size: clamp(12px, 3vw, 15px); font-weight: bold; text-transform: uppercase; 
-  letter-spacing: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto;
-}
-.logoutBtn { background: transparent; color: #00e5ff; border: none; cursor: pointer; padding: 0 5px; font-family: inherit; font-size: 12px; flex-shrink: 0; text-decoration: underline; }
-.deleteBtn { background: transparent; color: #ff4757; border: none; text-decoration: underline; font-size: 10px; cursor: pointer; font-family: inherit; padding-left: 10px; opacity: 0.7; }
-
-
-/* GÓC PHẢI: TÀI NGUYÊN (Đồng bộ với Kho đồ & HQ) */
-.rightSection { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; max-width: 60%; }
-
-.currencyBar { 
-  display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; 
-}
-
-.currencyChip {
-  display: flex; align-items: center; gap: 6px;
-  background: rgba(10, 20, 40, 0.6); backdrop-filter: blur(12px);
-  border: 1px solid var(--border-subtle);
-  padding: 5px 12px;
-  border-radius: var(--radius-sm);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-}
-
-.currencyIcon { 
-  width: 14px; height: 14px; 
-  display: flex; align-items: center; justify-content: center;
-}
-.currencyIcon svg { width: 100%; height: 100%; }
-
-.currencyAmt { 
-  font-family: 'Share Tech Mono', monospace; 
-  font-size: 16px; 
-  color: #fff; 
-}
-
-/* Đổ màu đặc trưng cho 4 loại tài nguyên */
-.chipEnergy { color: #0abde3; border-bottom: 2px solid #0abde3; text-shadow: 0 0 8px rgba(10, 189, 227, 0.5); }
-.chipCoin   { color: var(--accent-warm); border-bottom: 2px solid var(--accent-warm); text-shadow: 0 0 8px rgba(251, 146, 60, 0.5); }
-.chipHeart  { color: var(--accent-red); border-bottom: 2px solid var(--accent-red); text-shadow: 0 0 8px rgba(255, 107, 129, 0.5); }
-.chipGem    { color: var(--accent); border-bottom: 2px solid var(--accent); text-shadow: 0 0 8px rgba(56, 189, 248, 0.5); }
-.chipGear { 
-  color: #c084fc; 
-  border-bottom: 2px solid #c084fc; 
-  text-shadow: 0 0 8px rgba(192, 132, 252, 0.5); 
-}
-
-.langBtn { 
+.langBtn {
   background: rgba(10, 20, 40, 0.6); backdrop-filter: blur(10px); 
-  color: #FFD700; border: 1px solid #FFD700; border-radius: 6px; 
-  padding: 4px 10px; font-size: 12px; cursor: pointer; font-family: inherit; 
-  box-shadow: 0 0 10px rgba(255, 215, 0, 0.3); 
+  color: #00e5ff; border: 1px solid #00e5ff; border-radius: 6px; 
+  padding: 6px 12px; font-size: 14px; cursor: pointer; font-family: inherit; 
 }
-/* TIÊU ĐỀ GAME (Cực sáng, Trung tâm) */
+
+.logoutBtn {
+  background: transparent; color: #ff4757; border: 1px solid #ff4757; 
+  padding: 6px 12px; border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 14px;
+}
+
 .title {
-  position: absolute; left: auto; transform: translateX(-50%); width: 100%; text-align: center;
-  color: #fff; text-shadow: 0 0 10px #00e5ff, 0 0 20px #00e5ff, 0 0 40px #00e5ff;
-  margin: 0; pointer-events: none; z-index: 100; text-transform: uppercase; white-space: nowrap;
+  color: #fff; text-shadow: 0 0 15px #00e5ff, 0 0 30px #00e5ff;
+  font-size: clamp(40px, 8vw, 80px); margin: 0; text-transform: uppercase; z-index: 100;
+  letter-spacing: 4px; text-align: center; line-height: 1;
 }
 
-/* KHU VỰC CHỌN CHẾ ĐỘ (Hologram, Cân đối) */
-.cardsWrapper {
-  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-  z-index: 50; pointer-events: none; /* Chuột sẽ xuyên qua lớp vỏ này */
+.subtitle {
+  color: #b388ff; font-size: clamp(20px, 4vw, 35px); letter-spacing: 8px; margin: 10px 0 40px 0;
+  text-shadow: 0 0 10px #b388ff; z-index: 100;
 }
 
-.card {
-  position: absolute; 
-  pointer-events: auto; /* Bật lại khả năng click chuột cho riêng 2 cánh cửa */
-  border-radius: 50% 50% 10px 10px; background: rgba(10, 20, 40, 0.4); backdrop-filter: blur(8px); 
-  text-align: center; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
-  transition: all 0.3s ease; box-sizing: border-box; overflow: hidden;
+/* KHUNG TRUNG TÂM */
+.authBox {
+  background: rgba(8, 14, 28, 0.85); border: 2px solid rgba(0, 229, 255, 0.4);
+  border-radius: 12px; padding: 30px; display: flex; flex-direction: column; gap: 20px;
+  align-items: center; width: 90%; max-width: 400px;
+  box-shadow: 0 0 30px rgba(0, 229, 255, 0.15), inset 0 0 20px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px); z-index: 100;
 }
 
-.cardEndless { box-shadow: inset 0 0 15px rgba(0, 229, 255, 0.2); }
-.cardCampaign { box-shadow: inset 0 0 15px rgba(179, 136, 255, 0.2); }
-.card:active { transform: scale(0.95); }
-.card:hover { transform: translateY(-5px); }
-.cardEndless:hover { box-shadow: 0 10px 30px rgba(0, 229, 255, 0.5), inset 0 0 20px rgba(0, 229, 255, 0.2); }
-.cardCampaign:hover { box-shadow: 0 10px 30px rgba(179, 136, 255, 0.5), inset 0 0 20px rgba(179, 136, 255, 0.2); }
+.boxTitle { margin: 0; color: #facc15; font-size: 24px; letter-spacing: 2px; text-shadow: 0 0 10px rgba(250, 204, 21, 0.5); }
 
-/* KHUNG ẢNH TRONG THẺ (Màu theo thiết kế của bạn) */
-.cardBanner {
-  width: 100%; height: clamp(70px, 12vh, 130px); border-radius: 10px; margin-bottom: 15px;
-  display: flex; align-items: center; justify-content: center; font-size: clamp(30px, 7vw, 60px);
-  box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+/* NÚT LOGIN */
+.loginBtn {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 12px; border-radius: 8px; font-family: inherit; font-size: 20px; font-weight: bold;
+  cursor: pointer; transition: 0.2s;
 }
-/* 👇 MÀU Banner theo thiết kế của bạn (Deep Cyan & Dark Red/Purple) */
-.bannerEndless { background: linear-gradient(135deg, #090979, #00d2ff); }
-.bannerCampaign { background: linear-gradient(135deg, #4b134f, #c94b4b); }
+.googleBtn { background: #fff; color: #000; border: none; }
+.googleBtn:hover { background: #f1f1f1; transform: scale(1.02); }
+.appleBtn { background: #000; color: #fff; border: 1px solid #333; }
+.appleBtn:hover { background: #111; transform: scale(1.02); }
+.loginIcon { width: 24px; height: 24px; }
+.guestNote { font-size: 14px; color: #64748b; font-family: 'Share Tech Mono', monospace; text-align: center; }
 
-.cardTitle { font-size: clamp(18px, 4.5vw, 30px); margin: 0 0 5px 0; text-transform: uppercase; letter-spacing: 2px; text-shadow: 2px 2px 4px #000; }
-.desc { font-size: clamp(10px, 2.5vw, 15px); color: #d1d8e0; margin: 0; line-height: 1.4; opacity: 0.9; }
-
-/* NÚT LOGIN Ở DƯỚI CÙNG (Cố định, Cực mỏng) */
-.bottomAction {
-  position: absolute; bottom: calc(env(safe-area-inset-bottom) + 15px); display: flex; gap: 15px; z-index: 100;
+/* INPUT ĐẶT TÊN */
+.inputGroup { display: flex; gap: 10px; width: 100%; }
+.nameInput {
+  flex: 1; background: rgba(0,0,0,0.6); border: 1px solid #b388ff; color: #fff;
+  padding: 12px; font-family: 'Share Tech Mono', monospace; font-size: 20px;
+  border-radius: 6px; text-align: center; outline: none; transition: 0.2s;
 }
-.actionBtn { 
-  background: rgba(10, 20, 40, 0.7); color: #fff; border: 2px solid #00e5ff; border-radius: 15px; 
-  padding: 8px 18px; font-size: clamp(12px, 3.5vw, 16px); font-family: inherit; cursor: pointer; display: flex; 
-  align-items: center; gap: 6px; backdrop-filter: blur(10px); box-shadow: 0 0 15px rgba(0, 229, 255, 0.3); text-transform: uppercase; letter-spacing: 1px;
+.nameInput:focus { border-color: #00e5ff; box-shadow: 0 0 15px rgba(0, 229, 255, 0.3); }
+.diceBtn {
+  background: rgba(179, 136, 255, 0.2); border: 1px solid #b388ff; border-radius: 6px;
+  font-size: 24px; padding: 0 15px; cursor: pointer; transition: 0.2s;
 }
-.actionBtnApple { border-color: #fff; box-shadow: 0 0 15px rgba(255, 255, 255, 0.3); }
+.diceBtn:hover { background: rgba(179, 136, 255, 0.5); transform: rotate(15deg); }
 
-/* =========================================================
-   🚀 4. DANH SÁCH CONFIG VỊ TRÍ ĐỘNG (MEDIA QUERIES)
-========================================================= */
-
-/* --- 4.1. ĐIỆN THOẠI BÉ (iPhone SE) - MÀN DỌC --- */
-@media screen and (max-width: 375px) and (orientation: portrait) {
-  .title { top: 35%; font-size: 35px; letter-spacing: 2px; }
-  /* ĐIỀU CHỈNH CỬA TRÁI (VÔ CỰC) */
-  .cardEndless { top: 50%; left: 12%; width: 29.5%; height: 28%; }
-  /* ĐIỀU CHỈNH CỬA PHẢI (CHIẾN DỊCH) */
-  .cardCampaign { top: 50%; right: 13%; width: 29.5%; height: 28%; }  
-  .cardBanner { height: 40%; font-size: 35px; }
-  .cardTitle { font-size: 16px; }
-  /* .desc { display: none; } */
-  .bottomAction { bottom: 14%;}
+.confirmBtn {
+  width: 100%; background: #00e5ff; color: #000; border: none; padding: 12px;
+  border-radius: 6px; font-family: inherit; font-size: 22px; font-weight: bold;
+  cursor: pointer; transition: 0.2s;
 }
+.confirmBtn:hover { background: #66fcf1; box-shadow: 0 0 20px rgba(0, 229, 255, 0.5); }
+.confirmBtn:disabled { background: #64748b; cursor: not-allowed; box-shadow: none; }
 
-/* --- 4.2. ĐIỆN THOẠI CHUẨN (iPhone 13, 14, 15) - MÀN DỌC --- */
-@media screen and (min-width: 376px) and (max-width: 430px) and (orientation: portrait) {
-  .title { top: 35%; font-size: 45px; letter-spacing: 3px; }
-  /* ĐIỀU CHỈNH CỬA TRÁI (VÔ CỰC) */
-  .cardEndless { top: 50%; left: 12%; width: 29.5%; height: 28%; }
-  /* ĐIỀU CHỈNH CỬA PHẢI (CHIẾN DỊCH) */
-  .cardCampaign { top: 50%; right: 13%; width: 29.5%; height: 28%; }
-  .cardBanner { height: 45%; font-size: 40px; }
-  .cardTitle { font-size: 18px; }
-  /* .desc { font-size: 11px; display: none; }  */
-  .bottomAction { bottom: 14.5%; }
-  .actionBtn { font-size: 14px; }
+/* VÀO GAME */
+.welcomeText { margin: 0; color: #2ecc71; font-size: 26px; text-shadow: 0 0 10px rgba(46, 204, 113, 0.5); text-align: center;}
+.enterGameBtn {
+  width: 100%; background: linear-gradient(90deg, #ff416c, #ff4b2b); color: #fff;
+  border: none; padding: 15px; border-radius: 8px; font-family: inherit; font-size: 26px;
+  font-weight: bold; cursor: pointer; letter-spacing: 2px;
+  box-shadow: 0 0 20px rgba(255, 75, 43, 0.5); transition: 0.2s;
 }
-
-/* --- 4.3. ĐIỆN THOẠI LỚN / PHABLET - MÀN DỌC --- */
-@media screen and (min-width: 431px) and (max-width: 600px) and (orientation: portrait) {
-  .title { top: 30%; font-size: 55px; }
-  .cardEndless { top: 50%; left: 12%; width: 29.5%; height: 28%; }
-  .cardCampaign { top: 50%; right: 13%; width: 29.5%; height: 28%; }
-  .cardBanner { height: 45%; font-size: 50px; }
-  .cardTitle { font-size: 20px; }
-  .desc { display: block; font-size: 12px; }
-  .bottomAction { bottom: 14% }
-}
-
-/* --- 4.4. MÁY TÍNH BẢNG (iPad) - MÀN DỌC --- */
-@media screen and (min-width: 601px) and (max-width: 1024px) and (orientation: portrait) {
-  .title { top: 30%; font-size: 70px; }
-  .cardEndless { top: 50%; left: 12%; width: 29.5%; height: 28%; }
-  .cardCampaign { top: 50%; right: 13%; width: 29.5%; height: 28%; }
-  .cardBanner { height: 50%; font-size: 60px; }
-  .cardTitle { font-size: 24px; }
-  .desc { display: block; font-size: 16px; }
-  .bottomAction { bottom: 5%; width: 60%; }
-}
-
-/* --- 4.5. MÀN HÌNH ĐIỆN THOẠI - XOAY NGANG --- */
-@media screen and (max-height: 500px) and (orientation: landscape) {
-  .topNav { top: 10px; }
-  .title { top: 25%; font-size: 35px; }
-  .cardEndless { top: 50%; left: 12%; width: 29.5%; height: 28%; }
-  .cardCampaign { top: 50%; right: 13%; width: 29.5%; height: 28%; }
-  .cardBanner { height: 40%; font-size: 30px; margin-bottom: 2px;}
-  .cardTitle { font-size: 14px; }
-  /* .desc { display: none; } */
-  .bottomAction { bottom: 5%; }
-  .actionBtn { padding: 5px 10px; font-size: 12px; }
-}
-
-/* --- 4.6. PC & TABLET LỚN - MÀN NGANG --- */
-@media screen and (min-height: 501px) and (min-width: 768px) and (orientation: landscape) {
-  .topNav { top: 25px; }
-  .resourceHud { display: flex; gap: 30px; padding: 10px 25px; }
-  .resItem { font-size: 24px; }
-  .title { top: 15%; font-size: 80px; letter-spacing: 5px; }
-  .cardEndless { top: 40%; left: 16%; width: 22.5%; height: 44%; max-width: 450px; }
-  .cardCampaign { top: 40%; right: 16.2%; width: 23%; height: 44%; max-width: 450px; }
-  .card { padding: 20px; }
-  .cardBanner { height: 50%; font-size: 70px; }
-  .cardTitle { font-size: 30px; margin-top: 10px;}
-  .desc { display: block; font-size: 18px; }
-  .bottomAction { bottom: 3%; }
-  .actionBtn { padding: 10px 25px; font-size: 18px; }
-}
+.enterGameBtn:hover { transform: scale(1.05); box-shadow: 0 0 30px rgba(255, 75, 43, 0.8); }

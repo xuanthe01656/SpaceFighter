@@ -2,47 +2,58 @@
 /* 1. SETUP CHUNG & RESET                    */
 /* ========================================= */
 * {
-    box-sizing: border-box; /* Bắt buộc để padding/border không làm phình kích thước phần tử */
+    box-sizing: border-box; 
     margin: 0;
     padding: 0;
     -webkit-tap-highlight-color: transparent;
 }
 
-body {
-    overflow: auto; /* Chặn cuộn trang ngoài ý muốn */
-    background-color: #0d0e15;
-    font-family: 'VT323', monospace;
-    touch-action: none; /* Chống pull-to-refresh trên mobile */
-    user-select: none;  /* Chống bôi đen text khi bấm spam */
+:root {
+    background-color: #03060e; 
 }
 
-#root { width: 100%; height: 100vh; height: 100dvh;}
-#gameCanvas { display: block; width: 100%; height: 100%; }
+body {
+    background-color: #03060e;
+    font-family: 'VT323', monospace;
+    overflow: hidden; 
+    touch-action: none; 
+    user-select: none;  
+    -webkit-user-select: none;
+    overscroll-behavior-y: none; /* Chặn hiệu ứng kéo nảy (bounce) trên iOS */
+}
+
+#root { 
+    width: 100%; 
+    height: 100vh; 
+    height: 100dvh; 
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+img {
+    image-rendering: -webkit-optimize-contrast;
+}
 
 /* ========================================= */
-/* 2. LAYOUT CƠ BẢN (UI LAYER)               */
+/* 2. GAME UI LAYER (Lobby, Game Over)       */
 /* ========================================= */
 .ui-layer {
     position: absolute; top: 0; left: 0; 
     width: 100%; height: 100%;
-    pointer-events: none; /* Xuyên qua layer này để thao tác canvas nếu cần */
+    pointer-events: none; 
     display: flex; flex-direction: column;
     justify-content: center; align-items: center;
     text-align: center; text-shadow: 2px 2px 0 #000;
     z-index: 100;
+    /* Padding né tai thỏ trên điện thoại */
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
-.title { 
-    font-size: 70px; color: #FFD700; 
-    margin-bottom: 10px; 
-    animation: float 3s ease-in-out infinite; 
-}
+.title { font-size: 70px; color: #FFD700; margin-bottom: 10px; animation: float 3s ease-in-out infinite; }
 .subtitle { font-size: 24px; color: #fff; margin-bottom: 30px; }
 
-/* ========================================= */
-/* 3. NÚT BẤM (BUTTONS) & MENU GRID          */
-/* ========================================= */
+/* MENU & BUTTONS */
 .menu-grid {
     display: grid; grid-template-columns: 1fr 1fr; gap: 15px;
     width: 90%; max-width: 400px; margin-bottom: 20px;
@@ -56,286 +67,144 @@ body {
     cursor: pointer; border-radius: 12px;
     transition: all 0.1s; text-transform: uppercase; width: 100%;
 }
-
 .btn:active { transform: translateY(4px); box-shadow: 0 0 0 transparent !important; filter: brightness(0.9); }
-
-/* Bảng màu Nút */
 .btn-red { background: linear-gradient(to bottom, #ff6b81, #ff4757); box-shadow: 0 6px 0 #b33939; text-shadow: 1px 1px 0 #b33939; }
 .btn-purple { background: linear-gradient(to bottom, #a55eea, #8854d0); box-shadow: 0 6px 0 #5f27cd; text-shadow: 1px 1px 0 #5f27cd; }
 .btn-blue { background: linear-gradient(to bottom, #48dbfb, #0abde3); box-shadow: 0 6px 0 #0984e3; text-shadow: 1px 1px 0 #0984e3; }
 .btn-green { background: linear-gradient(to bottom, #55efc4, #00b894); box-shadow: 0 6px 0 #006266; text-shadow: 1px 1px 0 #006266; }
-
 .btn-small { min-width: auto; width: auto; padding: 10px 20px; font-size: 22px; }
 .btn-back { margin-top: 20px; background: transparent; border: 2px solid #ff4757; color: #ff4757; font-size: 24px; padding: 8px 20px; }
 .btn-back:hover { background: #ff4757; color: white; }
 
-/* ========================================= */
-/* 4. GAME HUD (IN-GAME UI)                  */
-/* ========================================= */
-.hud { position: absolute; top: 20px; left: 20px; font-size: 40px; color: white; z-index: 10; pointer-events: none; display: none; }
-.level-hud { position: absolute; top: 60px; left: 20px; font-size: 24px; color: #FFD700; z-index: 10; pointer-events: none; display: none; }
-
-.online-hud {
-    position: absolute; top: 10px; left: 10px; z-index: 100;
-    background: rgba(0, 0, 0, 0.6); padding: 10px; border-radius: 8px;
-    font-family: 'VT323', monospace; text-align: left; border: 1px solid #444;
-}
-.p-info { font-size: 24px; color: #fff; text-shadow: 2px 2px 0 #000; margin-bottom: 5px; }
-
-.control-btn {
-    position: absolute; top: 20px; font-size: 30px; color: white;
-    cursor: pointer; pointer-events: auto; z-index: 10;
-    background: rgba(0,0,0,0.5); border-radius: 5px; padding: 5px 10px; border: 2px solid white;
-}
-#muteBtn { right: 20px; }
-#pauseBtn { right: 80px; }
-
-/* ========================================= */
-/* 5. COMPONENTS (LOBBY, SHOP, LEADERBOARD)  */
-/* ========================================= */
-/* Lobby */
-.lobby-panel {
-    background: rgba(0, 0, 0, 0.8); border: 3px solid #0abde3; border-radius: 15px;
+/* LOBBY & INPUT FORMS */
+.lobby-panel, .gameover-panel {
+    background: rgba(0, 0, 0, 0.85); border: 3px solid #0abde3; border-radius: 15px;
     padding: 30px; width: 90%; max-width: 450px;
     box-shadow: 0 0 20px rgba(10, 189, 227, 0.3);
     display: flex; flex-direction: column; gap: 15px; pointer-events: auto;
+    align-items: center; 
 }
-.room-input {
-    font-family: 'VT323', monospace; font-size: 35px; padding: 10px;
+.gameover-panel { border-color: #ff4757; box-shadow: 0 0 30px rgba(255, 71, 87, 0.4); animation: popIn 0.3s ease-out; }
+
+.room-input, input[type="text"] {
+    font-family: 'VT323', monospace; font-size: 24px; padding: 12px;
     border-radius: 8px; border: 2px solid #a55eea; width: 100%; text-align: center;
-    background: rgba(20, 20, 20, 0.9); color: #FFD700; outline: none; transition: 0.3s; letter-spacing: 3px;
+    background: rgba(20, 20, 20, 0.9); color: #FFD700; outline: none; transition: 0.3s;
+    pointer-events: auto;
 }
-.room-input:focus { border-color: #FFD700; box-shadow: 0 0 15px rgba(255, 215, 0, 0.5); }
-/* Tinh chỉnh lại nhóm Input (Mã Số + Nút Vào) */
+.room-input:focus, input[type="text"]:focus { border-color: #FFD700; box-shadow: 0 0 15px rgba(255, 215, 0, 0.5); }
+
+/* KHUNG NHẬP TÊN TRÊN MÀN HÌNH NGANG/PC */
 .input-group { 
-    display: flex; 
-    gap: 10px; 
-    align-items: stretch; /* Ép nút và input cao bằng nhau */
-    justify-content: center; 
-    width: 100%; /* Không cho phép tràn khỏi panel */
+    display: flex; flex-direction: row; gap: 10px; width: 100%; align-items: stretch;
 }
+.input-group input { flex: 1; min-width: 0; }
+.input-group .btn { width: auto !important; min-width: 100px; flex-shrink: 0; margin: 0; }
 
-/* Ép ô nhập Mã Số tự động co lại cho vừa khoảng trống */
-.input-group input {
-    flex: 1; 
-    min-width: 0; /* Quan trọng: Ngăn không cho input đẩy lồi flexbox */
-    width: 100%;
-}
-
-/* Khống chế nút VÀO nhỏ lại, không bị ảnh hưởng bởi width: 100% của .btn */
-.input-group .btn {
-    width: auto !important; 
-    min-width: 90px;
-    flex-shrink: 0; /* Cấm nút VÀO bị bẹp dúm khi màn hình quá nhỏ */
-    margin: 0 !important;
-}
-
-/* Fix luôn cho ô nhập Tên Chiến Binh căng ngang cho đều, đẹp mắt */
-#lobbyNameInput, input[placeholder="NHẬP TÊN CHIẾN BINH"] {
-    width: 100% !important;
-}
 .room-code-box {
-    font-size: 70px; font-weight: bold; color: #55efc4; border: 4px dashed #55efc4;
-    background: rgba(0, 0, 0, 0.5); padding: 10px; margin: 15px 0; text-shadow: 0 0 10px #55efc4;
-    letter-spacing: 5px; user-select: text; pointer-events: auto;
+    font-size: 50px; font-weight: bold; color: #55efc4; border: 4px dashed #55efc4;
+    background: rgba(0, 0, 0, 0.5); padding: 10px; width: 100%;
+    text-shadow: 0 0 10px #55efc4; letter-spacing: 5px; user-select: text; pointer-events: auto;
 }
 
-.divider { display: flex; align-items: center; color: #aaa; font-size: 20px; margin: 10px 0; }
-.divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: #555; margin: 0 10px; }
+/* GAME OVER TEXTS */
+.go-title { font-size: 50px; color: #ff4757; text-shadow: 0 0 10px #ff4757; font-weight: bold; margin-bottom: 5px;}
+.score-display { font-size: 24px; color: #fff; background: rgba(255, 255, 255, 0.1); padding: 10px 30px; border-radius: 50px; border: 1px solid #555; width: 100%; }
+.score-display span { color: #FFD700; font-weight: bold; font-size: 35px; }
+.best-score { font-size: 20px; color: #aaa; }
 
-/* Leaderboard */
+/* LEADERBOARD */
 .leaderboard-box { 
     background: rgba(0,0,0,0.95); padding: 20px; border: 2px solid #FFD700; border-radius: 10px; 
     width: 90%; max-width: 500px; max-height: 50vh; overflow-y: auto; pointer-events: auto; margin-bottom: 20px; 
+    touch-action: pan-y; -webkit-overflow-scrolling: touch;
 }
 table { width: 100%; color: white; font-size: 20px; border-collapse: collapse; }
 th { border-bottom: 1px solid #FFD700; padding: 5px; color: #FFD700; position: sticky; top: -20px; background: #000; }
 td { padding: 8px; border-bottom: 1px solid #444; }
 
 .tab-container { display: flex; justify-content: center; gap: 10px; margin-bottom: 10px; }
-.tab-btn { 
-    background: #333; color: #fff; border: 1px solid #777; padding: 5px 15px; 
-    cursor: pointer; font-family: 'VT323', monospace; font-size: 20px; pointer-events: auto; transition: all 0.2s;
-}
+.tab-btn { background: #333; color: #fff; border: 1px solid #777; padding: 5px 15px; cursor: pointer; font-family: 'VT323', monospace; font-size: 20px; pointer-events: auto; transition: all 0.2s; }
 .tab-btn.active { background: #FFD700; color: #000; border-color: #FFD700; font-weight: bold; }
 
-/* Game Over */
-.gameover-panel {
-    background: rgba(0, 0, 0, 0.9); border: 3px solid #ff4757; border-radius: 20px;
-    padding: 40px; width: 90%; max-width: 500px; box-shadow: 0 0 30px rgba(255, 71, 87, 0.4);
-    display: flex; flex-direction: column; align-items: center; gap: 15px; animation: popIn 0.3s ease-out;
-    pointer-events: auto;
-}
-.go-title { font-size: 60px; color: #ff4757; text-shadow: 0 0 10px #ff4757; margin-bottom: 5px; font-weight: bold; letter-spacing: 2px; }
-.score-display { font-size: 30px; color: #fff; background: rgba(255, 255, 255, 0.1); padding: 10px 30px; border-radius: 50px; border: 1px solid #555; margin-bottom: 10px; }
-.score-display span { color: #FFD700; font-weight: bold; font-size: 35px; }
-.best-score { font-size: 20px; color: #aaa; margin-top: -10px; margin-bottom: 15px; }
+/* HUD */
+.hud { position: absolute; top: max(20px, env(safe-area-inset-top)); left: max(20px, env(safe-area-inset-left)); font-size: 40px; color: white; z-index: 10; pointer-events: none; display: none; }
+.level-hud { position: absolute; top: max(60px, env(safe-area-inset-top)); left: max(20px, env(safe-area-inset-left)); font-size: 24px; color: #FFD700; z-index: 10; pointer-events: none; display: none; }
+.control-btn { position: absolute; top: max(20px, env(safe-area-inset-top)); font-size: 30px; color: white; cursor: pointer; pointer-events: auto; z-index: 10; background: rgba(0,0,0,0.5); border-radius: 5px; padding: 5px 10px; border: 2px solid white; }
+#muteBtn { right: max(20px, env(safe-area-inset-right)); }
+#pauseBtn { right: max(80px, env(safe-area-inset-right)); }
 
-/* Utility */
 .hidden { display: none !important; }
 
-/* ========================================= */
-/* 6. ANIMATIONS                             */
-/* ========================================= */
 @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
 @keyframes popIn { 0% { transform: scale(0.8); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
 
-#levelUpMsg {
-    position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%);
-    font-size: 80px; color: #FFD700; font-weight: bold; text-shadow: 4px 4px 0px #ff4757; 
-    pointer-events: none; z-index: 1005; animation: retroLevelUp 1.5s forwards;
+/* ========================================= */
+/* 3. UTILITY CLASSES (Cho Inventory/Shop)   */
+/* ========================================= */
+.scrollable-layer {
+    pointer-events: auto; 
+    touch-action: pan-y;  
+    -webkit-overflow-scrolling: touch; 
+    overflow-y: auto;
+    width: 100%;
+    height: 100%;
 }
-@keyframes retroLevelUp {
-    0% { opacity: 0; transform: translate(-50%, -30%); }
-    20% { opacity: 1; transform: translate(-50%, -50%); }
-    80% { opacity: 1; transform: translate(-50%, -50%); }
-    100% { opacity: 0; transform: translate(-50%, -70%); }
-}
-/* Hiệu ứng ngón tay bấm lên xuống */
-@keyframes tapHand {
-    0%, 100% { transform: translateY(0) scale(1); opacity: 0.8; }
-    50% { transform: translateY(-20px) scale(0.9); opacity: 1; }
-}
+.scrollable-layer::-webkit-scrollbar { width: 4px; }
+.scrollable-layer::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.1); border-radius: 4px; }
+.scrollable-layer::-webkit-scrollbar-track { background: transparent; }
 
-/* Hiệu ứng chữ nhấp nháy */
-@keyframes pulseText {
-    0%, 100% { opacity: 0.5; transform: scale(1); }
-    50% { opacity: 1; transform: scale(1.05); }
-}
 /* ================================================================= */
-/* 📱 7. RESPONSIVE: MOBILE PORTRAIT (Màn dọc < 600px)               */
+/* 📱 RESPONSIVE MOBILE PORTRAIT (Màn dọc) - SỬA LỖI FORM NHẬP TÊN   */
 /* ================================================================= */
 @media only screen and (max-width: 600px) {
-    .title { font-size: 40px; margin-bottom: 10px; }
-    .subtitle { font-size: 18px; margin-bottom: 15px; }
-    .input-group .btn { font-size: 20px !important; padding: 5px 15px !important; height: auto !important; }
-    .btn { font-size: 18px; padding: 12px 5px; }
-    .lobby-panel, .gameover-panel { padding: 20px 15px !important; width: 95% !important; gap: 10px !important; }
+    .title { font-size: 45px; }
+    .subtitle { font-size: 18px; }
+    .menu-grid { width: 100%; }
     
-    .room-input { font-size: 24px; padding: 10px; }
-    .room-code-box { font-size: 45px; padding: 5px; margin: 10px 0; }
-    .btn-back { font-size: 16px; padding: 5px 15px; margin-top: 10px; }
-
-    .go-title { font-size: 42px !important; letter-spacing: 0; }
-    .score-display { font-size: 20px; padding: 5px 20px; } 
-    .score-display span { font-size: 24px; }
+    .lobby-panel, .gameover-panel { padding: 20px 15px; width: 95%; gap: 12px; }
     
-    /* Xếp các nút Chơi lại / Menu dọc lại cho dễ bấm */
-    .gameover-panel > div:last-child { flex-direction: column !important; gap: 10px !important; margin-top: 5px !important; }
-    .gameover-panel > div:last-child .btn { font-size: 18px !important; width: 100% !important; padding: 12px !important; }
+    /* FIX: Bẻ khung nhập tên thành 2 dòng (Input ở trên, Nút ở dưới) */
+    .input-group { 
+        flex-direction: column; 
+        gap: 10px;
+    }
+    .input-group .btn { 
+        width: 100% !important; 
+        padding: 12px !important;
+        font-size: 22px !important;
+    }
     
-    #levelUpMsg { font-size: 50px; text-shadow: 3px 3px 0px #ff4757; }
+    .room-input, input[type="text"] { font-size: 22px; padding: 12px; }
+    .room-code-box { font-size: 40px; letter-spacing: 2px; }
+    
+    .go-title { font-size: 40px; }
+    .score-display { font-size: 20px; padding: 10px; }
+    .score-display span { font-size: 28px; }
+    
+    .gameover-panel > div:last-child { flex-direction: column !important; gap: 10px !important; width: 100%; }
+    .gameover-panel > div:last-child .btn { width: 100% !important; padding: 12px !important; font-size: 20px !important;}
 }
 
 /* ================================================================= */
-/* 📱 8. RESPONSIVE: MOBILE LANDSCAPE (Màn ngang < 500px chiều cao)  */
+/* 📱 RESPONSIVE MOBILE LANDSCAPE (Màn ngang)                        */
 /* ================================================================= */
 @media only screen and (max-height: 500px) and (orientation: landscape) {
     .ui-layer { justify-content: flex-start; padding-top: 10px; overflow-y: auto; overflow-x: hidden; }
-
     .title { font-size: 35px; margin-bottom: 5px; margin-top: 5px; }
     .subtitle { font-size: 16px; margin-bottom: 5px; }
-
-    /* Menu 4 cột dàn ngang */
     .menu-grid { grid-template-columns: repeat(4, 1fr); gap: 10px; width: 95%; max-width: 700px; }
     .btn { font-size: 16px !important; padding: 8px 5px !important; }
-
-    /* Lobby dàn ngang */
-    .lobby-panel { 
-        flex-direction: row !important; flex-wrap: wrap; justify-content: center; 
-        padding: 10px !important; gap: 10px !important; max-width: 600px; margin-bottom: 20px;
-    }
-    .room-input { font-size: 20px !important; padding: 5px !important; height: 40px; }
-    .room-code-box { font-size: 40px !important; margin: 5px 0 !important; }
-
-    /* Game Over Panel - Ép mỏng lại */
-    .gameover-panel { 
-        flex-direction: column !important; padding: 10px 20px !important; 
-        width: 85% !important; max-width: 500px !important; gap: 5px !important; margin-bottom: 20px;
-    }
-    .go-title { font-size: 30px !important; margin-bottom: 0 !important; }
-    .score-display { font-size: 16px !important; padding: 2px 20px !important; margin-bottom: 0 !important; }
-    .score-display span { font-size: 20px !important; }
-    .best-score { font-size: 14px !important; margin-bottom: 0 !important; }
-
-    /* Ép khung nhập tên Game Over nằm ngang */
-    .gameover-panel > div:nth-child(4) { 
-        flex-direction: row !important; padding-top: 5px !important; border-top: none !important; 
-    }
-    input[placeholder="NHẬP TÊN BẠN"] { width: 60% !important; font-size: 16px !important; padding: 5px !important; }
-    .gameover-panel > div:nth-child(4) .btn-green { width: 40% !important; font-size: 14px !important; padding: 5px !important; }
     
-    /* Bóp nút chơi lại */
-    .gameover-panel > div:last-child { margin-top: 5px !important; gap: 10px !important; }
-    .gameover-panel > div:last-child .btn { font-size: 16px !important; padding: 5px !important; }
+    .lobby-panel, .gameover-panel { flex-direction: row !important; flex-wrap: wrap; justify-content: center; padding: 15px !important; max-width: 600px;}
+    .room-input, input[type="text"] { font-size: 18px !important; padding: 8px !important; }
+    .room-code-box { font-size: 35px !important; margin: 5px 0 !important; }
+    .go-title { font-size: 30px; }
+    .score-display { font-size: 16px; padding: 5px 15px; width: auto;}
     
-    .leaderboard-box { max-height: 40vh !important; }
-    #levelUpMsg { font-size: 40px; text-shadow: 2px 2px 0px #ff4757; }
-}
-/* ========================================= */
-/* 9. PIXEL ICONS (SPRITE SHEET - BẢN DỌC)   */
-/* ========================================= */
-
-.pixel-icon {
-    display: inline-block;
-    width: 32px;
-    height: 32px;
-    background-image: url('/images/icons.png');
-    background-repeat: no-repeat;
-    /* KHUÔN VÀNG THƯỚC NGỌC CỦA GAME RETRO: Giữ ảnh không bị nhòe khi phóng to */
-    image-rendering: pixelated; 
-    vertical-align: middle;
-}
-
-/* Ảnh xuất dọc nên ta thay đổi tọa độ Y (số thứ 2) */
-.icon-coin { 
-    background-position: 0px 0px; 
-}
-
-/* Trái tim nằm ở hàng 2, đẩy ảnh lên 32px */
-.icon-heart { 
-    background-position: 0px -32px; 
-}
-
-/* TV nằm ở hàng 3, đẩy ảnh lên 64px */
-.icon-tv { 
-    background-position: 0px -64px; 
-}
-
-/* Lớp phụ trợ nếu cần thu nhỏ/phóng to icon */
-.icon-sm { transform: scale(0.8); }
-.icon-lg { transform: scale(1.2); }
-/* Nút Đóng hình dấu X góc trên trái */
-.btn-close {
-    position: absolute;
-    top: calc(env(safe-area-inset-top) + 20px);
-    left: 20px;
-    width: 45px;
-    height: 45px;
-    border-radius: 50%;
-    background-color: #ff4757;
-    color: white;
-    border: 3px solid white;
-    font-size: 24px;
-    font-weight: bold;
-    cursor: pointer;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-    pointer-events: auto;
-    box-shadow: 0 4px 10px rgba(255, 71, 87, 0.5);
-    transition: transform 0.2s, background-color 0.2s;
-    font-family: Arial, sans-serif; /* Dùng font chuẩn cho dấu X cho cân đối */
-}
-
-.btn-close:active {
-    transform: scale(0.9);
-    background-color: #ff6b81;
-}
-
-/* Fix cuộn mượt cho Shop và Leaderboard */
-.scrollable-layer {
-    pointer-events: auto !important; /* Bắt toàn bộ thao tác vuốt trên màn hình */
-    touch-action: pan-y !important;  /* Cho phép hệ thống xử lý thao tác vuốt dọc */
+    /* Đảm bảo màn ngang vẫn nằm trên cùng 1 hàng */
+    .input-group { flex-direction: row; }
+    .input-group .btn { width: auto !important; padding: 8px 15px !important; font-size: 18px !important; }
+    
+    .leaderboard-box { max-height: 40vh; }
 }

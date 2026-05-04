@@ -259,14 +259,15 @@ export default function ItemModal({
                 }}
               />
 
-              {/* Image or crate icon */}
+              {/* Image or crate icon - Thêm logic onError */}
               {isCrate
                 ? <div className={styles.crateIconWrap}>{item.icon}</div>
                 : <img
-                    src={baseInfo?.imgSrc || baseInfo?.imgHq || baseInfo?.imgTop}
+                    src={baseInfo?.imgSrc || baseInfo?.imgHq || baseInfo?.imgTop || '/images/no_image.png'}
                     alt="item"
                     className={styles.itemImage}
                     style={{ filter: `drop-shadow(0 0 18px ${rarityColor}60)` }}
+                    onError={(e) => { e.target.onerror = null; e.target.src = '/images/no_image.png'; }}
                   />
               }
 
@@ -476,7 +477,7 @@ export default function ItemModal({
                                   </span>
                                 </div>
 
-                                {/* Sacrifice grid */}
+                                {/* Sacrifice grid - Thêm logic onError cho phôi */}
                                 <div className={styles.sacrificeGrid}>
                                   {(resources?.duplicateItems || []).map(dup => {
                                     const isSel = selectedSacrifices.includes(dup.uuid);
@@ -485,7 +486,6 @@ export default function ItemModal({
                                     if (dup.type === 'aircraft')   src = AIRCRAFTS?.find(a => a.id === dup.id)?.imgSrc;
                                     else if (dup.type === 'pilot') src = PILOTS?.find(p => p.id === dup.id)?.imgSrc;
                                     else src = GEAR_CATALOG?.[dup.type]?.find(g => g.id === dup.baseId)?.imgSrc;
-                                    const emoji = { mainGun:'🔫', armor:'🛡️', drone:'🛰️', wingman:'🚀' }[dup.type] || '⚙️';
                                     return (
                                       <div
                                         key={dup.uuid}
@@ -494,8 +494,18 @@ export default function ItemModal({
                                         onClick={() => toggleSacrifice(dup.uuid)}
                                       >
                                         {src
-                                          ? <img src={src} alt="mat" style={{ width: '68%', height: '68%', objectFit: 'contain', filter: `drop-shadow(0 0 5px ${rc}80)` }} />
-                                          : <span style={{ fontSize: '26px' }}>{emoji}</span>}
+                                          ? <img 
+                                              src={src} 
+                                              alt="mat" 
+                                              style={{ width: '68%', height: '68%', objectFit: 'contain', filter: `drop-shadow(0 0 5px ${rc}80)` }} 
+                                              onError={(e) => { e.target.onerror = null; e.target.src = '/images/no_image.png'; }}
+                                            />
+                                          : <img 
+                                              src="/images/no_image.png" 
+                                              alt="no-image" 
+                                              style={{ width: '68%', height: '68%', objectFit: 'contain', opacity: 0.5 }} 
+                                            />
+                                        }
                                         <span className={styles.sacLvl} style={{ borderColor: rc }}>
                                           Lv.{dup.level || 1}
                                         </span>

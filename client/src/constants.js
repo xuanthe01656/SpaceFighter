@@ -795,18 +795,59 @@ export const PLANET_CONFIG = {
   }
 };
 
-// Cấu trúc chuẩn cho 10 ải của MỌI tinh cầu
+/// Cấu trúc chuẩn cho 10 ải của MỌI tinh cầu
 export const STAGE_CONFIG = {
-  1: { waves: 5, baseEnemies: 5, timeLimit: 90 },      
-  2: { waves: 5, baseEnemies: 8, timeLimit: 100 },     
-  3: { waves: 7, baseEnemies: 10, timeLimit: 120 },
-  4: { waves: 7, baseEnemies: 15, timeLimit: 140 },
-  5: { waves: 10, baseEnemies: 20, hasBoss: true, bossType: 'mech', timeLimit: 180 },
-  6: { waves: 8, baseEnemies: 22, timeLimit: 150 },
-  7: { waves: 8, baseEnemies: 25, timeLimit: 160 },
-  8: { waves: 10, baseEnemies: 28, timeLimit: 180 },
-  9: { waves: 12, baseEnemies: 35, timeLimit: 210 },
-  10: { waves: 15, baseEnemies: 40, hasBoss: true, bossType: 'alien', timeLimit: 240 } 
+  1: { waves: 5, baseEnemies: 5, timeLimit: 90, expReward: 100 },      
+  2: { waves: 5, baseEnemies: 8, timeLimit: 100, expReward: 150 },     
+  3: { waves: 7, baseEnemies: 10, timeLimit: 120, expReward: 250 },
+  4: { waves: 7, baseEnemies: 15, timeLimit: 140, expReward: 400 },
+  5: { waves: 10, baseEnemies: 20, hasBoss: true, bossType: 'mech', timeLimit: 180, expReward: 800 },
+  6: { waves: 8, baseEnemies: 22, timeLimit: 150, expReward: 500 },
+  7: { waves: 8, baseEnemies: 25, timeLimit: 160, expReward: 650 },
+  8: { waves: 10, baseEnemies: 28, timeLimit: 180, expReward: 900 },
+  9: { waves: 12, baseEnemies: 35, timeLimit: 210, expReward: 1200 },
+  10: { waves: 15, baseEnemies: 40, hasBoss: true, bossType: 'alien', timeLimit: 240, expReward: 2500 } 
+};
+// ==========================================
+// --- TÊN GỌI RIÊNG CHO TỪNG ẢI (LORE) ---
+// ==========================================
+export const PLANET_STAGE_NAMES = {
+  1: { // Trạm Tiền Tiêu Alpha
+    1: { vi: 'Vành Đai Phế Liệu', en: 'Debris Belt' },
+    2: { vi: 'Trạm Thu Phát Rìa', en: 'Outer Relay Station' },
+    3: { vi: 'Khu Mỏ Cũ', en: 'Abandoned Mines' },
+    4: { vi: 'Hành Lang Giao Tranh', en: 'Conflict Corridor' },
+    5: { vi: 'Cổng Phòng Thủ Chóp', en: 'Vanguard Gate' },
+    6: { vi: 'Vùng Phân Tán', en: 'Scattering Zone' },
+    7: { vi: 'Căn Cứ Tiền Phương', en: 'Forward Base' },
+    8: { vi: 'Lò Phản Ứng Phụ', en: 'Sub-Reactor' },
+    9: { vi: 'Hành Lang Lõi', en: 'Core Pathway' },
+    10: { vi: 'Trạm Chỉ Huy Alpha', en: 'Alpha Command Center' }
+  },
+  2: { // Tinh Vân Băng Giá
+    1: { vi: 'Biển Băng Trôi', en: 'Drifting Ice Sea' },
+    2: { vi: 'Bão Tuyết Ion', en: 'Ion Blizzard' },
+    3: { vi: 'Núi Băng Lục Giác', en: 'Hex-Glacier' },
+    4: { vi: 'Khe Nứt Lạnh Lẽo', en: 'Freezing Rift' },
+    5: { vi: 'Cổng Băng Vĩnh Cửu', en: 'Permafrost Gate' },
+    6: { vi: 'Nghĩa Địa Phi Thuyền', en: 'Frozen Shipyard' },
+    7: { vi: 'Trạm Nghiên Cứu Băng', en: 'Cryo-Lab' },
+    8: { vi: 'Mỏ Pha Lê Sâu', en: 'Deep Crystal Mines' },
+    9: { vi: 'Tâm Bão Tinh Vân', en: 'Eye of the Nebula' },
+    10: { vi: 'Lõi Băng Cực Đại', en: 'Absolute Zero Core' }
+  },
+  3: { // Hỏa Ngục Prime
+    1: { vi: 'Sông Dung Nham', en: 'Magma River' },
+    2: { vi: 'Biển Lửa Plasma', en: 'Plasma Fire Sea' },
+    3: { vi: 'Đầm Lầy Lưu Huỳnh', en: 'Sulfur Swamps' },
+    4: { vi: 'Vách Đá Cháy', en: 'Burning Cliffs' },
+    5: { vi: 'Cổng Hỏa Ngục', en: 'Inferno Gate' },
+    6: { vi: 'Cột Tro Bụi', en: 'Ash Pillars' },
+    7: { vi: 'Lò Rèn Hắc Ám', en: 'Dark Forge' },
+    8: { vi: 'Hành Lang Nhiệt Cháy', en: 'Thermal Corridor' },
+    9: { vi: 'Tâm Trái Đất Đỏ', en: 'Red Core Center' },
+    10: { vi: 'Lò Phản Ứng Hủy Diệt', en: 'Doomsday Reactor' }
+  }
 };
 // ==========================================
 // --- CẤU HÌNH QUÁI VẬT & TRÙM THEO TINH CẦU ---
@@ -848,6 +889,115 @@ export const PLANET_BOSSES = {
     mech: { id: 'p3_boss_fire', baseHp: 75000, scale: 1.7, hitboxW: 95, score: 300, imgSrc: '' },
     alien: { id: 'p3_boss_demon', baseHp: 200000, scale: 2.2, hitboxW: 140, score: 400, imgSrc: '' }
   }
+};
+// ==========================================
+// --- DỮ LIỆU TÂN THỦ MẶC ĐỊNH (NEW PLAYER TEMPLATE) ---
+// ==========================================
+export const DEFAULT_CAMPAIGN_DATA = {
+  progress: { currentStage: 1, highestStage: 1, combatPower: 1200,exp: 0 },
+  loadout: { pilot: "pilot_alpha", aircraft: "ship_xwing", mainGun: "item_start_gun", wingman: "", armor: "", drone: "" },
+  ownedPilots: { "pilot_alpha": { level: 1, stars: 1 } },
+  ownedAircrafts: { "ship_xwing": { level: 1, stars: 1 } },
+  items: { "item_start_gun": { baseId: "gun_laser", rarity: 1, level: 1, type: "mainGun" } },
+  materials: { gears: 0, blueprints: 0 },
+  hasClaimedFirstTopup: false,
+};
+export const FIRST_TOPUP_REWARD = {
+  aircraftId: 'ship_nova',
+  gems: 888,
+  coins: 38383
+};
+// ==========================================
+// --- ĐƯỜNG CONG KINH NGHIỆM VÀ VIP (CURVES) ---
+// ==========================================
+
+// Hàm lấy mốc tính toán dựa trên mảng
+const calculateLevelData = (totalPoints, reqArray) => {
+  let level = 1;
+  let accumulated = 0;
+  for (let i = 0; i < reqArray.length; i++) {
+    if (totalPoints >= accumulated + reqArray[i]) {
+      accumulated += reqArray[i];
+      level++;
+    } else { break; }
+  }
+  const isMaxLevel = level > reqArray.length;
+  const currentPointsInLevel = isMaxLevel ? reqArray[reqArray.length - 1] : totalPoints - accumulated;
+  const pointsNeeded = isMaxLevel ? reqArray[reqArray.length - 1] : reqArray[level - 1];
+  const percent = isMaxLevel ? 100 : Math.min((currentPointsInLevel / pointsNeeded) * 100, 100);
+
+  return { level, currentPoints: currentPointsInLevel, maxPointsForNext: pointsNeeded, percent, isMaxLevel };
+};
+
+export const calculatePlayerLevel = (exp = 0) => {
+  // Điểm cần thiết để LÊN CẤP TIẾP THEO (Càng lên cao càng dốc)
+  // Vd: Lv1 lên Lv2 cần 500. Lv2 lên Lv3 cần 1000...
+  const EXP_REQUIREMENTS = [500, 1000, 1800, 3000, 5000, 8500, 14000, 22000, 35000, 50000];
+  const data = calculateLevelData(exp, EXP_REQUIREMENTS);
+  return { level: data.level, currentExp: data.currentPoints, maxExpForNextLevel: data.maxPointsForNext, percent: data.percent, isMax: data.isMaxLevel };
+};
+
+export const calculateVIPLevel = (vipPoints = 0) => {
+  // Điểm nạp cần thiết để lên VIP tiếp theo
+  // Vd: Vip0 lên Vip1 cần 500. Vip1 lên Vip2 cần 1500 (tổng nạp 2000)...
+  const VIP_REQUIREMENTS = [500, 1500, 3000, 5000, 10000, 20000, 50000];
+  const data = calculateLevelData(vipPoints, VIP_REQUIREMENTS);
+  return { level: data.level - 1, currentPoints: data.currentPoints, maxPointsForNext: data.maxPointsForNext, percent: data.percent, isMax: data.isMaxLevel }; // VIP bắt đầu từ 0
+};
+// ==========================================
+// --- CẤU HÌNH GÓI NẠP KIM CƯƠNG (TOP-UP) ---
+// ==========================================
+export const TOPUP_PACKAGES = [
+  {
+    id: 'pack_first_topup',
+    gems: 0, 
+    price: { vi: '19,000đ', en: '$0.99' },
+    bonus: 0,
+    isFirstTopup: true
+  },
+  { 
+    id: 'pack_100_gems', 
+    gems: 100, 
+    price: { vi: '22,000đ', en: '$0.99' }, 
+    bonus: 0 
+  },
+  { 
+    id: 'pack_500_gems', 
+    gems: 500, 
+    price: { vi: '109,000đ', en: '$4.99' }, 
+    bonus: 50 
+  },
+  { 
+    id: 'pack_1200_gems', 
+    gems: 1200, 
+    price: { vi: '219,000đ', en: '$9.99' }, 
+    bonus: 200 
+  },
+  { 
+    id: 'pack_3000_gems', 
+    gems: 3000, 
+    price: { vi: '499,000đ', en: '$19.99' }, 
+    bonus: 800 
+  },
+];
+// ==========================================
+// --- HỆ THỐNG CHỈ THỊ (MISSIONS) ---
+// ==========================================
+export const MISSIONS_CONFIG = {
+  daily: [
+    { id: 'd_login', title: { vi: 'Điểm Danh Hàng Ngày', en: 'Daily Check-in' }, desc: { vi: 'Đăng nhập vào trạm không gian', en: 'Log into the space station' }, goal: 1, reward: { type: 'energy', amount: 20 }, targetScreen: 'attendance' }, // attendance sẽ làm sau
+    { id: 'd_play_3', title: { vi: 'Tuần Tra Khu Vực', en: 'Sector Patrol' }, desc: { vi: 'Tham gia 3 trận chiến dịch', en: 'Play 3 campaign battles' }, goal: 3, reward: { type: 'coins', amount: 5000 }, targetScreen: 'galaxy_map' },
+    { id: 'd_kill_50', title: { vi: 'Càn Quét Tàn Dư', en: 'Sweep the Remnants' }, desc: { vi: 'Tiêu diệt 50 kẻ địch', en: 'Destroy 50 enemies' }, goal: 50, reward: { type: 'gems', amount: 10 }, targetScreen: 'galaxy_map' }
+  ],
+  weekly: [
+    { id: 'w_login_5', title: { vi: 'Sĩ Quan Cần Mẫn', en: 'Diligent Officer' }, desc: { vi: 'Đăng nhập 5 ngày trong tuần', en: 'Log in 5 days a week' }, goal: 5, reward: { type: 'diamonds', amount: 50 }, targetScreen: 'attendance' },
+    { id: 'w_boss_3', title: { vi: 'Săn Tiền Thưởng', en: 'Bounty Hunter' }, desc: { vi: 'Tiêu diệt 3 Boss Tinh cầu', en: 'Defeat 3 Planetary Bosses' }, goal: 3, reward: { type: 'gears', amount: 100 }, targetScreen: 'galaxy_map' },
+    { id: 'w_spend_coins', title: { vi: 'Kích Cầu Kinh Tế', en: 'Economic Stimulus' }, desc: { vi: 'Tiêu hao 50.000 Xu', en: 'Spend 50,000 Coins' }, goal: 50000, reward: { type: 'blueprints', amount: 5 }, targetScreen: 'shop_campaign' }
+  ],
+  monthly: [
+    { id: 'm_clear_planet', title: { vi: 'Chinh Phục Tinh Cầu', en: 'Planet Conqueror' }, desc: { vi: 'Vượt qua 30 ải chiến dịch', en: 'Clear 30 campaign stages' }, goal: 30, reward: { type: 'diamonds', amount: 300 }, targetScreen: 'galaxy_map' },
+    { id: 'm_pull_gacha', title: { vi: 'Đầu Tư Công Nghệ', en: 'Tech Investor' }, desc: { vi: 'Mở hòm tiếp tế 50 lần', en: 'Open 50 supply crates' }, goal: 50, reward: { type: 'gears', amount: 1000 }, targetScreen: 'shop_campaign' }
+  ]
 };
   export const PIPE_DIST_DESKTOP = 250;
   export const PIPE_DIST_MOBILE = 200;

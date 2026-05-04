@@ -1,0 +1,109 @@
+/* src/components/CampaignPortal/AttendanceModal.module.css */
+.popupOverlay { position: fixed; inset: 0; background: rgba(0, 5, 10, 0.85); backdrop-filter: blur(8px); display: flex; justify-content: center; align-items: center; z-index: 999; }
+
+/* Bổ sung max-height và flex để modal không tràn viền dọc */
+.modal { background: rgba(8, 14, 28, 0.95); border: 2px solid #38bdf8; width: 90%; max-width: 500px; max-height: 90vh; border-radius: 12px; position: relative; box-shadow: 0 0 40px rgba(0, 240, 255, 0.15), inset 0 0 20px rgba(0, 240, 255, 0.05); overflow: hidden; display: flex; flex-direction: column;}
+
+.closeBtn { position: absolute; top: 10px; right: 10px; background: transparent; border: none; color: #ff4757; font-size: 20px; cursor: pointer; transition: 0.2s; z-index: 10;}
+.closeBtn:hover { transform: scale(1.2); filter: drop-shadow(0 0 8px #ff4757); }
+
+.header { background: linear-gradient(to bottom, rgba(56, 189, 248, 0.2), transparent); padding: 20px; text-align: center; border-bottom: 1px solid rgba(56, 189, 248, 0.2); flex-shrink: 0; }
+.title { margin: 0; color: #38bdf8; font-family: 'Barlow Condensed', sans-serif; font-size: 28px; font-weight: 800; letter-spacing: 2px; text-shadow: 0 0 10px #38bdf8; text-transform: uppercase; }
+.subtitle { margin: 5px 0 0 0; color: #94a3b8; font-family: 'Share Tech Mono', monospace; font-size: 14px; }
+
+/* Bổ sung overflow-y để cuộn nếu màn hình quá lùn */
+.content { padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 20px; overflow-y: auto; }
+
+.daysGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; width: 100%; }
+.daySlot { background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px 5px; display: flex; flex-direction: column; align-items: center; gap: 5px; position: relative; transition: 0.3s; }
+.daySlot.claimed { border-color: #4ade80; background: rgba(74, 222, 128, 0.1); }
+.daySlot.today { border-color: #facc15; box-shadow: 0 0 15px rgba(250, 204, 21, 0.3); transform: scale(1.05); z-index: 2; background: rgba(250, 204, 21, 0.15);}
+.daySlot.day7 { grid-column: span 2; background: linear-gradient(135deg, rgba(192, 132, 252, 0.2), rgba(251, 191, 36, 0.2)); border-color: #c084fc; }
+
+.dayLabel { font-family: 'Barlow Condensed', sans-serif; font-size: 14px; font-weight: bold; color: #cbd5e1; white-space: nowrap; }
+.rewardIcon { width: 30px; height: 30px; display: flex; justify-content: center; align-items: center; color: #fb923c; filter: drop-shadow(0 0 5px currentColor); }
+.rewardIcon svg { width: 100%; height: 100%; }
+.day7 .rewardIcon { width: 40px; height: 40px; font-size: 32px; filter: drop-shadow(0 0 10px #c084fc); }
+.rewardAmt { font-family: 'Share Tech Mono', monospace; font-size: 14px; font-weight: bold; color: #fff; white-space: nowrap;}
+.checkMark { position: absolute; inset: 0; background: rgba(0,0,0,0.6); border-radius: inherit; display: flex; justify-content: center; align-items: center; font-size: 24px; color: #4ade80; font-weight: bold; text-shadow: 0 0 10px #4ade80; }
+
+.claimBtn { width: 100%; padding: 15px; border: none; border-radius: 30px; font-family: 'Barlow Condensed', sans-serif; font-size: 20px; font-weight: bold; letter-spacing: 2px; cursor: pointer; transition: 0.3s; flex-shrink: 0; }
+.claimBtn.ready { background: #38bdf8; color: #000; box-shadow: 0 0 20px rgba(56, 189, 248, 0.5); }
+.claimBtn.ready:hover { background: #fff; box-shadow: 0 0 25px #fff; }
+.claimBtn.disabled { background: rgba(255,255,255,0.1); color: #64748b; cursor: not-allowed; }
+
+/* Animation Gacha Overlay */
+.gachaOverlay { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.95); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; }
+.shakingCrate { width: 200px; height: 200px; object-fit: contain; animation: fierceShake 0.1s infinite; filter: drop-shadow(0 0 30px #facc15); }
+@keyframes fierceShake { 0% { transform: translate(2px, 1px) rotate(0deg); } 20% { transform: translate(-3px, 0px) rotate(1deg); } 40% { transform: translate(1px, -1px) rotate(1deg); } 60% { transform: translate(-3px, 1px) rotate(0deg); } 80% { transform: translate(-1px, -1px) rotate(1deg); } 100% { transform: translate(1px, -2px) rotate(-1deg); } }
+.whiteFlash { position: absolute; inset: 0; background: #fff; z-index: 101; animation: flashFade 1.5s forwards; pointer-events: none; }
+@keyframes flashFade { 0% { opacity: 1; } 100% { opacity: 0; } }
+.openedShowcase { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; padding: 20px; overflow-y: auto;}
+.openedCrateImg { width: 120px; height: 120px; object-fit: contain; margin-bottom: 20px; filter: drop-shadow(0 0 30px #facc15); animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; flex-shrink: 0;}
+@keyframes popIn { 0% { transform: scale(0); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+.resultsGrid { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; width: 100%; }
+.resultCard { background: rgba(10, 18, 36, 0.9); border: 2px solid; border-radius: 8px; padding: 10px; width: 75px; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.resultImg { width: 45px; height: 45px; object-fit: contain; filter: drop-shadow(0 0 8px rgba(255,255,255,0.5)); }
+.resultRarity { font-size: 10px; letter-spacing: 1px; }
+.gachaCloseBtn { margin-top: 20px; padding: 10px 30px; background: transparent; color: #fff; border: 2px solid #fff; border-radius: 30px; font-family: inherit; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; flex-shrink: 0; }
+.gachaCloseBtn:hover { background: #fff; color: #000; }
+
+
+/* =========================================================
+   MEDIA QUERIES FOR RESPONSIVE
+   ========================================================= */
+
+/* 1. Màn hình dọc trên điện thoại hẹp (Portrait Mobile) */
+@media (max-width: 480px) and (orientation: portrait) {
+    .modal { width: 95%; max-width: 100%; }
+    .header { padding: 15px 10px; }
+    .title { font-size: 24px; }
+    .subtitle { font-size: 12px; }
+    
+    .content { padding: 15px 10px; gap: 15px; }
+    .daysGrid { gap: 8px; }
+    .daySlot { padding: 8px 4px; }
+    
+    .dayLabel { font-size: 12px; }
+    .rewardIcon { width: 24px; height: 24px; }
+    .day7 .rewardIcon { width: 32px; height: 32px; }
+    .rewardAmt { font-size: 12px; }
+    
+    .claimBtn { padding: 12px; font-size: 18px; }
+}
+
+/* 2. Màn hình ngang (Landscape - Web/Tablet/Mobile xoay ngang) */
+@media (max-height: 600px) and (orientation: landscape) {
+    .modal {
+        max-width: 750px; /* Nới rộng Popup ra để chứa 1 hàng ngang */
+    }
+    .header {
+        padding: 10px 15px;
+    }
+    .title { font-size: 20px; }
+    
+    .content {
+        padding: 10px 15px 15px 15px;
+        gap: 10px;
+    }
+    .daysGrid {
+        /* Chuyển thành 1 HÀNG DUY NHẤT. 6 ngày = 6 ô, ngày 7 (span 2) = 2 ô. Tổng 8 ô. */
+        grid-template-columns: repeat(8, 1fr); 
+        gap: 8px;
+    }
+    .daySlot { padding: 5px; gap: 2px; justify-content: center; }
+    
+    .dayLabel { font-size: 11px; }
+    .rewardIcon { width: 20px; height: 20px; }
+    .day7 .rewardIcon { width: 26px; height: 26px; }
+    .rewardAmt { font-size: 12px; }
+    
+    .claimBtn { padding: 10px; font-size: 16px; margin-top: 5px; }
+
+    /* Thu nhỏ overlay Gacha để không bị lấp nút XÁC NHẬN */
+    .shakingCrate { width: 120px; height: 120px; }
+    .openedCrateImg { width: 70px; height: 70px; margin-bottom: 10px; }
+    .resultCard { width: 60px; padding: 5px; gap: 2px;}
+    .resultImg { width: 35px; height: 35px; }
+    .gachaCloseBtn { margin-top: 10px; padding: 8px 25px; }
+}

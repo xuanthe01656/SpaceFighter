@@ -1,13 +1,19 @@
 /* src/components/StageSelect/StageSelect.module.css */
+/* Các thành phần trước đó giữ nguyên, thay thế từ phần PLANET ICON trở đi */
+
 .container {
   width: 100%; height: 100dvh; 
   background: radial-gradient(circle at 50% 10%, #0b192c 0%, #000000 80%);
   color: #fff; display: flex; flex-direction: column; align-items: center; 
   font-family: 'VT323', monospace; box-sizing: border-box; position: relative; 
-  z-index: 10; overflow-y: auto; pointer-events: auto; padding: 20px;
+  z-index: 10; overflow-y: auto; pointer-events: auto; 
+  /* Chuyển padding top lên Header để Header dính sát nóc màn hình */
+  padding-top: 0; 
+  padding-right: max(16px, env(safe-area-inset-right));
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  padding-left: max(16px, env(safe-area-inset-left));
 }
 
-/* Lưới radar định vị không gian */
 .container::before {
   content: ""; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
   background-image: 
@@ -16,82 +22,60 @@
   background-size: 30px 30px; pointer-events: none; z-index: 0;
 }
 
-.contentWrapper {
-  width: 100%; max-width: 700px; display: flex; flex-direction: column; flex: 1; z-index: 10;
-}
+.contentWrapper { width: 100%; max-width: 700px; display: flex; flex-direction: column; flex: 1; z-index: 10; }
 
-/* HEADER */
-.header {
-  display: flex; align-items: center; margin-bottom: 40px; 
-  padding-bottom: 15px; border-bottom: 2px solid rgba(102, 252, 241, 0.3);
+.header { 
+  position: sticky;
+  top: 0;
+  z-index: 50; /* Đè lên trên các thẻ ải */
+  background: rgba(11, 25, 44, 0.95); /* Màu nền che đi các hành tinh cuộn ở dưới */
+  backdrop-filter: blur(12px);
+  
+  /* Khéo léo bù trừ khoảng cách an toàn (Tai thỏ) vào padding của header */
+  padding-top: max(20px, env(safe-area-inset-top)); 
+  padding-bottom: 15px; 
+  padding-left: 20px;
+  padding-right: 20px;
+  margin-bottom: 30px; 
+  
+  display: flex; align-items: center; 
+  border-bottom: 2px solid rgba(102, 252, 241, 0.3); 
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5); /* Đổ bóng nhẹ phân tách với Map */
 }
-
-.backBtn {
-  background: rgba(11, 12, 16, 0.8); color: #66fcf1; border: 1px solid #66fcf1; 
-  padding: 8px 20px; border-radius: 8px; font-family: inherit; font-size: 20px; 
-  cursor: pointer; text-transform: uppercase; transition: all 0.2s;
-  box-shadow: 0 0 10px rgba(102, 252, 241, 0.2);
-}
+.backBtn { background: rgba(11, 12, 16, 0.8); color: #66fcf1; border: 1px solid #66fcf1; padding: 8px 20px; border-radius: 8px; font-family: inherit; font-size: 20px; cursor: pointer; text-transform: uppercase; transition: all 0.2s; box-shadow: 0 0 10px rgba(102, 252, 241, 0.2); }
 .backBtn:hover { background: rgba(102, 252, 241, 0.2); box-shadow: 0 0 15px rgba(102, 252, 241, 0.5); }
+.title { flex: 1; text-align: center; margin: 0; color: #fff; font-size: clamp(24px, 6vw, 36px); text-shadow: 0 0 15px #66fcf1, 0 0 30px #45a29e; letter-spacing: 3px; text-transform: uppercase; }
 
-.title {
-  flex: 1; text-align: center; margin: 0; color: #fff; font-size: clamp(24px, 6vw, 36px);
-  text-shadow: 0 0 15px #66fcf1, 0 0 30px #45a29e; letter-spacing: 3px; text-transform: uppercase;
-}
+.mapContainer { position: relative; flex: 1; display: flex; flex-direction: column; gap: 30px; padding-left: 20px; }
+.pathLine { position: absolute; left: 60px; top: 30px; bottom: 30px; width: 4px; background: linear-gradient(to bottom, #66fcf1 50%, #333 50%); background-size: 100% 20px; z-index: 0; opacity: 0.5; }
 
-/* KHU VỰC BẢN ĐỒ TIMELINE */
-.mapContainer {
-  position: relative; flex: 1; display: flex; flex-direction: column; gap: 30px; padding-left: 20px;
-}
-
-/* Đường ray kết nối các hành tinh */
-.pathLine {
-  position: absolute; left: 60px; top: 30px; bottom: 30px; width: 4px;
-  background: linear-gradient(to bottom, #66fcf1 50%, #333 50%);
-  background-size: 100% 20px; z-index: 0; opacity: 0.5;
-}
-
-/* THẺ TỪNG ẢI */
-.stageCard {
-  display: flex; align-items: center; padding: 15px 20px; border-radius: 15px;
-  background: rgba(11, 12, 16, 0.7); backdrop-filter: blur(10px);
-  border: 2px solid #333; position: relative; z-index: 1;
-  transition: all 0.3s ease;
-}
-
-.stageUnlocked {
-  border-color: #45a29e; background: linear-gradient(90deg, rgba(31, 40, 51, 0.9), rgba(11, 12, 16, 0.9));
-  box-shadow: 0 0 20px rgba(102, 252, 241, 0.15), inset 0 0 10px rgba(102, 252, 241, 0.1);
-  cursor: pointer;
-}
+.stageCard { display: flex; align-items: center; padding: 15px 20px; border-radius: 15px; background: rgba(11, 12, 16, 0.7); backdrop-filter: blur(10px); border: 2px solid #333; position: relative; z-index: 1; transition: all 0.3s ease; }
+.stageUnlocked { border-color: #45a29e; background: linear-gradient(90deg, rgba(31, 40, 51, 0.9), rgba(11, 12, 16, 0.9)); box-shadow: 0 0 20px rgba(102, 252, 241, 0.15), inset 0 0 10px rgba(102, 252, 241, 0.1); cursor: pointer; }
 .stageUnlocked:hover { transform: translateX(10px); box-shadow: 0 0 25px rgba(102, 252, 241, 0.4); }
-
-.stageBoss {
-  border-color: #ff4757; background: linear-gradient(90deg, rgba(50, 10, 15, 0.9), rgba(20, 5, 8, 0.9));
-  box-shadow: 0 0 25px rgba(255, 71, 87, 0.2), inset 0 0 15px rgba(255, 71, 87, 0.15);
-}
+.stageBoss { border-color: #ff4757; background: linear-gradient(90deg, rgba(50, 10, 15, 0.9), rgba(20, 5, 8, 0.9)); box-shadow: 0 0 25px rgba(255, 71, 87, 0.2), inset 0 0 15px rgba(255, 71, 87, 0.15); }
 .stageBoss:hover { transform: translateX(10px); box-shadow: 0 0 30px rgba(255, 71, 87, 0.5); }
+.stageLocked { opacity: 0.5; cursor: not-allowed; filter: grayscale(100%); }
 
-.stageLocked {
-  opacity: 0.5; cursor: not-allowed; filter: grayscale(100%);
-}
-
-/* BIỂU TƯỢNG HÀNH TINH (PLANET ICON) */
-.planetIcon {
+/* --- THUMBNAIL HÌNH ẢNH MỚI --- */
+.thumbnailWrap {
   width: 80px; height: 80px; border-radius: 50%; display: flex; justify-content: center; align-items: center;
-  font-size: 40px; margin-right: 25px; border: 3px solid #333; background: #000;
-  box-shadow: inset 0 0 20px rgba(255,255,255,0.1);
+  margin-right: 25px; border: 3px solid #66fcf1; background: #000;
+  box-shadow: 0 0 15px #66fcf1, inset 0 0 20px rgba(102, 252, 241, 0.4);
+  overflow: hidden; /* Cắt ảnh tròn */
 }
-.unlockedIcon { border-color: #66fcf1; background: radial-gradient(circle at 30% 30%, #45a29e, #1f2833); box-shadow: 0 0 20px #66fcf1; }
-.bossIcon { border-color: #ff4757; background: radial-gradient(circle at 30% 30%, #ff4757, #2f3640); box-shadow: 0 0 30px #ff4757; }
+.bossThumb {
+  width: 90px; height: 90px; border-radius: 12px; /* Boss thì khung vuông bo góc */
+  border-color: #ff4757; box-shadow: 0 0 25px #ff4757, inset 0 0 30px rgba(255, 71, 87, 0.5);
+}
 
-/* THÔNG TIN BÊN TRONG */
-.stageInfo { flex: 1; }
-.stageName { margin: 0 0 5px 0; color: #fff; font-size: clamp(20px, 5vw, 26px); letter-spacing: 1px; text-transform: uppercase; }
-.bossName { color: #ff4757; text-shadow: 0 0 10px rgba(255, 71, 87, 0.8); }
+.thumbImage { width: 100%; height: 100%; object-fit: cover; }
+.fallbackIcon { font-size: 40px; }
+
+.stageInfo { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.stageName { margin: 0 0 2px 0; color: #fff; font-size: clamp(20px, 5vw, 26px); letter-spacing: 1px; text-transform: uppercase; }
+.bossNameText { color: #ff4757; text-shadow: 0 0 10px rgba(255, 71, 87, 0.8); }
+
+.bossTitleLabel { font-size: 16px; color: #facc15; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+
+.starRow { color: #facc15; font-size: 20px; margin-top: 2px; }
 .stageStatus { margin: 0; font-size: 16px; color: #aaa; }
-.statusReady { color: #66fcf1; font-weight: bold; animation: blink 1.5s infinite; }
-
-@keyframes blink {
-  0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; }
-}

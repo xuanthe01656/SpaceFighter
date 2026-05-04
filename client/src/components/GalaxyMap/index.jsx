@@ -618,7 +618,7 @@ export default function GalaxyMap({ gsRef, setScreen, lang }) {
                   pointerEvents: 'none',
                 }}
               />
-              🚀 {lang === 'vi' ? 'ĐÁP XUỐNG CHIẾN ĐẤU' : 'INITIATE COMBAT'}
+               {lang === 'vi' ? 'ĐÁP XUỐNG CHIẾN ĐẤU' : 'INITIATE COMBAT'}
             </motion.button>
 
           </motion.div>

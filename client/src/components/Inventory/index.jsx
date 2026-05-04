@@ -5,14 +5,36 @@ import styles from './Inventory.module.css';
 import toast from 'react-hot-toast';
 import ItemModal from '../ItemModal/ItemModal';
 
+ // --- ĐỒNG BỘ HỆ THỐNG SVG ICONS CHUẨN SCI-FI ---
  const Icons = {
     Energy: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>,
     Coin: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" /><line x1="12" y1="2" x2="12" y2="6" /><line x1="12" y1="18" x2="12" y2="22" /><line x1="2" y1="12" x2="6" y2="12" /><line x1="18" y1="12" x2="22" y2="12" /></svg>),
     Gem: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 22 2 9 6 2 18 2 22 9 12 22" /><line x1="2" y1="9" x2="22" y2="9" /><line x1="12" y1="22" x2="8" y2="9" /><line x1="12" y1="22" x2="16" y2="9" /><line x1="8" y1="9" x2="6" y2="2" /><line x1="16" y1="9" x2="18" y2="2" /></svg>),
     Blueprint: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" /><circle cx="12" cy="7" r="1.5" /><path d="M12 8.5L8.5 17" /><path d="M12 8.5L15.5 17" /><path d="M10 14h4" /></svg>),
-    Gear: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>,
-    Trash: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+    Gear: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>,
+    Trash: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>,
+    
+    // Icons Menu & Filter mới
+    Bag: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="8" width="18" height="12" rx="2" ry="2"/><path d="M7 8V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/></svg>,
+    Book: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>,
+    Forge: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>,
+    All: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>,
+    Gun: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 7"/></svg>, // Simple check for Gun
+    Wingman: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 22 12 17 22 22 12 2"/></svg>, // Simple ship for Wingman
+    Shield: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>, // Shield for Armor
+    Drone: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M3 12h3M18 12h3M12 3v3M12 18v3"/></svg>, // Drone representation
+    Pilot: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> // User/Pilot
   };
+
+// Hàm tiện ích: Định dạng số liệu ngắn gọn (1K, 1.5M, 2B) giống hệt CampaignPortal
+const formatCompactNumber = (number) => {
+  if (number < 1000) return number.toString();
+  const suffixes = ["", "K", "M", "B", "T"];
+  const suffixNum = Math.floor(("" + number).length / 3);
+  let shortValue = parseFloat((suffixNum !== 0 ? (number / Math.pow(1000, suffixNum)) : number).toPrecision(3));
+  if (shortValue % 1 !== 0) shortValue = shortValue.toFixed(1);
+  return shortValue + suffixes[suffixNum];
+};
 
 const getItemLimits = (item) => {
   if (!item) return { maxLevel: 10, maxStar: 1 };
@@ -69,18 +91,17 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
   const currentDiamonds   = Number(gsRef.current.diamonds) || 0;
   const currentBlueprints = Number(materials?.blueprints)   || 0;
   const currentGears      = Number(materials?.gears)        || 0;
-  const currentCrates     = Number(materials?.crates)       || 0;
   const currentEnergy     = Number(gsRef.current.energy)   || 50;
 
   const isForge = mainTab === 'forge';
 
   const sideTabs = [
-    { id: 'all',     icon: '◈', label: { vi: 'Tất cả',    en: 'ALL'   } },
-    { id: 'mainGun', icon: '⊕', label: { vi: 'Súng chính', en: 'GUN'  } },
-    { id: 'wingman', icon: '◎', label: { vi: 'Súng phụ',   en: 'WING' } },
-    { id: 'armor',   icon: '◇', label: { vi: 'Phụ trợ',    en: 'ARMOR'} },
-    { id: 'drone',   icon: '⊛', label: { vi: 'Vệ tinh',    en: 'DRONE'} },
-    { id: 'pilot',   icon: '◉', label: { vi: 'Phi công',   en: 'PILOT'} },
+    { id: 'all',     icon: Icons.All, label: { vi: 'Tất cả',    en: 'ALL'   } },
+    { id: 'mainGun', icon: Icons.Gun, label: { vi: 'Súng chính', en: 'GUN'  } },
+    { id: 'wingman', icon: Icons.Wingman, label: { vi: 'Súng phụ',   en: 'WING' } },
+    { id: 'armor',   icon: Icons.Shield, label: { vi: 'Phụ trợ',    en: 'ARMOR'} },
+    { id: 'drone',   icon: Icons.Drone, label: { vi: 'Vệ tinh',    en: 'DRONE'} },
+    { id: 'pilot',   icon: Icons.Pilot, label: { vi: 'Phi công',   en: 'PILOT'} },
   ].filter(tab => isForge ? (tab.id !== 'pilot') : true); 
 
   if (isForge && bagFilter === 'pilot') {
@@ -92,6 +113,7 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
   
   const bagAircrafts = AIRCRAFTS.filter(ac => ownedAircrafts[ac.id]).map(ac => {
     const acData = ownedAircrafts[ac.id];
+    // Đảm bảo phi cơ lấy độ hiếm mặc định theo tier (max 5) hoặc 1
     const baseRarity = ac.tier || ac.rarity || 1;
     return { ...acData, id: ac.id, uuid: ac.id, type: 'aircraft', isOwned: true, rarity: acData.stars || baseRarity };
   });
@@ -279,7 +301,7 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
     let earnedCoins = 0;
     itemsToProcess.forEach(item => {
         const r = item.rarity || 1;
-        earnedCoins += Math.min(10, r * 2); // Rarity * 2 (max 10 xu)
+        earnedCoins += Math.min(10, r * 2); 
 
         if (item.type === 'pilot') delete gsRef.current.campaignData.ownedPilots[item.id];
         else if (item.type === 'aircraft') delete gsRef.current.campaignData.ownedAircrafts[item.id];
@@ -288,7 +310,6 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
 
     gsRef.current.coins = currentCoins + earnedCoins;
     
-    // GỌI FIREBASE SYNC
     saveUserProfile();
     setRefreshTick(p => p + 1);
     setIsSelectMode(false);
@@ -327,7 +348,6 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
         else delete gsRef.current.campaignData.items[item.uuid];
     });
 
-    // GỌI FIREBASE SYNC
     saveUserProfile();
     setRefreshTick(p => p + 1);
     setIsSelectMode(false);
@@ -347,7 +367,7 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
         gsRef.current.campaignData.items[selectedItem.uuid].isLocked = !isCurrentlyLocked;
     }
     
-    saveUserProfile(); // GỌI FIREBASE SYNC KHI KHÓA
+    saveUserProfile(); 
     setRefreshTick(p => p + 1);
     toast.success(lang === 'vi' ? (isCurrentlyLocked ? 'Đã mở khóa vật phẩm!' : 'Đã khóa an toàn!') : (isCurrentlyLocked ? 'Item Unlocked!' : 'Item Locked!'));
   };
@@ -408,11 +428,24 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
     saveUserProfile(); setRefreshTick(p => p + 1); return isSuccess; 
   };
 
+  // --- RENDER ICON / IMAGE ---
   const renderIcon = (item, size) => {
     const baseInfo = item.type === 'pilot' ? PILOTS.find(p => p.id === item.id) : GEAR_CATALOG[item.type]?.find(g => g.id === item.baseId);
-    if (baseInfo?.imgSrc) return <img src={baseInfo.imgSrc} alt="icon" style={{ maxWidth: size, objectFit: 'contain' }} />;
-    const emoji = { mainGun: '🔫', armor: '🛡️', drone: '🛰️', pilot: '👨‍🚀', wingman: '🚀' }[item.type] || '🚀';
-    return <span style={{ fontSize: size }}>{emoji}</span>;
+    
+    // Nếu có ảnh, render và xử lý fallback bằng onerror
+    if (baseInfo?.imgSrc) {
+      return (
+        <img 
+          src={baseInfo.imgSrc} 
+          alt="icon" 
+          style={{ maxWidth: size, maxHeight: size, objectFit: 'contain' }} 
+          onError={(e) => { e.target.onerror = null; e.target.src = '/images/no_image.png'; }}
+        />
+      );
+    }
+    
+    // Nếu không có ảnh, dùng fallback mặc định
+    return <img src="/images/no_image.png" alt="icon" style={{ maxWidth: size, maxHeight: size, objectFit: 'contain', opacity: 0.5 }} />;
   };
 
   const toggleEquip = () => {
@@ -438,15 +471,19 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
 
   const isEquipped = (selectedItem && selectedItem.isOwned !== false) && (loadout[selectedItem.type] === selectedItem.uuid || loadout.pilot === selectedItem.id);
 
-  // HELPER RENDER TỪNG Ô VẬT PHẨM (Có Checkbox & Lock Icon)
+  // --- ITEM SLOT ---
   const renderItemSlot = (item, idx, isForgeMode = false) => {
     const isEq = item.isOwned && (loadout[item.type] === item.uuid || loadout.pilot === item.id || loadout.aircraft === item.id);
     const isChecked = sellSelection.includes(item.uuid);
     
+    // Đảm bảo rarity được xử lý đúng, tối đa là 5
+    const computedRarity = Math.min(5, Math.max(1, item.rarity || 1));
+    const rarityClass = `r${computedRarity}`;
+    
     return (
       <motion.div 
         key={item.uuid} initial={{ opacity: 0, scale: 0.85 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: Math.min(idx * 0.012, 0.2), duration: 0.2 }}
-        className={`${styles.itemSlot} ${styles['r' + Math.min(5, item.rarity)]} ${selectedId === item.uuid ? styles.selected : ''} ${!item.isOwned ? styles.lockedItem : ''}`} 
+        className={`${styles.itemSlot} ${styles[rarityClass]} ${selectedId === item.uuid ? styles.selected : ''} ${!item.isOwned ? styles.lockedItem : ''}`} 
         onClick={() => handleItemClick(item)} 
         onPointerDown={() => handlePressStart(item)}
         onPointerUp={handlePressEnd}
@@ -466,7 +503,12 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
 
         <div className={styles.itemIconWrap}>
            {item.type === 'aircraft' ? (
-              <img src={AIRCRAFTS.find(a=>a.id===item.id)?.imgHq || '/images/ship_xwing_hq.png'} alt="aircraft" style={{ maxWidth: isForgeMode ? '36px' : '40px', objectFit: 'contain' }} />
+              <img 
+                src={AIRCRAFTS.find(a=>a.id===item.id)?.imgHq || '/images/ship_xwing_hq.png'} 
+                alt="aircraft" 
+                style={{ maxWidth: isForgeMode ? '36px' : '40px', objectFit: 'contain' }} 
+                onError={(e) => { e.target.onerror = null; e.target.src = '/images/no_image.png'; }}
+              />
            ) : renderIcon(item, isForgeMode ? '36px' : '40px')}
         </div>
         <div className={styles.itemFooter}><span className={styles.itemLevel}>{item.isOwned ? `LV ${item.level || 1}` : '🔒'}</span></div>
@@ -482,23 +524,25 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
             <span className={styles.backArrow}>‹</span><span className={styles.backText}>{gsRef.current?.cameFromHQ ? (lang === 'vi' ? 'HÀNH DINH' : 'HQ') : (lang === 'vi' ? 'CHỈ HUY' : 'COMMAND')}</span>
           </motion.button>
           <div className={styles.headerTitle}>{mainTab === 'collection' ? (lang === 'vi' ? 'BỘ SƯU TẬP' : 'COLLECTION') : (isForge ? (lang === 'vi' ? 'XƯỞNG RÈN' : 'FORGE CORE') : (lang === 'vi' ? 'KHO VŨ KHÍ' : 'ARMORY'))}</div>
+          
+          {/* THANH TÀI NGUYÊN - ĐÃ ĐƯỢC FORMAT GỌN GÀNG TỪ gsRef */}
           <div className={styles.currencyBar}>
-            <div className={`${styles.currencyChip} ${styles.chipEnergy}`}><div className={styles.currencyIcon}><Icons.Energy /></div><span className={styles.currencyAmt}>{currentEnergy.toLocaleString()}</span></div>
-            <div className={`${styles.currencyChip} ${styles.chipCoin}`}><div className={styles.currencyIcon}><Icons.Coin /></div><span className={styles.currencyAmt}>{currentCoins.toLocaleString()}</span></div>
-            <div className={`${styles.currencyChip} ${styles.chipGem}`}><div className={styles.currencyIcon}><Icons.Gem /></div><span className={styles.currencyAmt}>{currentDiamonds.toLocaleString()}</span></div>
-            <div className={`${styles.currencyChip} ${styles.chipBlueprint}`}><div className={styles.currencyIcon}><Icons.Blueprint /></div><span className={styles.currencyAmt}>{currentBlueprints.toLocaleString()}</span></div>
-            <div className={`${styles.currencyChip} ${styles.chipGear}`}><div className={styles.currencyIcon}><Icons.Gear /></div><span className={styles.currencyAmt}>{currentGears.toLocaleString()}</span></div>
+            <div className={`${styles.currencyChip} ${styles.chipEnergy}`}><div className={styles.currencyIcon}><Icons.Energy /></div><span className={styles.currencyAmt}>{formatCompactNumber(currentEnergy)}</span></div>
+            <div className={`${styles.currencyChip} ${styles.chipCoin}`}><div className={styles.currencyIcon}><Icons.Coin /></div><span className={styles.currencyAmt}>{formatCompactNumber(currentCoins)}</span></div>
+            <div className={`${styles.currencyChip} ${styles.chipGem}`}><div className={styles.currencyIcon}><Icons.Gem /></div><span className={styles.currencyAmt}>{formatCompactNumber(currentDiamonds)}</span></div>
+            <div className={`${styles.currencyChip} ${styles.chipBlueprint}`}><div className={styles.currencyIcon}><Icons.Blueprint /></div><span className={styles.currencyAmt}>{formatCompactNumber(currentBlueprints)}</span></div>
+            <div className={`${styles.currencyChip} ${styles.chipGear}`}><div className={styles.currencyIcon}><Icons.Gear /></div><span className={styles.currencyAmt}>{formatCompactNumber(currentGears)}</span></div>
           </div>
         </header>
 
         <nav className={styles.mainTabs}>
           {[
-            { id: 'bag', icon: '⊞', label: { vi: 'TÚI TRANG BỊ', en: 'LOADOUT' } }, 
-            { id: 'collection', icon: '📖', label: { vi: 'BỘ SƯU TẬP', en: 'COLLECTION' } },
-            { id: 'forge', icon: '⊗', label: { vi: 'XƯỞNG RÈN', en: 'FORGE CORE' } }
+            { id: 'bag', icon: Icons.Bag, label: { vi: 'TÚI TRANG BỊ', en: 'LOADOUT' } }, 
+            { id: 'collection', icon: Icons.Book, label: { vi: 'BỘ SƯU TẬP', en: 'COLLECTION' } },
+            { id: 'forge', icon: Icons.Forge, label: { vi: 'XƯỞNG RÈN', en: 'FORGE CORE' } }
           ].map(tab => (
             <button key={tab.id} data-tab={tab.id} className={`${styles.mainTabBtn} ${mainTab === tab.id ? styles.active : ''}`} onClick={() => { setMainTab(tab.id); setSelectedId(null); setBagFilter('all'); setIsSelectMode(false); }}>
-              <span className={styles.tabIcon}>{tab.icon}</span>{tab.label[lang]}{mainTab === tab.id && <motion.div className={styles.tabUnderline} layoutId="mainUnderline" />}
+              <span className={styles.tabIcon} style={{ width: '20px', height: '20px' }}>{<tab.icon />}</span>{tab.label[lang]}{mainTab === tab.id && <motion.div className={styles.tabUnderline} layoutId="mainUnderline" />}
             </button>
           ))}
         </nav>
@@ -536,7 +580,7 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
                     <div className={styles.verticalTabs}>
                       {sideTabs.map(tab => (
                         <button key={tab.id} className={`${styles.sideTabBtn} ${bagFilter === tab.id ? styles.active : ''}`} onClick={() => { setBagFilter(tab.id); setSelectedId(null); setIsSelectMode(false); }}>
-                          <span className={styles.sideIcon}>{tab.icon}</span><span className={styles.sideLabel}>{tab.label[lang]}</span>
+                          <span className={styles.sideIcon} style={{ width: '18px', height: '18px', display: 'flex', alignItems: 'center' }}>{<tab.icon />}</span><span className={styles.sideLabel}>{tab.label[lang]}</span>
                           {bagFilter === tab.id && <motion.div className={styles.sideActivePip} layoutId="sidePip" />}
                         </button>
                       ))}
@@ -578,10 +622,10 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
                {lang === 'vi' ? 'CHỌN TẤT CẢ' : 'SELECT ALL'}
             </button>
             <button className={styles.deleteBtn} disabled={sellSelection.length === 0} onClick={executeDelete}>
-               <Icons.Trash /> {lang === 'vi' ? `XÓA (${sellSelection.length})` : `DEL (${sellSelection.length})`}
+               <div style={{ width: '20px', height: '20px' }}><Icons.Trash /></div> {lang === 'vi' ? `XÓA (${sellSelection.length})` : `DEL (${sellSelection.length})`}
             </button>
             <button className={styles.sellBtn} disabled={sellSelection.length === 0} onClick={executeSell}>
-               <Icons.Coin /> {lang === 'vi' ? `BÁN (${sellSelection.length})` : `SELL (${sellSelection.length})`}
+               <div style={{ width: '20px', height: '20px' }}><Icons.Coin /></div> {lang === 'vi' ? `BÁN (${sellSelection.length})` : `SELL (${sellSelection.length})`}
             </button>
           </motion.div>
         )}
@@ -596,7 +640,7 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
             onEquip: selectedItem?.type === 'aircraft' ? () => handleEquipAircraft(selectedItem.id) : toggleEquip, 
             onUpgrade: handleUpgrade, 
             onStarUp: handleStarUp, 
-            onToggleLock: toggleLock, // Gửi hàm khóa qua Modal
+            onToggleLock: toggleLock,
             onGoToForge: () => { setMainTab('forge'); setSelectedId(null); }, 
             onGoToShop: () => { setScreen('shop_campaign'); } 
           }}

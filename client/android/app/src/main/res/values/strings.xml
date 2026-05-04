@@ -1,8 +1,8 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Astro Cat PvP 4.0</string>
-    <string name="title_activity_main">Astro Cat PvP 4.0</string>
-    <string name="package_name">com.ban.astrocat</string>
-    <string name="custom_url_scheme">com.ban.astrocat</string>
-    <string name="server_client_id">271365354200-divjlei917agdhao9na226dnhemtiq2b.apps.googleusercontent.com</string>
+    <string name="app_name">Space Fighter 4.0: Galaxy Wars</string>
+    <string name="title_activity_main">Space Fighter 4.0</string>
+    <string name="package_name"><com class="theIT">com.theIT.spacefighter4</com></string>
+    <string name="custom_url_scheme">com.theIT.spacefighter4</string>
+    <string name="server_client_id">528039759292-052m13c4bffv1t5vskvdvmjdl9n23gb8.apps.googleusercontent.com</string>
 </resources>

@@ -1,114 +1,178 @@
-/* src/components/Pilots/Pilots.module.css */
+/* ============================================================
+   Pilots.module.css  —  AAA Tactical Space Game HUD
+   Aesthetic: "Deep Space Armory"
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;800&family=Share+Tech+Mono&display=swap');
+
+:root {
+  --bg-void:       #03060e;
+  --bg-panel:      rgba(8, 14, 28, 0.88);
+  --bg-card:       rgba(10, 18, 36, 0.82);
+  --bg-element:    rgba(15, 24, 50, 0.7);
+
+  --accent:        #38bdf8;
+  --accent-glow:   rgba(56, 189, 248, 0.35);
+  --accent-warm:   #fb923c;
+  --gem-color:     #c084fc;
+
+  --text-primary:  #e2e8f0;
+  --text-dim:      #64748b;
+
+  --border-subtle: rgba(56, 189, 248, 0.15);
+
+  /* Rarity palette */
+  --r1: #94a3b8;   --r1-g: rgba(148, 163, 184, 0.2);
+  --r2: #4ade80;   --r2-g: rgba(74, 222, 128, 0.2);
+  --r3: #60a5fa;   --r3-g: rgba(96, 165, 250, 0.22);
+  --r4: #c084fc;   --r4-g: rgba(192, 132, 252, 0.25);
+  --r5: #fbbf24;   --r5-g: rgba(251, 191, 36, 0.28);
+
+  --font-ui:   'Barlow Condensed', sans-serif;
+  --font-data: 'Share Tech Mono', monospace;
+  --radius:    10px;
+}
+
 .container {
-    width: 100%; height: 100dvh; 
-    background: radial-gradient(circle at 50% 50%, #0f0c29 0%, #000000 100%);
-    color: #fff; display: flex; flex-direction: column; align-items: center; 
-    font-family: 'VT323', monospace; padding: 15px; box-sizing: border-box; 
-    position: relative; z-index: 20; overflow: hidden; pointer-events: auto;
-  }
-  
-  .container::before {
-    content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    background-image: 
-      linear-gradient(rgba(0, 229, 255, 0.05) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0, 229, 255, 0.05) 1px, transparent 1px);
-    background-size: 40px 40px; pointer-events: none; z-index: 0;
-    transform: perspective(500px) rotateX(60deg) translateY(-100px) scale(3);
-    transform-origin: top; opacity: 0.4;
-  }
-  
-  .contentWrapper { width: 100%; max-width: 1000px; display: flex; flex-direction: column; flex: 1; z-index: 10; overflow: hidden; }
-  
-  /* HEADER */
-  .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid rgba(0, 229, 255, 0.3); padding-bottom: 10px; margin-bottom: 15px; flex-shrink: 0; }
-  .backBtn { background: rgba(11, 12, 16, 0.8); color: #00e5ff; border: 1px solid #00e5ff; padding: 5px 15px; border-radius: 5px; font-family: inherit; font-size: 18px; cursor: pointer; text-transform: uppercase; transition: all 0.2s; }
-  .backBtn:active { transform: scale(0.9); }
-  .wallet { display: flex; gap: 15px; font-size: 20px; font-weight: bold; }
-  
-  /* BỐ CỤC CHÍNH */
-  .mainLayout { display: flex; flex-direction: column; gap: 15px; flex: 1; overflow: hidden; }
-  
-  /* LƯỚI PHI CÔNG */
-  .gridSection {
-    flex: 1; display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); 
-    gap: 15px; overflow-y: auto; padding: 10px; align-content: flex-start;
-    background: rgba(11, 12, 16, 0.5); backdrop-filter: blur(10px);
-    border: 1px solid rgba(0, 229, 255, 0.1); border-radius: 15px;
-  }
-  
-  .pilotCard {
-    background: rgba(31, 40, 51, 0.8); border: 2px solid #555; border-radius: 12px;
-    padding: 15px 10px; display: flex; flex-direction: column; align-items: center; 
-    text-align: center; position: relative; cursor: pointer; transition: all 0.2s;
-    box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
-  }
-  .pilotCard.locked { filter: grayscale(100%); opacity: 0.6; }
-  .pilotCard.selected { transform: scale(1.05); z-index: 2; }
-  
-  /* VIỀN MÀU ĐỘ HIẾM */
-  .rarity1 { border-color: #95a5a6; } 
-  .rarity2 { border-color: #2ecc71; box-shadow: inset 0 0 15px rgba(46, 204, 113, 0.3); }
-  .rarity3 { border-color: #3498db; box-shadow: inset 0 0 15px rgba(52, 152, 219, 0.3); } 
-  .rarity4 { border-color: #9b59b6; box-shadow: inset 0 0 15px rgba(155, 89, 182, 0.3); } 
-  .rarity5 { border-color: #f1c40f; box-shadow: inset 0 0 15px rgba(241, 196, 15, 0.3); } 
-  
-  .pilotCard.selected.rarity1 { box-shadow: 0 0 15px #95a5a6, inset 0 0 15px rgba(149,165,166,0.5); }
-  .pilotCard.selected.rarity3 { box-shadow: 0 0 15px #3498db, inset 0 0 15px rgba(52,152,219,0.5); }
-  .pilotCard.selected.rarity4 { box-shadow: 0 0 15px #9b59b6, inset 0 0 15px rgba(155,89,182,0.5); }
-  .pilotCard.selected.rarity5 { box-shadow: 0 0 15px #f1c40f, inset 0 0 15px rgba(241,196,15,0.5); }
-  
-  .avatarCircle {
-    width: 60px; height: 60px; border-radius: 50%; background: #1a1a2e;
-    border: 2px solid rgba(255,255,255,0.2); margin-bottom: 8px; display: flex; align-items: center; justify-content: center; font-size: 35px;
-  }
-  .selected .avatarCircle { border-color: inherit; } 
-  
-  .equippedBadge {
-    position: absolute; top: -5px; right: -5px; background: #ff4757; color: #fff;
-    font-size: 12px; padding: 2px 8px; border-radius: 4px; font-weight: bold; box-shadow: 0 0 10px rgba(255, 71, 87, 0.8);
-  }
-  
-  /* BẢNG CHI TIẾT (PANEL) */
-  .detailSection {
-    background: rgba(11, 12, 16, 0.7); backdrop-filter: blur(15px); border: 1px solid rgba(0, 229, 255, 0.3); border-radius: 15px; 
-    padding: 15px; display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; box-shadow: 0 0 20px rgba(0,0,0,0.5); position: relative;
-    overflow-y: auto;
-  }
-  .detailSection::before, .detailSection::after { content: ""; position: absolute; width: 15px; height: 15px; border: 2px solid #00e5ff; }
-  .detailSection::before { top: -2px; left: -2px; border-right: none; border-bottom: none; }
-  .detailSection::after { bottom: -2px; right: -2px; border-left: none; border-top: none; }
-  
-  .pilotInfoTop { display: flex; align-items: center; gap: 15px; }
-  .detailAvatar { font-size: 50px; filter: drop-shadow(0 0 10px rgba(255,255,255,0.3)); }
-  .pilotName { color: #fff; font-size: clamp(20px, 5vw, 28px); margin: 0 0 5px 0; text-transform: uppercase; letter-spacing: 2px; }
-  
-  .skillBox { background: rgba(0, 229, 255, 0.1); border-left: 4px solid #00e5ff; padding: 10px 15px; border-radius: 4px; }
-  .skillDesc { color: #fff; font-size: 14px; margin: 0; line-height: 1.4; }
-  
-  /* KHU VỰC NÂNG SAO */
-  .upgradeBox {
-    background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(241, 196, 15, 0.3);
-    padding: 10px; border-radius: 8px; margin-top: auto;
-  }
-  .upgradeStats { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 16px; }
-  .rateText { color: #2ed573; font-weight: bold; }
-  .costText { color: #FFD700; font-weight: bold; }
-  .maxStarText { text-align: center; color: #f1c40f; font-weight: bold; font-size: 18px; padding: 10px; }
-  
-  .actionGroup { display: flex; gap: 10px; margin-top: 10px; }
-  .btnAction {
-    flex: 1; padding: 12px; border: none; color: #fff; font-family: inherit; font-size: clamp(16px, 4vw, 20px); 
-    font-weight: bold; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;
-    clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
-  }
-  .deployBtn { background: linear-gradient(90deg, #00d2ff, #3a7bd5); box-shadow: 0 0 15px rgba(0, 210, 255, 0.4); }
-  .deployBtn:disabled { background: #555; color: #888; box-shadow: none; cursor: not-allowed; }
-  .activeBtn { background: linear-gradient(90deg, #2ed573, #2bad60); box-shadow: 0 0 15px rgba(46, 213, 115, 0.4); }
-  .starUpBtn { background: linear-gradient(90deg, #f1c40f, #e67e22); box-shadow: 0 0 15px rgba(241, 196, 15, 0.4); }
-  .starUpBtn:disabled { background: #555; color: #888; box-shadow: none; cursor: not-allowed; }
-  
-  @media (min-width: 768px) {
-    .mainLayout { flex-direction: row; }
-    .gridSection { flex: 3; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); padding: 20px; }
-    .detailSection { flex: 2; height: 100%; min-width: 350px; }
-  }
+  width: 100%; min-height: 100dvh;
+  background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(30, 60, 120, 0.30), transparent), var(--bg-void);
+  color: var(--text-primary); font-family: var(--font-ui);
+  display: flex; flex-direction: column; align-items: center;
+  padding: 12px 16px; box-sizing: border-box; position: relative;
+  overflow-y: auto; overflow-x: hidden;
+  padding-top: max(12px, env(safe-area-inset-top));
+  padding-right: max(16px, env(safe-area-inset-right));
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  padding-left: max(16px, env(safe-area-inset-left));
+}
+
+.container::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none;
+  background-image: linear-gradient(rgba(56, 189, 248, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(56, 189, 248, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px; z-index: 0;
+}
+
+.contentWrapper { width: 100%; max-width: 1280px; display: flex; flex-direction: column; gap: 14px; z-index: 10; flex: 1; }
+
+/* HEADER */
+.header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle); flex-shrink: 0; }
+.backBtn { display: flex; align-items: center; gap: 8px; background: var(--bg-element); color: var(--accent); border: 1px solid var(--border-subtle); padding: 8px 18px 8px 12px; border-radius: 6px; font-family: var(--font-ui); font-size: 18px; font-weight: 700; letter-spacing: 0.08em; cursor: pointer; text-transform: uppercase; transition: all 0.2s; position: relative; overflow: hidden; }
+.backBtn::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); }
+.backBtn:hover { background: rgba(56, 189, 248, 0.12); box-shadow: 0 0 16px var(--accent-glow); }
+
+.headerTitle { font-size: clamp(20px, 4vw, 28px); font-weight: 800; letter-spacing: 0.22em; text-transform: uppercase; text-shadow: 0 0 20px var(--accent-glow); }
+
+.currencyBar { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.currencyChip { display: flex; align-items: center; gap: 6px; background: var(--bg-element); border: 1px solid rgba(255,255,255,0.1); padding: 6px 12px; border-radius: 4px; }
+.currencyIcon { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; }
+.currencyIcon svg { width: 100%; height: 100%; }
+.chipCoin { color: var(--accent-warm); border-bottom: 2px solid var(--accent-warm); }
+.chipGem { color: var(--gem-color); border-bottom: 2px solid var(--gem-color); }
+.currencyAmt { font-family: var(--font-data); font-size: 16px; color: var(--text-primary); }
+
+/* BỐ CỤC CHÍNH (Workspace) */
+.lowerWorkspace {
+  display: flex; flex: 1; gap: 14px; min-height: 0; margin-top: 10px;
+}
+
+/* KHU VỰC LƯỚI BÊN TRÁI */
+.inventoryBoard {
+  background: var(--bg-panel); border: 1px solid var(--border-subtle); border-radius: var(--radius);
+  box-shadow: inset 0 0 40px rgba(0,0,0,0.6); backdrop-filter: blur(12px);
+  display: flex; overflow: hidden;
+}
+
+.gridArea {
+  flex: 1; display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  grid-auto-rows: max-content; gap: 10px; padding: 14px; overflow-y: auto; align-content: flex-start;
+}
+.gridArea::-webkit-scrollbar { width: 4px; }
+.gridArea::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 4px; }
+
+.itemSlot {
+  aspect-ratio: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: var(--bg-card); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px;
+  cursor: pointer; position: relative; transition: transform 0.15s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  overflow: hidden;
+}
+.itemSlot:hover { border-color: rgba(56,189,248,0.35); box-shadow: 0 0 12px rgba(56,189,248,0.20); transform: translateY(-2px); }
+.itemSlot.selected { border-color: var(--accent); box-shadow: 0 0 20px var(--accent-glow), 0 0 6px var(--accent); transform: translateY(-3px) scale(1.04); z-index: 2; }
+
+.lockedItem { filter: grayscale(100%) brightness(0.4); opacity: 0.6; }
+.lockedItem:hover { filter: grayscale(80%) brightness(0.6); opacity: 0.8; }
+.lockedItem.selected { filter: grayscale(0%) brightness(1); opacity: 1; }
+
+.itemGlow { position: absolute; inset: 0; opacity: 0.3; pointer-events: none; border-radius: inherit; }
+.r1 .itemGlow { background: radial-gradient(circle at 50% 100%, var(--r1-g), transparent 70%); }
+.r2 .itemGlow { background: radial-gradient(circle at 50% 100%, var(--r2-g), transparent 70%); }
+.r3 .itemGlow { background: radial-gradient(circle at 50% 100%, var(--r3-g), transparent 70%); }
+.r4 .itemGlow { background: radial-gradient(circle at 50% 100%, var(--r4-g), transparent 70%); }
+.r5 .itemGlow { background: radial-gradient(circle at 50% 100%, var(--r5-g), transparent 70%); }
+
+.r1 { border-bottom: 2px solid var(--r1); }
+.r2 { border-bottom: 2px solid var(--r2); }
+.r3 { border-bottom: 2px solid var(--r3); }
+.r4 { border-bottom: 2px solid var(--r4); }
+.r5 { border-bottom: 2px solid var(--r5); box-shadow: 0 2px 10px var(--r5-g); }
+
+.equippedBadge {
+  position: absolute; top: 4px; right: 4px; width: 18px; height: 18px;
+  background: var(--accent); color: var(--bg-void); border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 800; box-shadow: 0 0 8px var(--accent-glow); z-index: 5;
+}
+.lockIconBadge {
+  position: absolute; top: 4px; left: 4px; font-size: 12px; background: rgba(0,0,0,0.6);
+  padding: 2px 4px; border-radius: 4px; z-index: 5; border: 1px solid rgba(255,255,255,0.2);
+}
+
+.itemIconWrap { font-size: 40px; filter: drop-shadow(0 0 6px rgba(255,255,255,0.25)); }
+.pilotNameSlot {
+  position: absolute; bottom: 22px; font-size: 12px; font-weight: bold;
+  text-shadow: 0 1px 2px #000; text-align: center; width: 100%;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 4px; box-sizing: border-box;
+}
+.itemFooter { position: absolute; bottom: 3px; font-family: var(--font-data); font-size: 11px; color: var(--accent-warm); letter-spacing: 0.05em; }
+
+/* BẢNG CHI TIẾT BÊN PHẢI (Detail Panel) */
+.detailPanel {
+  flex: 2; display: flex; flex-direction: column; gap: 15px; padding: 20px;
+  background: var(--bg-panel); border: 1px solid var(--border-subtle); border-radius: var(--radius);
+  box-shadow: inset 0 0 40px rgba(0,0,0,0.6); overflow-y: auto;
+}
+
+.detailHeader { display: flex; gap: 15px; align-items: center; border-bottom: 1px solid rgba(56, 189, 248, 0.2); padding-bottom: 15px; }
+.detailAvatar { font-size: 60px; filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.5)); }
+.detailName { margin: 0 0 5px 0; font-size: 26px; color: #fff; letter-spacing: 1px; text-transform: uppercase; }
+.detailStars { color: var(--accent-warm); font-size: 18px; letter-spacing: 2px; margin-bottom: 5px; }
+.detailLevel { color: #4ade80; font-size: 14px; font-family: var(--font-data); }
+
+.skillBox { background: rgba(56, 189, 248, 0.1); border-left: 3px solid var(--accent); padding: 12px; border-radius: 4px; }
+.skillTitle { color: var(--accent); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; font-weight: bold; }
+.skillDesc { font-size: 15px; color: var(--text-primary); line-height: 1.4; }
+
+.upgradeBox { background: rgba(0,0,0,0.4); border: 1px dashed var(--accent-warm); padding: 15px; border-radius: 8px; }
+.upgradeTitle { font-size: 16px; color: #fff; margin-bottom: 10px; }
+.upgradeStats { display: flex; justify-content: space-between; font-family: var(--font-data); font-size: 15px; }
+.maxStarText { text-align: center; color: var(--accent-warm); font-weight: bold; font-size: 16px; }
+
+.actionGroup { display: flex; gap: 10px; margin-top: auto; }
+.actionBtn {
+  flex: 1; padding: 12px; border-radius: 6px; border: none; font-family: var(--font-ui);
+  font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.2s;
+}
+.btnDeploy { background: var(--accent); color: #000; }
+.btnDeploy:hover:not(:disabled) { box-shadow: 0 0 15px var(--accent-glow); filter: brightness(1.1); }
+.btnDeploy.active { background: #4ade80; }
+.btnDeploy:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btnStarUp { background: var(--accent-warm); color: #000; }
+.btnStarUp:hover:not(:disabled) { box-shadow: 0 0 15px var(--accent-warm-g); filter: brightness(1.1); }
+.btnStarUp:disabled { opacity: 0.5; cursor: not-allowed; }
+
+@media (max-width: 768px) {
+  .headerTitle { display: none; }
+  .lowerWorkspace { flex-direction: column; }
+  .inventoryBoard { min-height: 300px; flex: none; }
+  .gridArea { grid-template-columns: repeat(4, 1fr) !important; }
+}

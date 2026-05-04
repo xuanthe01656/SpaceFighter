@@ -1,42 +1,69 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { GEAR_CATALOG, PILOTS } from '../../constants';
+import { Capacitor } from '@capacitor/core';
+import { Purchases } from '@revenuecat/purchases-capacitor';
+import { GEAR_CATALOG, PILOTS, CRATE_CONFIGS, TOPUP_PACKAGES, FIRST_TOPUP_REWARD, AIRCRAFTS } from '../../constants'; 
 import styles from './ShopCampaign.module.css';
 import toast from 'react-hot-toast';
 
-// --- ICONS ---
+// --- ĐỒNG BỘ HỆ THỐNG SVG ICONS CHUẨN SCI-FI ---
 const Icons = {
   Coin: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" /><line x1="12" y1="2" x2="12" y2="6" /><line x1="12" y1="18" x2="12" y2="22" /><line x1="2" y1="12" x2="6" y2="12" /><line x1="18" y1="12" x2="22" y2="12" /></svg>),
-  Gem: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 22 2 9 6 2 18 2 22 9 12 22" /><line x1="2" y1="9" x2="22" y2="9" /><line x1="12" y1="22" x2="8" y2="9" /><line x1="12" y1="22" x2="16" y2="9" /><line x1="8" y1="9" x2="6" y2="2" /><line x1="16" y1="9" x2="18" y2="2" /></svg>)
+  Gem: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 22 2 9 6 2 18 2 22 9 12 22" /><line x1="2" y1="9" x2="22" y2="9" /><line x1="12" y1="22" x2="8" y2="9" /><line x1="12" y1="22" x2="16" y2="9" /><line x1="8" y1="9" x2="6" y2="2" /><line x1="16" y1="9" x2="18" y2="2" /></svg>),
+  Gift: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>)
 };
 
-// --- DATA CẤU HÌNH ---
+const formatCompactNumber = (number) => {
+  if (number < 1000) return number.toString();
+  const suffixes = ["", "K", "M", "B", "T"];
+  const suffixNum = Math.floor(("" + number).length / 3);
+  let shortValue = parseFloat((suffixNum !== 0 ? (number / Math.pow(1000, suffixNum)) : number).toPrecision(3));
+  if (shortValue % 1 !== 0) shortValue = shortValue.toFixed(1);
+  return shortValue + suffixes[suffixNum];
+};
+
 const RARITY_COLOR = { 1: '#94a3b8', 2: '#4ade80', 3: '#60a5fa', 4: '#c084fc', 5: '#fbbf24' };
 const RARITY_LABELS = { 1: 'COMMON', 2: 'UNCOMMON', 3: 'RARE', 4: 'EPIC', 5: 'LEGENDARY' };
 
-// Cấu hình Hòm Gacha (Gắn kèm Hình ảnh Đóng/Mở)
-const CRATE_CONFIGS = [
-  { id: 'basic', rarity: 1, currency: 'coins', title: { vi: 'HÒM CƠ BẢN', en: 'STANDARD CRATE' }, desc: { vi: 'Trang bị tàn tích. Rớt đồ Trắng, Lục, Lam.', en: 'Salvaged parts.' }, cost: 100, dropRates: { 1: 50, 2: 35, 3: 12, 4: 3, 5: 0 }, imgClosed: '/images/common.png', imgOpen: '/images/common_op.png' },
-  { id: 'premium', rarity: 3, currency: 'coins', title: { vi: 'HÒM CAO CẤP', en: 'PREMIUM CRATE' }, desc: { vi: 'Công nghệ quân sự. Có tỷ lệ Vàng!', en: 'Military tech.' }, cost: 500, dropRates: { 1: 0, 2: 40, 3: 40, 4: 15, 5: 5 }, imgClosed: '/images/rare.png', imgOpen: '/images/rare_op.png' },
-  { id: 'pilot_gacha', rarity: 4, currency: 'diamonds', title: { vi: 'VÉ TUYỂN MỘ', en: 'RECRUIT TICKET' }, desc: { vi: 'Phát tín hiệu triệu hồi phi công ngẫu nhiên.', en: 'Broadcast SOS.' }, cost: 30, dropRates: { 1: 30, 2: 28, 3: 22, 4: 14, 5: 6 }, imgClosed: '/images/epic.png', imgOpen: '/images/epic_op.png' },
-  { id: 'epic', rarity: 5, currency: 'diamonds', title: { vi: 'HÒM HUYỀN THOẠI', en: 'EPIC CACHE' }, desc: { vi: 'Tinh hoa vũ trụ. Chỉ rớt Lam, Tím, Vàng.', en: 'Galactic apex.' }, cost: 50, dropRates: { 1: 0, 2: 0, 3: 50, 4: 35, 5: 15 }, imgClosed: '/images/legendary.png', imgOpen: '/images/legendary_op.png' },
-];
-
-const TOPUP_PACKAGES = [
-  { id: 'pack1', gems: 100, price: '22,000đ', bonus: 0 },
-  { id: 'pack2', gems: 500, price: '109,000đ', bonus: 50 },
-  { id: 'pack3', gems: 1200, price: '219,000đ', bonus: 200 },
-  { id: 'pack4', gems: 3000, price: '499,000đ', bonus: 800 },
-];
-
 export default function ShopCampaign({ gsRef, setScreen, lang, saveUserProfile }) {
-  const [activeTab, setActiveTab] = useState('crates'); // 'crates' | 'topup'
-  const [selectedCrateId, setSelectedCrateId] = useState(CRATE_CONFIGS[0].id);
+  const [activeTab, setActiveTab] = useState(gsRef.current?.shopInitialTab || 'crates');
+  
+  useEffect(() => {
+     if(gsRef.current?.shopInitialTab) gsRef.current.shopInitialTab = null;
+  }, []);
+  
+  const [rcOfferings, setRcOfferings] = useState(null); 
+  
+  const gachaCrates = CRATE_CONFIGS.map(c => {
+    if(c.id === 'basic') return {...c, imgClosed: '/images/common.png', imgOpen: '/images/common_op.png'};
+    if(c.id === 'premium') return {...c, imgClosed: '/images/rare.png', imgOpen: '/images/rare_op.png'};
+    if(c.id === 'pilot_gacha') return {...c, imgClosed: '/images/epic.png', imgOpen: '/images/epic_op.png'};
+    if(c.id === 'epic') return {...c, imgClosed: '/images/legendary.png', imgOpen: '/images/legendary_op.png'};
+    return {...c, imgClosed: '/images/common.png', imgOpen: '/images/common_op.png'};
+  });
+
+  const [selectedCrateId, setSelectedCrateId] = useState(gachaCrates[0].id);
   const [refreshTick, setRefreshTick] = useState(0);
 
-  // --- GACHA ANIMATION STATE ---
-  const [gachaState, setGachaState] = useState('idle'); // 'idle' | 'opening' | 'opened'
+  const [gachaState, setGachaState] = useState('idle'); 
   const [gachaResults, setGachaResults] = useState([]);
+
+  useEffect(() => {
+    const initRevenueCat = async () => {
+      if (Capacitor.isNativePlatform()) {
+        try {
+          if (Capacitor.getPlatform() === 'ios') await Purchases.configure({ apiKey: "appl_YOUR_APPLE_KEY_HERE" });
+          else if (Capacitor.getPlatform() === 'android') await Purchases.configure({ apiKey: "goog_YOUR_GOOGLE_KEY_HERE" });
+          
+          const offerings = await Purchases.getOfferings();
+          if (offerings.current !== null && offerings.current.availablePackages.length !== 0) {
+            setRcOfferings(offerings.current);
+          }
+        } catch (error) { console.warn("Chưa setup RevenueCat, dùng luồng Test.", error); }
+      }
+    };
+    initRevenueCat();
+  }, []);
 
   const campaignData = gsRef.current.campaignData;
   if (!campaignData) return null;
@@ -48,23 +75,77 @@ export default function ShopCampaign({ gsRef, setScreen, lang, saveUserProfile }
   const currentDiamonds = Number(gsRef.current.diamonds) || 0;
   const currentCrates = campaignData.materials.crates;
 
-  const activeCrate = CRATE_CONFIGS.find(c => c.id === selectedCrateId);
+  const activeCrate = gachaCrates.find(c => c.id === selectedCrateId);
 
-  // --- LOGIC MUA KIM CƯƠNG ---
-  const handleTopup = (pack) => {
-    const totalGems = pack.gems + pack.bonus;
-    gsRef.current.diamonds = currentDiamonds + totalGems;
+  // ==========================================
+  // THỰC THI LOGIC NẠP KIM CƯƠNG VÀ QUÀ NẠP ĐẦU CHUẨN
+  // ==========================================
+  const grantGemsSuccess = (pack) => {
+    const totalGems = pack.gems + (pack.bonus || 0);
+
+    // Kích hoạt quà nạp đầu nếu người chơi mua GÓI BẤT KỲ mà cờ chưa đánh dấu
+    if (!campaignData.hasClaimedFirstTopup) {
+      const { aircraftId, gems, coins } = FIRST_TOPUP_REWARD;
+      
+      gsRef.current.diamonds = currentDiamonds + totalGems + gems;
+      gsRef.current.coins = currentCoins + coins;
+      gsRef.current.vipPoints = (Number(gsRef.current.vipPoints) || 0) + totalGems; 
+
+      if (!campaignData.ownedAircrafts) campaignData.ownedAircrafts = {};
+      if (!campaignData.ownedAircrafts[aircraftId]) {
+         campaignData.ownedAircrafts[aircraftId] = { level: 1, stars: 1, isLocked: false };
+      }
+
+      campaignData.hasClaimedFirstTopup = true; // Khóa cờ nạp đầu vĩnh viễn
+
+      toast.success(
+        lang === 'vi' ? `Nhận thành công ${totalGems} Gem và QUÀ NẠP ĐẦU!` : `Claimed ${totalGems} Gems + FIRST TOP-UP BONUS!`,
+        { icon: '🎁', style: { border: '1px solid #ff47a3', background: '#000', color: '#fff' } }
+      );
+    } else {
+      gsRef.current.diamonds = currentDiamonds + totalGems;
+      gsRef.current.vipPoints = (Number(gsRef.current.vipPoints) || 0) + totalGems; 
+      toast.success(
+        lang === 'vi' ? `Nạp thành công ${totalGems} Kim cương!` : `Successfully topped up ${totalGems} Diamonds!`,
+        { icon: '💎', style: { border: '1px solid #c084fc', background: '#000', color: '#fff' } }
+      );
+    }
+
     saveUserProfile();
     setRefreshTick(t => t + 1);
-    toast.success(lang === 'vi' ? `Nạp thành công ${totalGems} Kim cương!` : `Successfully topped up ${totalGems} Diamonds!`);
   };
 
-  // --- LOGIC QUAY GACHA ---
+  const handleTopup = async (pack) => {
+    if (!Capacitor.isNativePlatform()) {
+      toast.loading(lang === 'vi' ? '[Web Test] Đang xử lý...' : '[Web Test] Processing...');
+      setTimeout(() => { toast.dismiss(); grantGemsSuccess(pack); }, 600);
+      return;
+    }
+
+    try {
+      if (rcOfferings && rcOfferings.availablePackages) {
+        const storePackage = rcOfferings.availablePackages.find(p => p.identifier === pack.id);
+        if (storePackage) {
+          const { customerInfo } = await Purchases.purchasePackage({ package: storePackage });
+          if (typeof customerInfo.entitlements.active !== "undefined") {
+             grantGemsSuccess(pack); return;
+          }
+        }
+      }
+      throw new Error("Package not found in Store");
+    } catch (error) {
+      if (error.userCancelled) toast(lang === 'vi' ? 'Đã hủy thanh toán' : 'Purchase cancelled');
+      else {
+        toast.success(lang === 'vi' ? '[Dev Test] Thanh toán thành công!' : '[Dev Test] Payment Success!');
+        grantGemsSuccess(pack);
+      }
+    }
+  };
+
   const handleOpenGacha = (amount) => {
     const inventoryStock = currentCrates[activeCrate.id] || 0;
     const cost = activeCrate.cost * amount;
 
-    // 1. Kiểm tra tài nguyên (Ưu tiên dùng hòm có sẵn trong kho, nếu thiếu mới trừ tiền)
     if (inventoryStock >= amount) {
         campaignData.materials.crates[activeCrate.id] -= amount;
     } else {
@@ -76,7 +157,6 @@ export default function ShopCampaign({ gsRef, setScreen, lang, saveUserProfile }
         else gsRef.current.diamonds -= cost;
     }
 
-    // 2. Thực hiện random rớt đồ
     const pullResults = [];
     for (let i = 0; i < amount; i++) {
         let roll = Math.random() * 100;
@@ -114,11 +194,8 @@ export default function ShopCampaign({ gsRef, setScreen, lang, saveUserProfile }
     saveUserProfile();
     setRefreshTick(t => t + 1);
 
-    // 3. Kích hoạt Animation Rung Rương (1.5s) rồi nổ tung thành Kết quả
     setGachaState('opening');
-    setTimeout(() => {
-        setGachaState('opened');
-    }, 1500);
+    setTimeout(() => setGachaState('opened'), 1500);
   };
 
   return (
@@ -132,20 +209,23 @@ export default function ShopCampaign({ gsRef, setScreen, lang, saveUserProfile }
             <span className={styles.backText}>{lang === 'vi' ? 'CHỈ HUY' : 'COMMAND'}</span>
           </motion.button>
           <div className={styles.headerTitle}>{lang === 'vi' ? 'CHỢ TIẾP TẾ' : 'SUPPLY DEPOT'}</div>
+          
           <div className={styles.currencyBar}>
-            <div className={`${styles.currencyChip} ${styles.chipCoin}`}><div className={styles.currencyIcon}><Icons.Coin /></div><span className={styles.currencyAmt}>{currentCoins.toLocaleString()}</span></div>
-            <div className={`${styles.currencyChip} ${styles.chipGem}`}><div className={styles.currencyIcon}><Icons.Gem /></div><span className={styles.currencyAmt}>{currentDiamonds.toLocaleString()}</span></div>
+            <div className={`${styles.currencyChip} ${styles.chipCoin}`}><div className={styles.currencyIcon}><Icons.Coin /></div><span className={styles.currencyAmt}>{formatCompactNumber(currentCoins)}</span></div>
+            <div className={`${styles.currencyChip} ${styles.chipGem}`}><div className={styles.currencyIcon}><Icons.Gem /></div><span className={styles.currencyAmt}>{formatCompactNumber(currentDiamonds)}</span></div>
           </div>
         </header>
 
-        {/* TABS: MỞ HÒM vs NẠP KIM CƯƠNG */}
+        {/* TABS CÙNG SVG ICONS */}
         <div className={styles.mainTabs}>
           <button className={`${styles.mainTabBtn} ${activeTab === 'crates' ? styles.active : ''}`} onClick={() => setActiveTab('crates')}>
-             🎁 {lang === 'vi' ? 'MỞ GACHA' : 'OPEN CRATES'}
+             <div style={{ width: '22px', height: '22px' }}><Icons.Gift /></div>
+             {lang === 'vi' ? 'MỞ GACHA' : 'OPEN CRATES'}
              {activeTab === 'crates' && <motion.div className={styles.tabUnderline} layoutId="shopTab" />}
           </button>
           <button data-tab="topup" className={`${styles.mainTabBtn} ${activeTab === 'topup' ? styles.active : ''}`} onClick={() => setActiveTab('topup')}>
-             💎 {lang === 'vi' ? 'NẠP KIM CƯƠNG' : 'TOP-UP GEMS'}
+             <div style={{ width: '22px', height: '22px' }}><Icons.Gem /></div>
+             {lang === 'vi' ? 'NẠP KIM CƯƠNG' : 'TOP-UP GEMS'}
              {activeTab === 'topup' && <motion.div className={styles.tabUnderline} layoutId="shopTab" />}
           </button>
         </div>
@@ -156,25 +236,62 @@ export default function ShopCampaign({ gsRef, setScreen, lang, saveUserProfile }
           {/* KHU VỰC NẠP KIM CƯƠNG */}
           {activeTab === 'topup' && (
             <div className={styles.topupGrid}>
-              {TOPUP_PACKAGES.map(pack => (
+              
+              {/* BANNER NẠP LẦN ĐẦU */}
+              {!campaignData.hasClaimedFirstTopup && (
+                 <div className={styles.firstTopupBanner}>
+                   <h3>{lang === 'vi' ? 'QUÀ TẶNG NẠP LẦN ĐẦU' : 'FIRST TOP-UP BONUS'}</h3>
+                   <p>{lang === 'vi' ? 'Mua bất kỳ gói Kim Cương nào dưới đây để kích hoạt nhận ngay bộ quà tặng Huyền thoại!' : 'Top up ANY package below to claim all these Legendary rewards immediately!'}</p>
+                   
+                   <div className={styles.ftbRewards}>
+                      <div className={styles.ftbItem}>
+                         <div className={styles.ftbItemImg}>
+                            <img 
+                               src={AIRCRAFTS.find(a=>a.id === FIRST_TOPUP_REWARD.aircraftId)?.imgSrc || '/images/ships/nova_hq.png'} 
+                               alt="Nova" 
+                               onError={(e) => { e.target.onerror = null; e.target.src = '/images/no_image.png'; }}
+                            />
+                         </div>
+                         <span style={{ color: '#facc15' }}>{AIRCRAFTS.find(a=>a.id === FIRST_TOPUP_REWARD.aircraftId)?.name[lang] || 'NOVA'}</span>
+                      </div>
+                      <div className={styles.ftbItem}>
+                         <div className={styles.ftbItemImg} style={{ color: '#c084fc' }}><Icons.Gem /></div>
+                         <span style={{ color: '#c084fc' }}>+{formatCompactNumber(FIRST_TOPUP_REWARD.gems)} GEMS</span>
+                      </div>
+                      <div className={styles.ftbItem}>
+                         <div className={styles.ftbItemImg} style={{ color: '#fb923c' }}><Icons.Coin /></div>
+                         <span style={{ color: '#fb923c' }}>+{formatCompactNumber(FIRST_TOPUP_REWARD.coins)} COINS</span>
+                      </div>
+                   </div>
+                 </div>
+              )}
+
+              {/* RENDER CÁC GÓI NẠP - SỬ DỤNG LỆNH FILTER ĐỂ ẨN GÓI 0 GEM */}
+              {TOPUP_PACKAGES.filter(pack => pack.gems > 0 && !pack.isFirstTopup).map(pack => {
+                 const storePack = rcOfferings?.availablePackages?.find(p => p.identifier === pack.id);
+                 const displayPrice = storePack ? storePack.product.priceString : pack.price[lang];
+                 
+                 return (
                  <div key={pack.id} className={styles.topupCard} onClick={() => handleTopup(pack)}>
                     {pack.bonus > 0 && <div className={styles.bonusTag}>+ {pack.bonus}</div>}
-                    <div className={styles.topupIcon}>💎</div>
+                    
+                    <div className={styles.topupIcon} style={{ width: '48px', height: '48px', margin: '0 auto 10px auto', color: 'var(--gem-color)' }}>
+                      <Icons.Gem />
+                    </div>
+                    
                     <div className={styles.topupTitle}>{pack.gems} GEMS</div>
-                    <div className={styles.topupAmount}>{pack.price}</div>
+                    <div className={styles.topupAmount}>{displayPrice}</div>
                     <button className={styles.topupBtn}>{lang === 'vi' ? 'MUA NGAY' : 'PURCHASE'}</button>
                  </div>
-              ))}
+              )})}
             </div>
           )}
 
-          {/* KHU VỰC GACHA */}
+          {/* KHU VỰC GACHA (Giữ nguyên) */}
           {activeTab === 'crates' && activeCrate && (
             <div className={styles.gachaContainer}>
-              
-              {/* Cột chọn hòm */}
               <div className={styles.gachaSidebar}>
-                {CRATE_CONFIGS.map(crate => (
+                {gachaCrates.map(crate => (
                   <div key={crate.id} className={`${styles.crateSelector} ${selectedCrateId === crate.id ? styles.selected : ''}`} onClick={() => setSelectedCrateId(crate.id)}>
                     <img src={crate.imgClosed} alt="crate" className={styles.selectorImg} />
                     <div className={styles.selectorInfo}>
@@ -185,10 +302,8 @@ export default function ShopCampaign({ gsRef, setScreen, lang, saveUserProfile }
                 ))}
               </div>
 
-              {/* Sân khấu mở hòm */}
               <div className={styles.gachaShowcase}>
                 <div className={styles.showcaseGlow} />
-                
                 <div className={styles.showcaseInfo}>
                   <div className={styles.showcaseTitle}>{activeCrate.title[lang]}</div>
                   <div className={styles.showcaseDesc}>{activeCrate.desc[lang]}</div>
@@ -204,7 +319,6 @@ export default function ShopCampaign({ gsRef, setScreen, lang, saveUserProfile }
                 <img src={activeCrate.imgClosed} alt="crate-big" className={styles.showcaseImg} />
 
                 <div className={styles.actionRow}>
-                  {/* Nút X1 */}
                   <button 
                     className={`${styles.pullBtn} ${(currentCrates[activeCrate.id] || 0) >= 1 ? styles.useStock : (activeCrate.currency === 'coins' ? styles.useCoin : styles.useGem)}`}
                     onClick={() => handleOpenGacha(1)}
@@ -214,12 +328,11 @@ export default function ShopCampaign({ gsRef, setScreen, lang, saveUserProfile }
                        {(currentCrates[activeCrate.id] || 0) >= 1 ? (
                          `(${lang === 'vi' ? 'Dùng Hòm' : 'Use Crate'})`
                        ) : (
-                         <>{activeCrate.currency === 'coins' ? <Icons.Coin /> : <Icons.Gem />} {activeCrate.cost}</>
+                         <><div style={{ width: '16px', height: '16px' }}>{activeCrate.currency === 'coins' ? <Icons.Coin /> : <Icons.Gem />}</div>{activeCrate.cost}</>
                        )}
                     </span>
                   </button>
 
-                  {/* Nút X10 */}
                   <button 
                     className={`${styles.pullBtn} ${(currentCrates[activeCrate.id] || 0) >= 10 ? styles.useStock : (activeCrate.currency === 'coins' ? styles.useCoin : styles.useGem)}`}
                     onClick={() => handleOpenGacha(10)}
@@ -229,29 +342,24 @@ export default function ShopCampaign({ gsRef, setScreen, lang, saveUserProfile }
                        {(currentCrates[activeCrate.id] || 0) >= 10 ? (
                          `(${lang === 'vi' ? 'Dùng 10 Hòm' : 'Use 10 Crates'})`
                        ) : (
-                         <>{activeCrate.currency === 'coins' ? <Icons.Coin /> : <Icons.Gem />} {activeCrate.cost * 10}</>
+                         <><div style={{ width: '16px', height: '16px' }}>{activeCrate.currency === 'coins' ? <Icons.Coin /> : <Icons.Gem />}</div>{activeCrate.cost * 10}</>
                        )}
                     </span>
                   </button>
                 </div>
               </div>
-
             </div>
           )}
         </div>
       </div>
 
-      {/* FULLSCREEN GACHA OVERLAY (ANIMATION) */}
       <AnimatePresence>
         {gachaState !== 'idle' && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={styles.gachaOverlay}>
-            
-            {/* Giai đoạn 1: Rương đang rung lắc */}
             {gachaState === 'opening' && (
               <img src={activeCrate.imgClosed} className={styles.shakingCrate} alt="shaking" />
             )}
 
-            {/* Giai đoạn 2: Flash sáng trắng rồi hiện Rương Mở + Item */}
             {gachaState === 'opened' && (
               <>
                 <div className={styles.whiteFlash} />
@@ -267,7 +375,12 @@ export default function ShopCampaign({ gsRef, setScreen, lang, saveUserProfile }
                           key={idx} initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: 0.1 + idx * 0.1, type: 'spring' }}
                           className={styles.resultCard} style={{ borderColor: rc, boxShadow: `0 0 15px ${rc}40` }}
                         >
-                          <img src={baseInfo?.imgSrc} alt="item" className={styles.resultImg} />
+                         <img 
+                            src={baseInfo?.imgSrc || '/images/no_image.png'} 
+                            alt="item" 
+                            className={styles.resultImg} 
+                            onError={(e) => { e.target.onerror = null; e.target.src = '/images/no_image.png'; }}
+                          />
                           <span className={styles.resultRarity} style={{ color: rc }}>{'★'.repeat(item.rarity || 1)}</span>
                         </motion.div>
                       )
@@ -280,7 +393,6 @@ export default function ShopCampaign({ gsRef, setScreen, lang, saveUserProfile }
                 </div>
               </>
             )}
-
           </motion.div>
         )}
       </AnimatePresence>

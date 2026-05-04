@@ -1,138 +1,229 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { motion } from 'framer-motion';
-import { t } from '../../utils/translations'; 
+import toast from 'react-hot-toast';
+import { collection, query, where, getDocs, doc, setDoc } from 'firebase/firestore';
+import { updateProfile } from 'firebase/auth';
+import { db, auth } from '../../firebase';
 import styles from './Portal.module.css';
 
 export default function Portal({ 
   gsRef, setScreen, currentUser, loginWithGoogle, loginWithApple, 
-  logout, deleteAccount, lang, toggleLanguage 
+  logout, lang, toggleLanguage 
 }) {
   const platform = Capacitor.getPlatform();
-  const campaignData = gsRef.current?.campaignData;
-  const materials = campaignData?.materials || {};
-  //const {materials} = campaignData;
-  // Lấy chỉ số từ Game State
-  const energy = gsRef?.current?.energy ?? 50;
-  const lives = gsRef?.current?.lives ?? 10;
-  const coins = gsRef?.current?.coins ?? 0;
-  const diamonds = gsRef?.current?.diamonds ?? 0;
-  const gear =Number(materials.gears) || 0;
-  const blueprints = Number(materials.blueprints) || 0;
+  
+  // Các trạng thái của sảnh: 'login' (chưa đăng nhập) -> 'name' (nhập tên) -> 'ready' (sẵn sàng vào game)
+  const [step, setStep] = useState('login');
+  const [displayName, setDisplayName] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const Icons = {
-    Heart: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21.35L10.55 20.03C5.4 15.36 2 12.28 2 8.5C2 5.42 4.42 3 7.5 3C9.24 3 10.91 3.81 12 5.09C13.09 3.81 14.76 3 16.5 3C19.58 3 22 5.42 22 8.5C22 12.28 18.6 15.36 13.45 20.03L12 21.35Z" /><line x1="2" y1="9" x2="22" y2="9" /><line x1="12" y1="22" x2="8" y2="9" /><line x1="12" y1="22" x2="16" y2="9" /><line x1="8" y1="9" x2="6" y2="2" /><line x1="16" y1="9" x2="18" y2="2" /></svg>),
-    Energy: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>,
-    Coin: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" /><line x1="12" y1="2" x2="12" y2="6" /><line x1="12" y1="18" x2="12" y2="22" /><line x1="2" y1="12" x2="6" y2="12" /><line x1="18" y1="12" x2="22" y2="12" /></svg>),
-    Gem: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 22 2 9 6 2 18 2 22 9 12 22" /><line x1="2" y1="9" x2="22" y2="9" /><line x1="12" y1="22" x2="8" y2="9" /><line x1="12" y1="22" x2="16" y2="9" /><line x1="8" y1="9" x2="6" y2="2" /><line x1="16" y1="9" x2="18" y2="2" /></svg>),
-    Blueprint: () => (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" /><circle cx="12" cy="7" r="1.5" /><path d="M12 8.5L8.5 17" /><path d="M12 8.5L15.5 17" /><path d="M10 14h4" /></svg>),
-    Sacrifice: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>,
-    Gear: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+  // Khi có user đăng nhập, chuyển sang bước Đặt tên và lấy tên mặc định từ Auth
+  useEffect(() => {
+    if (currentUser) {
+      setDisplayName(currentUser.displayName || gsRef.current.myName || '');
+      setStep('name');
+    } else {
+      setStep('login');
+    }
+  }, [currentUser, gsRef]);
+
+  // Bộ tạo tên ngẫu nhiên chuẩn Viễn tưởng (Sci-fi)
+  const generateRandomName = () => {
+    const adjs = ['Astro', 'Nova', 'Cosmic', 'Star', 'Cyber', 'Neon', 'Dark', 'Light', 'Space', 'Galactic', 'Iron', 'Phantom'];
+    const nouns = ['Cat', 'Wolf', 'Fox', 'Dragon', 'Hunter', 'Striker', 'Titan', 'Viper', 'Ghost', 'Rider'];
+    const adj = adjs[Math.floor(Math.random() * adjs.length)];
+    const noun = nouns[Math.floor(Math.random() * nouns.length)];
+    const num = Math.floor(Math.random() * 9999);
+    setDisplayName(`${adj}${noun}${num}`);
   };
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: { opacity: 1, transition: { staggerChildren: 0.15 } }
+
+  // Bộ lọc từ ngữ vi phạm (Profanity Filter)
+  const checkBadWords = (name) => {
+    const badWords = ['admin', 'fuck', 'shit', 'bitch', 'lon', 'cac', 'cc', 'dm', 'vcl', 'wtf', 'loz'];
+    const lowerName = name.toLowerCase();
+    return badWords.some(word => lowerName.includes(word));
   };
-  const itemVariants = {
-    hidden: { y: -20, opacity: 0 },
-    visible: { y: 0, opacity: 1, transition: { type: 'spring' } }
+
+  // Xử lý xác nhận tên
+  const handleConfirmName = async () => {
+    const trimmedName = displayName.trim();
+    
+    // 1. Kiểm tra độ dài
+    if (trimmedName.length < 3 || trimmedName.length > 15) {
+      toast.error(lang === 'vi' ? 'Tên danh xưng phải từ 3 - 15 ký tự!' : 'Identity must be 3-15 chars!');
+      return;
+    }
+
+    // 2. Kiểm tra từ bậy
+    if (checkBadWords(trimmedName)) {
+      toast.error(lang === 'vi' ? 'Tên chứa ký tự hoặc từ ngữ không hợp lệ!' : 'Invalid words detected!');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // 3. Truy vấn Firestore xem tên này đã có ai dùng chưa
+      const q = query(collection(db, "users"), where("profile.displayName", "==", trimmedName));
+      const querySnapshot = await getDocs(q);
+      
+      let isDuplicate = false;
+      querySnapshot.forEach((docSnap) => {
+        // Nếu tìm thấy ID khác với ID của chính mình thì nghĩa là có người khác đang xài
+        if (docSnap.id !== currentUser.uid) {
+          isDuplicate = true;
+        }
+      });
+
+      if (isDuplicate) {
+        toast.error(lang === 'vi' ? 'Danh xưng này đã được đăng ký, vui lòng chọn tên khác!' : 'Identity already taken!');
+        setIsLoading(false);
+        return;
+      }
+
+      // 4. Cập nhật thành công -> Ghi vào Auth & DB
+      if (auth.currentUser) {
+        await updateProfile(auth.currentUser, { displayName: trimmedName });
+      }
+      
+      const userRef = doc(db, "users", currentUser.uid);
+      await setDoc(userRef, { profile: { displayName: trimmedName } }, { merge: true });
+
+      gsRef.current.myName = trimmedName;
+      toast.success(lang === 'vi' ? 'Định danh Phi công thành công!' : 'Identity Confirmed!');
+      setStep('ready');
+
+    } catch (error) {
+      console.error(error);
+      toast.error(lang === 'vi' ? 'Máy chủ đang bận, thử lại sau!' : 'Server busy, try again later!');
+    }
+    setIsLoading(false);
   };
+
+  const handleGuestPlay = () => {
+    // 1. Gán ID ngẫu nhiên cho khách nếu chưa có
+    if (!gsRef.current.deviceId || gsRef.current.deviceId === 'unknown') {
+      gsRef.current.deviceId = `GUEST-${Math.floor(Math.random() * 1000000)}`;
+    }
+    
+    // 2. Gán tên hiển thị mặc định
+    gsRef.current.myName = lang === 'vi' ? 'Phi Công Lạ Mặt' : 'Unknown Pilot';
+    
+    // 3. Tải lại dữ liệu Local (nếu người này đã từng chơi Khách trước đó)
+    const guestCampaign = localStorage.getItem('astro_guest_campaign');
+    if (guestCampaign) {
+      try {
+        gsRef.current.campaignData = JSON.parse(guestCampaign);
+      } catch (e) {
+        console.error("Lỗi parse data khách:", e);
+      }
+    }
+    
+    // 4. Chuyển thẳng vào game
+    setScreen('campaign_portal');
+    toast.success(lang === 'vi' ? 'Khởi động chế độ Chơi Ngay!' : 'Guest Mode Initialized!');
+  };
+
+  // Hoạt ảnh
+  const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.15 } } };
+  const itemVariants = { hidden: { y: 20, opacity: 0 }, visible: { y: 0, opacity: 1, transition: { type: 'spring' } } };
 
   return (
     <motion.div variants={containerVariants} initial="hidden" animate="visible" className={styles.container}>
-      {/* THANH HUD TRÊN CÙNG */}
       <div className={styles.backgroundLayer} />
+      
       <div className={styles.topNav}>
-        {/* GÓC TRÁI: HỒ SƠ NGƯỜI CHƠI HOẶC TRỐNG */}
-        <motion.div variants={itemVariants} className={styles.authSection}>
-          {currentUser && (
-            <>
-              <div className={styles.userPill}>
-                <img src={currentUser.photoURL} alt="avatar" className={styles.avatar} referrerPolicy="no-referrer" />
-                <span className={styles.userName} title={currentUser.displayName}>
-                  {currentUser.displayName}
-                </span>
-                <button onClick={logout} className={styles.logoutBtn}>
-                  {lang === 'vi' ? 'THOÁT' : 'LOGOUT'}
-                </button>
-              </div>
-              <button onClick={deleteAccount} className={styles.deleteBtn}>
-                {lang === 'vi' ? 'Xóa tài khoản' : 'Delete Account'}
-              </button>
-            </>
-          )}
-        </motion.div>
-        {/* GÓC PHẢI: TÀI NGUYÊN (Khung viền Vàng) */}
-        <motion.div variants={itemVariants} className={styles.rightSection}>
-          <div className={styles.currencyBar}>
-            <div className={`${styles.currencyChip} ${styles.chipEnergy}`} title={lang === 'vi' ? 'Năng lượng' : 'Energy'}>
-               <div className={styles.currencyIcon}><Icons.Energy /></div>
-               <span className={styles.currencyAmt}>{energy}</span>
-            </div>
-            <div className={`${styles.currencyChip} ${styles.chipCoin}`} title={lang === 'vi' ? 'Xu' : 'Coins'}>
-               <div className={styles.currencyIcon}><Icons.Coin /></div>
-               <span className={styles.currencyAmt}>{coins.toLocaleString()}</span>
-            </div>
-            <div className={`${styles.currencyChip} ${styles.chipHeart}`} title={lang === 'vi' ? 'Mạng' : 'Lives'}>
-               <div className={styles.currencyIcon}><Icons.Heart /></div>
-               <span className={styles.currencyAmt}>{lives}</span>
-            </div>
-            <div className={`${styles.currencyChip} ${styles.chipGem}`} title={lang === 'vi' ? 'Kim Cương' : 'Diamonds'}>
-               <div className={styles.currencyIcon}><Icons.Gem /></div>
-               <span className={styles.currencyAmt}>{diamonds.toLocaleString()}</span>
-            </div>
-            <div className={`${styles.currencyChip} ${styles.chipGear}`} title={lang === 'vi' ? 'Kim Cương' : 'Diamonds'}>
-               <div className={styles.currencyIcon}><Icons.Gear /></div>
-               <span className={styles.currencyAmt}>{gear.toLocaleString()}</span>
-            </div>
-          </div>
-          <motion.button whileTap={{ scale: 0.9 }} onClick={toggleLanguage} className={styles.langBtn}>
-            {lang === 'vi' ? '🇻🇳 TIẾNG VIỆT' : '🇬🇧 ENGLISH'}
-          </motion.button>
-        </motion.div>
+        <motion.button whileTap={{ scale: 0.9 }} onClick={toggleLanguage} className={styles.langBtn}>
+          {lang === 'vi' ? '🇻🇳 TIẾNG VIỆT' : '🇬🇧 ENGLISH'}
+        </motion.button>
+        {currentUser && (
+           <button onClick={logout} className={styles.logoutBtn}>
+             {lang === 'vi' ? 'ĐĂNG XUẤT' : 'LOGOUT'}
+           </button>
+        )}
       </div>
 
-      {/* TÊN GAME (Neon tỏa sáng) */}
       <motion.h1 variants={itemVariants} className={styles.title}>
-        ASTRO CAT 2.0
+        SPACE FIGHTER 4.0
       </motion.h1>
+      <motion.p variants={itemVariants} className={styles.subtitle}>GALAXY WARS</motion.p>
 
-      {/* 2 CÁNH CỬA (Lưới 2 cột song song) */}
-      <motion.div variants={itemVariants} className={styles.cardsWrapper}>
-        {/* CỬA 1: VÔ CỰC */}
-        <div 
-          className={`portal-card ${styles.card} ${styles.cardEndless}`} 
-          onClick={() => setScreen('menu')}
-        >
-          <div className={`${styles.cardBanner} ${styles.bannerEndless}`}>♾️</div>
-          <h2 className={styles.cardTitle} style={{ color: '#00e5ff' }}>VÔ CỰC</h2>
-          <p className={styles.desc}>Bay lượn, nhặt xu, thi đấu PvP trực tuyến.</p>
-        </div>
-        {/* CỬA 2: CHIẾN DỊCH */}
-        <div 
-          className={`portal-card ${styles.card} ${styles.cardCampaign}`} 
-          onClick={() => setScreen('campaign_portal')}
-        >
-          <div className={`${styles.cardBanner} ${styles.bannerCampaign}`}>🚀</div>
-          <h2 className={styles.cardTitle} style={{ color: '#b388ff' }}>CHIẾN DỊCH</h2>
-          <p className={styles.desc}>Quản lý Phi cơ, nâng cấp vũ khí, đánh Boss.</p>
-        </div>
-      </motion.div>
-      {/* NÚT ĐĂNG NHẬP Ở DƯỚI CÙNG (Dành cho tài khoản Khách) */}
-      {!currentUser && (
-        <motion.div variants={itemVariants} className={styles.bottomAction}>
+      {/* KHUNG ĐĂNG NHẬP (Lúc chưa có User) */}
+      {step === 'login' && (
+        <motion.div variants={itemVariants} className={styles.authBox}>
+          <h2 className={styles.boxTitle}>{lang === 'vi' ? 'THIẾT LẬP KẾT NỐI' : 'ESTABLISH CONNECTION'}</h2>
+          
           {platform !== 'ios' && (
-            <button onClick={loginWithGoogle} className={styles.actionBtn}>
-              <img src="/images/google.png" alt="G" style={{ width: '18px' }} /> GOOGLE LOGIN
+            <button onClick={loginWithGoogle} className={`${styles.loginBtn} ${styles.googleBtn}`}>
+              <img src="/images/google.png" alt="G" className={styles.loginIcon} /> 
+              {lang === 'vi' ? 'TIẾP TỤC VỚI GOOGLE' : 'CONTINUE WITH GOOGLE'}
             </button>
           )}
+
           {platform === 'ios' && (
-            <button onClick={loginWithApple} className={`${styles.actionBtn} ${styles.actionBtnApple}`}>
-              🍎 APPLE LOGIN
+            <button onClick={loginWithApple} className={`${styles.loginBtn} ${styles.appleBtn}`}>
+              🍎 {lang === 'vi' ? 'ĐĂNG NHẬP APPLE ID' : 'SIGN IN WITH APPLE'}
             </button>
           )}
+          
+          <button 
+             onClick={handleGuestPlay} 
+             className={`${styles.loginBtn} ${styles.guestBtn}`}
+             style={{ background: 'transparent', border: '1px solid #00e5ff', color: '#00e5ff', marginTop: '10px' }}
+          >
+              {lang === 'vi' ? 'CHƠI NGAY (KHÔNG LƯU MẠNG)' : 'GUEST PLAY (OFFLINE)'}
+          </button>
+
+          <div className={styles.guestNote}>
+            {lang === 'vi' ? 'Chú ý: Dữ liệu Khách có thể bị mất khi cài lại thiết bị hoặc gỡ ứng dụng.' : 'Warning: Guest data may be lost upon app uninstallation.'}
+          </div>
         </motion.div>
       )}
+
+      {/* KHUNG ĐẶT TÊN (Đã đăng nhập) */}
+      {step === 'name' && (
+        <motion.div variants={itemVariants} className={styles.authBox}>
+          <h2 className={styles.boxTitle}>{lang === 'vi' ? 'HỒ SƠ PHI CÔNG' : 'PILOT DOSSIER'}</h2>
+          
+          <div className={styles.inputGroup}>
+            <input 
+              type="text" 
+              className={styles.nameInput}
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder={lang === 'vi' ? 'Nhập mã định danh...' : 'Enter your codename...'}
+              maxLength={15}
+            />
+            <button className={styles.diceBtn} onClick={generateRandomName} title="Random">
+              🎲
+            </button>
+          </div>
+
+          <button 
+            className={styles.confirmBtn} 
+            onClick={handleConfirmName}
+            disabled={isLoading}
+          >
+            {isLoading ? (lang === 'vi' ? 'ĐANG ĐỒNG BỘ DỮ LIỆU...' : 'SYNCING DATA...') : (lang === 'vi' ? 'HOÀN TẤT ĐĂNG KÝ' : 'FINISH REGISTRATION')}
+          </button>
+        </motion.div>
+      )}
+
+      {/* KHUNG VÀO GAME (Đã hoàn tất tên) */}
+      {step === 'ready' && (
+        <motion.div variants={itemVariants} className={styles.authBox}>
+           <h2 className={styles.welcomeText}>
+             {lang === 'vi' ? `XÁC NHẬN, ${displayName}!` : `AFFIRMATIVE, ${displayName}!`}
+           </h2>
+           <button 
+             className={styles.enterGameBtn} 
+             onClick={() => setScreen('campaign_portal')}
+           >
+             {lang === 'vi' ? 'XUẤT KÍCH NGAY' : 'LAUNCH MISSION'}
+           </button>
+        </motion.div>
+      )}
+
     </motion.div>
   );
 }

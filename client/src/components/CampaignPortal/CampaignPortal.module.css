@@ -5,11 +5,13 @@
 :root {
   --bg-element:    rgba(10, 15, 30, 0.7);
   --accent-cyan:   #00f0ff;
+  --accent-blue:   #0064ff;
   --accent-purple: #b388ff;
   --accent-orange: #ff3c00;
   --accent-gold:   #facc15;
   --accent-pink:   #ff47a3;
   --text-main:     #e2e8f0;
+  --text-muted:    #94a3b8;
   --border-dim:    rgba(0, 240, 255, 0.2);
 
   --font-ui:   'Barlow Condensed', sans-serif;
@@ -18,210 +20,299 @@
 }
 
 .container {
-  width: 100%; 
-  height: 100dvh; 
-  position: relative;
-  font-family: var(--font-ui); 
-  color: var(--text-main); 
-  overflow: hidden; 
-  box-sizing: border-box;
-  /* Chờ ảnh nền của bạn. Mặc định là dải màu sâu */
+  width: 100%; height: 100dvh; position: relative;
+  font-family: var(--font-ui); color: var(--text-main); 
+  overflow: hidden; box-sizing: border-box;
   background: url('/images/potal_bg169.png') no-repeat center center;
   background-size: cover;
-  background-position: center;
+  /* Bỏ padding ở đây để nền tràn viền */
 }
 
-/* Hiệu ứng Scanline (Lưới HUD) */
 .container::after {
-  content: ""; 
-  position: absolute; 
-  inset: 0;
+  content: ""; position: absolute; inset: 0;
   background-image: linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px);
-  background-size: 100% 4px; 
-  pointer-events: none; 
-  z-index: 1;
+  background-size: 100% 4px; pointer-events: none; z-index: 1;
 }
 
 /* ==========================================
    1. TOP NAVIGATION
 ========================================== */
 .topNav {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  display: flex; 
-  justify-content: space-between; 
-  align-items: flex-start;
-  padding: 15px 25px; 
-  z-index: 10; 
+  position: absolute; 
+  /* Dùng calc để cộng dồn khoảng cách gốc và vùng tai thỏ */
+  top: calc(15px + env(safe-area-inset-top, 0px)); 
+  left: calc(25px + env(safe-area-inset-left, 0px)); 
+  right: calc(25px + env(safe-area-inset-right, 0px));
+  display: flex; justify-content: space-between; align-items: flex-start;
+  flex-wrap: nowrap;
+  padding: 0; z-index: 10; gap: 15px;
 }
 
-.backBtn {
-  display: flex; align-items: center; gap: 8px; 
-  background: var(--bg-element); color: var(--accent-cyan);
-  border: none; border-left: 4px solid var(--accent-cyan);
-  padding: 8px 20px; 
-  font-family: var(--font-ui); font-size: 20px; font-weight: 700; 
-  cursor: pointer; text-transform: uppercase; 
-  clip-path: var(--cyber-cut); backdrop-filter: blur(5px);
-  transition: 0.2s;
-}
-.backBtn:hover { background: rgba(0, 240, 255, 0.15); text-shadow: 0 0 8px var(--accent-cyan); }
+.profileBtn { display: flex; align-items: center; gap: 10px; background: var(--bg-element); border: 1px solid var(--border-dim); padding: 5px 20px 5px 5px; border-radius: 30px; cursor: pointer; backdrop-filter: blur(8px); transition: 0.3s; box-shadow: 0 4px 15px rgba(0,0,0,0.3); flex-shrink: 0; }
+.profileBtn:hover { border-color: var(--accent-cyan); box-shadow: 0 0 20px rgba(0, 240, 255, 0.2); transform: scale(1.02); }
+.profileAvatarWrap { width: 42px; height: 42px; border-radius: 50%; border: 2px solid var(--accent-cyan); display: flex; justify-content: center; align-items: center; overflow: hidden; background: rgba(0,0,0,0.5); }
+.profileAvatar { width: 100%; height: 100%; object-fit: cover; }
+.avatarPlaceholder { width: 24px; height: 24px; color: var(--accent-cyan); }
+.profileInfo { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px;}
+.profileName { color: #fff; font-family: var(--font-ui); font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; line-height: 1; white-space: nowrap; }
+.levelRow { display: flex; align-items: center; gap: 6px; width: 100%; }
+.profileLevel { color: var(--accent-gold); font-family: var(--font-data); font-size: 13px; line-height: 1; }
+.miniExpBarBg { width: 50px; height: 4px; background: rgba(0,0,0,0.6); border-radius: 2px; overflow: hidden; border: 1px solid rgba(0, 240, 255, 0.3); }
+.miniExpBarFill { height: 100%; background: linear-gradient(90deg, var(--accent-cyan), var(--accent-blue)); }
 
-.currencyBar { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-.currencyChip {
-  display: flex; align-items: center; gap: 6px; 
-  background: var(--bg-element); border: 1px solid var(--border-dim); 
-  padding: 4px 12px; border-radius: 6px; 
-  backdrop-filter: blur(5px); box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
-}
-.currencyIcon { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; }
+.currencyBar { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; flex: 1; }
+.currencyChip { display: flex; align-items: center; gap: 6px; background: var(--bg-element); border: 1px solid var(--border-dim); padding: 4px 10px; border-radius: 6px; backdrop-filter: blur(5px); box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3); }
+.currencyIcon { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;}
 .currencyIcon svg { width: 100%; height: 100%; }
-
 .chipEnergy    { color: #0abde3; border-bottom: 2px solid #0abde3; }
 .chipCoin      { color: #fb923c; border-bottom: 2px solid #fb923c; }
 .chipGem       { color: #38bdf8; border-bottom: 2px solid #38bdf8; }
 .chipBlueprint { color: #00ff88; border-bottom: 2px solid #00ff88; }
 .chipGear      { color: #c084fc; border-bottom: 2px solid #c084fc; }
-
 .currencyAmt { font-family: var(--font-data); font-size: 16px; color: #fff; }
 
 /* ==========================================
-   2. LEFT SIDEBAR (Tính năng Sự kiện)
+   2. LEFT SIDEBAR
 ========================================== */
-.leftSidebar {
-  position: absolute;
-  top: 90px; left: 25px;
-  display: flex; flex-direction: column; gap: 15px;
-  z-index: 10;
+.leftSidebar { 
+  position: absolute; 
+  top: calc(90px + env(safe-area-inset-top, 0px)); 
+  left: calc(25px + env(safe-area-inset-left, 0px)); 
+  display: flex; flex-direction: column; gap: 15px; z-index: 10; 
 }
-
-.sideBtn {
-  display: flex; align-items: center; gap: 12px;
-  background: var(--bg-element); border: 1px solid var(--border-dim);
-  padding: 10px 20px 10px 15px; border-radius: 8px;
-  color: var(--text-main); font-family: var(--font-ui); font-size: 18px; font-weight: 700;
-  cursor: pointer; backdrop-filter: blur(5px); transition: 0.2s;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-}
+.sideBtn { display: flex; align-items: center; gap: 12px; background: var(--bg-element); border: 1px solid var(--border-dim); padding: 10px 20px 10px 15px; border-radius: 8px; color: var(--text-main); font-family: var(--font-ui); font-size: 18px; font-weight: 700; cursor: pointer; backdrop-filter: blur(5px); transition: 0.2s; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
 .sideBtn:hover { background: rgba(255,255,255,0.1); transform: translateX(5px); }
-
 .sideIcon { width: 22px; height: 22px; color: var(--accent-cyan); }
 .sideIcon svg { width: 100%; height: 100%; }
-
-/* Nạp Đầu - Hiệu ứng đặc biệt */
 .topupBtn { border-color: var(--accent-pink); background: rgba(255, 71, 163, 0.1); }
 .topupBtn .sideIcon { color: var(--accent-pink); filter: drop-shadow(0 0 8px var(--accent-pink)); }
 .topupBtn:hover { box-shadow: 0 0 15px rgba(255, 71, 163, 0.4); }
-
 .eventBtn .sideIcon { color: var(--accent-gold); filter: drop-shadow(0 0 5px var(--accent-gold)); }
 
 /* ==========================================
-   3. BOTTOM NAVIGATION (Kho, Trại, Cửa Hàng)
+   3. BOTTOM NAVIGATION (Nút kho, nhân sự, shop trên màn ngang)
 ========================================== */
-.bottomNav {
-  position: absolute;
-  bottom: 30px; left: 25px;
-  display: flex; gap: 15px;
-  z-index: 10;
+.bottomNav { 
+  position: absolute; 
+  bottom: calc(30px + env(safe-area-inset-bottom, 0px)); 
+  left: calc(25px + env(safe-area-inset-left, 0px)); 
+  display: flex; gap: 15px; z-index: 10; 
 }
-
-.navBtn {
-  display: flex; align-items: center; gap: 10px;
-  background: var(--bg-element); border: 1px solid var(--border-dim);
-  color: var(--text-main); padding: 12px 25px; 
-  font-family: var(--font-ui); font-size: 20px; font-weight: 700; letter-spacing: 0.05em;
-  cursor: pointer; clip-path: var(--cyber-cut); backdrop-filter: blur(5px);
-  transition: 0.2s; position: relative;
-}
-.navBtn::after {
-  content: ""; position: absolute; bottom: 0; left: 0; width: 0; height: 3px;
-  background: var(--accent-cyan); transition: 0.3s;
-}
+.navBtn { display: flex; align-items: center; gap: 10px; background: var(--bg-element); border: 1px solid var(--border-dim); color: var(--text-main); padding: 12px 20px; font-family: var(--font-ui); font-size: 20px; font-weight: 700; letter-spacing: 0.05em; cursor: pointer; clip-path: var(--cyber-cut); backdrop-filter: blur(5px); transition: 0.2s; position: relative; }
+.navBtn::after { content: ""; position: absolute; bottom: 0; left: 0; width: 0; height: 3px; background: var(--accent-cyan); transition: 0.3s; }
 .navBtn:hover { background: rgba(0, 240, 255, 0.1); color: #fff; }
 .navBtn:hover::after { width: 100%; }
 .navIcon { width: 22px; height: 22px; color: #94a3b8; transition: 0.2s; }
 .navBtn:hover .navIcon { color: var(--accent-cyan); }
 
 /* ==========================================
-   4. BOTTOM RIGHT (Combat Action)
+   4. BOTTOM RIGHT ACTION (Nút chiến dịch, phó bản)
 ========================================== */
-.actionArea {
-  position: absolute;
-  bottom: 30px; right: 30px;
-  display: flex; align-items: flex-end; gap: 20px;
-  z-index: 10;
+.actionArea { 
+  position: absolute; 
+  bottom: calc(30px + env(safe-area-inset-bottom, 0px)); 
+  right: calc(30px + env(safe-area-inset-right, 0px)); 
+  display: flex; align-items: flex-end; gap: 15px; z-index: 10; 
 }
 
-/* Nút Phó Bản */
-.subModeBtn {
-  display: flex; flex-direction: column; align-items: center; gap: 5px;
-  background: var(--bg-element); border: 1px solid rgba(250, 204, 21, 0.3);
-  padding: 15px; border-radius: 50%; width: 75px; height: 75px;
-  color: var(--accent-gold); font-family: var(--font-ui); font-size: 14px; font-weight: bold;
-  cursor: pointer; backdrop-filter: blur(5px); transition: 0.2s;
-  box-shadow: 0 0 15px rgba(250, 204, 21, 0.1);
-}
-.subModeBtn:hover { background: rgba(250, 204, 21, 0.2); transform: scale(1.05); }
-.subModeIcon { width: 28px; height: 28px; }
-.subModeIcon svg { width: 100%; height: 100%; }
+.subModeBtn { display: flex; align-items: center; gap: 10px; flex-direction: row; background: linear-gradient(135deg, rgba(250, 204, 21, 0.1) 0%, rgba(255, 60, 0, 0.2) 100%); border: 1px solid var(--accent-gold); padding: 8px 18px 8px 8px; border-radius: 40px; color: var(--accent-gold); font-family: var(--font-ui); font-size: 16px; font-weight: bold; cursor: pointer; backdrop-filter: blur(5px); transition: 0.2s; box-shadow: 0 0 15px rgba(250, 204, 21, 0.1); }
+.subModeBtn:hover { background: linear-gradient(135deg, rgba(250, 204, 21, 0.2) 0%, rgba(255, 60, 0, 0.3) 100%); transform: scale(1.05); }
+.subModeIcon { background: var(--accent-gold); color: #000; width: 36px; height: 36px; border-radius: 50%; display: flex; justify-content: center; align-items: center; box-shadow: 0 0 10px var(--accent-gold); }
+.subModeIcon svg { width: 20px; height: 20px; }
 
-/* Nút CHIẾN DỊCH KHỔNG LỒ */
-.mainLaunchBtn {
-  display: flex; align-items: center; gap: 15px;
-  background: linear-gradient(135deg, rgba(0, 240, 255, 0.2) 0%, rgba(0, 100, 255, 0.4) 100%);
-  border: 2px solid var(--accent-cyan);
-  padding: 15px 30px 15px 15px; border-radius: 60px;
-  cursor: pointer; backdrop-filter: blur(8px);
-  box-shadow: 0 0 30px rgba(0, 240, 255, 0.3), inset 0 0 20px rgba(0, 240, 255, 0.2);
-  transition: 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-.mainLaunchBtn:hover {
-  transform: scale(1.05);
-  background: linear-gradient(135deg, rgba(0, 240, 255, 0.3) 0%, rgba(0, 100, 255, 0.6) 100%);
-  box-shadow: 0 0 50px rgba(0, 240, 255, 0.5), inset 0 0 30px rgba(0, 240, 255, 0.4);
-}
-
-.launchIconBg {
-  background: var(--accent-cyan); color: #000;
-  width: 60px; height: 60px; border-radius: 50%;
-  display: flex; justify-content: center; align-items: center;
-  box-shadow: 0 0 20px var(--accent-cyan);
-}
-.launchIconBg svg { width: 35px; height: 35px; }
-
+.mainLaunchBtn { display: flex; align-items: center; gap: 12px; background: linear-gradient(135deg, rgba(0, 240, 255, 0.2) 0%, rgba(0, 100, 255, 0.4) 100%); border: 2px solid var(--accent-cyan); padding: 12px 25px 12px 12px; border-radius: 60px; cursor: pointer; backdrop-filter: blur(8px); box-shadow: 0 0 30px rgba(0, 240, 255, 0.3), inset 0 0 20px rgba(0, 240, 255, 0.2); transition: 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+.mainLaunchBtn:hover { transform: scale(1.05); background: linear-gradient(135deg, rgba(0, 240, 255, 0.3) 0%, rgba(0, 100, 255, 0.6) 100%); box-shadow: 0 0 50px rgba(0, 240, 255, 0.5), inset 0 0 30px rgba(0, 240, 255, 0.4); }
+.launchIconBg { background: var(--accent-cyan); color: #000; width: 55px; height: 55px; border-radius: 50%; display: flex; justify-content: center; align-items: center; box-shadow: 0 0 20px var(--accent-cyan); }
+.launchIconBg svg { width: 30px; height: 30px; }
 .launchContent { display: flex; flex-direction: column; align-items: flex-start; }
-.launchTitle { color: #fff; font-family: var(--font-ui); font-size: 32px; font-weight: 800; letter-spacing: 2px; text-shadow: 0 0 10px var(--accent-cyan); line-height: 1; }
-.launchSub { color: var(--accent-cyan); font-family: var(--font-data); font-size: 14px; letter-spacing: 1px; margin-top: 5px; }
+.launchTitle { color: #fff; font-family: var(--font-ui); font-size: 28px; font-weight: 800; letter-spacing: 2px; text-shadow: 0 0 10px var(--accent-cyan); line-height: 1; }
+.launchSub { color: var(--accent-cyan); font-family: var(--font-data); font-size: 13px; letter-spacing: 1px; margin-top: 4px; }
+
+/* ==========================================
+   POPUP HỒ SƠ (MODAL) VÀ CĂN CHỈNH CHO MÀN NGANG
+========================================== */
+.popupOverlay { position: fixed; inset: 0; background: rgba(0, 5, 10, 0.85); backdrop-filter: blur(8px); display: flex; justify-content: center; align-items: center; z-index: 999; }
+
+.profileModal { 
+  background: rgba(8, 14, 28, 0.95); border: 1px solid var(--accent-cyan); 
+  width: 90%; max-width: 360px;
+  max-height: 90vh;
+  padding: 25px 20px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; gap: 15px; 
+  position: relative; box-shadow: 0 0 40px rgba(0, 240, 255, 0.15), inset 0 0 20px rgba(0, 240, 255, 0.05); 
+  clip-path: polygon(20px 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%, 0 100%, 0 20px);
+  overflow-y: auto; 
+}
+
+.closeModalBtn { position: absolute; top: 10px; right: 10px; background: transparent; border: none; color: #ff4757; width: 30px; height: 30px; cursor: pointer; transition: 0.2s; z-index: 10;}
+.closeModalBtn:hover { transform: scale(1.2); filter: drop-shadow(0 0 8px #ff4757); }
+.modalHeader { display: flex; flex-direction: column; align-items: center; gap: 5px; width: 100%; }
+.modalAvatarWrap { position: relative; display: flex; justify-content: center; align-items: center; margin-bottom: 5px; }
+.modalAvatar { width: 80px; height: 80px; border-radius: 50%; border: 3px solid var(--accent-cyan); box-shadow: 0 0 20px rgba(0, 240, 255, 0.4); object-fit: cover; }
+.modalAvatarPlaceholder { width: 80px; height: 80px; border-radius: 50%; border: 3px solid var(--accent-cyan); background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; color: var(--accent-cyan); }
+.modalAvatarPlaceholder svg { width: 40px; height: 40px; }
+.modalName { font-family: var(--font-ui); font-size: 26px; color: #fff; margin: 0; text-transform: uppercase; letter-spacing: 1.5px; text-shadow: 0 0 10px var(--accent-cyan); text-align: center; line-height: 1; }
+.modalExpContainer { width: 100%; display: flex; flex-direction: column; gap: 5px; margin-top: 5px; }
+.modalExpLabel { display: flex; justify-content: space-between; align-items: center; font-family: var(--font-data); font-size: 14px; color: var(--accent-cyan); }
+.modalExpNum { color: #fff; font-size: 12px; }
+.modalExpBg { width: 100%; height: 8px; background: rgba(0,0,0,0.6); border-radius: 4px; overflow: hidden; border: 1px solid rgba(0, 240, 255, 0.3); }
+.modalExpFill { height: 100%; background: linear-gradient(90deg, var(--accent-cyan), var(--accent-blue)); box-shadow: 0 0 10px var(--accent-cyan); transition: width 0.4s ease; }
+.vipCard { width: 100%; background: linear-gradient(135deg, rgba(250, 204, 21, 0.1) 0%, rgba(255, 60, 0, 0.1) 100%); border: 1px solid rgba(250, 204, 21, 0.4); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; box-shadow: inset 0 0 20px rgba(250, 204, 21, 0.05); }
+.vipHeader { display: flex; justify-content: space-between; align-items: center; }
+.vipTitle { display: flex; align-items: center; gap: 5px; color: var(--accent-gold); font-family: var(--font-ui); font-size: 20px; font-weight: 800; text-shadow: 0 0 8px rgba(250, 204, 21, 0.5); margin: 0; line-height: 1;}
+.vipTitle svg { width: 20px; height: 20px; }
+.vipNext { font-family: var(--font-data); font-size: 12px; color: var(--accent-orange); }
+.vipBarBg { width: 100%; height: 6px; background: rgba(0,0,0,0.6); border-radius: 3px; overflow: hidden; }
+.vipBarFill { height: 100%; background: linear-gradient(90deg, var(--accent-gold), var(--accent-orange)); box-shadow: 0 0 10px var(--accent-gold); transition: width 0.4s ease; }
+.vipPointsText { font-family: var(--font-data); font-size: 11px; color: #fff; text-align: right; }
+.uidContainer { width: 100%; display: flex; flex-direction: column; gap: 5px; }
+.uidLabel { color: var(--text-muted); font-family: var(--font-ui); font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
+.uidBox { display: flex; align-items: center; justify-content: space-between; width: 100%; background: rgba(0,0,0,0.6); border: 1px dashed var(--accent-purple); padding: 8px 12px; border-radius: 6px; box-sizing: border-box; }
+.uidText { font-family: var(--font-data); font-size: 13px; color: var(--accent-purple); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 85%; }
+.copyBtn { background: transparent; border: none; color: var(--accent-cyan); cursor: pointer; width: 20px; height: 20px; padding: 0; transition: 0.2s; }
+.copyBtn:hover { color: #fff; transform: scale(1.1); filter: drop-shadow(0 0 5px var(--accent-cyan)); }
+.modalActions { display: flex; flex-direction: column; width: 100%; gap: 10px; margin-top: 5px; }
+.logoutBtn { display: flex; align-items: center; justify-content: center; gap: 10px; background: rgba(255, 60, 0, 0.1); border: 1px solid var(--accent-orange); color: var(--accent-orange); padding: 8px; font-family: var(--font-ui); font-size: 16px; font-weight: bold; cursor: pointer; border-radius: 6px; transition: 0.2s; text-transform: uppercase; letter-spacing: 1px; }
+.logoutBtn:hover { background: var(--accent-orange); color: #fff; box-shadow: 0 0 15px rgba(255, 60, 0, 0.4); }
+.actionIcon { width: 20px; height: 20px; }
+.deleteBtn { background: transparent; border: none; color: #ff4757; font-family: var(--font-ui); font-size: 13px; text-decoration: underline; cursor: pointer; opacity: 0.7; transition: 0.2s; padding: 5px 0; }
+.deleteBtn:hover { opacity: 1; text-shadow: 0 0 8px rgba(255, 71, 87, 0.5); }
 
 
 /* ==========================================
-   RESPONSIVE (ĐIỆN THOẠI DỌC)
+   MEDIA QUERIES - RESPONSIVE FIXES
 ========================================== */
-@media (max-width: 768px) {
-  .container {
-    background: url('/images/potal_bg916.png') no-repeat center center;
-    background-size: cover;
+
+/* Layout CSS Grid cho Modal trên màn hình ngang */
+@media (orientation: landscape) and (max-height: 600px) {
+  .profileModal {
+    display: grid;
+    grid-template-columns: 1fr 1.2fr;
+    gap: 15px 25px;
+    max-width: 600px;
+    padding: 25px 30px;
+    align-items: center;
   }
-  .topNav { padding: 10px; flex-wrap: wrap; gap: 10px; }
-  .backText { display: none; } /* Ẩn chữ Hệ điều hành cho đỡ chật */
-  .currencyBar { width: 100%; justify-content: center; }
-  
-  .leftSidebar { top: 95px; left: 10px; gap: 10px; }
-  .sideBtn { padding: 8px 12px; font-size: 15px; }
-  
-  /* Gom 3 nút quản lý xuống sát nút Combat */
-  .bottomNav {
-    bottom: 110px; left: 50%; transform: translateX(-50%);
-    width: max-content; gap: 8px;
+  .modalHeader { grid-column: 1; width: 100%; }
+  .vipCard, .uidContainer { grid-column: 2; width: 100%; margin: 0; }
+  .modalActions { 
+    grid-column: 1 / -1; 
+    flex-direction: row; 
+    justify-content: center; 
+    align-items: center;
+    gap: 20px;
+    margin-top: 10px;
   }
-  .navBtn { padding: 8px 12px; font-size: 14px; flex-direction: column; gap: 4px; }
-  .navBtn span { display: none; } /* Chỉ hiện icon trên mobile */
-  
-  .actionArea { bottom: 20px; right: 10px; gap: 10px; }
-  .subModeBtn { width: 60px; height: 60px; padding: 10px; }
-  .subModeBtn span { display: none; }
-  
+  .logoutBtn { flex: 1; max-width: 250px; }
+  .deleteBtn { margin-left: 0; }
+}
+
+/* Fix màn hình Landscape vừa (Tablet/Web hẹp) */
+@media (max-width: 1024px) and (orientation: landscape) {
+  .bottomNav { left: calc(15px + env(safe-area-inset-left, 0px)); bottom: calc(15px + env(safe-area-inset-bottom, 0px)); gap: 8px; }
+  .navBtn { padding: 10px 15px; font-size: 16px; }
+  .actionArea { right: calc(15px + env(safe-area-inset-right, 0px)); bottom: calc(15px + env(safe-area-inset-bottom, 0px)); gap: 10px; }
+  .launchTitle { font-size: 22px; }
   .mainLaunchBtn { padding: 10px 20px 10px 10px; }
-  .launchIconBg { width: 50px; height: 50px; }
-  .launchTitle { font-size: 24px; }
+  .subModeBtn { width: auto; padding: 6px 12px 6px 6px; }
+}
+
+/* Fix Giao diện xoay dọc (Mobile Portrait) */
+@media (max-width: 768px) and (orientation: portrait) {
+  .container { background: url('/images/potal_bg916.png') no-repeat center center; background-size: cover; }
+  
+  .topNav { 
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    left: calc(10px + env(safe-area-inset-left, 0px));
+    right: calc(10px + env(safe-area-inset-right, 0px));
+    padding: 0; 
+    flex-direction: row; 
+    align-items: flex-start;
+    flex-wrap: nowrap;
+    gap: 12px;
+  }
+  .profileBtn { align-self: flex-start; padding: 4px 15px 4px 4px; flex-shrink: 0; }
+  .profileName { font-size: 16px; max-width: 60px; overflow: hidden; text-overflow: ellipsis;}
+  
+  .currencyBar { 
+    justify-content: flex-end; 
+    padding-bottom: 5px; 
+    flex: 1; 
+    flex-wrap: wrap; 
+  }
+  .currencyChip { padding: 4px 8px; }
+  .currencyAmt { font-size: 14px; }
+
+  .leftSidebar { top: calc(90px + env(safe-area-inset-top, 0px)); left: calc(10px + env(safe-area-inset-left, 0px)); gap: 10px; }
+  .sideBtn { padding: 8px 12px; font-size: 14px; }
+  .sideIcon { width: 18px; height: 18px; }
+  
+  /* Đáy màn hình: Gom nút Nav thành cục Vuông (Inventory, Shop, Pilots) */
+  .bottomNav { 
+    bottom: calc(90px + env(safe-area-inset-bottom, 0px)); /* Tự cộng dồn offset và tai thỏ */
+    left: 50%; 
+    transform: translateX(-50%); 
+    width: max-content; 
+    gap: 10px; 
+  }
+  .navBtn { padding: 10px; width: 55px; height: 55px; justify-content: center; border-radius: 12px; clip-path: none; }
+  .navBtn::after { display: none; }
+  .navBtn span { display: none; }
+  .navIcon { width: 26px; height: 26px; }
+  
+  .actionArea { 
+    bottom: calc(15px + env(safe-area-inset-bottom, 0px)); 
+    right: calc(10px + env(safe-area-inset-right, 0px)); 
+    gap: 10px; 
+    flex-direction: row; 
+    align-items: flex-end;
+  }
+  
+  .subModeBtn { padding: 6px 12px 6px 6px; gap: 6px; border-radius: 30px;}
+  .subModeBtn span { display: block; font-size: 13px; } 
+  .subModeIcon { width: 32px; height: 32px; }
+  .subModeIcon svg { width: 18px; height: 18px; }
+  
+  .mainLaunchBtn { padding: 8px 15px 8px 8px; }
+  .launchIconBg { width: 45px; height: 45px; }
+  .launchIconBg svg { width: 24px; height: 24px; }
+  .launchTitle { font-size: 20px; }
+  .launchSub { font-size: 11px; }
+
+  /* Phục hồi layout Modal dọc cho điện thoại dọc */
+  .profileModal { 
+    flex-direction: column; 
+    padding: 20px 15px; 
+    max-width: 340px; 
+    width: 90%;
+  }
+  .modalHeader { width: 100%; }
+  .vipCard, .uidContainer, .modalActions { width: 100%; margin-left: 0; }
+  .modalActions { flex-direction: column; }
+  .deleteBtn { margin-left: 0; align-self: center; }
+}
+/* ==========================================
+   KHU VỰC CHUYỂN ĐỔI NGÔN NGỮ
+========================================== */
+.langToggleContainer { 
+  width: 100%; display: flex; justify-content: space-between; align-items: center; 
+  background: rgba(0,0,0,0.4); padding: 8px 12px; border-radius: 8px; 
+  border: 1px solid rgba(255,255,255,0.05); margin-bottom: 5px; box-sizing: border-box;
+}
+.langLabel { 
+  font-family: var(--font-ui); font-size: 14px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;
+}
+.langButtons { 
+  display: flex; gap: 6px; 
+}
+.langBtn { 
+  background: transparent; border: 1px solid var(--border-dim); color: var(--text-muted); 
+  padding: 4px 12px; border-radius: 4px; font-family: var(--font-ui); font-size: 14px; 
+  font-weight: bold; cursor: pointer; transition: 0.2s; 
+}
+.langBtn:hover { 
+  background: rgba(255,255,255,0.1); color: #fff; 
+}
+.langActive { 
+  background: rgba(0, 240, 255, 0.2); border-color: var(--accent-cyan); 
+  color: var(--accent-cyan); box-shadow: 0 0 10px rgba(0, 240, 255, 0.2); 
 }
