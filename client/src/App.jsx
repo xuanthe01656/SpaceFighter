@@ -17,6 +17,8 @@ import CampaignPortal from './components/CampaignPortal';
 import ShopCampaign from './components/ShopCampaign';
 import GalaxyMap from './components/GalaxyMap';
 import Missions from './components/Missions';
+import DungeonSelect from './components/DungeonSelect';
+import DungeonEngine from './components/Dungeon/DungeonEngine';
 import { secureStorage } from './utils/storageHelper';
 import { DEFAULT_CAMPAIGN_DATA } from './constants';
 
@@ -180,10 +182,16 @@ export default function Game() {
       )}
       
       {screen === 'campaign_portal' && (
-        <CampaignPortal gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} currentUser={currentUser} logout={logout} deleteAccount={deleteAccount} loginWithGoogle={loginWithGoogle} loginWithApple={loginWithApple} toggleLanguage={toggleLanguage} setLang={setLang} />
+        <CampaignPortal gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} currentUser={currentUser} logout={logout} deleteAccount={deleteAccount} loginWithGoogle={loginWithGoogle} loginWithApple={loginWithApple} toggleLanguage={toggleLanguage} setLang={setLang} getRealTime={getRealTime}/>
       )}
       {screen === 'missions' && (
-        <Missions gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} />
+        <Missions gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} getRealTime={getRealTime}/>
+      )}
+      {screen === 'dungeon_select' && (
+        <DungeonSelect gsRef={gsRef} setScreen={setScreen} lang={lang} getRealTime={getRealTime} />
+      )}
+      {screen === 'dungeon' && (
+        <DungeonEngine gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} />
       )}
       {screen === 'shop_campaign' && (
         <ShopCampaign gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} />

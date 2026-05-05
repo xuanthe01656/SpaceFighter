@@ -38,7 +38,7 @@ const formatCompactNumber = (number) => {
   return shortValue + suffixes[suffixNum];
 };
 
-export default function CampaignPortal({ gsRef, setScreen, lang, setLang, currentUser, logout, deleteAccount, loginWithGoogle, loginWithApple, saveUserProfile }) {
+export default function CampaignPortal({ gsRef, setScreen, lang, setLang, currentUser, logout, deleteAccount, loginWithGoogle, loginWithApple, saveUserProfile, getRealTime }) {
   const platform = Capacitor.getPlatform();
   const [showProfile, setShowProfile] = useState(false);
   
@@ -65,10 +65,14 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
   const vipData = calculateVIPLevel(totalVipPoints);
   const missionData = gsRef.current.campaignData?.missionData || { claimed: [], progress: {} };
   let missionBadgeCount = 0;
+  const now = new Date(getRealTime());
+  const currentMonthDays = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   ['daily', 'weekly', 'monthly'].forEach(type => {
     MISSIONS_CONFIG[type]?.forEach(m => {
       const prog = missionData.progress[m.id] || 0;
       const isClaimed = missionData.claimed.includes(m.id);
+      let actualGoal = m.goal;
+      if (m.id === 'm_login_30') actualGoal = currentMonthDays;
       if (prog >= m.goal && !isClaimed) missionBadgeCount++; // Hoàn thành nhưng chưa nhận
     });
   });
@@ -185,7 +189,7 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
 
       {/* BOTTOM RIGHT ACTION AREA */}
       <motion.div variants={itemVariants} className={styles.actionArea}>
-        <button className={styles.subModeBtn} onClick={handleNotImplemented}>
+        <button className={styles.subModeBtn} onClick={() => handleNav('dungeon_select')}>
           <div className={styles.subModeIcon}><Icons.Swords /></div><span>{lang === 'vi' ? 'PHÓ BẢN' : 'DUNGEON'}</span>
         </button>
         <button className={styles.mainLaunchBtn} onClick={() => handleNav('galaxy_map')}>
@@ -214,6 +218,7 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
         gsRef={gsRef}
         saveUserProfile={saveUserProfile}
         lang={lang}
+        getRealTime={getRealTime}
       />
       {/* POPUP THÔNG TIN HỒ SƠ (MODAL) */}
       <AnimatePresence>

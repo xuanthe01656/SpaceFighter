@@ -11,7 +11,7 @@ const Icons = {
 
 const RARITY_COLOR = { 1: '#94a3b8', 2: '#4ade80', 3: '#60a5fa', 4: '#c084fc', 5: '#fbbf24' };
 
-export default function AttendanceModal({ isOpen, onClose, gsRef, saveUserProfile, lang }) {
+export default function AttendanceModal({ isOpen, onClose, gsRef, saveUserProfile, lang, getRealTime }) {
   const [gachaState, setGachaState] = useState('idle');
   const [gachaResults, setGachaResults] = useState([]);
 
@@ -26,7 +26,7 @@ export default function AttendanceModal({ isOpen, onClose, gsRef, saveUserProfil
         gsRef.current.campaignData.attendance = { streak: 0, lastDate: '' };
       }
       const attData = gsRef.current.campaignData.attendance;
-      const todayStr = new Date().toDateString();
+      const todayStr = new Date(getRealTime()).toDateString();
       
       setCurrentStreak(attData.streak);
       setHasClaimedToday(attData.lastDate === todayStr);
@@ -39,7 +39,7 @@ export default function AttendanceModal({ isOpen, onClose, gsRef, saveUserProfil
     if (hasClaimedToday) return;
 
     let newStreak = currentStreak >= 7 ? 1 : currentStreak + 1;
-    const todayStr = new Date().toDateString();
+    const todayStr = new Date(getRealTime()).toDateString();
 
     // 1. Cập nhật State để UI đổi ngay lập tức
     setCurrentStreak(newStreak);
@@ -49,15 +49,21 @@ export default function AttendanceModal({ isOpen, onClose, gsRef, saveUserProfil
     gsRef.current.campaignData.attendance.streak = newStreak;
     gsRef.current.campaignData.attendance.lastDate = todayStr;
 
-    // --- FIX ĐỒNG BỘ MISSION: Đảm bảo tồn tại object progress và ép cập nhật ---
+    // 3. ĐỒNG BỘ TIẾN TRÌNH NHIỆM VỤ TỔNG HỢP
     if (!gsRef.current.campaignData.missionData) {
         gsRef.current.campaignData.missionData = { claimed: [], progress: {} };
     }
+    
+    // - Nhiệm vụ Ngày
     gsRef.current.campaignData.missionData.progress['d_login'] = 1;
     
-    // Tích lũy tiến trình đăng nhập 5 ngày trong tuần
+    // - Nhiệm vụ Tuần (Tích lũy tối đa 5 ngày)
     const currentWeeklyLogin = gsRef.current.campaignData.missionData.progress['w_login_5'] || 0;
     gsRef.current.campaignData.missionData.progress['w_login_5'] = Math.min(5, currentWeeklyLogin + 1);
+
+    // - Nhiệm vụ Tháng (Tích lũy tối đa 30 ngày)
+    const currentMonthlyLogin = gsRef.current.campaignData.missionData.progress['m_login_30'] || 0;
+    gsRef.current.campaignData.missionData.progress['m_login_30'] = Math.min(30, currentMonthlyLogin + 1);
 
 
     if (newStreak === 7) {
@@ -96,7 +102,7 @@ export default function AttendanceModal({ isOpen, onClose, gsRef, saveUserProfil
       toast.success(lang === 'vi' ? 'Điểm danh thành công! +10 Xu' : 'Attendance Claimed! +10 Coins', { icon: '🪙' });
     }
 
-    // 3. Đóng gói lưu lên mây
+    // 4. Đóng gói lưu lên mây
     saveUserProfile();
   };
 

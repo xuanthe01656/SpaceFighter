@@ -996,9 +996,65 @@ export const MISSIONS_CONFIG = {
   ],
   monthly: [
     { id: 'm_clear_planet', title: { vi: 'Chinh Phục Tinh Cầu', en: 'Planet Conqueror' }, desc: { vi: 'Vượt qua 30 ải chiến dịch', en: 'Clear 30 campaign stages' }, goal: 30, reward: { type: 'diamonds', amount: 300 }, targetScreen: 'galaxy_map' },
-    { id: 'm_pull_gacha', title: { vi: 'Đầu Tư Công Nghệ', en: 'Tech Investor' }, desc: { vi: 'Mở hòm tiếp tế 50 lần', en: 'Open 50 supply crates' }, goal: 50, reward: { type: 'gears', amount: 1000 }, targetScreen: 'shop_campaign' }
+    { id: 'm_pull_gacha', title: { vi: 'Đầu Tư Công Nghệ', en: 'Tech Investor' }, desc: { vi: 'Mở hòm tiếp tế 50 lần', en: 'Open 50 supply crates' }, goal: 50, reward: { type: 'gears', amount: 1000 }, targetScreen: 'shop_campaign' },
+    { id: 'm_login_30', title: { vi: 'Gương Mẫu Toàn Diện', en: 'Exemplary Service' }, desc: { vi: 'Điểm danh tháng', en: 'Check-in this month' }, goal: 30, reward: { type: 'diamonds', amount: 500 }, targetScreen: 'attendance' }
   ]
 };
+// ==========================================
+// --- HỆ THỐNG PHÓ BẢN (DUNGEONS) ---
+// ==========================================
+export const DUNGEON_CONFIG = [
+  {
+    id: 'dung_taurus',
+    type: 'resource',
+    difficulty: 1,
+    title: { vi: 'VÀNH ĐAI TAURUS', en: 'TAURUS BELT' },
+    subtitle: { vi: 'Khai thác Tài Nguyên', en: 'Resource Extraction' },
+    desc: { vi: 'Tiêu diệt hải tặc vũ trụ để đoạt lại khoáng sản. Địch đông, giáp mỏng.', en: 'Destroy space pirates to reclaim minerals. High enemy count, low armor.' },
+    boss: { vi: 'Mũi Khoan Gỉ Sét', en: 'The Rusty Driller' },
+    bgImg: '/images/dungeon_taurus.jpg', // Placeholder cho ảnh AAA sau này
+    themeColor: '#4ade80', // Xanh lá
+    energyCost: 10,
+    openDays: [1, 3, 5, 0], // Mở Thứ 2, 4, 6, Chủ Nhật (0)
+    rewards: [
+      { type: 'coins', amountStr: '10K - 50K' }
+    ]
+  },
+  {
+    id: 'dung_nereus',
+    type: 'gear',
+    difficulty: 2,
+    title: { vi: 'LÕI TRẠM NEREUS', en: 'NEREUS CORE' },
+    subtitle: { vi: 'Đột kích Công nghệ', en: 'Tech Raid' },
+    desc: { vi: 'Vượt qua hệ thống phòng vệ A.I dày đặc khiên năng lượng để lấy bản thiết kế.', en: 'Breach A.I defenses with energy shields to secure blueprints.' },
+    boss: { vi: 'Mắt Thần Oracle', en: 'The Oracle Core' },
+    bgImg: '/images/dungeon_nereus.jpg',
+    themeColor: '#38bdf8', // Xanh dương
+    energyCost: 15,
+    openDays: [2, 4, 6, 0], // Mở Thứ 3, 5, 7, Chủ Nhật (0)
+    rewards: [
+      { type: 'blueprints', amountStr: '1 - 5' },
+      { type: 'gears', amountStr: '20 - 50' }
+    ]
+  },
+  {
+    id: 'dung_abaddon',
+    type: 'survival',
+    difficulty: 3,
+    title: { vi: 'HỐ ĐEN ABADDON', en: 'ABADDON ANOMALY' },
+    subtitle: { vi: 'Thử thách Sinh tồn', en: 'Survival Challenge' },
+    desc: { vi: 'Sống sót giữa khe nứt không-thời gian và sinh vật lai tạp. Độ khó cực độ.', en: 'Survive the space-time rift and biomech swarms. Extreme difficulty.' },
+    boss: { vi: 'Sinh Vật Lai Leviathan', en: 'Biomech Leviathan' },
+    bgImg: '/images/dungeon_abaddon.jpg',
+    themeColor: '#ff4757', // Đỏ
+    energyCost: 20,
+    openDays: [0, 6], // Chỉ mở Thứ 7, Chủ Nhật
+    rewards: [
+      { type: 'diamonds', amountStr: '50 - 200' },
+      { type: 'gears', amountStr: '100 - 300' }
+    ]
+  }
+];
   export const PIPE_DIST_DESKTOP = 250;
   export const PIPE_DIST_MOBILE = 200;
   export const MAX_Y_DIFF = 180;

@@ -182,7 +182,7 @@ export default class CampaignScene extends Phaser.Scene {
     this.enemyHpGraphics = this.add.graphics().setDepth(40);
 
     this.player = this.physics.add.sprite(width / 2, height - 100, 'player_ship_img');
-    const targetWidth = Math.min(width * 0.5, 160);
+    const targetWidth = Math.min(width * 0.5, 100);
     this.playerScale = targetWidth / (this.player.width || 1);
     this.player.setScale(this.playerScale);
 
@@ -765,7 +765,7 @@ export default class CampaignScene extends Phaser.Scene {
     const w = gameSize.width; const h = gameSize.height;
     this.bgGrid.setPosition(w / 2, h / 2); this.bgGrid.setSize(w, h * 2);
     this.physics.world.setBounds(0, 0, w, h);
-    const targetWidth = Math.min(w * 0.5, 160);
+    const targetWidth = Math.min(w * 0.5, 100);
     this.playerScale = targetWidth / (this.player.width || 1); this.player.setScale(this.playerScale);
     this.engineFlareLeft.startFollow(this.player, -this.player.displayWidth * 0.22, this.player.displayHeight * 0.40);
     this.engineFlareRight.startFollow(this.player, this.player.displayWidth * 0.22, this.player.displayHeight * 0.40);

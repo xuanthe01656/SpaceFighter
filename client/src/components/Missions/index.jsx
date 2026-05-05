@@ -35,7 +35,7 @@ const getRewardColor = (type) => {
   }
 };
 
-export default function Missions({ gsRef, setScreen, lang, saveUserProfile }) {
+export default function Missions({ gsRef, setScreen, lang, saveUserProfile, getRealTime }) {
   const [activeTab, setActiveTab] = useState('daily');
   
   if (!gsRef.current.campaignData.missionData) {
@@ -52,7 +52,7 @@ export default function Missions({ gsRef, setScreen, lang, saveUserProfile }) {
   const [claimedMissions, setClaimedMissions] = useState(missionTrack.claimed || []);
 
   useEffect(() => {
-    const now = new Date();
+    const now = new Date(getRealTime());
     const todayTimestamp = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const todayStr = now.toDateString();
     
@@ -67,17 +67,23 @@ export default function Missions({ gsRef, setScreen, lang, saveUserProfile }) {
     let shouldSave = false;
 
     // --- 1. BACK-SYNC TỪ ĐIỂM DANH (ATTENDANCE) SANG MISSIONS ---
-    // Kiểm tra nếu hôm nay ĐÃ điểm danh (trong attData) nhưng nhiệm vụ ngày 'd_login' lại chưa có tiến trình
     const attData = gsRef.current.campaignData.attendance || { streak: 0, lastDate: '' };
+    
+    // Bù Nhiệm vụ Ngày
     if (attData.lastDate === todayStr && missionTrack.progress['d_login'] !== 1) {
         missionTrack.progress['d_login'] = 1;
         shouldSave = true;
     }
     
-    // Đồng bộ tiến trình đăng nhập 5 ngày trong tuần nếu chưa đủ
-    // (Lấy số ngày streak tối đa là 5 để đắp vào, chỉ là giải pháp xấp xỉ vì ta không lưu chi tiết ngày nào trong tuần)
+    // Bù Nhiệm vụ Tuần (Lấy số ngày streak tối đa là 5 để đắp vào)
     if (attData.streak > 0 && missionTrack.progress['w_login_5'] < attData.streak) {
         missionTrack.progress['w_login_5'] = Math.min(5, attData.streak);
+        shouldSave = true;
+    }
+
+    // --- BỔ SUNG: Bù Nhiệm vụ Tháng ---
+    if (attData.streak > 0 && (missionTrack.progress['m_login_30'] || 0) < attData.streak) {
+        missionTrack.progress['m_login_30'] = Math.min(30, attData.streak);
         shouldSave = true;
     }
 
@@ -90,7 +96,6 @@ export default function Missions({ gsRef, setScreen, lang, saveUserProfile }) {
           missionTrack.progress[m.id] = 0;
           missionTrack.claimed = missionTrack.claimed.filter(id => id !== m.id);
        });
-       // Nếu hôm nay đã điểm danh rồi thì sau khi reset tự động đánh dấu hoàn thành lại
        if (attData.lastDate === todayStr) {
            missionTrack.progress['d_login'] = 1;
        }
@@ -104,7 +109,6 @@ export default function Missions({ gsRef, setScreen, lang, saveUserProfile }) {
           missionTrack.progress[m.id] = 0;
           missionTrack.claimed = missionTrack.claimed.filter(id => id !== m.id);
        });
-       // Lấy lại tiến trình streak nếu đang ở giữa tuần mà reset lỗi
        missionTrack.progress['w_login_5'] = Math.min(5, attData.streak);
        shouldSave = true;
     }
@@ -116,10 +120,11 @@ export default function Missions({ gsRef, setScreen, lang, saveUserProfile }) {
           missionTrack.progress[m.id] = 0;
           missionTrack.claimed = missionTrack.claimed.filter(id => id !== m.id);
        });
+       // Khi qua tháng mới, reset luôn cả nhiệm vụ tháng
+       missionTrack.progress['m_login_30'] = 0;
        shouldSave = true;
     }
 
-    // Nếu có thay đổi (back-sync hoặc reset) thì cập nhật State và lưu Cloud
     if (shouldSave) {
        setClaimedMissions([...missionTrack.claimed]);
        saveUserProfile();
@@ -190,10 +195,17 @@ export default function Missions({ gsRef, setScreen, lang, saveUserProfile }) {
           {tabs.map(tab => {
             // Đếm realtime số nhiệm vụ hoàn thành ở tab hiện tại
             let badgeCount = 0;
+            const nowForGoal = new Date(getRealTime());
+            const currentMonthDays = new Date(nowForGoal.getFullYear(), nowForGoal.getMonth() + 1, 0).getDate();
+
             MISSIONS_CONFIG[tab.id].forEach(m => {
               const prog = missionTrack.progress[m.id] || 0;
               const isClaimed = claimedMissions.includes(m.id);
-              if (prog >= m.goal && !isClaimed) badgeCount++;
+              
+              let actualGoal = m.goal;
+              if (m.id === 'm_login_30') actualGoal = currentMonthDays;
+
+              if (prog >= actualGoal && !isClaimed) badgeCount++;
             });
 
             return (
@@ -210,8 +222,17 @@ export default function Missions({ gsRef, setScreen, lang, saveUserProfile }) {
            {currentList.map((mission, idx) => {
              const currentProg = missionTrack.progress[mission.id] || 0;
              const isClaimed = claimedMissions.includes(mission.id);
-             const isCompleted = currentProg >= mission.goal;
-             const percent = Math.min(100, (currentProg / mission.goal) * 100);
+             
+             // --- TỰ ĐỘNG TÍNH NGÀY CHO THÁNG 2 (HOẶC CÁC THÁNG 31 NGÀY) ---
+             let actualGoal = mission.goal;
+             if (mission.id === 'm_login_30') {
+                 const now = new Date(getRealTime());;
+                 // Lấy chính xác tổng số ngày của tháng hiện tại
+                 actualGoal = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(); 
+             }
+
+             const isCompleted = currentProg >= actualGoal;
+             const percent = Math.min(100, (currentProg / actualGoal) * 100);
              const rColor = getRewardColor(mission.reward.type);
 
              return (
@@ -225,7 +246,8 @@ export default function Missions({ gsRef, setScreen, lang, saveUserProfile }) {
                     <p className={styles.mDesc}>{mission.desc[lang]}</p>
                     
                     <div className={styles.mProgressWrap}>
-                      <div className={styles.mProgressText}>{currentProg} / {mission.goal}</div>
+                      {/* Đổi mission.goal thành actualGoal ở đây */}
+                      <div className={styles.mProgressText}>{currentProg} / {actualGoal}</div>
                       <div className={styles.mProgressBarBg}>
                         <div className={styles.mProgressBarFill} style={{ width: `${percent}%`, background: isCompleted ? '#4ade80' : '#38bdf8' }}></div>
                       </div>
@@ -250,7 +272,6 @@ export default function Missions({ gsRef, setScreen, lang, saveUserProfile }) {
                         {lang === 'vi' ? 'NHẬN THƯỞNG' : 'CLAIM'}
                       </button>
                     ) : (
-                      // NÚT THỰC HIỆN KHI CHƯA HOÀN THÀNH
                       <button 
                          className={`${styles.mBtn} ${styles.mBtnProceed}`} 
                          onClick={() => handleProceed(mission.targetScreen)}
