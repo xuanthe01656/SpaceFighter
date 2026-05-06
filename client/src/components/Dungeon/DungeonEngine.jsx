@@ -1,623 +1,329 @@
 /**
- * DungeonEngine.jsx
- * ─────────────────────────────────────────────────────────────────────────────
- * Màn hình chiến đấu chính: Babylon.js canvas + React HUD overlay
+ * DungeonEngine.jsx  –  Babylon.js canvas + React HUD overlay
+ * HUD thiết kế giống Campaign (hex bar, HP phân đoạn, điểm/sóng)
  *
- * PROPS:
- *   gsRef           – useRef({ selectedDungeonId, campaignData })
- *   setScreen       – fn(screenName: string)
- *   lang            – 'vi' | 'en'
- *   saveUserProfile – fn(data)
- *
- * MỞ RỘNG SAU NÀY:
- *   - Thêm state vào GAME_STATE (skill, buff, v.v.)
- *   - Thêm HUD section mới vào <HudOverlay>
- *   - Swap placeholder icon bằng <img src={...}> khi có asset
- * ─────────────────────────────────────────────────────────────────────────────
+ * FIX:
+ *   - onHpChange(hp, maxHp?) đồng bộ maxHp từ Babylon sang React
+ *   - TopHexBar dùng SVG thay clip-path+env() để tránh bug trình duyệt
+ *   - DungeonScene.js cần gọi: cb(onHpChange, stats.hp, stats.maxHp) khi init
  */
 
-import React, {
-  useEffect, useRef, useState, useCallback,
-} from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Engine, Scene } from '@babylonjs/core';
 import { createDungeonScene } from './DungeonScene';
 
-// ─── DESIGN TOKENS ────────────────────────────────────────────────────────────
-const T = {
-  cyan:       '#64ffda',
-  cyanDim:    'rgba(100,255,218,0.15)',
-  cyanGlow:   'rgba(100,255,218,0.25)',
-  red:        '#ff4444',
-  redDim:     'rgba(255,68,68,0.12)',
-  gold:       '#ffd700',
-  goldDim:    'rgba(255,215,0,0.10)',
-  orange:     '#ff9900',
-  orangeDim:  'rgba(255,153,0,0.12)',
-  purple:     '#cc44ff',
-  muted:      '#8899bb',
-  faint:      '#4a6080',
-  dark:       'rgba(0,0,0,0.88)',
-  panel:      'rgba(2,10,24,0.80)',
-  panelBorder:'rgba(100,255,218,0.12)',
-  font:       "'Share Tech Mono', monospace",
-  fontHero:   "'Orbitron', monospace",
-};
-
-// ─── LANGUAGE STRINGS ─────────────────────────────────────────────────────────
+// ─── STRINGS ──────────────────────────────────────────────────────────────────
 const STRINGS = {
   vi: {
-    retreat:      '◀ RÚT LUI',
-    score:        'ĐIỂM',
-    wave:         'SÓNG',
-    waveOf:       '/',
-    hp:           'HP',
-    atk:          'ATK',
-    fireRate:     'BẮN',
-    armor:        'GIÁP',
-    bossWarning:  '⚠ BOSS',
-    victory:      '✦ CHIẾN THẮNG ✦',
-    victoryDesc:  'PHÓ BẢN HOÀN THÀNH',
-    defeat:       '✦ THẤT BẠI ✦',
-    defeatDesc:   'PHI THUYỀN BỊ PHÁ HỦY',
-    finalScore:   'ĐIỂM SỐ CUỐI',
-    retry:        '↺ THỬ LẠI',
-    exit:         '⌂ THOÁT',
+    retreat:     '◀ RÚT LUI',
+    score:       'ĐIỂM',
+    wave:        'SÓNG',
+    waveOf:      '/',
+    armorSystem: 'HỆ THỐNG GIÁP',
+    bossLabel:   'TRÙM',
+    bossWarning: 'CẢNH BÁO:\nTRÙM CUỐI XUẤT HIỆN!',
+    victory:     '✦ CHIẾN THẮNG ✦',
+    victoryDesc: 'PHÓ BẢN HOÀN THÀNH',
+    defeat:      '✦ THẤT BẠI ✦',
+    defeatDesc:  'PHI THUYỀN BỊ PHÁ HỦY',
+    finalScore:  'ĐIỂM SỐ CUỐI',
+    retry:       '↺ THỬ LẠI',
+    exit:        '⌂ THOÁT',
   },
   en: {
-    retreat:      '◀ RETREAT',
-    score:        'SCORE',
-    wave:         'WAVE',
-    waveOf:       '/',
-    hp:           'HP',
-    atk:          'ATK',
-    fireRate:     'RATE',
-    armor:        'ARMOR',
-    bossWarning:  '⚠ BOSS',
-    victory:      '✦ VICTORY ✦',
-    victoryDesc:  'DUNGEON CLEARED',
-    defeat:       '✦ DEFEATED ✦',
-    defeatDesc:   'SHIP DESTROYED',
-    finalScore:   'FINAL SCORE',
-    retry:        '↺ RETRY',
-    exit:         '⌂ EXIT',
+    retreat:     '◀ RETREAT',
+    score:       'SCORE',
+    wave:        'WAVE',
+    waveOf:      '/',
+    armorSystem: 'ARMOR SYSTEM',
+    bossLabel:   'BOSS',
+    bossWarning: 'WARNING:\nBOSS APPROACHING!',
+    victory:     '✦ VICTORY ✦',
+    victoryDesc: 'DUNGEON CLEARED',
+    defeat:      '✦ DEFEATED ✦',
+    defeatDesc:  'SHIP DESTROYED',
+    finalScore:  'FINAL SCORE',
+    retry:       '↺ RETRY',
+    exit:        '⌂ EXIT',
   },
 };
 
-// ─── INLINE STYLES ────────────────────────────────────────────────────────────
-const css = {
-  // Root wrapper – fills whatever container mounts it
-  root: {
-    position: 'relative',
-    width: '100%',
-    height: '100%',
-    minHeight: '100dvh',
-    backgroundColor: '#000',
-    overflow: 'hidden',
-    fontFamily: T.font,
-  },
-
-  // Babylon canvas
-  canvas: {
-    display: 'block',
-    width: '100%',
-    height: '100%',
-    touchAction: 'none',
-    outline: 'none',
-  },
-
-  // HUD overlay sits above canvas
-  hud: {
-    position: 'absolute',
-    inset: 0,
-    pointerEvents: 'none',   // all children default to no interaction
-    zIndex: 100,
-  },
-
-  // ── TOP-LEFT: Retreat button ──────────────────────────────────────────────
-  retreat: {
-    position: 'absolute',
-    top: 'max(16px, env(safe-area-inset-top))',
-    left: 'max(16px, env(safe-area-inset-left))',
-    pointerEvents: 'auto',
-    padding: 'clamp(6px,1.2vw,9px) clamp(12px,2vw,18px)',
-    background: T.panel,
-    color: T.cyan,
-    border: `1px solid ${T.cyan}`,
-    borderRadius: 6,
-    fontFamily: T.font,
-    fontSize: 'clamp(0.65rem,1.4vw,0.78rem)',
-    letterSpacing: '0.08em',
-    textTransform: 'uppercase',
-    cursor: 'pointer',
-    minWidth: 'clamp(90px,12vw,120px)',
-    backdropFilter: 'blur(6px)',
-    transition: 'background 0.2s, box-shadow 0.2s',
-  },
-
-  // ── TOP-CENTER: Wave counter ──────────────────────────────────────────────
-  waveBlock: {
-    position: 'absolute',
-    top: 'max(16px, env(safe-area-inset-top))',
-    left: '50%',
-    transform: 'translateX(-50%)',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 4,
-  },
-  waveText: {
-    color: T.gold,
-    fontFamily: T.font,
-    fontSize: 'clamp(0.72rem,1.6vw,0.95rem)',
-    letterSpacing: '0.14em',
-    whiteSpace: 'nowrap',
-  },
-  wavePipsRow: {
-    display: 'flex',
-    gap: 3,
-  },
-
-  // ── TOP-CENTER: Boss bar (below wave, hidden until boss) ──────────────────
-  bossBlock: {
-    position: 'absolute',
-    top: 'calc(max(16px, env(safe-area-inset-top)) + clamp(32px,5vw,52px))',
-    left: '50%',
-    transform: 'translateX(-50%)',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 4,
-    width: 'clamp(220px,40vw,340px)',
-    transition: 'opacity 0.4s',
-  },
-  bossLabel: {
-    color: T.red,
-    fontFamily: T.font,
-    fontSize: 'clamp(0.65rem,1.4vw,0.8rem)',
-    letterSpacing: '0.14em',
-    textShadow: `0 0 12px ${T.red}`,
-  },
-  bossBarBg: {
-    width: '100%',
-    height: 'clamp(10px,1.4vw,16px)',
-    background: '#2a0808',
-    border: `1px solid ${T.red}44`,
-    borderRadius: 4,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-
-  // ── TOP-RIGHT: Score ──────────────────────────────────────────────────────
-  scoreBlock: {
-    position: 'absolute',
-    top: 'max(16px, env(safe-area-inset-top))',
-    right: 'max(16px, env(safe-area-inset-right))',
-    textAlign: 'right',
-  },
-  scoreText: {
-    color: '#ffffff',
-    fontFamily: T.font,
-    fontSize: 'clamp(0.82rem,1.8vw,1.05rem)',
-    letterSpacing: '0.06em',
-  },
-  scoreDelta: {
-    color: T.gold,
-    fontFamily: T.font,
-    fontSize: 'clamp(0.6rem,1.2vw,0.72rem)',
-    letterSpacing: '0.08em',
-    height: 16,
-    textAlign: 'right',
-    transition: 'opacity 0.3s',
-  },
-
-  // ── BOTTOM-LEFT: HP bar ───────────────────────────────────────────────────
-  hpBlock: {
-    position: 'absolute',
-    bottom: 'max(20px, env(safe-area-inset-bottom))',
-    left: 'max(16px, env(safe-area-inset-left))',
-    width: 'clamp(160px,28vw,240px)',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 3,
-  },
-  hpLabelRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-  },
-  hpLabel: {
-    color: T.cyan,
-    fontSize: 'clamp(0.6rem,1.2vw,0.72rem)',
-    letterSpacing: '0.15em',
-  },
-  hpValue: {
-    color: T.muted,
-    fontSize: 'clamp(0.55rem,1vw,0.65rem)',
-  },
-  hpBarBg: {
-    width: '100%',
-    height: 'clamp(10px,1.4vw,14px)',
-    background: '#0a1020',
-    border: `1px solid ${T.cyan}33`,
-    borderRadius: 4,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  hpMeta: {
-    color: T.faint,
-    fontSize: 'clamp(0.52rem,0.9vw,0.62rem)',
-    letterSpacing: '0.1em',
-    textAlign: 'right',
-  },
-
-  // ── BOTTOM-RIGHT: Ship stats ──────────────────────────────────────────────
-  statsBlock: {
-    position: 'absolute',
-    bottom: 'max(20px, env(safe-area-inset-bottom))',
-    right: 'max(16px, env(safe-area-inset-right))',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 4,
-    alignItems: 'flex-end',
-  },
-  statRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-  },
-  statLabel: {
-    color: T.faint,
-    fontSize: 'clamp(0.52rem,0.9vw,0.62rem)',
-    letterSpacing: '0.14em',
-  },
-  statVal: {
-    color: T.cyan,
-    fontFamily: T.fontHero,
-    fontSize: 'clamp(0.7rem,1.4vw,0.82rem)',
-    fontWeight: 700,
-  },
-
-  // ── CENTER: Announcement text (mirrors Babylon GUI fontSize:52) ───────────
-  announcement: {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    transform: 'translate(-50%, -50%)',
-    textAlign: 'center',
-    fontFamily: T.fontHero,
-    fontWeight: 900,
-    fontSize: 'clamp(1.5rem,5vw,3rem)',
-    letterSpacing: '0.2em',
-    pointerEvents: 'none',
-    userSelect: 'none',
-  },
-
-  // ── RESULT OVERLAY (DungeonEngine.jsx original) ───────────────────────────
-  overlay: {
-    position: 'absolute',
-    inset: 0,
-    background: T.dark,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 200,
-    fontFamily: T.font,
-    padding: '20px clamp(16px,4vw,40px)',
-    animation: 'fadeIn 0.6s ease',
-  },
-  overlayTitle: {
-    fontFamily: T.fontHero,
-    fontWeight: 900,
-    fontSize: 'clamp(1.8rem,6vw,3.5rem)',
-    letterSpacing: '0.2em',
-    marginBottom: '0.4rem',
-    textAlign: 'center',
-  },
-  overlaySub: {
-    color: '#666',
-    fontSize: 'clamp(0.7rem,1.6vw,0.85rem)',
-    letterSpacing: '0.22em',
-    marginBottom: 'clamp(1.2rem,3vw,2rem)',
-    textAlign: 'center',
-  },
-  scoreBox: {
-    background: 'rgba(255,255,255,0.04)',
-    border: '1px solid #2a2a2a',
-    borderRadius: 8,
-    padding: 'clamp(0.8rem,2vw,1.2rem) clamp(1.5rem,4vw,3rem)',
-    marginBottom: 'clamp(1.5rem,3vw,2.5rem)',
-    textAlign: 'center',
-  },
-  scoreBoxLabel: {
-    color: '#555',
-    fontSize: 'clamp(0.62rem,1.2vw,0.75rem)',
-    letterSpacing: '0.3em',
-    marginBottom: '0.4rem',
-  },
-  scoreBoxNum: {
-    color: T.gold,
-    fontFamily: T.fontHero,
-    fontWeight: 700,
-    fontSize: 'clamp(1.6rem,5vw,2.4rem)',
-    letterSpacing: '0.05em',
-  },
-  btnRow: {
-    display: 'flex',
-    gap: 'clamp(0.6rem,1.5vw,1rem)',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-  },
+const T = {
+  cyan:  '#00e5ff',
+  red:   '#ff4757',
+  gold:  '#f1c40f',
+  dark:  'rgba(0,0,0,0.88)',
+  panel: 'rgba(5,11,20,0.85)',
+  font:  "'VT323', monospace",
 };
 
-// ─── WAVE PIPS ────────────────────────────────────────────────────────────────
-function WavePip({ state }) {
-  // state: 'done' | 'current' | 'pending'
-  const base = {
-    width: 'clamp(18px,3vw,26px)',
-    height: 4,
-    borderRadius: 2,
-    transition: 'all 0.4s',
-  };
-  if (state === 'done')    return <div style={{ ...base, background: T.gold, opacity: 0.6 }} />;
-  if (state === 'current') return <div style={{ ...base, background: T.gold, boxShadow: `0 0 6px ${T.gold}` }} />;
-  return <div style={{ ...base, background: 'rgba(255,215,0,0.15)' }} />;
-}
-
-// ─── HP BAR ───────────────────────────────────────────────────────────────────
-function HpBarFill({ pct }) {
-  let bg, glow;
-  if (pct > 0.6)      { bg = T.cyan;   glow = T.cyan; }
-  else if (pct > 0.3) { bg = '#ffaa00'; glow = '#ffaa00'; }
-  else                { bg = T.red;    glow = T.red; }
-
+// ─── SEGMENTED HP BAR (10 ô như Campaign) ────────────────────────────────────
+function SegmentedHpBar({ hp, maxHp }) {
+  const SEGS = 10;
+  const ratio = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
+  const filled = Math.round(ratio * SEGS);
+  const color = ratio <= 0.25 ? T.red : ratio <= 0.5 ? T.gold : T.cyan;
   return (
-    <div
-      style={{
-        height: '100%',
-        width: `${(pct * 100).toFixed(1)}%`,
-        background: bg,
-        borderRadius: 4,
-        transition: 'width 0.25s, background 0.35s',
-        boxShadow: pct <= 0.3 ? `0 0 8px ${glow}88` : 'none',
-        animation: pct <= 0.3 ? 'hpPulse 0.5s ease-in-out infinite alternate' : 'none',
-      }}
-    />
+    <div style={{ display: 'flex', gap: '2px', width: '100%', height: '100%' }}>
+      {Array.from({ length: SEGS }, (_, i) => (
+        <div key={i} style={{
+          flex: 1, height: '100%', borderRadius: 2,
+          background: i < filled ? color : 'rgba(0,0,0,0.6)',
+          boxShadow: i < filled ? `0 0 4px ${color}99` : 'none',
+          transition: 'background 0.25s',
+        }} />
+      ))}
+    </div>
   );
 }
 
-// ─── BOSS BAR FILL ────────────────────────────────────────────────────────────
-function BossBarFill({ pct }) {
+// ─── TOP HEX BAR – SVG clip đúng tọa độ, không dùng env() trong clipPath ─────
+// Khớp với Campaign: hai bên cao 35px, lõm giữa 65px, notch rộng ~180px
+function TopHexBar({ children, safeTopPx }) {
+  const st    = safeTopPx || 0;
+  const sideH = 35;   // chiều cao 2 bên
+  const midH  = 65;   // chiều cao phần lõm giữa
+  const totalH = midH + st;
+
+  // Tọa độ SVG theo viewport 1000 đơn vị ngang
+  const pts = [
+    `0,0`,
+    `1000,0`,
+    `1000,${sideH + st}`,
+    `590,${sideH + st}`,
+    `570,${midH + st}`,
+    `430,${midH + st}`,
+    `410,${sideH + st}`,
+    `0,${sideH + st}`,
+  ].join(' ');
+
+  const borderPts = [
+    `0,${sideH + st}`,
+    `410,${sideH + st}`,
+    `430,${midH + st}`,
+    `570,${midH + st}`,
+    `590,${sideH + st}`,
+    `1000,${sideH + st}`,
+  ].join(' ');
+
   return (
-    <div
-      style={{
-        height: '100%',
-        width: `${(pct * 100).toFixed(1)}%`,
-        background: `linear-gradient(90deg, ${T.red}, #ff6644)`,
-        borderRadius: 4,
-        transition: 'width 0.3s',
-      }}
-    />
+    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: totalH, zIndex: 110, pointerEvents: 'none' }}>
+      {/* SVG nền + viền */}
+      <svg
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }}
+        viewBox={`0 0 1000 ${totalH}`}
+        preserveAspectRatio="none"
+      >
+        <defs>
+          <clipPath id="dungeonHexClip">
+            <polygon points={pts} />
+          </clipPath>
+        </defs>
+        <rect width="1000" height={totalH} fill="rgba(5,11,20,0.87)" clipPath="url(#dungeonHexClip)" />
+        <polyline points={borderPts} fill="none" stroke="rgba(0,229,255,0.65)" strokeWidth="2.5" />
+      </svg>
+      {/* Children nội dung */}
+      <div style={{ position: 'relative', zIndex: 1, height: '100%' }}>
+        {children}
+      </div>
+    </div>
   );
 }
 
-// ─── OVERLAY BUTTON ───────────────────────────────────────────────────────────
-function OverlayBtn({ color, onClick, children }) {
-  const [hov, setHov] = useState(false);
-  return (
-    <button
-      onClick={onClick}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
-      style={{
-        padding: 'clamp(9px,1.8vw,12px) clamp(20px,4vw,32px)',
-        background: hov ? `${color}22` : 'rgba(0,0,0,0.7)',
-        color,
-        border: `2px solid ${color}`,
-        borderRadius: 6,
-        cursor: 'pointer',
-        fontFamily: T.font,
-        fontSize: 'clamp(0.78rem,1.6vw,1rem)',
-        textTransform: 'uppercase',
-        letterSpacing: '0.12em',
-        boxShadow: hov ? `0 0 18px ${color}44` : `0 0 10px ${color}22`,
-        transition: 'all 0.2s',
-        whiteSpace: 'nowrap',
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-// ─── ANNOUNCEMENT ─────────────────────────────────────────────────────────────
+// ─── ANNOUNCEMENT (dải ngang full-width, giống Campaign showAnnounce) ─────────
 function Announcement({ text, color }) {
-  // text=null → hidden
   if (!text) return null;
   return (
     <div style={{
-      ...css.announcement,
-      color,
-      textShadow: `0 0 40px ${color}`,
-      animation: 'annPop 0.45s cubic-bezier(0.2,1,0.3,1) forwards',
+      position: 'absolute', top: '33%', left: 0, right: 0,
+      textAlign: 'center', pointerEvents: 'none', zIndex: 200,
+      animation: 'annFade 0.3s ease',
     }}>
-      {text}
+      <div style={{
+        position: 'absolute',
+        top: '-20px', left: 0, right: 0, bottom: '-20px',
+        background: 'rgba(5,11,20,0.92)',
+        borderTop: `2px solid ${color}88`,
+        borderBottom: `2px solid ${color}88`,
+      }} />
+      <div style={{
+        position: 'relative',
+        fontFamily: T.font, fontWeight: 'bold',
+        fontSize: 'clamp(22px, 6vw, 38px)',
+        color, textShadow: `0 0 20px ${color}`,
+        letterSpacing: '0.08em', whiteSpace: 'pre-line', lineHeight: 1.2,
+      }}>
+        {text}
+      </div>
     </div>
   );
 }
 
 // ─── HUD OVERLAY ──────────────────────────────────────────────────────────────
-/**
- * Pure-React HUD sits above the Babylon canvas.
- * All values come from gameState so this component is
- * easy to extend: just add fields to gameState.
- */
-function HudOverlay({ gameState, lang, onRetreat }) {
-  const S = STRINGS[lang] || STRINGS.vi;
-  const {
-    score, wave, maxWave,
-    hp, maxHp, atk, armor, fireRateMs,
-    bossVisible, bossName, bossHp, bossMaxHp,
-    announcement,
-    shipName,
-  } = gameState;
-
-  const hpPct   = maxHp > 0 ? Math.max(0, hp / maxHp) : 0;
-  const bossPct  = bossMaxHp > 0 ? Math.max(0, bossHp / bossMaxHp) : 0;
+function HudOverlay({ gameState, lang, onRetreat, safeTopPx }) {
+  const S  = STRINGS[lang] || STRINGS.vi;
+  const st = safeTopPx || 0;
+  const { score, wave, maxWave, hp, maxHp, bossVisible, bossName, bossHp, bossMaxHp, announcement } = gameState;
 
   return (
-    <div style={css.hud}>
-      {/* ── Retreat (top-left) ──────────────────────── */}
+    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 100 }}>
+
+      {/* ─── Thanh Hex phía trên ─── */}
+      <TopHexBar safeTopPx={st}>
+
+        {/* ĐIỂM – trái */}
+        <div style={{
+          position: 'absolute', top: st + 8, left: 15,
+          fontFamily: T.font, fontSize: 'clamp(20px,4.5vw,26px)',
+          color: T.cyan, lineHeight: 1,
+        }}>
+          {S.score}: {score}
+        </div>
+
+        {/* HỆ THỐNG GIÁP + HP bar – giữa (trong vùng lõm) */}
+        <div style={{
+          position: 'absolute',
+          top: st + 38,
+          left: '50%', transform: 'translateX(-50%)',
+          width: 120,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+        }}>
+          <div style={{ fontFamily: T.font, fontSize: 14, color: '#fff', whiteSpace: 'nowrap', lineHeight: 1 }}>
+            {S.armorSystem}
+          </div>
+          <div style={{
+            width: '100%', height: 12,
+            background: 'rgba(0,0,0,0.8)',
+            border: '1px solid rgba(0,229,255,0.35)',
+            borderRadius: 3, padding: '2px', boxSizing: 'border-box',
+          }}>
+            <SegmentedHpBar hp={hp} maxHp={maxHp} />
+          </div>
+        </div>
+
+        {/* SÓNG – phải */}
+        <div style={{
+          position: 'absolute', top: st + 8, right: 15,
+          fontFamily: T.font, fontSize: 'clamp(20px,4.5vw,26px)',
+          color: T.gold, lineHeight: 1, textAlign: 'right',
+        }}>
+          {S.wave} {wave}{S.waveOf}{maxWave}
+        </div>
+
+      </TopHexBar>
+
+      {/* ─── Nút RÚT LUI – bên trái dưới thanh hex ─── */}
       <button
-        style={css.retreat}
+        style={{
+          position: 'absolute', top: st + 44, left: 15,
+          pointerEvents: 'auto',
+          padding: '6px 14px',
+          background: 'rgba(2,10,24,0.7)',
+          color: T.cyan, border: `1px solid ${T.cyan}`,
+          borderRadius: 5, fontFamily: T.font,
+          fontSize: 'clamp(16px,3.5vw,22px)', cursor: 'pointer',
+          transition: 'background 0.2s',
+        }}
         onClick={onRetreat}
-        onMouseEnter={e => e.currentTarget.style.background = T.cyanDim}
-        onMouseLeave={e => e.currentTarget.style.background = T.panel}
+        onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,229,255,0.18)'}
+        onMouseLeave={e => e.currentTarget.style.background = 'rgba(2,10,24,0.7)'}
       >
         {S.retreat}
       </button>
 
-      {/* ── Wave counter (top-center) ───────────────── */}
-      <div style={css.waveBlock}>
-        <div style={css.waveText}>
-          {S.wave}&nbsp;{wave}{S.waveOf}{maxWave}
-        </div>
-        <div style={css.wavePipsRow}>
-          {Array.from({ length: maxWave }, (_, i) => {
-            const state = i < wave - 1 ? 'done' : i === wave - 1 ? 'current' : 'pending';
-            return <WavePip key={i} state={state} />;
-          })}
-        </div>
-      </div>
-
-      {/* ── Boss bar (top-center, below wave) ───────── */}
-      <div style={{ ...css.bossBlock, opacity: bossVisible ? 1 : 0, pointerEvents: 'none' }}>
-        <div style={css.bossLabel}>
-          {S.bossWarning} {bossName ? `· ${bossName}` : ''}
-        </div>
-        <div style={css.bossBarBg}>
-          <BossBarFill pct={bossPct} />
-        </div>
-        <div style={{ color: '#ff8888', fontSize: 'clamp(0.55rem,1vw,0.65rem)', letterSpacing: '0.08em', marginTop: 2 }}>
-          {Math.max(0, bossHp).toLocaleString()} / {bossMaxHp.toLocaleString()}
-        </div>
-      </div>
-
-      {/* ── Score (top-right) ───────────────────────── */}
-      <div style={css.scoreBlock}>
-        <div style={css.scoreText}>
-          {S.score}: {score.toLocaleString()}
-        </div>
-      </div>
-
-      {/* ── HP bar (bottom-left) ────────────────────── */}
-      <div style={css.hpBlock}>
-        <div style={css.hpLabelRow}>
-          <span style={css.hpLabel}>{S.hp}</span>
-          <span style={css.hpValue}>{Math.max(0, hp)} / {maxHp}</span>
-        </div>
-        <div style={css.hpBarBg}>
-          <HpBarFill pct={hpPct} />
-        </div>
-        <div style={css.hpMeta}>
-          {S.armor}: {armor} · {S.fireRate}: {fireRateMs}ms
-        </div>
-      </div>
-
-      {/* ── Ship stats (bottom-right) ───────────────── */}
-      <div style={css.statsBlock}>
-        {shipName && (
-          <div style={{ color: T.faint, fontSize: 'clamp(0.52rem,0.9vw,0.62rem)', letterSpacing: '0.12em' }}>
-            {shipName}
+      {/* ─── Boss bar ─── */}
+      {bossVisible && (
+        <div style={{
+          position: 'absolute', top: st + 78, left: '50%', transform: 'translateX(-50%)',
+          width: 'clamp(200px,42vw,340px)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+          animation: 'fadeIn 0.4s ease',
+        }}>
+          <div style={{
+            fontFamily: T.font, fontSize: 'clamp(18px,4vw,24px)',
+            color: T.red, letterSpacing: '0.06em',
+            textShadow: `0 0 10px ${T.red}`, whiteSpace: 'nowrap',
+          }}>
+            ⚠ {bossName || S.bossLabel}
           </div>
-        )}
-        <div style={css.statRow}>
-          <span style={css.statLabel}>{S.atk}</span>
-          <span style={css.statVal}>{atk}</span>
+          <div style={{
+            width: '100%', height: 8,
+            background: 'rgba(30,0,0,0.8)',
+            border: `2px solid ${T.red}`, borderRadius: 3,
+            overflow: 'hidden', boxShadow: '0 0 12px rgba(255,71,87,0.4)',
+          }}>
+            <div style={{
+              height: '100%',
+              width: `${bossMaxHp > 0 ? Math.max(0, (bossHp / bossMaxHp) * 100).toFixed(1) : 0}%`,
+              background: `linear-gradient(90deg,${T.red},#ff6644)`,
+              borderRadius: 2, transition: 'width 0.3s',
+            }} />
+          </div>
+          <div style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 12, color: '#ff8888' }}>
+            {Math.max(0, bossHp).toLocaleString()} / {bossMaxHp.toLocaleString()}
+          </div>
         </div>
-      </div>
-
-      {/* ── Center announcement ─────────────────────── */}
-      {announcement && (
-        <Announcement text={announcement.text} color={announcement.color} />
       )}
+
+      {/* ─── Announcement ─── */}
+      {announcement && <Announcement text={announcement.text} color={announcement.color} />}
     </div>
   );
 }
 
 // ─── RESULT OVERLAY ───────────────────────────────────────────────────────────
+function OverlayBtn({ color, onClick, children }) {
+  const [hov, setHov] = useState(false);
+  return (
+    <button onClick={onClick}
+      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      style={{
+        padding: '10px 28px', background: hov ? `${color}22` : 'rgba(0,0,0,0.7)',
+        color, border: `2px solid ${color}`, borderRadius: 6, cursor: 'pointer',
+        fontFamily: T.font, fontSize: 'clamp(18px,3vw,22px)', textTransform: 'uppercase',
+        letterSpacing: '0.12em', boxShadow: hov ? `0 0 18px ${color}44` : `0 0 10px ${color}22`,
+        transition: 'all 0.2s', whiteSpace: 'nowrap',
+      }}
+    >{children}</button>
+  );
+}
+
 function ResultOverlay({ result, score, lang, onRetry, onExit }) {
   const S = STRINGS[lang] || STRINGS.vi;
   const isVictory = result === 'victory';
   const color = isVictory ? T.cyan : T.red;
-  const title = isVictory ? S.victory : S.defeat;
-  const desc  = isVictory ? S.victoryDesc : S.defeatDesc;
-
   return (
-    <div style={css.overlay}>
-      <style>{`
-        @keyframes fadeIn  { from { opacity: 0 } to { opacity: 1 } }
-        @keyframes annPop  { from { transform: translate(-50%,-50%) scale(0.6); opacity: 0 }
-                             to   { transform: translate(-50%,-50%) scale(1);   opacity: 1 } }
-        @keyframes hpPulse { from { opacity: 0.65 } to { opacity: 1 } }
-      `}</style>
-
-      <div style={{ ...css.overlayTitle, color, textShadow: `0 0 30px ${color}` }}>
-        {title}
+    <div style={{
+      position: 'absolute', inset: 0, background: T.dark,
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      zIndex: 200, fontFamily: T.font, padding: '20px clamp(16px,4vw,40px)',
+      animation: 'fadeIn 0.6s ease',
+    }}>
+      <div style={{ fontFamily: T.font, fontWeight: 'bold', fontSize: 'clamp(28px,7vw,48px)', letterSpacing: '0.2em', marginBottom: '0.4rem', textAlign: 'center', color, textShadow: `0 0 30px ${color}` }}>
+        {isVictory ? S.victory : S.defeat}
       </div>
-      <div style={css.overlaySub}>{desc}</div>
-
-      <div style={css.scoreBox}>
-        <div style={css.scoreBoxLabel}>{S.finalScore}</div>
-        <div style={css.scoreBoxNum}>{score.toLocaleString()}</div>
+      <div style={{ color: '#666', fontSize: 'clamp(14px,2.5vw,18px)', letterSpacing: '0.22em', marginBottom: '2rem', textAlign: 'center' }}>
+        {isVictory ? S.victoryDesc : S.defeatDesc}
       </div>
-
-      <div style={css.btnRow}>
+      <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid #2a2a2a', borderRadius: 8, padding: '1rem 3rem', marginBottom: '2rem', textAlign: 'center' }}>
+        <div style={{ color: '#555', fontSize: 'clamp(12px,2vw,15px)', letterSpacing: '0.3em', marginBottom: '0.4rem' }}>{S.finalScore}</div>
+        <div style={{ color: T.gold, fontFamily: "'Share Tech Mono',monospace", fontWeight: 700, fontSize: 'clamp(28px,6vw,42px)' }}>{score.toLocaleString()}</div>
+      </div>
+      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
         <OverlayBtn color={T.cyan}   onClick={onRetry}>{S.retry}</OverlayBtn>
-        <OverlayBtn color={T.orange} onClick={onExit}>{S.exit}</OverlayBtn>
+        <OverlayBtn color="#ff9900" onClick={onExit}>{S.exit}</OverlayBtn>
       </div>
     </div>
   );
 }
 
-// ─── INITIAL GAME STATE ───────────────────────────────────────────────────────
-/**
- * Tất cả dữ liệu HUD được gom vào một object.
- * DungeonScene.js cập nhật state này qua callbacks.
- * Để thêm HUD mới: thêm field vào đây + cập nhật HudOverlay.
- */
-const makeInitialState = (aircraftBase, pilotBase, mainGunBase, armorBase) => {
-  const baseHp  = aircraftBase?.baseHp  ?? 1000;
-  const baseAtk = aircraftBase?.baseAtk ?? 10;
-  const extraHp = armorBase   ? (armorBase.baseHp ?? 0) : 0;
-  const gunAtk  = mainGunBase ? (mainGunBase.baseAtk ?? 0) : 0;
-  const atkMult = pilotBase?.passive === 'main_damage_boost'
-    ? 1 + (pilotBase.value ?? 0) : 1;
-
-  return {
-    // Score
-    score: 0,
-    // Wave
-    wave: 1,
-    maxWave: 5,
-    // HP
-    hp:    Math.floor(baseHp + extraHp),
-    maxHp: Math.floor(baseHp + extraHp),
-    // Combat stats
-    atk:        Math.floor((baseAtk + gunAtk) * atkMult),
-    armor:      aircraftBase?.baseArmor ?? 0,
-    fireRateMs: mainGunBase?.fireRate ? Math.round(mainGunBase.fireRate * 1000) : 400,
-    // Boss
-    bossVisible: false,
-    bossName:    '',
-    bossHp:      0,
-    bossMaxHp:   0,
-    // Ship display name
-    shipName: aircraftBase?.name?.vi ?? aircraftBase?.name?.en ?? '',
-    // Announcement (set transiently, cleared by timer)
-    announcement: null,
-  };
-};
+// ─── INITIAL STATE ────────────────────────────────────────────────────────────
+const makeInitialState = () => ({
+  score: 0, wave: 1, maxWave: 5,
+  hp: 1000, maxHp: 1000,   // DungeonScene sẽ overwrite ngay khi init
+  bossVisible: false, bossName: '', bossHp: 0, bossMaxHp: 0,
+  announcement: null,
+});
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile }) {
@@ -625,228 +331,93 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile 
   const engineRef = useRef(null);
   const sceneRef  = useRef(null);
 
-  // ── Result state (managed by React, triggered from Babylon) ─────────────
-  const [gameResult, setGameResult] = useState(null);   // null | 'victory' | 'defeat'
+  const [gameResult, setGameResult] = useState(null);
   const [finalScore, setFinalScore] = useState(0);
+  const [gameState, setGameState]   = useState(makeInitialState);
+  const [safeTopPx, setSafeTopPx]   = useState(0);
 
-  // ── HUD state (reactive mirror of BabylonScene internals) ───────────────
-  const [gameState, setGameState] = useState(() => {
-    try {
-      const { items, loadout } = gsRef.current.campaignData;
-      // Dynamic import not possible here; resolve synchronously from gsRef
-      // Replace these with your actual AIRCRAFTS / PILOTS / GEAR_CATALOG lookups
-      const aircraftBase = gsRef.current._aircraftBase ?? null;
-      const pilotBase    = gsRef.current._pilotBase    ?? null;
-      const mainGunBase  = gsRef.current._mainGunBase  ?? null;
-      const armorBase    = gsRef.current._armorBase    ?? null;
-      return makeInitialState(aircraftBase, pilotBase, mainGunBase, armorBase);
-    } catch {
-      return makeInitialState(null, null, null, null);
-    }
-  });
+  // Đọc safe-area-inset-top 1 lần khi mount
+  useEffect(() => {
+    const el = document.createElement('div');
+    el.style.cssText = 'position:fixed;top:env(safe-area-inset-top,0px);left:0;width:1px;height:1px;opacity:0;pointer-events:none';
+    document.body.appendChild(el);
+    const v = parseFloat(getComputedStyle(el).top) || 0;
+    setSafeTopPx(v);
+    document.body.removeChild(el);
+  }, []);
 
-  // ── Announcement helper (auto-clear after 2 s) ──────────────────────────
   const annTimerRef = useRef(null);
-  const showAnnouncement = useCallback((text, color = T.gold) => {
+  const showAnn = useCallback((text, color = T.gold) => {
     clearTimeout(annTimerRef.current);
     setGameState(s => ({ ...s, announcement: { text, color } }));
-    annTimerRef.current = setTimeout(
-      () => setGameState(s => ({ ...s, announcement: null })),
-      2000,
-    );
+    annTimerRef.current = setTimeout(() => setGameState(s => ({ ...s, announcement: null })), 2200);
   }, []);
 
-  // ── Callbacks for DungeonScene.js ───────────────────────────────────────
-  const onScoreUpdate = useCallback((score) => {
-    setGameState(s => ({ ...s, score }));
-  }, []);
-
-  const onWaveStart = useCallback((wave, maxWave, L) => {
-    const isLast = wave === maxWave;
+  // FIX BUG HP: nhận cả maxHp từ DungeonScene
+  const onHpChange     = useCallback((hp, maxHp) => setGameState(s => ({ ...s, hp: Math.max(0, hp), ...(maxHp !== undefined ? { maxHp } : {}) })), []);
+  const onScoreUpdate  = useCallback((score) => setGameState(s => ({ ...s, score })), []);
+  const onWaveStart    = useCallback((wave, maxWave) => {
+    const S = STRINGS[lang] || STRINGS.vi;
     setGameState(s => ({ ...s, wave, maxWave }));
-    showAnnouncement(
-      isLast
-        ? (lang === 'vi' ? '⚠ SÓNG CUỐI CÙNG ⚠' : '⚠ FINAL WAVE ⚠')
-        : `${lang === 'vi' ? 'SÓNG' : 'WAVE'} ${wave}`,
-      isLast ? T.red : T.gold,
-    );
-  }, [lang, showAnnouncement]);
+    const isLast = wave === maxWave;
+    showAnn(isLast ? (lang === 'vi' ? 'SÓNG CUỐI CÙNG' : 'FINAL WAVE') : `${S.wave} ${wave}`, isLast ? T.red : T.gold);
+  }, [lang, showAnn]);
+  const onBossSpawn    = useCallback((name, bossMaxHp) => {
+    const S = STRINGS[lang] || STRINGS.vi;
+    setGameState(s => ({ ...s, bossVisible: true, bossName: name, bossHp: bossMaxHp, bossMaxHp }));
+    showAnn(S.bossWarning, T.red);
+  }, [lang, showAnn]);
+  const onBossHpChange = useCallback((bossHp) => setGameState(s => ({ ...s, bossHp: Math.max(0, bossHp) })), []);
+  const onBossDead     = useCallback(() => setGameState(s => ({ ...s, bossVisible: false, bossHp: 0 })), []);
+  const onBossDefeated = useCallback(() => showAnn(lang === 'vi' ? '✦ BOSS ĐÃ TIÊU DIỆT ✦' : '✦ BOSS DEFEATED ✦', '#ff9900'), [lang, showAnn]);
+  const onGameOver     = useCallback((score) => { setFinalScore(score); setGameResult('defeat'); }, []);
+  const onVictory      = useCallback((score) => { setFinalScore(score); setGameResult('victory'); if (saveUserProfile) saveUserProfile({ lastScore: score }); }, [saveUserProfile]);
 
-  const onHpChange = useCallback((hp) => {
-    setGameState(s => ({ ...s, hp: Math.max(0, hp) }));
-  }, []);
+  const getCallbacks = useCallback(() => ({
+    gsRef, setScreen, lang, saveUserProfile,
+    onGameOver, onVictory, onScoreUpdate, onWaveStart, onHpChange,
+    onBossSpawn, onBossHpChange, onBossDead, onBossDefeated,
+  }), [gsRef, setScreen, lang, saveUserProfile, onGameOver, onVictory, onScoreUpdate, onWaveStart, onHpChange, onBossSpawn, onBossHpChange, onBossDead, onBossDefeated]);
 
-  const onBossSpawn = useCallback((name, bossMaxHp) => {
-    setGameState(s => ({
-      ...s,
-      bossVisible: true,
-      bossName: name,
-      bossHp: bossMaxHp,
-      bossMaxHp,
-    }));
-    showAnnouncement('⚠ BOSS ⚠', T.red);
-  }, [showAnnouncement]);
+  const startBabylon = useCallback(() => {
+    const engine = new Engine(canvasRef.current, true, { preserveDrawingBuffer: true, stencil: true, adaptToDeviceRatio: true });
+    engineRef.current = engine;
+    const scene = new Scene(engine);
+    sceneRef.current = scene;
+    createDungeonScene(scene, canvasRef.current, engine, getCallbacks());
+    engine.runRenderLoop(() => { if (scene?.activeCamera) scene.render(); });
+    return engine;
+  }, [getCallbacks]);
 
-  const onBossHpChange = useCallback((bossHp) => {
-    setGameState(s => ({ ...s, bossHp: Math.max(0, bossHp) }));
-  }, []);
-
-  const onBossDead = useCallback(() => {
-    setGameState(s => ({ ...s, bossVisible: false, bossHp: 0 }));
-  }, []);
-
-  const onBossDefeated = useCallback(() => {
-    showAnnouncement(
-      lang === 'vi' ? '✦ BOSS ĐÃ BỊ TIÊU DIỆT ✦' : '✦ BOSS DEFEATED ✦',
-      '#ff9900',
-    );
-  }, [lang, showAnnouncement]);
-
-  const onGameOver = useCallback((score) => {
-    setFinalScore(score);
-    setGameResult('defeat');
-  }, []);
-
-  const onVictory = useCallback((score) => {
-    setFinalScore(score);
-    setGameResult('victory');
-    if (saveUserProfile) saveUserProfile({ lastScore: score });
-  }, [saveUserProfile]);
-
-  // ── Babylon bootstrap ───────────────────────────────────────────────────
   useEffect(() => {
     if (!canvasRef.current) return;
-
-    const engine = new Engine(canvasRef.current, true, {
-      preserveDrawingBuffer: true,
-      stencil: true,
-      adaptToDeviceRatio: true,
-    });
-    engineRef.current = engine;
-
-    const scene = new Scene(engine);
-    // clearColor được set trong DungeonScene theo dungeonConfig.themeColor
-    sceneRef.current = scene;
-
-    createDungeonScene(scene, canvasRef.current, engine, {
-      gsRef,
-      setScreen,
-      lang,
-      saveUserProfile,
-      onGameOver,
-      onVictory,
-      onScoreUpdate,
-      onWaveStart,
-      onHpChange,
-      onBossSpawn,
-      onBossHpChange,
-      onBossDead,
-      onBossDefeated,
-    });
-
-    engine.runRenderLoop(() => {
-      if (scene?.activeCamera) scene.render();
-    });
-
+    const engine = startBabylon();
     const onResize = () => engine.resize();
     window.addEventListener('resize', onResize);
-
     return () => {
       clearTimeout(annTimerRef.current);
       window.removeEventListener('resize', onResize);
-      scene.dispose();
+      sceneRef.current?.dispose();
       engine.dispose();
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line
 
-  // ── Retry: reload scene without full page reload ────────────────────────
   const handleRetry = useCallback(() => {
-    setGameResult(null);
-    setFinalScore(0);
-    // Re-dispose & re-init Babylon
-    sceneRef.current?.dispose();
-    engineRef.current?.dispose();
+    setGameResult(null); setFinalScore(0); setGameState(makeInitialState());
+    sceneRef.current?.dispose(); engineRef.current?.dispose();
+    startBabylon();
+  }, [startBabylon]);
 
-    const engine = new Engine(canvasRef.current, true, {
-      preserveDrawingBuffer: true,
-      stencil: true,
-      adaptToDeviceRatio: true,
-    });
-    engineRef.current = engine;
-    const scene = new Scene(engine);
-    // clearColor được set trong DungeonScene theo dungeonConfig.themeColor
-    sceneRef.current = scene;
-
-    createDungeonScene(scene, canvasRef.current, engine, {
-      gsRef, setScreen, lang, saveUserProfile,
-      onGameOver, onVictory,
-      onScoreUpdate, onWaveStart, onHpChange,
-      onBossSpawn, onBossHpChange, onBossDead, onBossDefeated,
-    });
-    engine.runRenderLoop(() => {
-      if (scene?.activeCamera) scene.render();
-    });
-  }, [
-    gsRef, setScreen, lang, saveUserProfile,
-    onGameOver, onVictory, onScoreUpdate, onWaveStart,
-    onHpChange, onBossSpawn, onBossHpChange, onBossDead, onBossDefeated,
-  ]);
-
-  // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div style={css.root}>
-      {/* Global keyframe injection (once) */}
+    <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: '100dvh', backgroundColor: '#000', overflow: 'hidden' }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@700;900&display=swap');
-        @keyframes fadeIn  { from { opacity: 0 } to { opacity: 1 } }
-        @keyframes annPop  {
-          from { transform: translate(-50%,-50%) scale(0.6); opacity: 0 }
-          to   { transform: translate(-50%,-50%) scale(1);   opacity: 1 }
-        }
-        @keyframes hpPulse { from { opacity: 0.65 } to { opacity: 1 } }
+        @import url('https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap');
+        @keyframes fadeIn  { from{opacity:0} to{opacity:1} }
+        @keyframes annFade { from{opacity:0;transform:scaleY(0.85)} to{opacity:1;transform:scaleY(1)} }
       `}</style>
-
-      {/* ── Babylon canvas ── */}
-      <canvas ref={canvasRef} style={css.canvas} />
-
-      {/* ── React HUD overlay (always mounted, no layout cost) ── */}
-      {!gameResult && (
-        <HudOverlay
-          gameState={gameState}
-          lang={lang}
-          onRetreat={() => setScreen('dungeon_select')}
-        />
-      )}
-
-      {/* ── Game result overlay ── */}
-      {gameResult && (
-        <ResultOverlay
-          result={gameResult}
-          score={finalScore}
-          lang={lang}
-          onRetry={handleRetry}
-          onExit={() => setScreen('dungeon_select')}
-        />
-      )}
+      <canvas ref={canvasRef} style={{ display: 'block', width: '100%', height: '100%', touchAction: 'none', outline: 'none' }} />
+      {!gameResult && <HudOverlay gameState={gameState} lang={lang} onRetreat={() => setScreen('dungeon_select')} safeTopPx={safeTopPx} />}
+      {gameResult && <ResultOverlay result={gameResult} score={finalScore} lang={lang} onRetry={handleRetry} onExit={() => setScreen('dungeon_select')} />}
     </div>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// HOW TO WIRE onWaveStart / onHpChange / onBossSpawn into DungeonScene.js
-// ─────────────────────────────────────────────────────────────────────────────
-//
-// In createDungeonScene, destructure the new callbacks from `data`:
-//   const { onGameOver, onVictory,
-//           onScoreUpdate, onWaveStart, onHpChange,
-//           onBossSpawn, onBossHpChange, onBossDead } = data;
-//
-// Then call them at the right moments:
-//
-//   updateScore(delta) → onScoreUpdate?.(score)
-//   startWave(n)       → onWaveStart?.(n, MAX_WAVES, lang)
-//   damagePlayer(dmg)  → onHpChange?.(stats.hp)
-//   spawnBoss()        → onBossSpawn?.(bossName, bossMaxHp)
-//   boss hit           → onBossHpChange?.(bossHp)
-//   boss dead          → onBossDead?.()
-// ─────────────────────────────────────────────────────────────────────────────

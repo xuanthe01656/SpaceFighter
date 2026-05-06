@@ -153,7 +153,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     };
 
     // Đẩy stats ban đầu lên React HUD
-    cb(onHpChange, stats.hp);
+    cb(onHpChange, stats.hp, stats.maxHp);
 
     // ══════════════════════════════════════════════════════════════════════════
     // 2. CAMERA  (dùng engine.getRenderWidth/Height thay vì canvas.width)
