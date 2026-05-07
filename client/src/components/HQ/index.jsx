@@ -17,8 +17,10 @@ const formatCompactNumber = (number) => {
 export default function HQ({ gsRef, setScreen, lang, saveUserProfile }) {
   const campaignData = gsRef.current?.campaignData;
   const [refreshTick, setRefreshTick] = useState(0);
-  
   const [selectingSlot, setSelectingSlot] = useState(null); 
+  const gameMode = gsRef.current?.gameMode || 'campaign'; 
+  const targetDungeon = gsRef.current?.selectedDungeonId || '';
+  const dName = targetDungeon ? targetDungeon.replace('dung_', '').toUpperCase() : '';
 
   if (!campaignData) {
     return (
@@ -173,8 +175,10 @@ export default function HQ({ gsRef, setScreen, lang, saveUserProfile }) {
         
         <div className={styles.topSection}>
           <div className={styles.headerLeft}>
-            <motion.button whileTap={{ scale: 0.9 }} className={styles.backBtn} onClick={() => setScreen('stage_select')}>
-              ◀ {lang === 'vi' ? 'ẢI' : 'STAGES'}
+            <motion.button whileTap={{ scale: 0.9 }} className={styles.backBtn} 
+              onClick={() => setScreen(gameMode === 'dungeon' ? 'dungeon_select' : 'stage_select')}
+            >
+              ◀ {lang === 'vi' ? (gameMode === 'dungeon' ? 'PHÓ BẢN' : 'ẢI') : (gameMode === 'dungeon' ? 'DUNGEONS' : 'STAGES')}
             </motion.button>
             <h1 className={styles.title}>{lang === 'vi' ? 'TỔNG HÀNH DINH' : 'HQ CENTER'}</h1>
           </div>
@@ -269,8 +273,19 @@ export default function HQ({ gsRef, setScreen, lang, saveUserProfile }) {
         </div>
         
         <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <motion.button whileTap={{ scale: 0.95 }} className={styles.launchBtn} onClick={() => setScreen('campaign')}>
-            {lang === 'vi' ? `XUẤT KÍCH (ẢI ${targetStage})` : `LAUNCH STAGE ${targetStage}`}
+          <motion.button whileTap={{ scale: 0.95 }} className={styles.launchBtn} 
+            onClick={() => {
+              if (gameMode === 'dungeon') {
+                gsRef.current.energy -= (gsRef.current.pendingEnergyCost || 0);
+                setScreen('dungeon'); // Lưu ý thay bằng đúng tên key màn hình Dungeon của bác
+              } else {
+                setScreen('campaign');
+              }
+            }} 
+          >
+            {lang === 'vi' 
+              ? `XUẤT KÍCH (${gameMode === 'dungeon' ? dName : `ẢI ${targetStage}`})` 
+              : `LAUNCH ${gameMode === 'dungeon' ? dName : `STAGE ${targetStage}`}`}
           </motion.button>
         </div>
         

@@ -46,16 +46,10 @@ export default function DungeonSelect({ gsRef, setScreen, lang, getRealTime }) {
       toast.error(lang === 'vi' ? 'Không đủ Năng lượng!' : 'Not enough Energy!', { icon: '⚡' });
       return;
     }
-    
-    // Trừ Năng lượng
-    gsRef.current.energy -= dungeon.energyCost;
-    
-    // Lưu ID phó bản vào gsRef để Phaser Scene có thể đọc được
     gsRef.current.selectedDungeonId = dungeon.id;
-    
-    toast.success(lang === 'vi' ? `Đang vào: ${dungeon.title.vi}` : `Deploying to: ${dungeon.title.en}`, { icon: '🚀' });
-    // Chuyển sang màn hình chơi Phó bản
-    setScreen('dungeon'); 
+    gsRef.current.pendingEnergyCost = dungeon.energyCost; // Đưa cho HQ giữ dùm
+    gsRef.current.gameMode = 'dungeon';
+    setScreen('hq'); 
   };
 
   return (

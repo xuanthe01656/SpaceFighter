@@ -54,6 +54,7 @@ export default function StageSelect({ gsRef, setScreen, lang }) {
     if (stage.id <= unlockedStage) {
       progress.selectedStage = stage.id; 
       gsRef.current.campaignData.currentStageBg = stage.bgImage;
+      gsRef.current.gameMode = 'campaign'; 
       setScreen('hq'); 
     }
   };
