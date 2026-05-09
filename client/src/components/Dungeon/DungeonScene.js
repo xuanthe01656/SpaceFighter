@@ -22,7 +22,7 @@ const safeDisGui = (ctrl) => { if (ctrl) { try { ctrl.dispose(); } catch (_) {} 
 
 export const createDungeonScene = (scene, canvas, engine, data) => {
 
-    const { gsRef, lang, onGameOver, onVictory } = data;
+    const { gsRef, lang, onGameOver, onVictory, onBossDefeated } = data;
 
     // ══════════════════════════════════════════════════════════════════════════
     // 1. LOAD TRANG BỊ & TÍNH TOÁN STATS CHUẨN RPG TỪ CAMPAIGN
@@ -810,13 +810,23 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         triggerShake(0.6, 20);
         playerPlane.visibility = 0;
         engineFx.stop();
+        showAnnouncement(
+            lang === 'vi' ? 'THẤT BẠI!' : 'MISSION FAILED!',
+            '#ff4757',
+            2000,
+        );
         setTimeout(() => onGameOver(score), 1800);
     };
 
     const triggerVictory = () => {
         if (gameOver) return;
         gameOver = true;
-        setTimeout(() => onVictory(score), 1200);
+        showAnnouncement(
+            lang === 'vi' ? 'HOÀN THÀNH\nCHIẾN DỊCH!' : 'CAMPAIGN\nCLEARED!',
+            '#2ecc71',
+            2000,
+        );
+        setTimeout(() => onVictory(score), 2800);
     };
 
     setTimeout(() => { if (!scene.isDisposed) startWave(1); }, 800);
@@ -998,6 +1008,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                     bossPanel.isVisible = false;
                     updateScore(500 * currentWave);
                     showAnnouncement(lang === 'vi' ? '✦ BOSS ĐÃ TIÊU DIỆT ✦' : '✦ BOSS DEFEATED ✦', '#f1c40f');
+                    if (typeof onBossDefeated === 'function') onBossDefeated();
                     advanceWave();
                 }
                 break;

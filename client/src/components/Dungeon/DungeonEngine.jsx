@@ -23,13 +23,15 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile 
       gsRef,
       lang,
       onGameOver: (score) => {
-        // Thoát ra ngoài menu khi phi thuyền nổ
         setScreen('dungeon_select'); 
       },
       onVictory: (score) => {
-        // Lưu điểm và thoát khi thắng
         if (saveUserProfile) saveUserProfile({ lastScore: score });
         setScreen('dungeon_select'); 
+      },
+      onBossDefeated: () => {
+        // Callback rỗng – DungeonScene gọi khi boss chết
+        // (bossPanel đã ẩn trong Babylon, không cần xử lý React)
       }
     };
 
