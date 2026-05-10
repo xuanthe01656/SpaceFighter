@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import styles from './CampaignPortal.module.css';
 import { calculatePlayerLevel, calculateVIPLevel, MISSIONS_CONFIG} from '../../constants';
+import { secureStorage } from '../../utils/storageHelper';
 import FirstTopupModal from './FirstTopupModal';
 import AttendanceModal from './AttendanceModal';
 
@@ -47,7 +48,8 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
   const [showAttendance, setShowAttendance] = useState(false);
 
   const campaignData = gsRef.current.campaignData;
-  const materials = campaignData?.materials || {}; 
+  const hasClaimedFirstTopup = campaignData?.hasClaimedFirstTopup || false;
+  const materials = campaignData?.materials || {};
   const energy = gsRef.current?.energy ?? 50;
   const coins = gsRef.current?.coins ?? 0;
   const diamonds = gsRef.current?.diamonds ?? 0;
@@ -78,7 +80,7 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
   });
 
   const attData = gsRef.current.campaignData?.attendance || { lastDate: '' };
-  const canClaimAttendance = attData.lastDate !== new Date().toDateString();
+  const canClaimAttendance = attData.lastDate !== new Date(getRealTime()).toDateString();
   const handleNav = (screenName) => setScreen(screenName);
 
   const handleNotImplemented = () => {
@@ -154,10 +156,12 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
       {/* LEFT SIDEBAR */}
       <div className={styles.leftSidebar}>
         {/* THAY ĐỔI Ở ĐÂY: Gắn sự kiện mở Popup Nạp đầu */}
-        <motion.button variants={slideLeft} className={`${styles.sideBtn} ${styles.topupBtn}`} onClick={() => setShowFirstTopup(true)}>
-          <div className={styles.sideIcon}><Icons.Gift /></div>
-          <span className={styles.sideText}>{lang === 'vi' ? 'NẠP ĐẦU' : 'FIRST TOP-UP'}</span>
-        </motion.button>
+        {!hasClaimedFirstTopup && (
+          <motion.button variants={slideLeft} className={`${styles.sideBtn} ${styles.topupBtn}`} onClick={() => setShowFirstTopup(true)}>
+            <div className={styles.sideIcon}><Icons.Gift /></div>
+            <span className={styles.sideText}>{lang === 'vi' ? 'NẠP ĐẦU' : 'FIRST TOP-UP'}</span>
+          </motion.button>
+        )}
         <motion.button variants={slideLeft} className={styles.sideBtn} style={{ position: 'relative' }} onClick={() => setShowAttendance(true)}>
           <div className={styles.sideIcon}><Icons.Event /></div>
           <span className={styles.sideText}>{lang === 'vi' ? 'ĐIỂM DANH' : 'ATTENDANCE'}</span>
@@ -267,12 +271,12 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
                 <span className={styles.langLabel}>{lang === 'vi' ? 'NGÔN NGỮ / LANG:' : 'LANGUAGE / NGÔN NGỮ:'}</span>
                 <div className={styles.langButtons}>
                   <button 
-                    className={`${styles.langBtn} ${lang === 'vi' ? styles.langActive : ''}`} 
-                    onClick={() => setLang && setLang('vi')}
+                    className={`${styles.langBtn} ${lang === 'vi' ? styles.langActive : ''}`}
+                    onClick={() => { if(setLang) { setLang('vi'); secureStorage.setItem('astro_lang', 'vi'); } }}
                   >🇻🇳 VI</button>
-                  <button 
-                    className={`${styles.langBtn} ${lang === 'en' ? styles.langActive : ''}`} 
-                    onClick={() => setLang && setLang('en')}
+                  <button
+                    className={`${styles.langBtn} ${lang === 'en' ? styles.langActive : ''}`}
+                    onClick={() => { if(setLang) { setLang('en'); secureStorage.setItem('astro_lang', 'en'); } }}
                   >🇬🇧 EN</button>
                 </div>
               </div>

@@ -66,7 +66,7 @@ export const t = {
     restorePurchases: "KHÔI PHỤC GÓI VIP",
     errCoinHourlyLimitAd: "Đã đạt giới hạn 15 lần mỗi giờ. Vui lòng thử lại sau!",
     sessionTaken: "Đã ngắt kết nối thiết bị cũ!",
-    
+    sessionKicked: "⚠️ Tài khoản vừa đăng nhập ở thiết bị khác. Bạn đã bị đăng xuất!",
     // Toast Messages
     errNotEnoughCoins: "Không đủ Xu!",
     successOwned: "Đã sở hữu",
@@ -125,7 +125,6 @@ export const t = {
     loginRequired: 'Vui lòng đăng nhập!',
     nameTooShort: 'Vui lòng nhập tên (ít nhất 2 ký tự)!',
     enterRoomCode: 'Vui lòng nhập mã phòng!',
-    connecting: '🔗 Đang kết nối...',
     videoNotSupported: "Trình duyệt của bạn không hỗ trợ video.",
     topLoading: "Đang tải...",
   },
@@ -196,7 +195,7 @@ export const t = {
     restorePurchases: "RESTORE VIP PURCHASES",
     errCoinHourlyLimitAd: "Hourly limit of 15 reached. Please try again later!",
     sessionTaken: "Old session disconnected!",
-    
+    sessionKicked: "⚠️ Account logged in on another device. You have been signed out!",
     // Toast Messages
     errNotEnoughCoins: "Not enough Coins!",
     successOwned: "Successfully purchased",
@@ -255,7 +254,6 @@ export const t = {
     loginRequired: 'Please login first!',
     nameTooShort: 'Please enter a name (at least 2 characters)!',
     enterRoomCode: 'Please enter room code!',
-    connecting: '🔗 Connecting...',
     videoNotSupported: "Your browser does not support HTML video.",
     topLoading: "Loading...",
   }

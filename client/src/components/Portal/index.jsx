@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { collection, query, where, getDocs, doc, setDoc } from 'firebase/firestore';
 import { updateProfile } from 'firebase/auth';
 import { db, auth } from '../../firebase';
+import { secureStorage } from '../../utils/storageHelper';
 import styles from './Portal.module.css';
 
 export default function Portal({ 
@@ -110,13 +111,9 @@ export default function Portal({
     gsRef.current.myName = lang === 'vi' ? 'Phi Công Lạ Mặt' : 'Unknown Pilot';
     
     // 3. Tải lại dữ liệu Local (nếu người này đã từng chơi Khách trước đó)
-    const guestCampaign = localStorage.getItem('astro_guest_campaign');
-    if (guestCampaign) {
-      try {
-        gsRef.current.campaignData = JSON.parse(guestCampaign);
-      } catch (e) {
-        console.error("Lỗi parse data khách:", e);
-      }
+    const guestCampaign = secureStorage.getItem('astro_guest_campaign');
+    if (guestCampaign && typeof guestCampaign === 'object') {
+      gsRef.current.campaignData = guestCampaign;
     }
     
     // 4. Chuyển thẳng vào game

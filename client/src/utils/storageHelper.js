@@ -1,7 +1,7 @@
 import CryptoJS from 'crypto-js';
 
 // Hãy đổi chuỗi này thành một mã bí mật riêng của bạn
-const SECRET_KEY = "AstroCat_Secure_Key_99@2026"; 
+const SECRET_KEY = import.meta.env.VITE_STORAGE_KEY || "AstroCat_Secure_Key_99@2026";
 
 export const secureStorage = {
   setItem: (key, value) => {

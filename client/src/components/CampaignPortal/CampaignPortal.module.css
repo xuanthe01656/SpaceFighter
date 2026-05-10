@@ -316,3 +316,43 @@
   background: rgba(0, 240, 255, 0.2); border-color: var(--accent-cyan); 
   color: var(--accent-cyan); box-shadow: 0 0 10px rgba(0, 240, 255, 0.2); 
 }
+/* Thêm vào dưới cùng của CampaignPortal.module.css VÀ Missions.module.css */
+.notiBadge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background: #ff4757;
+  color: #fff;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  font-weight: bold;
+  height: 20px;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 0 8px rgba(255, 71, 87, 0.8);
+  pointer-events: none;
+  z-index: 10;
+  animation: pulseBadge 2s infinite;
+}
+
+.tabBadge {
+  background: #ff4757;
+  color: #fff;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: 8px;
+  box-shadow: 0 0 8px rgba(255, 71, 87, 0.8);
+}
+
+@keyframes pulseBadge {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { signInWithPopup, signInWithCredential, GoogleAuthProvider, OAuthProvider, updateProfile, deleteUser, signOut, onAuthStateChanged, browserPopupRedirectResolver } from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
@@ -13,7 +13,7 @@ import { DEFAULT_CAMPAIGN_DATA } from '../constants';
 
 export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
   const [currentUser, setCurrentUser] = useState(null);
-
+  const sessionListenerRef = useRef(null);
   const saveUserProfile = async (specificUpdates = null) => {
     const safeNum = (val, fallback) => (typeof val === 'number' && !isNaN(val)) ? val : fallback;
     const safeStr = (val, fallback) => (typeof val === 'string') ? val : fallback;
@@ -84,7 +84,9 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
           pilots: cData.ownedPilots || DEFAULT_CAMPAIGN_DATA.ownedPilots
         }
       };
-
+      // Giữ lại sessionId hiện tại để không bị xóa khi ghi đè document
+      const existingSessionId = secureStorage.getItem('astro_session_id');
+      if (existingSessionId) updateData.sessionId = existingSessionId;
       // Dùng setDoc để đẩy toàn bộ cấu trúc siêu gọn này lên Firebase
       await setDoc(userRef, updateData);
 
@@ -160,6 +162,9 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
           attendance: data.attendance || data.campaignData?.attendance || { streak: 0, lastDate: '' } // <-- THÊM DÒNG NÀY ĐỂ KÉO TỪ MÂY XUỐNG
         };
         setScreen(prev => prev === 'portal' ? 'campaign_portal' : prev);
+        const newSessionId = `s_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        secureStorage.setItem('astro_session_id', newSessionId);
+        await setDoc(userRef, { sessionId: newSessionId }, { merge: true }).catch(() => {});
       } else {
         // TẠO MỚI HOÀN TOÀN
         finalName = authName || `Astro_${Math.floor(Math.random() * 10000)}`;
@@ -168,6 +173,9 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
         gsRef.current.campaignData = JSON.parse(JSON.stringify(DEFAULT_CAMPAIGN_DATA));
         
         await saveUserProfile();
+        const newSessionId = `s_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        secureStorage.setItem('astro_session_id', newSessionId);
+        await setDoc(userRef, { sessionId: newSessionId }, { merge: true }).catch(() => {});
       }
 
       if (user.displayName !== finalName || user.photoURL !== finalPhoto) {
@@ -299,11 +307,25 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
     let isMounted = true;
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!isMounted) return;
-      setCurrentUser(user);
-      
+      setCurrentUser(user);      
       if (user) {
         gsRef.current.myName = user.displayName || 'Player';
         await loadUserProfile(user);
+        // --- CHỐNG ĐA THIẾT BỊ: Lắng nghe sessionId, đăng xuất nếu bị chiếm ---
+        if (sessionListenerRef.current) sessionListenerRef.current(); // hủy listener cũ nếu có
+        const userDocRef = doc(db, 'users', user.uid);
+        sessionListenerRef.current = onSnapshot(userDocRef, (snap) => {
+          if (!snap.exists() || !isMounted) return;
+          const remoteSession = snap.data().sessionId;
+          const localSession = secureStorage.getItem('astro_session_id');
+          if (remoteSession && localSession && remoteSession !== localSession) {
+            toast.error(t[langRef.current]?.sessionKicked || '⚠️ Tài khoản đã đăng nhập ở thiết bị khác!');
+            signOut(auth).then(() => {
+              secureStorage.removeItem('astro_session_id');
+              if (isMounted) { setCurrentUser(null); setScreen('portal'); }
+            }).catch(() => {});
+          }
+        });
       } else {
         let guestCoins = parseInt(secureStorage.getItem('astro_guest_coins')) || 0;
         let guestDiamonds = parseInt(secureStorage.getItem('astro_guest_diamonds')) || 0;
@@ -324,7 +346,7 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
       }
     });
 
-    return () => { isMounted = false; unsubscribe(); };
+    return () => { isMounted = false; unsubscribe(); if (sessionListenerRef.current) sessionListenerRef.current(); };
   }, []);
 
   useEffect(() => {

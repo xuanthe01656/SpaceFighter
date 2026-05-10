@@ -1,899 +1,1329 @@
-import * as Phaser from 'phaser';
-import { AIRCRAFTS, GEAR_CATALOG, PILOTS, PLANET_CONFIG, STAGE_CONFIG, PLANET_ENEMIES, PLANET_BOSSES} from '../../constants';
+import * as BABYLON from '@babylonjs/core';
+import * as GUI    from '@babylonjs/gui';
+import {
+  AIRCRAFTS, GEAR_CATALOG, PILOTS,
+  PLANET_CONFIG, STAGE_CONFIG, PLANET_ENEMIES, PLANET_BOSSES,
+} from '../../constants';
 
-const TEXTS = {
-  score: { vi: 'ĐIỂM', en: 'SCORE' },
-  armor: { vi: 'HỆ THỐNG GIÁP', en: 'ARMOR SYSTEM' },
-  retreat: { vi: '◀ RÚT LUI', en: '◀ RETREAT' },
-  bossWarn: { vi: 'CẢNH BÁO:\nTRÙM CUỐI XUẤT HIỆN!', en: 'WARNING:\nBOSS APPROACHING!' },
-  waveStart: { vi: 'TIẾN VÀO ĐỢT', en: 'ENTERING WAVE' },
-  clear: { vi: 'DỌN SẠCH!', en: 'SECTOR CLEARED!' },
-  campaignClear: { vi: 'HOÀN THÀNH\nCHIẾN DỊCH!', en: 'CAMPAIGN\nCLEARED!' },
-  lost: { vi: 'THẤT BẠI!', en: 'MISSION FAILED!' }
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+
+const clamp  = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+/** Tạo StandardMaterial với màu phát sáng, không bị ảnh hưởng ánh sáng scene */
+const makeMat = (scene, emissive) => {
+  const m = new BABYLON.StandardMaterial(`cm_${Math.random()}`, scene);
+  m.emissiveColor   = emissive;
+  m.disableLighting = true;
+  return m;
 };
 
-export default class CampaignScene extends Phaser.Scene {
-  constructor() { super('CampaignScene'); }
+/** Tạo vật liệu cho sprite tàu / quái – dùng PNG có alpha */
+const makeSpriteMat = (scene, imgSrc, onSuccess, onError) => {
+  const m   = new BABYLON.StandardMaterial(`sm_${Math.random()}`, scene);
+  const tex = new BABYLON.Texture(
+    imgSrc, scene, false, false, BABYLON.Texture.BILINEAR_SAMPLINGMODE,
+    () => { if (onSuccess) onSuccess(); },
+    () => { if (onError)   onError();   },
+  );
+  tex.hasAlpha                = true;
+  m.diffuseTexture            = tex;
+  m.emissiveTexture           = tex;
+  m.emissiveColor             = new BABYLON.Color3(0.12, 0.12, 0.12);
+  m.disableLighting           = true;
+  m.useAlphaFromDiffuseTexture = true;
+  m.backFaceCulling           = false;
+  return m;
+};
 
-  preload() {
-    const gsRef = this.registry.get('gsRef');
-    const { items, loadout, progress } = gsRef.current.campaignData; 
-    const currentPlanetId = progress.currentPlanet || 1;
-    const aircraftBase = AIRCRAFTS.find(a => a.id === loadout.aircraft) || AIRCRAFTS[0];
-    this.load.image('player_ship_img', aircraftBase.imgTop || '/images/ship_xwing_top.jpg');
-    
-    const wingmanItem = items[loadout.wingman];
-    const wingmanBase = wingmanItem ? GEAR_CATALOG.wingman.find(g => g.id === wingmanItem.baseId) : null;
-    if (wingmanBase && wingmanBase.imgSrc) this.load.image(wingmanBase.id, wingmanBase.imgSrc);
-    
-    const droneItem = items[loadout.drone];
-    const droneBase = droneItem && GEAR_CATALOG.drone ? GEAR_CATALOG.drone.find(g => g.id === droneItem.baseId) : null;
-    if (droneBase && droneBase.imgSrc) this.load.image(droneBase.id, droneBase.imgSrc);
-    // --- TẢI HÌNH ẢNH QUÁI & BOSS TỪ CONSTANTS (NẾU CÓ) ---
-    const currentEnemies = PLANET_ENEMIES[currentPlanetId] || PLANET_ENEMIES[1];
-    const currentBosses = PLANET_BOSSES[currentPlanetId] || PLANET_BOSSES[1];
+const safeDispose    = (mesh) => { if (mesh && !mesh.isDisposed?.()) mesh.dispose(); };
+const safeDisposeGui = (c)    => { if (c) { try { c.dispose(); } catch (_) {} } };
+const hexToC3        = (hex)  => BABYLON.Color3.FromHexString(hex.startsWith('#') ? hex : `#${hex}`);
 
-    currentEnemies.forEach(e => { if (e.imgSrc) this.load.image(e.id, e.imgSrc); });
-    Object.values(currentBosses).forEach(b => { if (b.imgSrc) this.load.image(b.id, b.imgSrc); });
-    const eS = this.add.graphics(); eS.fillStyle(0x1a0510, 1); eS.lineStyle(2, 0x00e5ff, 1); eS.beginPath(); eS.moveTo(15, 30); eS.lineTo(30, 10); eS.lineTo(0, 10); eS.closePath(); eS.fillPath(); eS.strokePath(); eS.generateTexture('fallback_enemy_small', 30, 30); eS.destroy();
-    const eG = this.add.graphics(); eG.fillStyle(0x1a0510, 1); eG.lineStyle(2, 0xff4757, 1); eG.beginPath(); eG.moveTo(25, 50); eG.lineTo(50, 20); eG.lineTo(40, 0); eG.lineTo(10, 0); eG.lineTo(0, 20); eG.closePath(); eG.fillPath(); eG.strokePath(); eG.fillStyle(0xff4757, 0.8); eG.fillCircle(25, 20, 6); eG.generateTexture('fallback_enemy_medium', 50, 50); eG.destroy();
-    const eL = this.add.graphics(); eL.fillStyle(0x1a0510, 1); eL.lineStyle(3, 0xfacc15, 1); eL.beginPath(); eL.moveTo(35, 70); eL.lineTo(70, 35); eL.lineTo(35, 0); eL.lineTo(0, 35); eL.closePath(); eL.fillPath(); eL.strokePath(); eL.fillStyle(0xfacc15, 0.5); eL.fillCircle(35, 35, 10); eL.generateTexture('fallback_enemy_large', 70, 70); eL.destroy();
-    const eK = this.add.graphics(); eK.fillStyle(0x1a0510, 1); eK.lineStyle(2, 0x9c27b0, 1); eK.beginPath(); eK.moveTo(20, 40); eK.lineTo(40, 0); eK.lineTo(0, 0); eK.closePath(); eK.fillPath(); eK.strokePath(); eK.fillStyle(0x9c27b0, 1); eK.fillCircle(20, 15, 5); eK.generateTexture('fallback_enemy_kamikaze', 40, 40); eK.destroy();
-    
-    const bG = this.add.graphics(); bG.fillStyle(0x300000, 1); bG.lineStyle(4, 0xff0000, 1); bG.beginPath(); bG.moveTo(50, 0); bG.lineTo(100, 30); bG.lineTo(100, 90); bG.lineTo(50, 120); bG.lineTo(0, 90); bG.lineTo(0, 30); bG.closePath(); bG.fillPath(); bG.strokePath(); bG.fillStyle(0xff0000, 1); bG.fillCircle(50, 60, 20); bG.generateTexture('fallback_boss_mech', 100, 120); bG.destroy();
-    const bA = this.add.graphics(); bA.fillStyle(0x1a0510, 1); bA.lineStyle(4, 0x9c27b0, 1); bA.beginPath(); bA.arc(60, 60, 50, 0, Math.PI * 2); bA.closePath(); bA.fillPath(); bA.strokePath(); bA.fillStyle(0x00e5ff, 1); bA.fillCircle(40, 50, 10); bA.fillCircle(80, 50, 10); bA.generateTexture('fallback_boss_alien', 120, 120); bA.destroy();
-   
-    const lG = this.add.graphics(); lG.fillStyle(0xffffff, 1); lG.fillRoundedRect(0, 0, 6, 24, 3); lG.generateTexture('laser', 6, 24); lG.destroy();
-    const pG = this.add.graphics(); pG.fillStyle(0xffffff, 1); pG.fillCircle(8, 8, 8); pG.generateTexture('plasma', 16, 16); pG.destroy();
-    const fG = this.add.graphics(); fG.fillStyle(0xffffff, 1); fG.fillCircle(8, 8, 8); fG.generateTexture('flare', 16, 16); fG.destroy();
-    
-    const dG = this.add.graphics(); dG.fillStyle(0x0a192f, 1); dG.lineStyle(2, 0x2ecc71, 1); dG.beginPath(); dG.moveTo(10, 0); dG.lineTo(20, 10); dG.lineTo(10, 20); dG.lineTo(0, 10); dG.closePath(); dG.fillPath(); dG.strokePath(); dG.fillStyle(0x2ecc71, 0.8); dG.fillCircle(10, 10, 3); dG.generateTexture('drone_img', 20, 20); dG.destroy();
-    const cG = this.add.graphics(); cG.fillStyle(0xf1c40f, 1); cG.lineStyle(2, 0xffffff, 1); cG.fillCircle(10, 10, 10); cG.strokeCircle(10, 10, 10); cG.generateTexture('drop_coin', 20, 20); cG.destroy();
-    const hG = this.add.graphics(); hG.fillStyle(0x2ecc71, 1); hG.lineStyle(1, 0xffffff, 1); hG.fillRect(6, 0, 8, 20); hG.fillRect(0, 6, 20, 8); hG.generateTexture('drop_heal', 20, 20); hG.destroy();
-    const pwG = this.add.graphics(); pwG.fillStyle(0x3498db, 1); pwG.moveTo(10,0); pwG.lineTo(20,20); pwG.lineTo(0,20); pwG.fillPath(); pwG.generateTexture('drop_power', 20, 20); pwG.destroy();
+// ─── MAIN EXPORT ──────────────────────────────────────────────────────────────
+
+/**
+ * createCampaignScene(scene, canvas, engine, data)
+ *
+ * data: { gsRef, lang, onVictory, onDefeat, saveUserProfile }
+ *   onVictory() → setScreen('stage_select')
+ *   onDefeat()  → setScreen('hq')
+ */
+export const createCampaignScene = (scene, canvas, engine, data) => {
+
+  const { gsRef, lang, onVictory, onDefeat, saveUserProfile } = data;
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 1. TÍNH CHỈ SỐ RPG (KHỚP 100% VỚI PHASER VÀ DUNGEON)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const { items, loadout, progress } = gsRef.current.campaignData;
+  const currentPlanetId = Number(progress.currentPlanet) || 1;
+  const planetConfig    = PLANET_CONFIG[currentPlanetId] || PLANET_CONFIG[1];
+  const currentStage    = Number(progress.selectedStage)
+    || (progress.planets?.[currentPlanetId]?.highestStage ?? 1);
+  const isReplay        = currentStage < (progress.planets?.[currentPlanetId]?.highestStage ?? 1);
+  const stageConfig     = STAGE_CONFIG[currentStage] || STAGE_CONFIG[1];
+
+  const pilotBase    = PILOTS.find(p => p.id === loadout.pilot)       || PILOTS[0];
+  const aircraftBase = AIRCRAFTS.find(a => a.id === loadout.aircraft) || AIRCRAFTS[0];
+
+  const ownedAircrafts = gsRef.current.campaignData.ownedAircrafts || {};
+  const acData  = ownedAircrafts[loadout.aircraft];
+  const acLevel = (typeof acData === 'object' ? acData.level : 1) || 1;
+
+  const mainGunItem = items?.[loadout.mainGun]  ?? null;
+  const mainGunBase = mainGunItem ? (GEAR_CATALOG.mainGun?.find(g => g.id === mainGunItem.baseId) ?? null) : null;
+  const armorItem   = items?.[loadout.armor]    ?? null;
+  const armorBase   = armorItem ? (GEAR_CATALOG.armor?.find(g => g.id === armorItem.baseId) ?? null) : null;
+  const wingmanItem = items?.[loadout.wingman]  ?? null;
+  const wingmanBase = wingmanItem ? (GEAR_CATALOG.wingman?.find(g => g.id === wingmanItem.baseId) ?? null) : null;
+  const droneItem   = items?.[loadout.drone]    ?? null;
+  const droneBase   = droneItem ? (GEAR_CATALOG.drone?.find(g => g.id === droneItem.baseId) ?? null) : null;
+
+  const getDynamicStat = (base, lv = 1, rar = 1, isHp = false) => {
+    if (!base) return 0;
+    const perLv = Math.max(isHp ? 5 : 1, Math.round(base * 0.1 + rar * (isHp ? 10 : 2)));
+    return base + perLv * (lv - 1);
+  };
+  const getFireRate = (baseRate, lv) =>
+    baseRate ? (baseRate * Math.pow(0.985, (lv || 1) - 1)) * 1000 : 400;
+
+  const baseAcHp    = Math.floor((aircraftBase.baseHp    || 1000) * (1 + (acLevel - 1) * 0.05));
+  const baseAcAtk   = Math.floor((aircraftBase.baseAtk   || 10)   * (1 + (acLevel - 1) * 0.05));
+  const baseAcArmor = Math.floor((aircraftBase.baseArmor || 20)   * (1 + (acLevel - 1) * 0.05));
+
+  const gunAtk    = mainGunBase ? getDynamicStat(mainGunBase.baseAtk,  mainGunItem?.level,  mainGunItem?.rarity)       : 0;
+  const wingAtk   = wingmanBase ? getDynamicStat(wingmanBase.baseAtk,  wingmanItem?.level,  wingmanItem?.rarity)       : 0;
+  const droneAtk  = droneBase   ? getDynamicStat(droneBase.baseAtk,    droneItem?.level,    droneItem?.rarity)         : 0;
+  const extraHp   = armorBase   ? getDynamicStat(armorBase.baseHp,     armorItem?.level,    armorItem?.rarity, true)   : 0;
+
+  let mainAtkMult = 1.0, wingRateMult = 1.0, moveSpeedMult = 1.0;
+
+  if (pilotBase.passive) {
+    const val = pilotBase.value;
+    switch (pilotBase.passive) {
+      case 'main_damage_boost': mainAtkMult    = 1 + val;             break;
+      case 'hp_regen':          /* hpRegenRate    = val; */             break;
+      case 'wing_fire_rate':    wingRateMult   = 1 - val;             break;
+      case 'movement_speed':    moveSpeedMult  = 1 + val;             break;
+      case 'damage_reduction':  /* damageReduc      = val; */             break;
+      case 'dodge_and_crit':    /* dodgeRate      = val.dodge ?? 0.15;
+                                critDmgBoost   = val.critDamage ?? 0.25; */ break;
+    }
   }
 
-  create() {
-    const gsRef = this.registry.get('gsRef');
-    const { items, loadout, progress } = gsRef.current.campaignData;
-    this.lang = this.registry.get('lang') || 'vi';
-    
-    // --- GALAXY DATA BINDING ---
-    this.currentPlanetId = progress.currentPlanet || 1;
-    this.planetConfig = PLANET_CONFIG[this.currentPlanetId] || PLANET_CONFIG[1];
-    
-    const pProgress = progress.planets[this.currentPlanetId];
-    this.currentStage = progress.selectedStage || pProgress.highestStage || 1;
-    this.isReplay = this.currentStage < (pProgress.highestStage || 1);
-    this.stageConfig = STAGE_CONFIG[this.currentStage];
-    
-    this.maxWaves = this.stageConfig.waves;
-    this.currentWave = 1;
-    this.gameState = 'TRANSITION';
-    this.enemiesToSpawn = this.stageConfig.baseEnemies + (this.currentWave * 2);
-    this.enemiesSpawned = 0;
-    this.startTime = this.time.now; // Bắt đầu tính giờ cho mốc 3 sao
+  const stats = {
+    maxHp:        Math.floor(baseAcHp + extraHp),
+    hp:           Math.floor(baseAcHp + extraHp),
+    atk:          Math.floor((baseAcAtk + gunAtk) * mainAtkMult),
+    wingAtk, droneAtk,
+    armor:        baseAcArmor,
+    fireRate:     getFireRate(mainGunBase?.fireRate, mainGunItem?.level),
+    wingFireRate: 600 * wingRateMult,
+    droneFireRate: droneBase?.fireRate
+      ? (droneBase.fireRate * Math.pow(0.985, (droneItem?.level || 1) - 1))
+      : 800,
+    mainGunId: mainGunBase?.id || 'gun_laser',
+    wingmanId: wingmanBase?.id || null,
+    droneId:   droneBase?.id   || null,
+  };
 
-    const pilotBase = PILOTS.find(p => p.id === loadout.pilot) || PILOTS[0];
-    const aircraftBase = AIRCRAFTS.find(a => a.id === loadout.aircraft) || AIRCRAFTS[0];
-    const armorItem = items[loadout.armor];
-    const armorBase = armorItem ? GEAR_CATALOG.armor.find(g => g.id === armorItem.baseId) : null;
-    const mainGunItem = items[loadout.mainGun];
-    const mainGunBase = mainGunItem ? GEAR_CATALOG.mainGun.find(g => g.id === mainGunItem.baseId) : null;
-    const wingmanItem = items[loadout.wingman];
-    const wingmanBase = wingmanItem ? GEAR_CATALOG.wingman.find(g => g.id === wingmanItem.baseId) : null;
-    const droneItem = items[loadout.drone];
-    const droneBase = droneItem && GEAR_CATALOG.drone ? GEAR_CATALOG.drone.find(g => g.id === droneItem.baseId) : null;
+  // ══════════════════════════════════════════════════════════════════════════
+  // 2. CAMERA ORTHOGRAPHIC TOP-DOWN
+  // ══════════════════════════════════════════════════════════════════════════
 
-    // 1. LẤY LEVEL CỦA PHI CƠ
-    const ownedAircrafts = gsRef.current.campaignData.ownedAircrafts || {};
-    const acData = ownedAircrafts[loadout.aircraft];
-    const acLevel = (typeof acData === 'object' ? acData.level : 1) || 1;
+  const ZOOM      = 15;
+  const getAspect = () => engine.getRenderWidth() / Math.max(engine.getRenderHeight(), 1);
+  const boundX    = () => ZOOM * getAspect() - 1.8;
 
-    // 2. TÁI TẠO HÀM TÍNH CHỈ SỐ ĐỘNG (CHUẨN KHỚP VỚI KHO ĐỒ)
-    const getDynamicStat = (baseStat, level, rarity, isHp = false) => {
-      if (!baseStat) return 0;
-      const perLevel = Math.max(isHp ? 5 : 1, Math.round(baseStat * 0.1 + (rarity || 1) * (isHp ? 10 : 2)));
-      return baseStat + (perLevel * ((level || 1) - 1));
-    };
+  const camera = new BABYLON.TargetCamera('cCam', new BABYLON.Vector3(0, 50, 0), scene);
+  camera.setTarget(BABYLON.Vector3.Zero());
+  camera.mode = BABYLON.Camera.ORTHOGRAPHIC_CAMERA;
 
-    // Tốc bắn cơ bản (Giảm 1.5% delay mỗi cấp -> Bắn nhanh hơn)
-    const getFireRate = (baseRate, level) => baseRate ? (baseRate * Math.pow(0.985, (level || 1) - 1)) * 1000 : 400;
+  const syncCamera = () => {
+    const r = getAspect();
+    camera.orthoTop    =  ZOOM; camera.orthoBottom = -ZOOM;
+    camera.orthoLeft   = -ZOOM * r; camera.orthoRight  =  ZOOM * r;
+  };
+  syncCamera();
+  engine.onResizeObservable.add(syncCamera);
 
-    // 3. TÍNH CHỈ SỐ GỐC TỪ PHI CƠ (+5% mỗi cấp)
-    const baseAcHp = Math.floor((aircraftBase.baseHp || 1000) * (1 + (acLevel - 1) * 0.05));
-    const baseAcAtk = Math.floor((aircraftBase.baseAtk || 10) * (1 + (acLevel - 1) * 0.05));
-    const baseAcArmor = Math.floor((aircraftBase.baseArmor || 20) * (1 + (acLevel - 1) * 0.05));
+  const ambient = new BABYLON.HemisphericLight('cAmb', new BABYLON.Vector3(0, 1, 0), scene);
+  ambient.intensity   = 1.0;
+  ambient.diffuse     = new BABYLON.Color3(0.7, 0.8, 1.0);
+  ambient.groundColor = new BABYLON.Color3(0.1, 0.1, 0.2);
 
-    // Tính chỉ số Trang bị
-    const gunAtk = mainGunBase ? getDynamicStat(mainGunBase.baseAtk, mainGunItem?.level, mainGunItem?.rarity) : 0;
-    const wingAtk = wingmanBase ? getDynamicStat(wingmanBase.baseAtk, wingmanItem?.level, wingmanItem?.rarity) : 0;
-    const droneAtk = droneBase ? getDynamicStat(droneBase.baseAtk, droneItem?.level, droneItem?.rarity) : 0;
-    const extraHp = armorBase ? getDynamicStat(armorBase.baseHp, armorItem?.level, armorItem?.rarity, true) : 0;
+  const themeHex = planetConfig.color || '#00e5ff';
+  const themeC3  = hexToC3(themeHex);
+  scene.clearColor = new BABYLON.Color4(0.008, 0.047, 0.105, 1);
 
-    // 4. HIỆU ỨNG PHI CÔNG (XỬ LÝ ĐỘNG TỪ PASSIVE VÀ VALUE)
-    let mainAtkMult = 1.0;
-    let wingRateMult = 1.0; 
-    let moveSpeedMult = 1.0;
-    let damageReduc = 0;
-    let hpRegenRate = 0; 
-    let dodgeRate = 0;
-    let critDamageBoost = 0;
+  const glow = new BABYLON.GlowLayer('cGlow', scene);
+  glow.intensity = 0.22;
 
-    if (pilotBase.passive) {
-      const val = pilotBase.value;
-      switch (pilotBase.passive) {
-        case 'main_damage_boost': mainAtkMult = 1 + val; break; // Ví dụ: 1 + 0.10 = 1.1
-        case 'hp_regen': hpRegenRate = val; break;
-        case 'wing_fire_rate': wingRateMult = 1 - val; break; // Giảm delay (tăng tốc bắn)
-        case 'movement_speed': moveSpeedMult = 1 + val; break;
-        case 'damage_reduction': damageReduc = val; break;
-        case 'dodge_and_crit': 
-          dodgeRate = val.dodge; 
-          critDamageBoost = val.critDamage; 
-          break;
-        // Các passive đặc biệt như nova_shield hay bullet_duplicate sẽ được xử lý trong logic game tương ứng
-      }
-    }
-    
-    // 5. ĐÓNG GÓI CHỈ SỐ
-    this.stats = {
-      hp: Math.floor((baseAcHp + extraHp)), 
-      maxHp: Math.floor((baseAcHp + extraHp)),
-      baseArmor: baseAcArmor, 
-      armor: baseAcArmor,
-      mainAtk: Math.floor((baseAcAtk + gunAtk) * mainAtkMult),
-      wingAtk: wingAtk,
-      droneAtk: droneAtk,
-      mainFireRate: getFireRate(mainGunBase?.fireRate, mainGunItem?.level),
-      wingFireRate: 600 * wingRateMult,
-      droneFireRate: droneBase?.fireRate ? (droneBase.fireRate * Math.pow(0.985, (droneItem?.level || 1) - 1)) : 800,
-      
-      mainGunId: mainGunBase?.id || 'gun_laser',
-      wingmanId: wingmanBase?.id || null,
-      droneId: droneBase?.id || null,
+  // ══════════════════════════════════════════════════════════════════════════
+  // 3. STARFIELD + SCROLLING GRID (PLANET-THEMED)
+  // ══════════════════════════════════════════════════════════════════════════
 
-      // Lưu các chỉ số bổ sung từ 8 phi công
-      hpRegenRate,
-      dodgeRate,
-      critDamageBoost,
-      damageReduc,
-      moveSpeedMult,
-      
-      pilotId: pilotBase.id,
-      passiveType: pilotBase.passive,
-      passiveValue: pilotBase.value
-    };
+  (() => {
+    const r = getAspect();
+    const SX = ZOOM * r * 2.5, SZ = ZOOM * 2.5;
 
-    this.score = 0;
-    this.collectedCoins = 0; 
-    this.nextEnemySpawn = 0; this.nextMainFire = 0; this.nextWingFire = 0; this.nextDroneFire = 0; this.nextBossFire = 0;
-    this.nextHealTime = 0;
-
-    const width = this.scale.width;
-    const height = this.scale.height;
-    
-    this.bgGrid = this.add.grid(width / 2, height / 2, width, height * 2, 50, 50, 0x020c1b, 1, Phaser.Display.Color.HexStringToColor(this.planetConfig.color).color, 0.1);
-    
-    this.bullets = this.physics.add.group({ defaultKey: 'laser', maxSize: 500 });
-    this.enemies = this.physics.add.group({ maxSize: 100 });
-    this.enemyBullets = this.physics.add.group({ defaultKey: 'plasma', maxSize: 500 });
-    this.drops = this.physics.add.group(); 
-    this.enemyHpGraphics = this.add.graphics().setDepth(40);
-
-    this.player = this.physics.add.sprite(width / 2, height - 100, 'player_ship_img');
-    const targetWidth = Math.min(width * 0.5, 60);
-    this.playerScale = targetWidth / (this.player.width || 1);
-    this.player.setScale(this.playerScale);
-
-    const hitScale = aircraftBase.hitboxScale || 0.8;
-    const hitBoxWidth = this.player.width * hitScale * 0.72;
-    const hitBoxHeight = this.player.height * hitScale * 0.58;
-    this.player.body.setSize(hitBoxWidth, hitBoxHeight);
-    this.player.body.setOffset((this.player.width - hitBoxWidth) / 2, (this.player.height - hitBoxHeight) / 2 + 18);
-    this.player.setCollideWorldBounds(true);
-
-    const flameScale = aircraftBase.engineFlameScale || 1.0;
-    const flareConf = { speed: 200, angle: 90, scale: { start: 0.6 * this.playerScale * flameScale, end: 0 }, alpha: { start: 0.85, end: 0 }, blendMode: 'ADD', tint: aircraftBase.engineFlameTint || 0x00e5ff, lifespan: 220 };
-    this.engineFlareLeft = this.add.particles(0, 0, 'flare', flareConf).startFollow(this.player, -this.player.displayWidth * 0.22, this.player.displayHeight * 0.40);
-    this.engineFlareRight = this.add.particles(0, 0, 'flare', flareConf).startFollow(this.player, this.player.displayWidth * 0.22, this.player.displayHeight * 0.40);
-
-    this.drones = [];
-    if (this.stats.droneId && droneBase) {
-      const droneScale = 0.055;
-      const formation = [{ offsetX: -58, offsetY: 25 }, { offsetX: 58, offsetY: 25 }];
-      formation.forEach((pos) => {
-        const textureKey = this.textures.exists(droneBase.id) ? droneBase.id : 'drone_img';
-        const drone = this.add.sprite(this.player.x + pos.offsetX, this.player.y + pos.offsetY, textureKey);
-        drone.setScale(droneScale); drone.offsetX = pos.offsetX; drone.offsetY = pos.offsetY;
-        drone.behavior = droneBase.behavior; drone.color = droneBase.color || 0xffffff; drone.projectileType = droneBase.projectileType || 'laser';
-        this.drones.push(drone);
+    // Parallax stars – 3 layers
+    const layers = [
+      { count: 220, size: 0.06, speed: 0.020, bright: new BABYLON.Color3(0.35, 0.45, 0.65) },
+      { count:  90, size: 0.13, speed: 0.048, bright: new BABYLON.Color3(0.65, 0.75, 1.00) },
+      { count:  28, size: 0.22, speed: 0.095, bright: new BABYLON.Color3(1.00, 1.00, 1.00) },
+    ];
+    const allLayers = layers.map(({ count, size, speed, bright }) => {
+      const mat   = makeMat(scene, bright);
+      const stars = Array.from({ length: count }, () => {
+        const s = BABYLON.MeshBuilder.CreateSphere(`cs_${Math.random()}`, { diameter: size, segments: 3 }, scene);
+        s.position.set((Math.random() - 0.5) * SX, -0.5, (Math.random() - 0.5) * SZ);
+        s.material = mat;
+        return s;
       });
-    }
-
-    this.player.setInteractive();
-    this.input.setDraggable(this.player);
-    this.input.on('drag', (pointer, obj, dragX, dragY) => {
-      if (this.gameState === 'GAMEOVER') return;
-      
-      // HIỆU ỨNG TỐC ĐỘ TINH CẦU (PLANET DEBUFF)
-      const speedModifier = 1 - (this.planetConfig.speedDebuff || 0);
-      let dx = dragX - obj.x;
-      let dy = (dragY - 40) - obj.y;
-      
-      obj.x += dx * speedModifier;
-      obj.y += dy * speedModifier;
+      return { stars, speed, span: SZ };
     });
 
-    this.physics.add.overlap(this.bullets, this.enemies, this.hitEnemy, null, this);
-    this.physics.add.overlap(this.player, this.enemies, this.hitPlayer, null, this);
-    this.physics.add.overlap(this.player, this.enemyBullets, this.hitPlayer, null, this);
-    this.physics.add.overlap(this.player, this.drops, this.collectDrop, null, this);
+    // Infinite grid lines – planet theme colour, very subtle
+    const gridMat  = makeMat(scene, themeC3.scale(0.07));
+    const GRID     = 2.2;
+    const rowCount = Math.ceil(SZ / GRID) + 2;
+    const gridRows = Array.from({ length: rowCount }, (_, i) => {
+      const m = BABYLON.MeshBuilder.CreateBox(`cgr_${i}`, { width: ZOOM * r * 2.2, height: 0.01, depth: 0.018 }, scene);
+      m.position.set(0, -0.45, -ZOOM - i * GRID);
+      m.material = gridMat;
+      return m;
+    });
 
-    this.hudGraphics = this.add.graphics().setDepth(99);
-    this.hpBarBg = this.add.graphics().setDepth(100);
-    this.hpBar = this.add.graphics().setDepth(100);
-    this.scoreText = this.add.text(0, 0, `${TEXTS.score[this.lang]}: 0`, { fontFamily: '"VT323", monospace', color: '#00e5ff' }).setDepth(100);
-    this.waveText = this.add.text(0, 0, '', { fontFamily: '"VT323", monospace', color: '#f1c40f' }).setOrigin(1, 0).setDepth(100);
-    this.hpText = this.add.text(0, 0, TEXTS.armor[this.lang], { fontFamily: '"VT323", monospace', color: '#fff' }).setOrigin(0.5, 0.5).setDepth(101);
-    this.announceBg = this.add.graphics().setDepth(199).setAlpha(0);
-    this.announceText = this.add.text(width / 2, height / 3, '', { fontFamily: '"VT323", monospace', color: '#fff', fontStyle: 'bold', align: 'center' }).setOrigin(0.5).setAlpha(0).setDepth(200);
-    
-    this.updateHUDLayout();
-    this.time.delayedCall(1000, () => this.startWave());
-    this.scale.on('resize', this.handleResize, this);
+    scene.onBeforeRenderObservable.add(() => {
+      allLayers.forEach(({ stars, speed, span }) =>
+        stars.forEach(s => { s.position.z += speed; if (s.position.z > span / 2) s.position.z -= span; })
+      );
+      const span = GRID * rowCount;
+      gridRows.forEach(m => { m.position.z += 0.038; if (m.position.z > ZOOM + GRID) m.position.z -= span; });
+    });
+  })();
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 4. GUI
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const ui  = GUI.AdvancedDynamicTexture.CreateFullscreenUI('CampaignUI', true, scene);
+  const dpr = window.devicePixelRatio || 1;
+
+  // ── SVG HUD top-bar (hexagon shape – planet theme colour) ─────────────────
+   const topBar = new GUI.Image('topBar', '');
+  topBar.width              = '100%';
+  topBar.verticalAlignment  = GUI.Control.VERTICAL_ALIGNMENT_TOP;
+  topBar.stretch            = GUI.Image.STRETCH_NONE;
+  ui.addControl(topBar);
+
+  // ── Score (left) ──────────────────────────────────────────────────────────
+  const scoreText = new GUI.TextBlock('scoreText');
+  scoreText.text                    = `${lang === 'vi' ? 'ĐIỂM' : 'SCORE'}: 0`;
+  scoreText.color                   = '#00e5ff';
+  scoreText.fontFamily              = '"VT323", monospace';
+  scoreText.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+  scoreText.textVerticalAlignment   = GUI.Control.VERTICAL_ALIGNMENT_TOP;
+  scoreText.left                    = `${15 * dpr}px`;
+  scoreText.top                     = `${10 * dpr}px`;
+  ui.addControl(scoreText);
+
+  // ── Wave info (right) ─────────────────────────────────────────────────────
+  const waveText = new GUI.TextBlock('waveText');
+  waveText.text                    = '';
+  waveText.color                   = '#f1c40f';
+  waveText.fontFamily              = '"VT323", monospace';
+  waveText.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_RIGHT;
+  waveText.textVerticalAlignment   = GUI.Control.VERTICAL_ALIGNMENT_TOP;
+  waveText.left                    = `-${15 * dpr}px`;
+  waveText.top                     = `${10 * dpr}px`;
+  ui.addControl(waveText);
+  // ── HP system label (center) ──────────────────────────────────────────────
+  const hpLabel = new GUI.TextBlock('hpLabel');
+  hpLabel.text                   = lang === 'vi' ? 'HỆ THỐNG GIÁP' : 'ARMOR SYSTEM';
+  hpLabel.color                  = '#ffffff';
+  hpLabel.fontFamily             = '"VT323", monospace';
+  hpLabel.textVerticalAlignment  = GUI.Control.VERTICAL_ALIGNMENT_TOP;
+  ui.addControl(hpLabel);
+
+   // ── Rebuild SVG whenever resolution changes ───────────────────────────────
+  const drawHudSvg = () => {
+  const w    = engine.getRenderWidth() || 1000;
+  const cssW = w / dpr;
+  const cx   = w / 2;
+  const h1   = 35 * dpr, h2 = 65 * dpr;
+  const dx1  = 90 * dpr, dx2 = 70 * dpr;
+  const accent = themeHex.replace('#', '%23');   // URL-encode '#'
+
+   const svgStr = [
+      `<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h2}' viewBox='0 0 ${w} ${h2}'>`,
+      `<polygon points='0,0 ${w},0 ${w},${h1} ${cx+dx1},${h1} ${cx+dx2},${h2} ${cx-dx2},${h2} ${cx-dx1},${h1} 0,${h1}' fill='rgba(5,11,20,0.85)'/>`,
+      `<polyline points='0,${h1} ${cx-dx1},${h1} ${cx-dx2},${h2} ${cx+dx2},${h2} ${cx+dx1},${h1} ${w},${h1}' fill='none' stroke='${accent}99' stroke-width='${2.5*dpr}'/>`,
+      `</svg>`,
+    ].join('');
+    topBar.source = 'data:image/svg+xml;utf8,' + svgStr;
+    topBar.height = `${h2}px`;
+
+    const isSmall = cssW < 400;
+    scoreText.fontSize = (isSmall ? 18 : 22) * dpr;
+    waveText.fontSize  = (isSmall ? 14 : 18) * dpr;
+    hpLabel.fontSize   = (isSmall ? 12 : 14) * dpr;
+    hpLabel.top        = `${(isSmall ? 20 : 22) * dpr}px`;
+  };
+  drawHudSvg();
+  engine.onResizeObservable.add(drawHudSvg);
+
+  // ── HP bar – 10 segmented blocks (same as DungeonScene) ──────────────────
+  const hpBarContainer = new GUI.Rectangle('hpBarCon');
+  hpBarContainer.width             = `${120 * dpr}px`;
+  hpBarContainer.height            = `${12 * dpr}px`;
+  hpBarContainer.background        = 'rgba(0,0,0,0.8)';
+  hpBarContainer.color             = 'rgba(0,229,255,0.4)';
+  hpBarContainer.thickness         = 1 * dpr;
+  hpBarContainer.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP;
+  hpBarContainer.top               = `${40 * dpr}px`;
+  ui.addControl(hpBarContainer);
+
+  const hpSegments = [];
+  for (let i = 0; i < 10; i++) {
+    const seg = new GUI.Rectangle(`hseg_${i}`);
+    seg.width               = `${10 * dpr}px`;
+    seg.height              = `${8  * dpr}px`;
+    seg.background          = '#00e5ff';
+    seg.thickness           = 0;
+    seg.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+    seg.left                = `${(i * 12 + 1) * dpr}px`;
+    hpBarContainer.addControl(seg);
+    hpSegments.push(seg);
   }
 
-  updateHUDLayout() {
-    const w = this.scale.width;
-    const isSmallScreen = w < 400;
-    this.scoreText.setFontSize(isSmallScreen ? '18px' : '22px');
-    this.waveText.setFontSize(isSmallScreen ? '18px' : '22px');
-    this.hpText.setFontSize(isSmallScreen ? '12px' : '14px');
-    this.hudGraphics.clear();
-    this.hudGraphics.fillStyle(0x050b14, 0.85);
-    this.hudGraphics.lineStyle(2, 0x00e5ff, 0.6);
-    this.hudGraphics.beginPath();
-    this.hudGraphics.moveTo(0, 0); this.hudGraphics.lineTo(w, 0); this.hudGraphics.lineTo(w, 35);
-    this.hudGraphics.lineTo(w / 2 + 90, 35); this.hudGraphics.lineTo(w / 2 + 70, 65);
-    this.hudGraphics.lineTo(w / 2 - 70, 65); this.hudGraphics.lineTo(w / 2 - 90, 35);
-    this.hudGraphics.lineTo(0, 35); this.hudGraphics.closePath();
-    this.hudGraphics.fillPath(); this.hudGraphics.strokePath();
-    this.scoreText.setPosition(15, 10);
-    this.waveText.setPosition(w - 15, 10);
-    this.hpText.setPosition(w / 2, 22);
-    this.updateHpBar();
+  const updateHpBar = () => {
+    const ratio = Math.max(0, stats.hp / stats.maxHp);
+    const color = ratio > 0.5 ? '#00e5ff' : ratio > 0.25 ? '#f1c40f' : '#ff4757';
+    hpSegments.forEach((seg, i) => {
+      seg.isVisible  = (i / 10) < ratio;
+      seg.background = color;
+    });
+  };
+
+ // ── Boss HP panel (StackPanel, same as DungeonScene) ──────────────────────
+  const bossPanel = new GUI.StackPanel('bossPanel');
+  bossPanel.width             = `${300 * dpr}px`;
+  bossPanel.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP;
+  bossPanel.top               = `${80 * dpr}px`;
+  bossPanel.isVisible         = false;
+  ui.addControl(bossPanel);
+
+  const bossNameText = new GUI.TextBlock('bossNameText');
+  bossNameText.text       = '⚠ BOSS';
+  bossNameText.color      = '#ff4757';
+  bossNameText.fontSize   = 20 * dpr;
+  bossNameText.fontFamily = '"VT323", monospace';
+  bossNameText.height     = `${25 * dpr}px`;
+  bossPanel.addControl(bossNameText);
+
+  const bossHpContainer = new GUI.Rectangle('bossHpCon');
+  bossHpContainer.width      = '100%';
+  bossHpContainer.height     = `${10 * dpr}px`;
+  bossHpContainer.background = 'rgba(30,0,0,0.8)';
+  bossHpContainer.color      = '#ff4757';
+  bossHpContainer.thickness  = 2 * dpr;
+  bossPanel.addControl(bossHpContainer);
+
+  const bossHpFill = new GUI.Rectangle('bossHpFill');
+  bossHpFill.width               = '100%'; bossHpFill.height = '100%';
+  bossHpFill.background          = '#ff4757'; bossHpFill.thickness = 0;
+  bossHpFill.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+ bossHpContainer.addControl(bossHpFill);
+
+   // ── Announcement banner (CENTER-based + '-15%', same as DungeonScene) ────
+  const annPanel = new GUI.Rectangle('annPanel');
+  annPanel.width             = '100%';
+  annPanel.height            = `${70 * dpr}px`;
+  annPanel.background        = 'rgba(5,11,20,0.92)';
+  annPanel.color             = 'rgba(102,252,241,0.5)';
+  annPanel.thickness         = 2 * dpr;
+  annPanel.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_CENTER;
+  annPanel.top               = '-15%';
+  annPanel.alpha             = 0;
+  ui.addControl(annPanel);
+
+  const annText = new GUI.TextBlock('annText');
+  annText.color      = '#66fcf1';
+  annText.fontSize   = 32 * dpr;
+  annText.fontWeight = 'bold';
+  annText.fontFamily = '"VT323", monospace';
+  annPanel.addControl(annText);
+
+  let annAnim = null;
+  const showAnnouncement = (text, colorHex = '#66fcf1', duration = 2000) => {
+    annText.text = text; annText.color = colorHex; annPanel.color = colorHex;
+    if (annAnim) { clearInterval(annAnim); annAnim = null; }
+    let step = 0;
+    annAnim = setInterval(() => {
+      step += 50;
+      if      (step < 300)            annPanel.alpha = step / 300;
+      else if (step < 300 + duration) annPanel.alpha = 1;
+      else if (step < 600 + duration) annPanel.alpha = 1 - (step - 300 - duration) / 300;
+      else { annPanel.alpha = 0; clearInterval(annAnim); annAnim = null; }
+    }, 50);
+  };
+
+  // ── Floating damage / pick-up text ────────────────────────────────────────
+  const showTextEffect = (worldX, worldZ, text, color = '#FFD700') => {
+    // Dummy invisible mesh để linkWithMesh (cách chuẩn Babylon GUI)
+    const dummy = BABYLON.MeshBuilder.CreateBox(`dum_${Date.now()}`, { size: 0.01 }, scene);
+    dummy.position.set(worldX, 0.5, worldZ);
+    dummy.isVisible = false;
+
+    const lbl = new GUI.TextBlock(`fl_${Date.now()}`, text);
+    lbl.color      = color;
+    lbl.fontFamily = '"VT323", monospace';
+    lbl.fontSize   = 20 * dpr;
+    lbl.fontStyle  = 'bold';
+    lbl.isPickable = false;
+    ui.addControl(lbl);
+    lbl.linkWithMesh(dummy);
+    lbl.linkOffsetYInPixels = -10 * dpr;
+
+    let t0 = null;
+    const obs = scene.onBeforeRenderObservable.add(() => {
+      if (!t0) t0 = performance.now();
+      const p = (performance.now() - t0) / 900;
+      if (p >= 1) { lbl.dispose(); safeDispose(dummy); scene.onBeforeRenderObservable.remove(obs); return; }
+      lbl.alpha = 1 - p;
+      dummy.position.z -= 0.025;
+    });
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 5. PLAYER SHIP
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const playerRoot  = new BABYLON.TransformNode('playerRoot', scene);
+  playerRoot.position.set(0, 0, ZOOM - 2.5);
+
+  // Sprite plane (2D image, faces camera via rotation)
+  const playerPlane = BABYLON.MeshBuilder.CreatePlane('playerPlane', { width: 2.4, height: 2.4 }, scene);
+  playerPlane.rotation.x = Math.PI / 2;
+  playerPlane.rotation.z = 0;  // Hướng mũi tàu lên trên (về phía -Z)
+  playerPlane.parent     = playerRoot;
+
+  const playerMat = makeSpriteMat(
+    scene,
+    aircraftBase.imgTop || '/images/ships/ship_xwing_top.png',
+    null,
+    () => {
+      // Fallback nếu không load được ảnh: dùng hình học đơn giản
+      const fb = BABYLON.MeshBuilder.CreateCylinder('pFb',
+        { diameterTop: 0.4, diameterBottom: 2.0, height: 0.4, tessellation: 6 }, scene);
+      fb.parent    = playerRoot;
+      fb.position.y = 0.2;
+      fb.material  = makeMat(scene, new BABYLON.Color3(0.1, 0.85, 1.0));
+      playerPlane.isVisible = false;
+    },
+  );
+  playerPlane.material = playerMat;
+
+  // ── Engine flame particles ────────────────────────────────────────────────
+  const flameHex   = aircraftBase.engineFlameTint
+    ? '#' + aircraftBase.engineFlameTint.toString(16).padStart(6, '0') : '#38bdf8';
+  const fR = parseInt(flameHex.slice(1,3),16)/255;
+  const fG = parseInt(flameHex.slice(3,5),16)/255;
+  const fB = parseInt(flameHex.slice(5,7),16)/255;
+  const fS = aircraftBase.engineFlameScale || 1.0;
+
+  const engineMount = new BABYLON.TransformNode('eMnt', scene);
+  engineMount.parent   = playerRoot;
+  engineMount.position.set(0, 0, 1.1);
+
+  const engineFx = new BABYLON.ParticleSystem('eFx', 160, scene);
+  engineFx.particleTexture = new BABYLON.Texture('https://assets.babylonjs.com/textures/flare.png', scene);
+  engineFx.emitter      = engineMount;
+  engineFx.minEmitBox   = new BABYLON.Vector3(-0.12*fS, 0, 0);
+  engineFx.maxEmitBox   = new BABYLON.Vector3( 0.12*fS, 0, 0);
+  engineFx.color1       = new BABYLON.Color4(Math.min(1,fR+.2), Math.min(1,fG+.2), Math.min(1,fB+.2), 1);
+  engineFx.color2       = new BABYLON.Color4(fR*.4, fG*.4, fB*.4, .9);
+  engineFx.colorDead    = new BABYLON.Color4(0, 0, .3, 0);
+  engineFx.minSize      = 0.12*fS; engineFx.maxSize   = 0.42*fS;
+  engineFx.minLifeTime  = 0.08;    engineFx.maxLifeTime = 0.22;
+  engineFx.emitRate     = 115;
+  engineFx.direction1   = new BABYLON.Vector3(-0.1, 0.07, 1);
+  engineFx.direction2   = new BABYLON.Vector3( 0.1, 0.10, 0.8);
+  engineFx.minEmitPower = 4; engineFx.maxEmitPower = 8;
+  engineFx.updateSpeed  = 0.02;
+  engineFx.start();
+
+  // ── Wingman drones ────────────────────────────────────────────────────────
+  const drones = [];
+  if (stats.droneId && droneBase) {
+    const formation = [{ ox: -2.0, oz: 0.5 }, { ox: 2.0, oz: 0.5 }];
+    const dColor = droneBase.color
+      ? '#' + droneBase.color.toString(16).padStart(6,'0') : '#2ecc71';
+    formation.forEach(pos => {
+      const node = new BABYLON.TransformNode('dNode', scene);
+      node.position.set(playerRoot.position.x + pos.ox, 0, playerRoot.position.z + pos.oz);
+      node.offsetX = pos.ox; node.offsetZ = pos.oz;
+
+      const fb = BABYLON.MeshBuilder.CreateSphere('dFb', { diameter: 0.55, segments: 10 }, scene);
+      fb.material = makeMat(scene, BABYLON.Color3.FromHexString(dColor));
+      fb.parent   = node;
+
+      if (droneBase.imgSrc) {
+        const dp = BABYLON.MeshBuilder.CreatePlane('dPlane', { size: 0.9 }, scene);
+        dp.rotation.x = Math.PI/2; dp.rotation.z = 0;
+        dp.parent     = node;
+        dp.material   = makeSpriteMat(scene, droneBase.imgSrc,
+          () => { fb.isVisible = false; }, () => { safeDispose(dp); });
+      }
+      drones.push(node);
+    });
   }
 
-  updateHpBar() {
-    const w = this.scale.width;
-    const ratio = Math.max(0, this.stats.hp / this.stats.maxHp);
-    const barW = 120; const barH = 12;
-    const x = w / 2 - barW / 2; const y = 40;
-    this.hpBarBg.clear(); this.hpBarBg.fillStyle(0x000000, 0.8); this.hpBarBg.lineStyle(1, 0x00e5ff, 0.4);
-    this.hpBarBg.fillRect(x, y, barW, barH); this.hpBarBg.strokeRect(x, y, barW, barH);
-    this.hpBar.clear();
-    const color = ratio > 0.5 ? 0x00e5ff : (ratio > 0.25 ? 0xf1c40f : 0xff4757);
-    this.hpBar.fillStyle(color, 1);
-    const segments = 10; const segWidth = barW / segments; const gap = 2;
-    for (let i = 0; i < segments; i++) {
-      if (i * segWidth >= barW * ratio) break;
-      let drawW = Math.min(segWidth - gap, (barW * ratio) - (i * segWidth));
-      if (drawW > 0) this.hpBar.fillRect(x + i * segWidth + gap / 2, y + 2, drawW, barH - 4);
+  // ══════════════════════════════════════════════════════════════════════════
+  // 6. INPUT – DRAG TO MOVE
+  // ══════════════════════════════════════════════════════════════════════════
+
+  let isDragging = false, dragOrigin = null;
+
+  const getWorldPos = () => {
+    const ray = scene.createPickingRay(scene.pointerX, scene.pointerY, BABYLON.Matrix.Identity(), camera);
+    const t   = -ray.origin.y / ray.direction.y;
+    if (!isFinite(t) || t < 0) return null;
+    return ray.origin.add(ray.direction.scale(t));
+  };
+
+  const speedMod = 1 - (planetConfig.speedDebuff || 0);
+
+  scene.onPointerObservable.add(pi => {
+    if (gameOver || gameState === 'CLEAR') return;
+    const { POINTERDOWN, POINTERUP, POINTERMOVE } = BABYLON.PointerEventTypes;
+    if (pi.type === POINTERDOWN) {
+      dragOrigin = getWorldPos(); isDragging = !!dragOrigin;
+    } else if (pi.type === POINTERUP) {
+      isDragging = false; dragOrigin = null;
+    } else if (pi.type === POINTERMOVE && isDragging && dragOrigin) {
+      const cur = getWorldPos();
+      if (!cur) return;
+      const d = cur.subtract(dragOrigin);
+      playerRoot.position.x = clamp(playerRoot.position.x + d.x * speedMod, -boundX(), boundX());
+      playerRoot.position.z = clamp(playerRoot.position.z + d.z * speedMod, -ZOOM + 1.8, ZOOM - 1.8);
+      dragOrigin = cur;
+      // Roll tilt on X-axis drag
+      const targetRoll = clamp(d.x * -1.5, -0.45, 0.45);
+      if (!isDragging) {
+        playerPlane.rotation.z = BABYLON.Scalar.Lerp(playerPlane.rotation.z, 0, .06);
+      }
     }
-  }
+  });
 
-  showAnnounce(text, color = '#66fcf1', duration = 2000) {
-    const w = this.scale.width; const h = this.scale.height;
-    const calcFontSize = Math.max(20, Math.min(35, w * 0.07));
-    this.announceText.setFontSize(`${calcFontSize}px`);
-    this.announceText.setWordWrapWidth(w * 0.85); 
-    this.announceText.setText(text).setColor(color);
-    this.announceText.updateText();
-    const actualTextHeight = this.announceText.height;
-    this.announceBg.clear();
-    this.announceBg.fillStyle(0x050b14, 0.9);
-    this.announceBg.lineStyle(2, Phaser.Display.Color.HexStringToColor(color).color, 0.8);
-    const bgY = (h / 3) - (actualTextHeight / 2) - 20;
-    const bgH = actualTextHeight + 40;
-    this.announceBg.fillRect(0, bgY, w, bgH);
-    this.announceBg.beginPath();
-    this.announceBg.moveTo(0, bgY); this.announceBg.lineTo(w, bgY);
-    this.announceBg.moveTo(0, bgY + bgH); this.announceBg.lineTo(w, bgY + bgH);
-    this.announceBg.strokePath();
-    this.tweens.add({ targets: [this.announceText, this.announceBg], alpha: 1, yoyo: true, hold: duration, duration: 400 });
-  }
+  // ══════════════════════════════════════════════════════════════════════════
+  // 7. EXPLOSION FX
+  // ══════════════════════════════════════════════════════════════════════════
 
-  showTextEffect(x, y, text, color = '#FFD700') {
-    const txt = this.add.text(x, y, text, { fontFamily: '"VT323", monospace', fontSize: '24px', fontStyle: 'bold', color: color }).setOrigin(0.5);
-    this.tweens.add({ targets: txt, y: y - 50, alpha: 0, duration: 800, onComplete: () => txt.destroy() });
-  }
+  const explode = (pos, scale = 1) => {
+    const ps = new BABYLON.ParticleSystem('exp', 80, scene);
+    ps.particleTexture = new BABYLON.Texture('https://assets.babylonjs.com/textures/flare.png', scene);
+    ps.emitter     = pos.clone();
+    ps.color1      = new BABYLON.Color4(1, .8, .1, 1); ps.color2 = new BABYLON.Color4(1, .3, 0, 1);
+    ps.colorDead   = new BABYLON.Color4(.1, 0, 0, 0);
+    ps.minSize     = .3*scale; ps.maxSize  = 1.2*scale;
+    ps.minLifeTime = .1;       ps.maxLifeTime = .4;
+    ps.emitRate    = 800;
+    ps.createSphereEmitter(.6*scale);
+    ps.minEmitPower = 3*scale; ps.maxEmitPower = 8*scale;
+    ps.gravity     = BABYLON.Vector3.Zero();
+    ps.targetStopDuration = .15;
+    ps.disposeOnStop = true;
+    ps.start();
+  };
 
-  explode(x, y, color, scale = 1) {
-    const emitter = this.add.particles(x, y, 'flare', { speed: { min: 100, max: 400 }, angle: { min: 0, max: 360 }, scale: { start: 0.5 * scale, end: 0 }, blendMode: 'ADD', tint: color, lifespan: 300, quantity: 15 });
-    emitter.explode();
-  }
+  // Camera shake
+  const shakeCamera = () => {
+    let c = 0;
+    const obs = scene.onBeforeRenderObservable.add(() => {
+      camera.position.x += (Math.random() - .5) * .35;
+      if (++c > 7) { camera.position.x = 0; scene.onBeforeRenderObservable.remove(obs); }
+    });
+  };
 
-  startWave() {
-    const waveStr = this.lang === 'vi' ? `ẢI ${this.currentStage} | ĐỢT ${this.currentWave}/${this.maxWaves}` : `STAGE ${this.currentStage} | WAVE ${this.currentWave}/${this.maxWaves}`;
-    this.waveText.setText(waveStr);
-    
-    if (this.currentWave === this.maxWaves && this.stageConfig.hasBoss) {
-      this.showAnnounce(TEXTS.bossWarn[this.lang], '#ff4757', 3000);
-      this.gameState = 'BOSS_FIGHT';
-      this.time.delayedCall(3500, () => this.spawnBoss());
+  // ══════════════════════════════════════════════════════════════════════════
+  // 8. BULLETS
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const playerBullets = [];
+  const enemyBullets  = [];
+  let lastFire      = 0;
+  let nextWingFire  = 0;
+  let nextDroneFire = 0;
+  let nextRegenTime = 0;
+
+  const gun       = GEAR_CATALOG.mainGun?.find(g => g.id === stats.mainGunId);
+  const gunPattern = gun?.firePattern || 'default';
+  const gunC       = gun?.color
+    ? new BABYLON.Color3(((gun.color>>16)&0xff)/255, ((gun.color>>8)&0xff)/255, (gun.color&0xff)/255)
+    : new BABYLON.Color3(0, .9, 1);
+  const gunMat    = makeMat(scene, gunC);
+  const wingMat   = makeMat(scene, new BABYLON.Color3(.8, .8, 0));
+  const droneMat  = makeMat(scene, new BABYLON.Color3(.2, 1, .4));
+  const enemyBulMat = makeMat(scene, new BABYLON.Color3(1, .28, .34));
+
+  const fireBullet = (x, z, vx, vz, atk, mat, isHoming = false, target = null) => {
+    const b = BABYLON.MeshBuilder.CreateCylinder(
+      `pb_${Date.now()}_${Math.random()}`, { height: 1.1, diameter: 0.13, tessellation: 6 }, scene);
+    b.position.set(x, 0, z);
+    b.rotation.x = Math.PI/2;
+    if (vx !== 0) b.rotation.z = Math.atan2(vx, -vz);
+    b.material = mat; b.atk = atk; b._vx = vx; b._vz = vz;
+    b.isHoming = isHoming; b.target = target;
+    playerBullets.push(b);
+  };
+
+  const fireEnemyBullet = (pos, vx = 0, vz = 0.24) => {
+    const b = BABYLON.MeshBuilder.CreateSphere(`eb_${Date.now()}_${Math.random()}`, { diameter: 0.44 }, scene);
+    b.position = pos.clone(); b.position.y = 0;
+    b.material = enemyBulMat; b._vx = vx; b._vz = vz;
+    enemyBullets.push(b);
+  };
+
+  const fireWeapons = () => {
+    const x = playerRoot.position.x, z = playerRoot.position.z - 1.2;
+    const atk = stats.atk;
+    switch (gunPattern) {
+      case 'spread3':
+        fireBullet(x,      z,     0,      -.58, atk,      gunMat);
+        fireBullet(x-.35,  z+.2, -.14,   -.52,  atk*.88, gunMat);
+        fireBullet(x+.35,  z+.2,  .14,   -.52,  atk*.88, gunMat);
+        break;
+      case 'homing': {
+        const tgt = enemies.find(e => !e._dead);
+        fireBullet(x, z, 0, -.54, atk, gunMat, true, tgt || null);
+        break;
+      }
+      default:
+        fireBullet(x, z, 0, -.60, atk, gunMat);
+    }
+  };
+
+  const fireWingman = () => {
+    if (!stats.wingmanId || drones.length === 0) return;
+    const alive = enemies.filter(e => !e._dead);
+    const tgt   = alive[Math.floor(Math.random() * alive.length)] || null;
+    drones.forEach(d => fireBullet(d.position.x, d.position.z - 1.0, 0, -.52, stats.wingAtk, wingMat, true, tgt));
+  };
+
+  const fireDrones = () => {
+    if (drones.length === 0) return;
+    const alive = enemies.filter(e => !e._dead);
+    const tgt   = alive[Math.floor(Math.random() * alive.length)] || null;
+    drones.forEach(d => {
+      let vx = 0, vz = -.68;
+      if (tgt) {
+        const dx = tgt.mesh.position.x - d.position.x;
+        const dz = tgt.mesh.position.z - d.position.z;
+        const dn = Math.sqrt(dx*dx + dz*dz) || 1;
+        vx = (dx/dn)*.68; vz = (dz/dn)*.68;
+      }
+      fireBullet(d.position.x, d.position.z-.5, vx, vz, stats.droneAtk, droneMat, !!tgt, tgt);
+    });
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 9. ENEMY SYSTEM
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const curEnemyCfgs = PLANET_ENEMIES[currentPlanetId] || PLANET_ENEMIES[1];
+  const curBossCfgs  = PLANET_BOSSES[currentPlanetId]  || PLANET_BOSSES[1];
+
+  // enemies[i] = { mesh, hp, maxHp, tier, speed, velX, sineOff,
+  //               isBoss, isEnraged, canShoot, lastShoot, shootMs,
+  //               points, miniHpBg, miniHp, _dead }
+  const enemies = [];
+
+  const TIER_COL = {
+    1: new BABYLON.Color3(.4, .9, 1.0),
+    2: new BABYLON.Color3(1.0, .55, .25),
+    3: new BABYLON.Color3(.95, .8, .15),
+    4: new BABYLON.Color3(.55, .2, .9),
+  };
+
+  /** Fallback mesh nếu không có imgSrc */
+  const buildFallbackEnemy = (tier) => {
+    let m;
+    switch (tier) {
+      case 2: m = BABYLON.MeshBuilder.CreateBox(`ef2_${Date.now()}`, { width:2.0, depth:2.0, height:.45 }, scene); break;
+      case 3: m = BABYLON.MeshBuilder.CreateCylinder(`ef3_${Date.now()}`, { diameterTop:1.2, diameterBottom:.5, height:.45, tessellation:6 }, scene); break;
+      case 4:
+        m = BABYLON.MeshBuilder.CreateTorus(`ef4_${Date.now()}`, { diameter:1.8, thickness:.35, tessellation:24 }, scene);
+        m.rotation.x = Math.PI/2;
+        break;
+      default: m = BABYLON.MeshBuilder.CreateSphere(`ef1_${Date.now()}`, { diameterX:1.6, diameterZ:1.6, diameterY:.4 }, scene);
+    }
+    m.material = makeMat(scene, TIER_COL[tier] || TIER_COL[1]);
+    return m;
+  };
+
+  const spawnEnemy = () => {
+    const rand = Math.random() * 100;
+    let tier = 1;
+    if (currentStage >= 2 && rand > 50) tier = 2;
+    if (currentStage >= 4 && rand > 75) tier = 3;
+    if (currentStage >= 6 && rand > 85) tier = 4;
+
+    const cfg    = curEnemyCfgs.find(e => e.tier === tier) || curEnemyCfgs[0];
+    const spawnX = playerRoot.position.x + (Math.random() - .5) * boundX() * 1.6;
+    const spawnZ = playerRoot.position.z - ZOOM - 3;
+
+    let mesh;
+    if (cfg.imgSrc) {
+      mesh = BABYLON.MeshBuilder.CreatePlane(`ep_${Date.now()}`, { width: 2.2, height: 2.2 }, scene);
+      mesh.rotation.x = Math.PI/2;
+      mesh.rotation.z = Math.PI; 
+      mesh.material   = makeSpriteMat(scene, cfg.imgSrc,
+        null,
+        () => { safeDispose(mesh); mesh = buildFallbackEnemy(tier); mesh.position.set(spawnX, .2, spawnZ); }
+      );
+    } else {
+      mesh = buildFallbackEnemy(tier);
+    }
+    mesh.position.set(spawnX, .2, spawnZ);
+
+    const rawSpeed = cfg.speedMin + Math.random() * (cfg.speedMax - cfg.speedMin);
+    const speed    = rawSpeed / 1200;   // pixels/s → Babylon units/frame@60fps
+
+    let baseHp = cfg.baseHp + currentStage * 15 + currentWave * 5;
+    baseHp     = Math.floor(baseHp * (planetConfig.enemyHpBuff || 1));
+    const pts  = isReplay ? Math.max(1, Math.floor(cfg.score / 2)) : cfg.score;
+
+    // Mini HP bar
+    const miniHpBg = new GUI.Rectangle(`ehb_${mesh.uniqueId}`);
+    miniHpBg.width = `${Math.round(46*dpr)}px`; miniHpBg.height = `${Math.round(5*dpr)}px`;
+    miniHpBg.background = '#111'; miniHpBg.color = '#ffffff30';
+    miniHpBg.cornerRadius = 3; miniHpBg.thickness = 1;
+    ui.addControl(miniHpBg);
+    miniHpBg.linkWithMesh(mesh);
+    miniHpBg.linkOffsetYInPixels = -Math.round(28*dpr);
+
+    const miniHp = new GUI.Rectangle(`ehf_${mesh.uniqueId}`);
+    miniHp.width = '100%'; miniHp.height = '100%';
+    miniHp.background = tier===3?'#ffdd55': tier===2?'#ff8a66':'#66ddff';
+    miniHp.thickness = 0; miniHp.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+    miniHpBg.addControl(miniHp);
+
+    enemies.push({
+      mesh, hp: baseHp, maxHp: baseHp, tier, speed,
+      velX: tier===4 ? 0 : (Math.random()-.5)*.05,
+      sineOff: Math.random() * Math.PI * 2,
+      isBoss: false, isEnraged: false,
+      canShoot: tier !== 4 && Math.random() > .5,
+      lastShoot: 0, shootMs: tier===3 ? 1400 : 2200,
+      points: pts, miniHpBg, miniHp, _dead: false,
+    });
+  };
+
+  const cleanEnemy = e => {
+    safeDisposeGui(e.miniHp); safeDisposeGui(e.miniHpBg); safeDispose(e.mesh); e._dead = true;
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 10. BOSS SYSTEM
+  // ══════════════════════════════════════════════════════════════════════════
+
+  let bossMesh    = null, bossHp = 0, bossMaxHp = 0;
+  let bossEnraged = false, bossPts = 0;
+  let bossVelX    = 0.028, bossFloatT = 0, nextBossFire = 0;
+
+  const buildFallbackBoss = (bType) => {
+    const m = BABYLON.MeshBuilder.CreateSphere('bFb', { diameter: 3.8, segments: 24 }, scene);
+    m.material = makeMat(scene, new BABYLON.Color3(1, .2, .2));
+    const ring = BABYLON.MeshBuilder.CreateTorus('bRingFb', { diameter: 7.5, thickness: .45, tessellation: 48 }, scene);
+    ring.parent = m; ring.rotation.x = Math.PI/2;
+    ring.material = makeMat(scene, new BABYLON.Color3(1, .5, 0));
+    return m;
+  };
+
+  const spawnBoss = () => {
+    const bType   = stageConfig.bossType || 'mech';
+    const bossCfg = curBossCfgs[bType] || Object.values(curBossCfgs)[0];
+
+    bossHp    = Math.floor((bossCfg.baseHp || 25000) * (planetConfig.enemyHpBuff || 1));
+    bossMaxHp = bossHp; bossEnraged = false;
+    bossPts   = isReplay ? Math.max(10, Math.floor((bossCfg.score||100)/3)) : (bossCfg.score||100);
+
+    if (bossCfg.imgSrc) {
+      bossMesh = BABYLON.MeshBuilder.CreatePlane('bossPlane', { width: 5.2, height: 5.2 }, scene);
+      bossMesh.rotation.x = Math.PI/2; bossMesh.rotation.z = Math.PI;
+      bossMesh.material   = makeSpriteMat(scene, bossCfg.imgSrc,
+        null, () => { safeDispose(bossMesh); bossMesh = buildFallbackBoss(bType); bossMesh.position.set(0, .5, -ZOOM-6); });
+    } else {
+      bossMesh = buildFallbackBoss(bType);
+    }
+    bossMesh.position.set(0, .5, -ZOOM - 6);
+
+    bossNameText.text = `⚠ ${lang==='vi' ? `TRÙM ẢI ${currentStage}` : `STAGE ${currentStage} BOSS`}`;
+    bossHpFill.width  = '100%'; bossPanel.isVisible = true;
+    showAnnouncement(
+      lang==='vi' ? '⚠ CẢNH BÁO: TRÙM CUỐI ⚠' : '⚠ BOSS APPROACHING ⚠',
+      '#ff4757', 3000);
+    nextBossFire = Date.now() + 3200;
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 11. DROPS
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const drops = [];
+  const dropMats = {
+    coin:  makeMat(scene, new BABYLON.Color3(1, .85, 0)),
+    heal:  makeMat(scene, new BABYLON.Color3(.2, .85, .2)),
+    power: makeMat(scene, new BABYLON.Color3(.2, .6, 1)),
+  };
+
+  const spawnDrop = (x, z, type) => {
+    let mesh;
+    if (type==='coin')  mesh = BABYLON.MeshBuilder.CreateCylinder(`dc_${Date.now()}`, { diameter:.7, height:.15, tessellation:10 }, scene);
+    else if (type==='heal') mesh = BABYLON.MeshBuilder.CreateBox(`dh_${Date.now()}`, { width:.6, depth:.6, height:.15 }, scene);
+    else mesh = BABYLON.MeshBuilder.CreateSphere(`dp_${Date.now()}`, { diameter:.6 }, scene);
+    mesh.position.set(x, .1, z);
+    mesh.material = dropMats[type];
+    drops.push({ mesh, type, _dead: false });
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 12. WAVE SYSTEM + GAME STATE
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const MAX_WAVES   = stageConfig.waves || 5;
+  let currentWave   = 0;
+  let waveCount     = 0;   // total enemies to spawn in current wave
+  let waveSpawned   = 0;
+  let lastSpawn     = 0;
+  let spawnInterval = 1200;
+  let gameOver      = false;
+  let gameState     = 'TRANSITION';  // PLAYING | BOSS_FIGHT | TRANSITION | GAMEOVER | CLEAR
+  let score         = 0;
+  let collectedCoins = 0;
+  let startTime     = Date.now();
+  let invincibleUntil = 0;
+  const INV_DUR     = 1500;
+  let tick          = 0;
+
+  const updateScore = delta => {
+    score += delta;
+    scoreText.text = `${lang==='vi'?'ĐIỂM':'SCORE'}: ${score}`;
+  };
+
+  const startWave = n => {
+    currentWave   = n;
+    waveCount     = (stageConfig.baseEnemies||5) + currentWave * 2;
+    spawnInterval = Math.max(300, 1500 - (currentStage*100 + currentWave*50));
+    waveSpawned   = 0;
+    lastSpawn     = Date.now();
+
+    waveText.text = lang==='vi'
+      ? `ẢI ${currentStage} | ĐỢT ${n}/${MAX_WAVES}`
+      : `STAGE ${currentStage} | WAVE ${n}/${MAX_WAVES}`;
+
+    if (n === MAX_WAVES && stageConfig.hasBoss) {
+      showAnnouncement(
+        lang==='vi' ? 'CẢNH BÁO:\nTRÙM CUỐI XUẤT HIỆN!' : 'WARNING:\nBOSS APPROACHING!',
+        '#ff4757', 3000);
+      gameState = 'BOSS_FIGHT';
+      setTimeout(() => spawnBoss(), 3500);
       return;
     }
-    
-    this.enemiesToSpawn = this.stageConfig.baseEnemies + (this.currentWave * 3);
-    this.enemiesSpawned = 0;
-    this.showAnnounce(`${TEXTS.waveStart[this.lang]} ${this.currentWave}`, '#66fcf1');
-    this.gameState = 'PLAYING';
-  }
+    showAnnouncement(
+      `${lang==='vi'?'TIẾN VÀO ĐỢT':'ENTERING WAVE'} ${n}`, '#66fcf1');
+    gameState = 'PLAYING';
+  };
 
-  stageCleared() {
-    this.gameState = 'CLEAR';
-    this.physics.pause(); 
-    this.showAnnounce(TEXTS.campaignClear[this.lang], '#2ecc71', 2000);
-    this.time.delayedCall(2500, () => {
-       this.showRewardSummary();
-    });
-  }
+  // ══════════════════════════════════════════════════════════════════════════
+  // 13. PLAYER DAMAGE / DEATH
+  // ══════════════════════════════════════════════════════════════════════════
 
-  showRewardSummary() {
-    const width = this.scale.width; const height = this.scale.height;
-    const cx = width / 2; const cy = height / 2;
-    const isMobile = width < 400;
+  const damagePlayer = rawDmg => {
+    if (Date.now() < invincibleUntil) return;
+    invincibleUntil = Date.now() + INV_DUR;
+    let dmg = rawDmg;
+    if (stats.armor) dmg = Math.floor(dmg * (1 - stats.armor / 100));
+    stats.hp = Math.max(0, stats.hp - dmg);
+    updateHpBar();
+    explode(playerRoot.position, 2);
+    shakeCamera();
 
-    // --- TÍNH SAO VÀ THỜI GIAN (STAR & TIME LOGIC) ---
-    const timeTaken = (this.time.now - this.startTime) / 1000;
-    
-    // Format thời gian thành MM:SS
-    const minutes = Math.floor(timeTaken / 60);
-    const seconds = Math.floor(timeTaken % 60);
-    const timeString = `${minutes < 10 ? '0' : ''}${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
-
-    // Đánh giá điều kiện
-    const c1Met = true; // Luôn đúng vì đã thắng ải mới hiện bảng này
-    const c2Met = (this.stats.hp / this.stats.maxHp) >= 0.5; // Máu trên 50%
-    const stageLimit = this.stageConfig.timeLimit || 150;
-    const c3Met = timeTaken <= stageLimit;
-    const limitMin = Math.floor(stageLimit / 60);
-    const limitSec = Math.floor(stageLimit % 60);
-    const limitStr = `${limitMin < 10 ? '0' : ''}${limitMin}:${limitSec < 10 ? '0' : ''}${limitSec}`;
-
-    let earnedStars = 1;
-    if (c2Met) earnedStars++; 
-    if (c3Met) earnedStars++;
-
-    const overlay = this.add.graphics().setDepth(300).setAlpha(0);
-    overlay.fillStyle(0x000000, 0.85); overlay.fillRect(0, 0, width, height);
-
-    // KÉO DÀI BẢNG LÊN 560 ĐỂ CÓ CHỖ CHỨA ĐIỀU KIỆN
-    const pW = Math.min(width * 0.9, 420); const pH = 560; 
-    const panel = this.add.graphics().setDepth(301).setAlpha(0);
-    panel.lineStyle(3, Phaser.Display.Color.HexStringToColor(this.planetConfig.color).color, 1);
-    panel.fillStyle(0x050b14, 0.95);
-    panel.strokeRoundedRect(cx - pW/2, cy - pH/2, pW, pH, 16);
-    panel.fillRoundedRect(cx - pW/2, cy - pH/2, pW, pH, 16);
-
-    const emitter = this.add.particles(cx, cy, 'flare', { speed: 150, scale: { start: 0.4, end: 0 }, blendMode: 'ADD', tint: 0xfacc15, lifespan: 1500, quantity: 1, frequency: 100 }).setDepth(299);
-
-    const stageBonus = this.isReplay ? 10 : (50 + (this.currentStage * 50));
-    const baseExp = this.stageConfig.expReward || 100;
-    const earnedExp = this.isReplay ? Math.floor(baseExp * 0) : baseExp; 
-    
-    const totalCoins = stageBonus + this.score + this.collectedCoins;
-
-    const titleFontSize = isMobile ? '26px' : '32px';
-    const labelFontSize = isMobile ? '18px' : '20px'; // Thu nhỏ font lable 1 chút cho đỡ chật
-    const valFontSize = isMobile ? '22px' : '24px';
-
-    const title = this.add.text(cx, cy - pH/2 + 35, this.lang === 'vi' ? 'BÁO CÁO CHIẾN DỊCH' : 'MISSION REPORT', { fontFamily: '"VT323", monospace', fontSize: titleFontSize, color: '#facc15', fontStyle: 'bold', textShadow: '0 0 10px #facc15' }).setOrigin(0.5).setDepth(302).setAlpha(0);
-    
-    // HIỂN THỊ SAO
-    const starStr = (earnedStars >= 1 ? '★ ' : '☆ ') + (earnedStars >= 2 ? '★ ' : '☆ ') + (earnedStars >= 3 ? '★' : '☆');
-    const starsTxt = this.add.text(cx, cy - pH/2 + 75, starStr, { fontFamily: '"VT323", monospace', fontSize: '36px', color: '#facc15', textShadow: '0 0 10px #facc15' }).setOrigin(0.5).setDepth(302).setAlpha(0);
-
-    // HIỂN THỊ 3 ĐIỀU KIỆN (Tick xanh / X đỏ)
-    const condStyle = { fontFamily: '"VT323", monospace', fontSize: isMobile ? '16px' : '18px' };
-    
-    const cond1Y = cy - pH/2 + 120;
-    const cond1 = this.add.text(cx, cond1Y, (c1Met ? '✅ ' : '❌ ') + (this.lang === 'vi' ? 'Hoàn thành nhiệm vụ' : 'Mission Cleared'), { ...condStyle, color: c1Met ? '#2ecc71' : '#ff4757' }).setOrigin(0.5).setDepth(302).setAlpha(0).setY(cond1Y + 20);
-    
-    const cond2Y = cy - pH/2 + 145;
-    const cond2 = this.add.text(cx, cond2Y, (c2Met ? '✅ ' : '❌ ') + (this.lang === 'vi' ? 'Giáp còn lại ≥ 50%' : 'Armor remaining ≥ 50%'), { ...condStyle, color: c2Met ? '#2ecc71' : '#ff4757' }).setOrigin(0.5).setDepth(302).setAlpha(0).setY(cond2Y + 20);
-    
-    const cond3Y = cy - pH/2 + 170;
-    const cond3 = this.add.text(cx, cond3Y, (c3Met ? '✅ ' : '❌ ') + (this.lang === 'vi' ? `Thời gian ≤ ${limitStr}` : `Clear Time ≤ ${limitStr}`), { ...condStyle, color: c3Met ? '#2ecc71' : '#ff4757' }).setOrigin(0.5).setDepth(302).setAlpha(0).setY(cond3Y + 20);
-
-    const styleLabel = { fontFamily: '"VT323", monospace', fontSize: labelFontSize, color: '#94a3b8' };
-    const styleValue = { fontFamily: '"VT323", monospace', fontSize: valFontSize, color: '#00e5ff', fontStyle: 'bold' };
-
-    const innerXLeft = cx - pW/2 + (isMobile ? 20 : 30);
-    const innerXRight = cx + pW/2 - (isMobile ? 20 : 30);
-
-    // CÁC THÔNG SỐ (Dịch Y xuống để chừa chỗ cho Điều kiện)
-    const tY0 = cy - 20;
-    const txtTime = this.add.text(innerXLeft, tY0, this.lang === 'vi' ? 'Thời gian:' : 'Clear Time:', styleLabel).setOrigin(0, 0.5).setDepth(302).setAlpha(0).setY(tY0 + 20);
-    const valTime = this.add.text(innerXRight, tY0, timeString, { ...styleValue, color: '#fff' }).setOrigin(1, 0.5).setDepth(302).setAlpha(0).setY(tY0 + 20);
-
-    const tY1 = cy + 20;
-    const txtExp = this.add.text(innerXLeft, tY1, this.lang === 'vi' ? 'Kinh nghiệm (EXP):' : 'EXP Gained:', styleLabel).setOrigin(0, 0.5).setDepth(302).setAlpha(0).setY(tY1 + 20);
-    const valExp = this.add.text(innerXRight, tY1, `+${earnedExp}`, { ...styleValue, color: '#00ffcc' }).setOrigin(1, 0.5).setDepth(302).setAlpha(0).setY(tY1 + 20);
-    
-    const tY2 = cy + 60;
-    const txtScore = this.add.text(innerXLeft, tY2, this.lang === 'vi' ? 'Điểm tác chiến:' : 'Combat Score:', styleLabel).setOrigin(0, 0.5).setDepth(302).setAlpha(0).setY(tY2 + 20);
-    const valScore = this.add.text(innerXRight, tY2, `+${this.score}`, styleValue).setOrigin(1, 0.5).setDepth(302).setAlpha(0).setY(tY2 + 20);
-
-    const tY3 = cy + 100;
-    const txtLoot = this.add.text(innerXLeft, tY3, this.lang === 'vi' ? 'Nhặt được:' : 'Loot Collected:', styleLabel).setOrigin(0, 0.5).setDepth(302).setAlpha(0).setY(tY3 + 20);
-    const valLoot = this.add.text(innerXRight, tY3, `+${this.collectedCoins}`, styleValue).setOrigin(1, 0.5).setDepth(302).setAlpha(0).setY(tY3 + 20);
-
-    const lineY = cy + 140;
-    const line = this.add.graphics().setDepth(302).setAlpha(0); line.lineStyle(2, 0x00e5ff, 0.3); line.moveTo(innerXLeft, lineY); line.lineTo(innerXRight, lineY); line.strokePath();
-
-    const tY4 = cy + 185;
-    const txtTotal = this.add.text(innerXLeft, tY4, this.lang === 'vi' ? 'TỔNG NHẬN:' : 'TOTAL EARNED:', { ...styleLabel, color: '#facc15', fontSize: '26px' }).setOrigin(0, 0.5).setDepth(302).setAlpha(0).setY(tY4 + 20);
-    const valTotal = this.add.text(innerXRight, tY4, `${totalCoins} ${this.lang === 'vi' ? 'XU' : 'COINS'}`, { ...styleValue, color: '#facc15', fontSize: '32px', textShadow: '0 0 10px #facc15' }).setOrigin(1, 0.5).setDepth(302).setAlpha(0).setY(tY4 + 20);
-    
-    const btnW = isMobile ? 160 : 200; const btnH = isMobile ? 45 : 50; 
-    const btnY = cy + pH/2 - 35; // Neo nút XÁC NHẬN gần mép dưới
-    
-    const btnContainer = this.add.container(cx, btnY).setDepth(305).setAlpha(0);
-    const btnBg = this.add.graphics(); btnBg.fillStyle(0x00e5ff, 1); btnBg.fillRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 10);
-    const btnTxt = this.add.text(0, 0, this.lang === 'vi' ? 'XÁC NHẬN' : 'ACCEPT', { fontFamily: '"VT323", monospace', fontSize: isMobile ? '22px' : '26px', color: '#000', fontStyle: 'bold' }).setOrigin(0.5);
-    btnContainer.add([btnBg, btnTxt]);
-    const btnZone = this.add.zone(cx, btnY, btnW, btnH).setOrigin(0.5).setDepth(306).setInteractive({ useHandCursor: true });
-
-    // CẬP NHẬT LẠI MẢNG ANIMATION (THÊM COND VÀ TIME VÀO)
-    const uiElements = [overlay, panel, title, starsTxt, cond1, cond2, cond3, txtTime, valTime, txtExp, valExp, txtScore, valScore, txtLoot, valLoot, line, txtTotal, valTotal, btnContainer];
-    this.tweens.add({ targets: uiElements, alpha: 1, y: '-=20', duration: 400, ease: 'Cubic.easeOut', delay: this.tweens.stagger(120) });
-
-   // DÙNG 'once' THAY VÌ 'on' ĐỂ CHỐNG SPAM CLICK LÀM LOẠN DATA
-    btnZone.once('pointerdown', () => {
-        btnBg.clear(); btnBg.fillStyle(0x00b8d4, 1); btnBg.fillRoundedRect(-btnW/2, -btnH/2, btnW, btnH, 10);
-        
-        const gsRef = this.registry.get('gsRef');
-        const progress = gsRef.current.campaignData.progress;
-        
-        // 1. LẤY CHUẨN XÁC VỊ TRÍ TỪ gsRef
-        const pId = Number(progress.currentPlanet) || 1;
-        const currStage = Number(progress.selectedStage) || 1;
-
-        // 2. BẢO HIỂM CẤU TRÚC
-        if (!progress.planets) progress.planets = {};
-        if (!progress.planets[pId]) progress.planets[pId] = { highestStage: 1, stars: {} };
-        if (!progress.planets[pId].stars) progress.planets[pId].stars = {};
-
-        // 3. CẬP NHẬT SAO
-        const oldStars = Number(progress.planets[pId].stars[currStage]) || 0;
-        progress.planets[pId].stars[currStage] = Math.max(oldStars, earnedStars);
-
-        // 4. MỞ KHÓA ẢI TIẾP THEO (Chỉ khi chơi đúng ải cao nhất hiện tại)
-        const currentHighest = Number(progress.planets[pId].highestStage) || 1;
-        if (currStage === currentHighest && currStage < 10) {
-            progress.planets[pId].highestStage = currStage + 1;
-            // Tự động đẩy selectedStage sang ải mới để người chơi bấm chơi tiếp luôn
-            progress.selectedStage = currStage + 1;
-        }
-
-        // 5. CHUYỂN TINH CẦU MỚI KHI QUA ẢI 10
-        if (currStage === 10 && currStage === currentHighest) {
-            const nextPlanetId = pId + 1;
-            if (nextPlanetId <= Object.keys(PLANET_CONFIG).length) {
-               progress.highestPlanet = Math.max(Number(progress.highestPlanet) || 1, nextPlanetId);
-               if (!progress.planets[nextPlanetId]) progress.planets[nextPlanetId] = { highestStage: 1, stars: {} };
-               
-               // Cập nhật selectedStage thành Ải 1 của Tinh cầu mới
-               progress.currentPlanet = nextPlanetId;
-               progress.selectedStage = 1;
-            }
-        }
-        
-        // 6. CỘNG EXP VÀ VÀNG THỰC TẾ
-        if (progress.exp === undefined) progress.exp = 0; 
-        progress.exp += earnedExp;                        
-        gsRef.current.coins = (Number(gsRef.current.coins) || 0) + totalCoins;
-        
-        // 7. ÉP LƯU DATA LÊN FIREBASE NGAY LẬP TỨC 
-        const saveUserProfile = this.registry.get('saveUserProfile');
-        if (saveUserProfile) {
-            saveUserProfile(); // Gọi hàm lưu của React
-        }
-
-        // 8. BẢO HIỂM TÀI KHOẢN KHÁCH (Lưu đúng key hệ thống astro_guest_campaign)
-        try {
-            window.localStorage.setItem('astro_guest_campaign', JSON.stringify(gsRef.current.campaignData));
-            window.localStorage.setItem('astro_guest_coins', gsRef.current.coins.toString());
-        } catch(e) { console.error("Lỗi lưu LocalStorage", e); }
-
-        // 9. CHUYỂN MÀN
-        this.time.delayedCall(200, () => {
-             emitter.stop(); 
-             this.registry.get('setScreen')('stage_select');
-        });
-    });
-  }
-  spawnEnemy() {
-    const enemy = this.enemies.get(Phaser.Math.Between(40, this.scale.width - 40), -50);
-    if (!enemy) return;
-
-    let tier = 1;
-    const rand = Math.random() * 100;
-    if (this.currentStage >= 2 && rand > 50) tier = 2; 
-    if (this.currentStage >= 4 && rand > 75) tier = 3; 
-    if (this.currentStage >= 6 && rand > 85) tier = 4; 
-
-    // --- LẤY DỮ LIỆU TỪ CONSTANTS ---
-    const currentEnemies = PLANET_ENEMIES[this.currentPlanetId] || PLANET_ENEMIES[1];
-    const enemyConfig = currentEnemies.find(e => e.tier === tier) || currentEnemies[0];
-    
-    // Ánh xạ sang hình vẽ tạm (fallback) nếu chưa có link ảnh
-    const fallbackMap = { 1: 'fallback_enemy_small', 2: 'fallback_enemy_medium', 3: 'fallback_enemy_large', 4: 'fallback_enemy_kamikaze' };
-    const tex = this.textures.exists(enemyConfig.id) ? enemyConfig.id : fallbackMap[tier];
-
-    enemy.setTexture(tex);
-    enemy.setActive(true).setVisible(true); enemy.body.enable = true; 
-    enemy.body.setSize(enemy.width * 0.8, enemy.height * 0.8);
-    
-    if (tier === 4) {
-      enemy.setVelocity(0, Phaser.Math.Between(enemyConfig.speedMin, enemyConfig.speedMax));
-    } else {
-      enemy.setVelocity(Phaser.Math.Between(-100, 100), Phaser.Math.Between(enemyConfig.speedMin, enemyConfig.speedMax)); 
+    if (stats.hp <= 0) {
+      gameOver = true; gameState = 'GAMEOVER';
+      engineFx.stop(); playerRoot.isVisible = false;
+      explode(playerRoot.position, 4);
+      showAnnouncement(lang==='vi'?'THẤT BẠI!':'MISSION FAILED!', '#ff0000', 3000);
+      setTimeout(() => {
+        gsRef.current.coins = (Number(gsRef.current.coins)||0) + score + collectedCoins;
+        if (saveUserProfile) saveUserProfile();
+        onDefeat();
+      }, 4000);
     }
-    
-    enemy.tier = tier;
-    
-    // ÁP DỤNG MÁU TỪ CONFIG & TINH CẦU
-    let baseHp = enemyConfig.baseHp + (this.currentStage * 15) + (this.currentWave * 5);
-    enemy.maxHp = baseHp * (this.planetConfig.enemyHpBuff || 1);
-    
-    enemy.hp = enemy.maxHp;
-    enemy.points = this.isReplay ? Math.max(1, Math.floor(enemyConfig.score / 2)) : enemyConfig.score; 
-    enemy.isBoss = false;
-    enemy.clearTint();
+  };
 
-    enemy.canShoot = tier !== 4 && Math.random() > 0.5; 
-    enemy.nextFire = this.time.now + Phaser.Math.Between(1000, 3000);
-  }
+  // ══════════════════════════════════════════════════════════════════════════
+  // 14. STAGE CLEAR
+  // ══════════════════════════════════════════════════════════════════════════
 
- spawnBoss() {
-    const bType = this.stageConfig.bossType || 'mech';
-    const currentBosses = PLANET_BOSSES[this.currentPlanetId] || PLANET_BOSSES[1];
-    
-    // Nếu trong Tinh cầu đó không có loại boss này, lấy mặc định con đầu tiên
-    const bossConfig = currentBosses[bType] || Object.values(currentBosses)[0]; 
-    
-    // Fallback nếu chưa có ảnh
-    const fallbackTex = bType === 'alien' ? 'fallback_boss_alien' : 'fallback_boss_mech';
-    const tex = this.textures.exists(bossConfig.id) ? bossConfig.id : fallbackTex;
+  const stageCleared = () => {
+    gameState = 'CLEAR'; engineFx.stop();
+    showAnnouncement(lang==='vi'?'HOÀN THÀNH\nCHIẾN DỊCH!':'CAMPAIGN\nCLEARED!', '#2ecc71', 2000);
+    setTimeout(() => showRewardSummary(), 2600);
+  };
 
-    this.boss = this.physics.add.sprite(this.scale.width / 2, -150, tex);
-    this.boss.setScale(bossConfig.scale); 
-    
-    this.boss.maxHp = bossConfig.baseHp * (this.planetConfig.enemyHpBuff || 1);
-    
-    this.boss.hp = this.boss.maxHp; 
-    this.boss.isBoss = true; 
-    this.boss.isEnraged = false; 
-    this.boss.body.setSize(bossConfig.hitboxW, 100);
-    this.boss.points = this.isReplay ? Math.max(10, Math.floor(bossConfig.score / 3)) : bossConfig.score; // Lấy điểm từ config
-    this.enemies.add(this.boss);
-    
-    const targetY = 220; 
-    this.tweens.add({ targets: this.boss, y: targetY, duration: 3000, ease: 'Power2' });
-    this.tweens.add({ targets: this.boss, x: { min: 80, max: this.scale.width - 80 }, duration: bType === 'alien' ? 1500 : 2500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: 3000 });
-    this.tweens.add({ targets: this.boss, y: targetY + 30, duration: 1200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: 3000 });
-  }
+  // ══════════════════════════════════════════════════════════════════════════
+  // 15. REWARD SUMMARY (FULL BABYLON GUI OVERLAY – AAA STYLE)
+  // ══════════════════════════════════════════════════════════════════════════
 
-  spawnDrop(x, y, type) {
-    const drop = this.drops.get();
-    if (!drop) return;
-    drop.dType = type;
-    if (type === 'coin') { drop.setTexture('drop_coin'); drop.setScale(1.2); }
-    else if (type === 'heal') { drop.setTexture('drop_heal'); drop.setScale(1.2); }
-    else if (type === 'power') { drop.setTexture('drop_power'); drop.setScale(1.2); }
-    drop.enableBody(true, x, y, true, true);
-    drop.body.updateFromGameObject();
-    drop.setVelocity(0, 120); 
-  }
+  const showRewardSummary = () => {
+    const timeTaken  = (Date.now() - startTime) / 1000;
+    const mm         = Math.floor(timeTaken/60), ss = Math.floor(timeTaken%60);
+    const timeStr    = `${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
 
-  collectDrop(player, drop) {
-    if (!drop.active) return;
-    drop.setActive(false).setVisible(false); drop.body.enable = false;
+    const c1Met      = true;
+    const c2Met      = (stats.hp / stats.maxHp) >= 0.5;
+    const limit      = stageConfig.timeLimit || 150;
+    const c3Met      = timeTaken <= limit;
+    const limM = Math.floor(limit/60), limS = Math.floor(limit%60);
+    const limStr = `${String(limM).padStart(2,'0')}:${String(limS).padStart(2,'0')}`;
 
-    if (drop.dType === 'coin') {
-      this.collectedCoins += 5;
-      this.showTextEffect(player.x, player.y - 30, this.lang === 'vi' ? "+5 Xu" : "+5 Coins", '#f1c40f');
-    } else if (drop.dType === 'heal') {
-      this.stats.hp = Math.min(this.stats.maxHp, this.stats.hp + 200);
-      this.updateHpBar();
-      this.showTextEffect(player.x, player.y - 30, "+200 HP", '#2ecc71');
-    } else if (drop.dType === 'power') {
-      this.stats.mainAtk += 50; 
-      this.showTextEffect(player.x, player.y - 30, this.lang === 'vi' ? "TĂNG SỨC MẠNH!" : "POWER UP!", '#3498db');
-      this.time.delayedCall(5000, () => { this.stats.mainAtk -= 50; }); 
-    }
-  }
+    let stars = 1;
+    if (c2Met) stars++; if (c3Met) stars++;
 
-  spawnBullet(x, y, vx, vy, color, atk, bType = 'normal', target = null, texture = 'laser') {
-    const b = this.bullets.get();
-    if (!b) return;
-    b.setTexture(texture);
-    if (texture === 'laser' || texture === 'plasma') { b.setTint(color); b.setScale(texture === 'plasma' ? 1.5 : 1); }
-    else { b.clearTint(); b.setScale(0.12); }
-    b.enableBody(true, x, y, true, true);
-    b.body.updateFromGameObject();
-    b.setVelocity(vx, vy); b.atk = atk; b.bType = bType; b.target = target;
-    b.setRotation(Math.atan2(vy, vx) + Math.PI / 2);
-  }
+    const stageBonus = isReplay ? 10 : 50 + currentStage*50;
+    const earnedExp  = isReplay ? 0 : (stageConfig.expReward||100);
+    const totalCoins = stageBonus + score + collectedCoins;
 
-  spawnEnemyBullet(x, y, vx, vy, texture = 'plasma') {
-    const b = this.enemyBullets.get();
-    if (!b) return;
-    b.setTexture(texture); 
-    if(texture === 'plasma') { b.setTint(0xff4757); b.setScale(1.5); }
-    else { b.clearTint(); b.setScale(1); }
-    b.enableBody(true, x, y, true, true);
-    b.body.updateFromGameObject();
-    b.setVelocity(vx, vy);
-  }
+    // ── Overlay background ──
+    const overlay = new GUI.Rectangle('summaryOverlay');
+    overlay.width = '100%'; overlay.height = '100%';
+    overlay.background = 'rgba(0,0,0,0)'; overlay.thickness = 0;
+    ui.addControl(overlay);
 
-  fireWeapons() {
-    if (!this.stats.mainGunId) return;
-    const gun = GEAR_CATALOG.mainGun.find(g => g.id === this.stats.mainGunId);
-    if (!gun) return;
-    const x = this.player.x; const y = this.player.y - 38; 
-    const atk = this.stats.mainAtk; const color = gun.color || 0x00e5ff; const projType = gun.projectileType || 'laser';
-    
-    switch (gun.firePattern) {
-      case 'spread3':
-        this.spawnBullet(x, y, 0, -1220, color, atk, 'normal', null, projType);
-        this.spawnBullet(x - 20, y + 10, -320, -1120, color, atk * 0.88, 'normal', null, projType);
-        this.spawnBullet(x + 20, y + 10, 320, -1120, color, atk * 0.88, 'normal', null, projType); break;
-      case 'homing':
-        const target = this.enemies.getChildren().find(e => e.active && e.hp > 0);
-        this.spawnBullet(x, y, 0, -1050, color, atk, 'homing', target || null, projType); break;
-      default: this.spawnBullet(x, y, 0, -1300, color, atk, 'normal', null, projType);
-    }
-  }
+    // ── Panel ──
+    const PW = Math.min(engine.getRenderWidth() * 0.90, Math.round(400 * dpr));
+    const panel = new GUI.Rectangle('summaryPanel');
+    panel.width        = `${PW}px`;
+    panel.height       = `${Math.round(540 * dpr)}px`;
+    panel.background   = 'rgba(5,11,20,0.97)';
+    panel.color        = themeHex;
+    panel.thickness    = Math.round(2 * dpr);
+    panel.cornerRadius = Math.round(14 * dpr);
+    overlay.addControl(panel);
 
-  fireWingman() {
-    if (!this.stats.wingmanId || this.drones.length === 0) return; 
-    const wing = GEAR_CATALOG.wingman.find(w => w.id === this.stats.wingmanId);
-    if (!wing) return;
-    const activeEnemies = this.enemies.getChildren().filter(e => e.active && e.hp > 0);
-    const target = activeEnemies.length > 0 ? activeEnemies[Phaser.Math.Between(0, activeEnemies.length - 1)] : null;
-    const wingOffsetX = this.player.displayWidth * 0.42; const wingOffsetY = this.player.displayHeight * 0.18;
-    this.drones.forEach((drone, index) => {
-      const sideX = (index === 0) ? -wingOffsetX : wingOffsetX;
-      this.spawnBullet(this.player.x + sideX, this.player.y + wingOffsetY, 0, -1000, wing.color, this.stats.wingAtk, 'homing', target, 'laser');
-    });
-  }
+    const stack = new GUI.StackPanel('summaryStack');
+    stack.isVertical  = true;
+    stack.paddingTop  = `${Math.round(16 * dpr)}px`;
+    panel.addControl(stack);
 
-  fireDrones() {
-    if (this.drones.length === 0) return;
-    const activeEnemies = this.enemies.getChildren().filter(e => e.active && e.hp > 0);
-    const target = activeEnemies.length > 0 ? activeEnemies[Phaser.Math.Between(0, activeEnemies.length - 1)] : null;
-    this.drones.forEach(drone => {
-        let vx = 0, vy = -1600;
-        if (target) { const angle = Phaser.Math.Angle.Between(drone.x, drone.y, target.x, target.y); vx = Math.cos(angle) * 1550; vy = Math.sin(angle) * 1550; }
-        this.spawnBullet(drone.x, drone.y - 15, vx, vy, drone.color, this.stats.droneAtk, 'sniper', target, drone.projectileType || 'laser');
-    });
-  }
+    // Helper: add a text line
+    const addTxt = (text, color, fs, pt = 6) => {
+      const t = new GUI.TextBlock();
+      t.text = text; t.color = color;
+      t.fontFamily = '"VT323", monospace'; t.fontSize = Math.round(fs * dpr);
+      t.height     = `${Math.round((fs * 1.3 + pt) * dpr)}px`;
+      t.paddingTop = `${Math.round(pt * dpr)}px`;
+      stack.addControl(t); return t;
+    };
 
-  hitEnemy(bullet, enemy) {
-    if (!bullet.active || !enemy.active) return;
-    enemy.hp -= bullet.atk;
-    this.showTextEffect(enemy.x, enemy.y, `-${Math.round(bullet.atk)}`, '#ff4757');
-    enemy.setTint(0xffffff);
-    if (enemy.setTintMode) enemy.setTintMode(Phaser.TintModes.FILL);
-    this.time.delayedCall(50, () => { 
-      if (enemy.active) { 
-        if (enemy.isEnraged) {
-          enemy.setTint(0xff5555); 
-          if (enemy.setTintMode) enemy.setTintMode(Phaser.TintModes.MULTIPLY);
-        } else {
-          enemy.clearTint(); 
-          if (enemy.setTintMode) enemy.setTintMode(Phaser.TintModes.MULTIPLY); 
-        }
-      } 
-    });
-    
-    if (enemy.isBoss && enemy.hp <= enemy.maxHp * 0.3 && !enemy.isEnraged) {
-      enemy.isEnraged = true;
-      this.showAnnounce(this.lang === 'vi' ? 'CẢNH BÁO: TRÙM NỔI ĐIÊN!' : 'WARNING: BOSS ENRAGED!', '#ff0000', 3000);
-      this.tweens.killTweensOf(enemy);
-      const isAlien = this.stageConfig.bossType === 'alien';
-      this.tweens.add({ targets: enemy, y: 220 + 30, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-      this.tweens.add({ targets: enemy, x: { min: 80, max: this.scale.width - 80 }, duration: isAlien ? 800 : 1200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-    }
+    // Helper: add a label + value row
+    const addRow = (label, value, vcol = '#00e5ff') => {
+      const row = new GUI.StackPanel();
+      row.isVertical  = false;
+      row.height      = `${Math.round(28 * dpr)}px`;
+      row.paddingTop  = `${Math.round(4 * dpr)}px`;
+      stack.addControl(row);
+      const lbl = new GUI.TextBlock();
+      lbl.text = label; lbl.color = '#94a3b8';
+      lbl.fontFamily = '"VT323", monospace'; lbl.fontSize = Math.round(17 * dpr);
+      lbl.width       = `${Math.round(PW * 0.55)}px`;
+      lbl.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+      lbl.paddingLeft = `${Math.round(22 * dpr)}px`;
+      const val = new GUI.TextBlock();
+      val.text = value; val.color = vcol;
+      val.fontFamily = '"VT323", monospace'; val.fontSize = Math.round(20 * dpr); val.fontStyle = 'bold';
+      val.width       = `${Math.round(PW * 0.45)}px`;
+      val.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_RIGHT;
+      val.paddingRight = `${Math.round(22 * dpr)}px`;
+      row.addControl(lbl); row.addControl(val);
+    };
 
-    if (bullet.bType !== 'plasma' && bullet.bType !== 'sniper') {
-      bullet.setActive(false).setVisible(false); bullet.body.enable = false;
-    }
-    
-    if (enemy.hp <= 0) {
-      this.explode(enemy.x, enemy.y, 0xff4757, enemy.isBoss ? 4 : 1.5);
-      this.score += enemy.points;
-      this.score += enemy.isBoss ? bossReward : enemy.points;
-      this.scoreText.setText(`${TEXTS.score[this.lang]}: ${this.score}`);
-      
-      const roll = Math.random() * 100;
-      if (roll < 4) this.spawnDrop(enemy.x, enemy.y, 'power'); 
-      else if (roll < 9) this.spawnDrop(enemy.x, enemy.y, 'heal'); 
-      else if (roll < 20) this.spawnDrop(enemy.x, enemy.y, 'coin'); 
+    // Helper: thin divider
+    const addDiv = (color = '#00e5ff33') => {
+      const d = new GUI.Rectangle();
+      d.width      = `${Math.round(PW * 0.88)}px`;
+      d.height     = `${Math.round(1.5 * dpr)}px`;
+      d.background = color; d.thickness = 0;
+      d.paddingTop = `${Math.round(8 * dpr)}px`;
+      stack.addControl(d);
+    };
 
-      enemy.setActive(false).setVisible(false); enemy.body.enable = false;
-      if (enemy.isBoss) this.stageCleared();
-    }
-  }
+    // ── Content ──
+    addTxt(lang==='vi'?'BÁO CÁO CHIẾN DỊCH':'MISSION REPORT', '#facc15', 28, 0);
 
-  hitPlayer(player, hazard) {
-    if (!hazard.active) return;
-    let damage = 200;
-    if (this.stats.armor) damage = Math.floor(damage * (1 - this.stats.armor / 100));
-    
-    if (hazard.texture.key === 'plasma') { hazard.setActive(false).setVisible(false); hazard.body.enable = false; } 
-    else { hazard.hp -= 500; if (hazard.hp <= 0) { hazard.setActive(false).setVisible(false); hazard.body.enable = false; } }
-    
-    this.explode(player.x, player.y, 0xFFD700, 2);
-    this.cameras.main.shake(200, 0.015);
-    this.stats.hp -= damage;
-    this.updateHpBar();
-    
-    if (this.stats.hp <= 0) {
-      this.gameState = 'GAMEOVER'; this.physics.pause(); this.player.setVisible(false);
-      this.engineFlareLeft.stop(); this.engineFlareRight.stop();
-      if (this.drones && this.drones.length > 0) this.drones.forEach(d => d.setVisible(false));
-      
-      this.explode(this.player.x, this.player.y, 0xff0000, 4);
-      this.showAnnounce(TEXTS.lost[this.lang], '#ff0000', 3000);
-      this.time.delayedCall(4000, () => {
-         const gsRef = this.registry.get('gsRef');
-         gsRef.current.coins = (Number(gsRef.current.coins) || 0) + this.score + this.collectedCoins;
-         const saveUserProfile = this.registry.get('saveUserProfile');
-         if (saveUserProfile) saveUserProfile();
-         this.registry.get('setScreen')('hq');
-      });
-    }
-  }
+    const starStr = [0,1,2].map(i => stars > i ? '★' : '☆').join(' ');
+    addTxt(starStr, '#facc15', 32, 4);
 
-  handleResize(gameSize) {
-    if (this.gameState === 'GAMEOVER') return;
-    const w = gameSize.width; const h = gameSize.height;
-    this.bgGrid.setPosition(w / 2, h / 2); this.bgGrid.setSize(w, h * 2);
-    this.physics.world.setBounds(0, 0, w, h);
-    const targetWidth = Math.min(w * 0.5, 60);
-    this.playerScale = targetWidth / (this.player.width || 1); this.player.setScale(this.playerScale);
-    this.engineFlareLeft.startFollow(this.player, -this.player.displayWidth * 0.22, this.player.displayHeight * 0.40);
-    this.engineFlareRight.startFollow(this.player, this.player.displayWidth * 0.22, this.player.displayHeight * 0.40);
-    this.updateHUDLayout();
-  }
+    const cond = (met, label) => addTxt((met?'✅ ':'❌ ') + label, met?'#2ecc71':'#ff4757', 16, 4);
+    cond(c1Met, lang==='vi'?'Hoàn thành nhiệm vụ':'Mission Cleared');
+    cond(c2Met, lang==='vi'?'Giáp còn lại ≥ 50%':'Armor remaining ≥ 50%');
+    cond(c3Met, lang==='vi'?`Thời gian ≤ ${limStr}`:`Clear Time ≤ ${limStr}`);
 
-  update(time, delta) {
-    if (this.gameState === 'GAMEOVER' || this.gameState === 'CLEAR') return;
-    this.bgGrid.y = (this.bgGrid.y + 2) % 50 + (this.scale.height / 2);
-    
-    if (this.drones && this.drones.length > 0) {
-      const hoverY = Math.sin(this.time.now * 0.0045) * 9;
-      this.drones.forEach(drone => { drone.x = Phaser.Math.Linear(drone.x, this.player.x + drone.offsetX, 0.25); drone.y = Phaser.Math.Linear(drone.y, this.player.y + drone.offsetY + hoverY, 0.25); });
-    }
-    
-    if (time > this.nextMainFire) { this.fireWeapons(); this.nextMainFire = time + this.stats.mainFireRate; }
-    if (this.stats.wingmanId && time > this.nextWingFire) { this.fireWingman(); this.nextWingFire = time + this.stats.wingFireRate; }
-    if (this.stats.droneId && time > this.nextDroneFire) { this.fireDrones(); this.nextDroneFire = time + this.stats.droneFireRate; }
-    // --- LOGIC HỒI MÁU TỰ ĐỘNG CỦA PHI CÔNG ---
-    if (this.stats.hpRegenRate > 0 && time > this.nextHealTime && this.stats.hp < this.stats.maxHp) {
-        // Tính lượng máu hồi mỗi giây
-        const healAmount = Math.ceil(this.stats.maxHp * this.stats.hpRegenRate); 
-        // Cộng máu nhưng không được vượt quá máu tối đa
-        this.stats.hp = Math.min(this.stats.maxHp, this.stats.hp + healAmount);
-        
-        this.updateHpBar(); // Cập nhật lại thanh máu màu xanh trên góc màn hình
-        
-        // Hiển thị chữ + Máu màu xanh lá bay lên cho đẹp
-        this.showTextEffect(this.player.x, this.player.y - 30, `+${healAmount}`, '#2ecc71');
-        
-        // Đặt lịch 1000ms (1 giây) sau mới hồi tiếp
-        this.nextHealTime = time + 1000; 
-    }
-    
-    const width = this.scale.width; const height = this.scale.height;
+    addDiv();
+    addRow(lang==='vi'?'Thời gian:':'Clear Time:', timeStr, '#fff');
+    addRow(lang==='vi'?'Kinh nghiệm:':'EXP Gained:', `+${earnedExp}`, '#00ffcc');
+    addRow(lang==='vi'?'Điểm tác chiến:':'Combat Score:', `+${score}`, '#00e5ff');
+    addRow(lang==='vi'?'Nhặt được:':'Loot Collected:', `+${collectedCoins}`, '#00e5ff');
+    addDiv('#00e5ff55');
+    addRow(lang==='vi'?'TỔNG NHẬN:':'TOTAL EARNED:',
+      `${totalCoins} ${lang==='vi'?'XU':'COINS'}`, '#facc15');
 
-    this.enemyHpGraphics.clear();
-    this.enemies.getChildren().forEach(e => {
-        if (!e.active || e.y < 0) return; 
-        const ratio = Math.max(0, e.hp / e.maxHp);
-        if (e.isBoss) {
-            const w = 150; const h = 8; const yOffset = e.displayHeight / 2 + 25;
-            this.enemyHpGraphics.fillStyle(0xff4757, 0.8); this.enemyHpGraphics.fillRect(e.x - w/2, e.y - yOffset, w, h);
-            this.enemyHpGraphics.fillStyle(0x2ecc71, 1); this.enemyHpGraphics.fillRect(e.x - w/2, e.y - yOffset, w * ratio, h);
-            this.enemyHpGraphics.lineStyle(2, 0xffffff, 1); this.enemyHpGraphics.strokeRect(e.x - w/2, e.y - yOffset, w, h);
-        } else {
-            const w = 40; const h = 4; const yOffset = e.displayHeight / 2 + 10;
-            this.enemyHpGraphics.fillStyle(0xff4757, 0.8); this.enemyHpGraphics.fillRect(e.x - w/2, e.y - yOffset, w, h);
-            this.enemyHpGraphics.fillStyle(0x2ecc71, 1); this.enemyHpGraphics.fillRect(e.x - w/2, e.y - yOffset, w * ratio, h);
-        }
+    // ── Confirm button ──
+    const btn = new GUI.Rectangle('btnConfirm');
+    btn.width        = `${Math.round(180 * dpr)}px`;
+    btn.height       = `${Math.round(46 * dpr)}px`;
+    btn.background   = '#00e5ff'; btn.cornerRadius = Math.round(10 * dpr); btn.thickness = 0;
+    btn.paddingTop   = `${Math.round(16 * dpr)}px`;
+    btn.isPointerBlocker = true;
+    const btnTxt = new GUI.TextBlock('btnTxt', lang==='vi'?'XÁC NHẬN':'ACCEPT');
+   btnTxt.color = '#000'; btnTxt.fontFamily = '"VT323", monospace';
+    btnTxt.fontSize = Math.round(22 * dpr); btnTxt.fontStyle = 'bold';
+    btn.addControl(btnTxt); stack.addControl(btn);
+
+    // Fade-in overlay
+    let fadeT0 = null;
+    const fadeObs = scene.onBeforeRenderObservable.add(() => {
+      if (!fadeT0) fadeT0 = performance.now();
+      overlay.background = `rgba(0,0,0,${Math.min(.85, (performance.now()-fadeT0)/400)})`;
+      if ((performance.now()-fadeT0) >= 400) scene.onBeforeRenderObservable.remove(fadeObs);
     });
 
-    if (this.gameState === 'PLAYING') {
-      if (this.enemiesSpawned < this.enemiesToSpawn) {
-        if (time > this.nextEnemySpawn) {
-          this.spawnEnemy();
-          this.enemiesSpawned++;
-          this.nextEnemySpawn = time + Math.max(300, 1500 - (this.currentStage * 100 + this.currentWave * 50));
+    // Confirm click – save progress
+    let clicked = false;
+    btn.onPointerDownObservable.addOnce(() => {
+      if (clicked) return; clicked = true;
+      btn.background = '#00b8d4';
+
+      const prog  = gsRef.current.campaignData.progress;
+      const pId   = Number(prog.currentPlanet) || 1;
+      const cStg  = Number(prog.selectedStage) || 1;
+
+      if (!prog.planets)          prog.planets = {};
+      if (!prog.planets[pId])     prog.planets[pId] = { highestStage: 1, stars: {} };
+      if (!prog.planets[pId].stars) prog.planets[pId].stars = {};
+
+      const oldStars = Number(prog.planets[pId].stars[cStg]) || 0;
+      prog.planets[pId].stars[cStg] = Math.max(oldStars, stars);
+
+      const curHigh = Number(prog.planets[pId].highestStage) || 1;
+      if (cStg === curHigh && cStg < 10) {
+        prog.planets[pId].highestStage = cStg + 1;
+        prog.selectedStage = cStg + 1;
+      }
+
+      if (cStg === 10 && cStg === curHigh) {
+        const nextPId = pId + 1;
+        if (nextPId <= Object.keys(PLANET_CONFIG).length) {
+          prog.highestPlanet = Math.max(Number(prog.highestPlanet)||1, nextPId);
+          if (!prog.planets[nextPId]) prog.planets[nextPId] = { highestStage: 1, stars: {} };
+          prog.currentPlanet = nextPId; prog.selectedStage = 1;
         }
       }
-      else if (this.enemies.countActive(true) === 0) { 
-        if (this.currentWave < this.maxWaves) {
-          this.gameState = 'TRANSITION';
-          this.showAnnounce(TEXTS.clear[this.lang], '#2ecc71', 1000);
-          this.currentWave++;
-          this.time.delayedCall(2000, () => this.startWave());
-        }
-        else if (!this.stageConfig.hasBoss) { this.stageCleared(); }
+
+      if (prog.exp === undefined) prog.exp = 0;
+      prog.exp += earnedExp;
+      gsRef.current.coins = (Number(gsRef.current.coins)||0) + totalCoins;
+
+      if (saveUserProfile) saveUserProfile();
+      try {
+        localStorage.setItem('astro_guest_campaign', JSON.stringify(gsRef.current.campaignData));
+        localStorage.setItem('astro_guest_coins', String(gsRef.current.coins));
+      } catch(_) {}
+
+      setTimeout(() => onVictory(), 200);
+    });
+  };
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 16. MAIN GAME LOOP (scene.onBeforeRenderObservable)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // Kick off first wave
+  setTimeout(() => startWave(1), 1000);
+
+  scene.onBeforeRenderObservable.add(() => {
+    if (gameOver || gameState === 'CLEAR') return;
+    const now = Date.now();
+    tick++;
+
+    // ── Roll return ──
+    playerPlane.rotation.z = BABYLON.Scalar.Lerp(playerPlane.rotation.z, 0, .06);
+
+    // ── Drone hover float ──
+    const hoverZ = Math.sin(tick * .04) * .18;
+    drones.forEach(d => {
+      d.position.x = BABYLON.Scalar.Lerp(d.position.x, playerRoot.position.x + d.offsetX, .22);
+      d.position.z = BABYLON.Scalar.Lerp(d.position.z, playerRoot.position.z + d.offsetZ + hoverZ, .22);
+    });
+
+    // ── Auto-fire ──
+    if (now > lastFire + stats.fireRate)       { fireWeapons();  lastFire      = now; }
+    if (stats.wingmanId && now > nextWingFire) { fireWingman();  nextWingFire  = now + stats.wingFireRate; }
+    if (stats.droneId   && now > nextDroneFire){ fireDrones();   nextDroneFire = now + stats.droneFireRate; }
+
+    const aspect = getAspect();
+    const cullX  = ZOOM * aspect + 3;
+
+    // ── Player bullets ──
+    for (let i = playerBullets.length-1; i >= 0; i--) {
+      const b = playerBullets[i];
+      if (b.isDisposed?.()) { playerBullets.splice(i,1); continue; }
+
+      // Homing steering
+      if (b.isHoming && b.target && !b.target._dead && b.target.mesh && !b.target.mesh.isDisposed?.()) {
+        const dx = b.target.mesh.position.x - b.position.x;
+        const dz = b.target.mesh.position.z - b.position.z;
+        const dn = Math.sqrt(dx*dx + dz*dz) || 1;
+        b._vx = BABYLON.Scalar.Lerp(b._vx, (dx/dn)*.55, .08);
+        b._vz = BABYLON.Scalar.Lerp(b._vz, (dz/dn)*.55, .08);
       }
-    }
-    
-    if (this.gameState === 'BOSS_FIGHT' && this.boss && this.boss.active) {
-      if (time > this.nextBossFire) {
-        const isAlien = this.stageConfig.bossType === 'alien';
-        const attackType = Phaser.Math.Between(1, 3);
-        if (attackType === 1) { 
-           for(let i = -3; i <= 3; i++) { this.spawnEnemyBullet(this.boss.x, this.boss.y + 40, i * 150, 450); }
-        } else if (attackType === 2) { 
-           const bullets = isAlien ? 16 : 8; 
-           for(let a = 0; a < Math.PI * 2; a += Math.PI * 2 / bullets) { 
-               this.spawnEnemyBullet(this.boss.x, this.boss.y, Math.cos(a)*(isAlien?400:300), Math.sin(a)*(isAlien?400:300)); 
-           }
-        } else { 
-           const angle = Phaser.Math.Angle.Between(this.boss.x, this.boss.y, this.player.x, this.player.y);
-           this.spawnEnemyBullet(this.boss.x, this.boss.y + 40, Math.cos(angle)*700, Math.sin(angle)*700);
-        }
-        let nextDelay = isAlien ? Phaser.Math.Between(600, 1200) : Phaser.Math.Between(1000, 2000);
-        if (this.boss.isEnraged) nextDelay *= 0.5; 
-        this.nextBossFire = time + nextDelay;
+      b.position.x += b._vx; b.position.z += b._vz;
+
+      if (b.position.z < -ZOOM-3 || b.position.z > ZOOM+3 || Math.abs(b.position.x) > cullX) {
+        safeDispose(b); playerBullets.splice(i,1);
       }
     }
 
-    this.bullets.getChildren().forEach(b => {
-      if (!b.active) return;
-      if (b.bType === 'homing' && b.target && b.target.active) {
-        if (Phaser.Math.Distance.Between(b.x, b.y, b.target.x, b.target.y) < 40) this.hitEnemy(b, b.target);
-        else { this.physics.moveToObject(b, b.target, 550); b.setRotation(Math.atan2(b.body.velocity.y, b.body.velocity.x) + Math.PI / 2); }
-      }
-      if (b.y < -50 || b.y > height + 50 || b.x < -50 || b.x > width + 50) { b.setActive(false).setVisible(false); b.body.enable = false; }
-    });
+    // ── Enemy bullets ──
+    for (let i = enemyBullets.length-1; i >= 0; i--) {
+      const b = enemyBullets[i];
+      if (b.isDisposed?.()) { enemyBullets.splice(i,1); continue; }
+      b.position.x += b._vx; b.position.z += b._vz;
 
-    this.enemies.getChildren().forEach(e => {
-      if (!e.active || e.isBoss) return;
+      if (b.position.z > ZOOM+3 || b.position.z < -ZOOM-3 || Math.abs(b.position.x) > cullX) {
+        safeDispose(b); enemyBullets.splice(i,1); continue;
+      }
+      const dx = b.position.x - playerRoot.position.x;
+      const dz = b.position.z - playerRoot.position.z;
+      if (dx*dx + dz*dz < 1.44) {   // hit radius 1.2
+        damagePlayer(200); safeDispose(b); enemyBullets.splice(i,1);
+      }
+    }
+
+    // ── Enemies ──
+    for (let i = enemies.length-1; i >= 0; i--) {
+      const e = enemies[i];
+      if (e._dead) { enemies.splice(i,1); continue; }
+
       if (!e.canShoot) {
-         const speed = e.tier === 4 ? 280 : 150; 
-         this.physics.moveToObject(e, this.player, speed);
-         e.setRotation(Math.atan2(this.player.y - e.y, this.player.x - e.x) - Math.PI / 2);
+        // Kamikaze / melee – chase player
+        const dx = playerRoot.position.x - e.mesh.position.x;
+        const dz = playerRoot.position.z - e.mesh.position.z;
+        const dn = Math.sqrt(dx*dx + dz*dz) || 1;
+        e.mesh.position.x += (dx/dn) * e.speed * 1.2;
+        e.mesh.position.z += (dz/dn) * e.speed * 1.2;
       } else {
-         e.setRotation(0); 
-         if (e.y < 40 && e.body.velocity.y < 0) e.body.velocity.y = Math.abs(e.body.velocity.y);
-         if (e.y > height * 0.65 && e.body.velocity.y > 0) e.body.velocity.y = -Math.abs(e.body.velocity.y); 
-         if (e.x < 30 && e.body.velocity.x < 0) e.body.velocity.x = Math.abs(e.body.velocity.x || 100);
-         if (e.x > width - 30 && e.body.velocity.x > 0) e.body.velocity.x = -Math.abs(e.body.velocity.x || 100);
-
-         if (time > e.nextFire) {
-            const angle = Phaser.Math.Angle.Between(e.x, e.y, this.player.x, this.player.y);
-            this.spawnEnemyBullet(e.x, e.y + 20, Math.cos(angle) * 350, Math.sin(angle) * 350);
-            e.nextFire = time + 3000; 
-         }
+        // Patrol + shoot
+        e.mesh.position.z += e.speed;
+        e.mesh.position.x += e.velX + Math.sin(tick * .03 + e.sineOff) * .04;
+        const bx = boundX();
+        if (e.mesh.position.z > ZOOM * .65 && e.speed > 0) e.speed = -Math.abs(e.speed);
+        if (e.mesh.position.z < -ZOOM + 1 && e.speed < 0) e.speed = Math.abs(e.speed);
+        if (Math.abs(e.mesh.position.x) > bx) {
+          e.velX *= -1; e.mesh.position.x = clamp(e.mesh.position.x, -bx, bx);
+        }
+        if (now > e.lastShoot + e.shootMs) {
+          const dx = playerRoot.position.x - e.mesh.position.x;
+          const dz = playerRoot.position.z - e.mesh.position.z;
+          const dn = Math.sqrt(dx*dx + dz*dz) || 1;
+          fireEnemyBullet(e.mesh.position, (dx/dn)*.24, (dz/dn)*.24);
+          e.lastShoot = now;
+        }
       }
-    });
 
-    this.enemyBullets.getChildren().forEach(b => {
-      if (b.active && (b.y > height + 50 || b.y < -50 || b.x < -50 || b.x > width + 50)) { b.setActive(false).setVisible(false); b.body.enable = false; }
-    });
+      // Cull past screen bottom
+      if (e.mesh.position.z > ZOOM + 5) { cleanEnemy(e); enemies.splice(i,1); continue; }
 
-    this.drops.getChildren().forEach(d => {
-       if (d.active && d.y > height + 50) { d.setActive(false).setVisible(false); d.body.enable = false; }
-    });
-  }
-}
+      // Collision with player
+      {
+        const dx = e.mesh.position.x - playerRoot.position.x;
+        const dz = e.mesh.position.z - playerRoot.position.z;
+        if (dx*dx + dz*dz < 3.24) {   // hit radius 1.8
+          damagePlayer(e.tier===4 ? 400 : 200);
+          explode(e.mesh.position, 1.5);
+          cleanEnemy(e); enemies.splice(i,1); continue;
+        }
+      }
+
+      // Bullet hits
+      let killed = false;
+      for (let j = playerBullets.length-1; j >= 0; j--) {
+        const b = playerBullets[j];
+        if (b.isDisposed?.()) continue;
+        const dx = b.position.x - e.mesh.position.x;
+        const dz = b.position.z - e.mesh.position.z;
+        if (dx*dx + dz*dz > 2.25) continue;  // hit radius 1.5
+
+        let dmg = b.atk;
+        e.hp -= dmg;
+        showTextEffect(e.mesh.position.x, e.mesh.position.z, `-${Math.round(dmg)}`, '#ff4757');
+        e.miniHp.width = `${Math.max(0, Math.round(e.hp/e.maxHp*100))}%`;
+
+        // Hit flash
+        if (e.mesh.material?.emissiveColor) {
+          const orig = e.mesh.material.emissiveColor.clone();
+          e.mesh.material.emissiveColor = new BABYLON.Color3(1,1,1);
+          setTimeout(()=>{ if (e.mesh?.material) e.mesh.material.emissiveColor = orig; }, 60);
+        }
+
+        safeDispose(b); playerBullets.splice(j,1);
+
+        if (e.hp <= 0) {
+          killed = true;
+          explode(e.mesh.position, e.tier===3 ? 2 : 1.5);
+          updateScore(e.points);
+          const roll = Math.random()*100;
+          if (roll < 4)       spawnDrop(e.mesh.position.x, e.mesh.position.z, 'power');
+          else if (roll < 9)  spawnDrop(e.mesh.position.x, e.mesh.position.z, 'heal');
+          else if (roll < 20) spawnDrop(e.mesh.position.x, e.mesh.position.z, 'coin');
+          cleanEnemy(e); enemies.splice(i,1);
+          break;
+        }
+      }
+      if (killed) continue;
+    }
+
+    // ── Boss ──
+    if (gameState==='BOSS_FIGHT' && bossMesh && !bossMesh.isDisposed?.()) {
+      // Entry slide
+      if (bossMesh.position.z < -ZOOM + 7)
+        bossMesh.position.z = BABYLON.Scalar.Lerp(bossMesh.position.z, -ZOOM+7, .018);
+
+      // Patrol
+      bossFloatT += .010;
+      bossMesh.position.z = (-ZOOM+7) + Math.sin(bossFloatT*.7) * .9;
+      bossMesh.position.x += bossVelX * (bossEnraged ? 1.8 : 1);
+      const bx = boundX() - 2;
+      if (Math.abs(bossMesh.position.x) > bx) {
+        bossVelX *= -1; bossMesh.position.x = clamp(bossMesh.position.x, -bx, bx);
+      }
+
+      // Boss fire
+      if (now > nextBossFire) {
+        const isAlien    = stageConfig.bossType==='alien';
+        const attackType = 1 + Math.floor(Math.random()*3);
+        if (attackType===1) {
+          for (let k=-3; k<=3; k++) fireEnemyBullet(bossMesh.position, k*.09, .45);
+        } else if (attackType===2) {
+          const cnt = isAlien ? 16 : 8;
+          for (let a=0; a < Math.PI*2; a += Math.PI*2/cnt)
+            fireEnemyBullet(bossMesh.position, Math.cos(a)*(isAlien?.52:.38), Math.sin(a)*(isAlien?.52:.38));
+        } else {
+          const dx = playerRoot.position.x - bossMesh.position.x;
+          const dz = playerRoot.position.z - bossMesh.position.z;
+          const dn = Math.sqrt(dx*dx+dz*dz)||1;
+          fireEnemyBullet(bossMesh.position, (dx/dn)*.58, (dz/dn)*.58);
+        }
+        const base = isAlien ? 700+Math.random()*600 : 1100+Math.random()*900;
+        nextBossFire = now + (bossEnraged ? base*.5 : base);
+      }
+
+      // Bullet hits boss
+      for (let j = playerBullets.length-1; j >= 0; j--) {
+        const b = playerBullets[j];
+        if (b.isDisposed?.()) continue;
+        const dx = b.position.x - bossMesh.position.x;
+        const dz = b.position.z - bossMesh.position.z;
+        if (dx*dx + dz*dz > 7.84) continue;  // hit radius 2.8
+
+        let dmg = b.atk;
+        bossHp -= dmg;
+        showTextEffect(bossMesh.position.x, bossMesh.position.z, `-${Math.round(dmg)}`, '#ff4757');
+        bossHpFill.width = `${Math.max(0, Math.round(bossHp/bossMaxHp*100))}%`;
+
+        // Flash boss
+        if (bossMesh.material?.emissiveColor) {
+          const orig = bossMesh.material.emissiveColor.clone();
+          bossMesh.material.emissiveColor = new BABYLON.Color3(1,1,1);
+          setTimeout(()=>{ if (bossMesh?.material) bossMesh.material.emissiveColor=orig; }, 60);
+        }
+        safeDispose(b); playerBullets.splice(j,1);
+
+        // Enrage at 30%
+        if (!bossEnraged && bossHp <= bossMaxHp*.3) {
+          bossEnraged = true;
+          showAnnouncement(lang==='vi'?'CẢNH BÁO: TRÙM NỔI ĐIÊN!':'WARNING: BOSS ENRAGED!', '#ff0000', 3000);
+          bossVelX *= 1.6;
+          // Change boss color to red
+          if (bossMesh.material) {
+            bossMesh.material.emissiveColor = new BABYLON.Color3(1, 0.3, 0.3);
+          }
+        }
+
+        if (bossHp <= 0) {
+          explode(bossMesh.position, 5);
+          updateScore(bossPts);
+          bossPanel.isVisible = false;
+          safeDispose(bossMesh); bossMesh = null;
+          stageCleared(); break;
+        }
+      }
+
+      // Boss ↔ player collision
+      if (bossMesh) {
+        const dx = bossMesh.position.x - playerRoot.position.x;
+        const dz = bossMesh.position.z - playerRoot.position.z;
+        if (dx*dx + dz*dz < 10.24) damagePlayer(400);   // hit radius 3.2
+      }
+    }
+
+    // ── Drops ──
+    for (let i = drops.length-1; i >= 0; i--) {
+      const d = drops[i];
+      if (d._dead) { drops.splice(i,1); continue; }
+      d.mesh.position.z += .055;
+      // Magnet collect
+      const dx = d.mesh.position.x - playerRoot.position.x;
+      const dz = d.mesh.position.z - playerRoot.position.z;
+      if (dx*dx + dz*dz < 2.25) {
+        if (d.type==='coin') {
+          collectedCoins += 5;
+          showTextEffect(playerRoot.position.x, playerRoot.position.z-.5, lang==='vi'?'+5 Xu':'+5 Coins', '#f1c40f');
+        } else if (d.type==='heal') {
+          stats.hp = Math.min(stats.maxHp, stats.hp+200); updateHpBar();
+          showTextEffect(playerRoot.position.x, playerRoot.position.z-.5, '+200 HP', '#2ecc71');
+        } else {
+          stats.atk += 50;
+          showTextEffect(playerRoot.position.x, playerRoot.position.z-.5, lang==='vi'?'TĂNG SỨC MẠNH!':'POWER UP!', '#3498db');
+          setTimeout(()=>{ stats.atk -= 50; }, 5000);
+        }
+        safeDispose(d.mesh); d._dead=true; drops.splice(i,1); continue;
+      }
+      if (d.mesh.position.z > ZOOM+5) { safeDispose(d.mesh); d._dead=true; drops.splice(i,1); }
+    }
+
+    // ── Spawn enemies (PLAYING state) ──
+    if (gameState==='PLAYING') {
+      if (waveSpawned < waveCount) {
+        if (now > lastSpawn + spawnInterval) { spawnEnemy(); waveSpawned++; lastSpawn = now; }
+      } else {
+        // All spawned, wait for all to die
+        const alive = enemies.filter(e => !e._dead).length;
+        if (alive===0) {
+          if (currentWave < MAX_WAVES) {
+            gameState = 'TRANSITION';
+            showAnnouncement(lang==='vi'?'DỌN SẠCH!':'SECTOR CLEARED!', '#2ecc71', 1000);
+            setTimeout(() => startWave(currentWave+1), 2000);
+          } else if (!stageConfig.hasBoss) {
+            stageCleared();
+          }
+        }
+      }
+    }
+  });
+};

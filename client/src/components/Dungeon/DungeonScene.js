@@ -30,6 +30,18 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
     const dungeonId     = gsRef.current.selectedDungeonId;
     const dungeonConfig = DUNGEON_CONFIG.find(d => d.id === dungeonId) || DUNGEON_CONFIG[0];
+    // difficulty 1 = dễ, 2 = thường, 3 = khó  (tham khảo tốc độ campaign)
+    const DIFF = ({
+        1: { speedBase: 0.038, speedInc: 0.004, spawnBase: 1600, spawnMin: 900,
+             countBase: 5,  countInc: 3, hpBase:  80, hpInc: 25,
+             bulletVel: 0.28, bossBase:  800, bossPerWave:  400 },
+        2: { speedBase: 0.052, speedInc: 0.006, spawnBase: 1400, spawnMin: 720,
+             countBase: 6,  countInc: 4, hpBase: 110, hpInc: 32,
+             bulletVel: 0.36, bossBase: 2000, bossPerWave:  900 },
+        3: { speedBase: 0.068, speedInc: 0.009, spawnBase: 1200, spawnMin: 580,
+             countBase: 8,  countInc: 5, hpBase: 150, hpInc: 48,
+             bulletVel: 0.44, bossBase: 4200, bossPerWave: 1600 },
+    })[dungeonConfig.difficulty || 1];
     const { items, loadout } = gsRef.current.campaignData;
 
     const pilotBase    = PILOTS.find(p => p.id === loadout.pilot)       || PILOTS[0];
@@ -579,10 +591,10 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
     const startWave = (n) => {
         currentWave     = n;
-        waveEnemyCount  = 6 + n * 4;
-        spawnInterval   = Math.max(650, 1450 - n * 70);
-        enemyBaseHp     = 120 + n * 40;
-        enemyBaseSpeed  = 0.07 + n * 0.01;
+        waveEnemyCount  = DIFF.countBase + n * DIFF.countInc;
+        spawnInterval   = Math.max(DIFF.spawnMin, DIFF.spawnBase - n * 60);
+        enemyBaseHp     = DIFF.hpBase + n * DIFF.hpInc;
+        enemyBaseSpeed  = DIFF.speedBase + n * DIFF.speedInc;
         waveBossEnabled = n % 3 === 0;
         bossSpawned     = false;
         bossActive      = false;
@@ -620,7 +632,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         if (bossSpawned) return;
         bossSpawned = true;
         bossActive  = true;
-        bossHp      = 4200 + currentWave * 1600;
+        bossHp      = DIFF.bossBase + currentWave * DIFF.bossPerWave;
         bossMaxHp   = bossHp;
 
         bossMesh = BABYLON.MeshBuilder.CreateSphere('bossCore', { diameter: 2.6, segments: 24 }, scene);
@@ -752,7 +764,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         playerBullets.push(b);
     };
 
-    const fireEnemyBullet = (pos, velX = 0, velZ = 0.45) => {
+    const fireEnemyBullet = (pos, velX = 0, velZ = enemyBulletVelZ) => {
         const b = BABYLON.MeshBuilder.CreateSphere(`eb_${Date.now()}_${Math.random()}`, { diameter: 0.5 }, scene);
         b.position = pos.clone();
         b.position.y = 0; 
@@ -768,6 +780,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     // ══════════════════════════════════════════════════════════════════════════
 
     let score        = 0;
+    let totalKills   = 0;
+    let enemyBulletVelZ = DIFF.bulletVel;
     let gameOver     = false;
     let invincibleMs = 0;
     const INV_DUR    = 1500;   
@@ -815,7 +829,12 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             '#ff4757',
             2000,
         );
-        setTimeout(() => onGameOver(score), 1800);
+        setTimeout(() => onGameOver({
+            score,
+            totalKills,
+            wavesCleared : Math.max(0, currentWave - 1),
+            maxWaves     : MAX_WAVES,
+        }), 1800);
     };
 
     const triggerVictory = () => {
@@ -826,7 +845,12 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             '#2ecc71',
             2000,
         );
-        setTimeout(() => onVictory(score), 2800);
+        setTimeout(() => onVictory({
+            score,
+            totalKills,
+            wavesCleared : currentWave,
+            maxWaves     : MAX_WAVES,
+        }), 2800);
     };
 
     setTimeout(() => { if (!scene.isDisposed) startWave(1); }, 800);
@@ -983,7 +1007,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
             if (now - (bossMesh._lastShoot || 0) > 2000) {
                 for (let k = -2; k <= 2; k++) {
-                    fireEnemyBullet(bossMesh.position, k * 0.08, 0.35);
+                    fireEnemyBullet(bossMesh.position, k * 0.08, enemyBulletVelZ * 0.85);
                 }
                 bossMesh._lastShoot = now;
             }
@@ -1007,6 +1031,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                     bossActive = false;
                     bossPanel.isVisible = false;
                     updateScore(500 * currentWave);
+                    totalKills++;
                     showAnnouncement(lang === 'vi' ? '✦ BOSS ĐÃ TIÊU DIỆT ✦' : '✦ BOSS DEFEATED ✦', '#f1c40f');
                     if (typeof onBossDefeated === 'function') onBossDefeated();
                     advanceWave();
@@ -1043,7 +1068,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             e.mesh.rotation.y += 0.025;
 
             if (e.type !== 'scout' && now - e.lastShoot > e.shootMs) {
-                fireEnemyBullet(e.mesh.position, 0, 0.40);
+                fireEnemyBullet(e.mesh.position, 0, enemyBulletVelZ);
                 e.lastShoot = now;
             }
 

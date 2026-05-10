@@ -1012,10 +1012,11 @@ export const DUNGEON_CONFIG = [
     subtitle: { vi: 'Khai thác Tài Nguyên', en: 'Resource Extraction' },
     desc: { vi: 'Tiêu diệt hải tặc vũ trụ để đoạt lại khoáng sản. Địch đông, giáp mỏng.', en: 'Destroy space pirates to reclaim minerals. High enemy count, low armor.' },
     boss: { vi: 'Mũi Khoan Gỉ Sét', en: 'The Rusty Driller' },
-    bgImg: '/images/dungeon_taurus.jpg', // Placeholder cho ảnh AAA sau này
-    themeColor: '#4ade80', // Xanh lá
+    bgImg: '/images/dungeon_taurus.jpg',
+    themeColor: '#4ade80',
     energyCost: 10,
-    openDays: [1, 3, 5, 0], // Mở Thứ 2, 4, 6, Chủ Nhật (0)
+    waves: 5, 
+    openDays: [1, 3, 5, 0], 
     rewards: [
       { type: 'coins', amountStr: '10K - 50K' }
     ]
@@ -1029,9 +1030,10 @@ export const DUNGEON_CONFIG = [
     desc: { vi: 'Vượt qua hệ thống phòng vệ A.I dày đặc khiên năng lượng để lấy bản thiết kế.', en: 'Breach A.I defenses with energy shields to secure blueprints.' },
     boss: { vi: 'Mắt Thần Oracle', en: 'The Oracle Core' },
     bgImg: '/images/dungeon_nereus.jpg',
-    themeColor: '#38bdf8', // Xanh dương
+    themeColor: '#38bdf8', 
     energyCost: 15,
-    openDays: [2, 4, 6, 0], // Mở Thứ 3, 5, 7, Chủ Nhật (0)
+    waves: 7,
+    openDays: [2, 4, 6, 0], 
     rewards: [
       { type: 'blueprints', amountStr: '1 - 5' },
       { type: 'gears', amountStr: '20 - 50' }
@@ -1048,7 +1050,8 @@ export const DUNGEON_CONFIG = [
     bgImg: '/images/dungeon_abaddon.jpg',
     themeColor: '#ff4757', // Đỏ
     energyCost: 20,
-    openDays: [0, 6], // Chỉ mở Thứ 7, Chủ Nhật
+    waves: 10,
+    openDays: [0, 6],
     rewards: [
       { type: 'diamonds', amountStr: '50 - 200' },
       { type: 'gears', amountStr: '100 - 300' }

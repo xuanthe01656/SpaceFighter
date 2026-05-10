@@ -3,6 +3,7 @@ node_modules/
 dist/
 build/
 .cache/
+.claude/
 
 # 2. File môi trường và bí mật (Cực kỳ quan trọng để bảo mật)
 .env

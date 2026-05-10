@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import * as Phaser from 'phaser';
 import GalaxyMapScene from './GalaxyMapScene';
 import { PLANET_CONFIG } from '../../constants';
 
@@ -93,12 +92,12 @@ const DataRow = ({ label, value, color = '#94a3b8', mono = true }) => (
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function GalaxyMap({ gsRef, setScreen, lang }) {
-  const containerRef   = useRef(null);
-  const gameRef        = useRef(null);
+   const canvasRef      = useRef(null);   // <canvas> for Babylon.js
+  const sceneRef       = useRef(null);   // GalaxyMapScene instance
   const [selectedPlanet, setSelectedPlanet] = useState(null);
   const [isMobile, setIsMobile]             = useState(window.innerWidth <= 768);
   const [hudTime, setHudTime]               = useState(new Date());
-  const [camZoom, setCamZoom]               = useState(null);
+  const [camZoom, setCamZoom]               = useState(100);
 
   // ── Responsive ──
   useEffect(() => {
@@ -138,49 +137,28 @@ export default function GalaxyMap({ gsRef, setScreen, lang }) {
 
   // ── Phaser Game Init ──
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!canvasRef.current) return;
 
-    const config = {
-      type: Phaser.WEBGL,
-      width:  window.innerWidth,
-      height: window.innerHeight,
-      parent: containerRef.current,
-      backgroundColor: '#01020a',
-      transparent: false,
-      scene: [GalaxyMapScene],
-      scale: {
-        mode:       Phaser.Scale.RESIZE,
-        autoCenter: Phaser.Scale.CENTER_BOTH,
-      },
-      render: {
-        antialias:        true,
-        antialiasGL:      true,
-        pixelArt:         false,
-        roundPixels:      false,
-        powerPreference:  'high-performance',
-      },
-    };
-
-    const game = new Phaser.Game(config);
-    game.registry.set('gsRef',         gsRef);
-    game.registry.set('planetsData',   Object.values(SAFE_PLANETS));
-    game.registry.set('lang',          lang);
-    game.registry.set('onPlanetSelect', (planet) => setSelectedPlanet(planet));
-    gameRef.current = game;
+    const scene = new GalaxyMapScene(canvasRef.current, {
+      gsRef,
+      planetsData:    Object.values(SAFE_PLANETS),
+      lang,
+      onPlanetSelect: (planet) => setSelectedPlanet(planet),
+    });
+    sceneRef.current = scene;
 
     // Expose zoom for HUD (read from Phaser after first frame)
     const zoomPoll = setInterval(() => {
-      const scene = game.scene.getScene('GalaxyMapScene');
-      if (scene?.cameras?.main) {
-        setCamZoom(Math.round(scene.cameras.main.zoom * 100));
-        clearInterval(zoomPoll);
+      if (sceneRef.current?.getZoomPercent) {
+        const z = sceneRef.current.getZoomPercent();
+        if (z !== null) setCamZoom(Math.round(z));
       }
-    }, 200);
+    }, 500);
 
     return () => {
       clearInterval(zoomPoll);
-      gameRef.current?.destroy(true);
-      gameRef.current = null;
+      sceneRef.current?.destroy();
+      sceneRef.current = null;
     };
   }, []);
 
@@ -217,8 +195,15 @@ export default function GalaxyMap({ gsRef, setScreen, lang }) {
   return (
     <div style={{ position: 'fixed', inset: 0, overflow: 'hidden', fontFamily: font, userSelect: 'none' }}>
 
-      {/* ── Phaser canvas ── */}
-      <div ref={containerRef} style={{ position: 'absolute', inset: 0, zIndex: 0 }} />
+      {/* ── Babylon.js canvas ── */}
+      <canvas
+        ref={canvasRef}
+        style={{
+          position: 'absolute', inset: 0, zIndex: 0,
+          width: '100%', height: '100%',
+          display: 'block', outline: 'none', touchAction: 'none',
+        }}
+      />
 
       {/* ── CRT / Scanline FX ── */}
       <CRTOverlay />
@@ -369,8 +354,8 @@ export default function GalaxyMap({ gsRef, setScreen, lang }) {
             padding: '6px 14px', backdropFilter: 'blur(10px)',
             fontFamily: '"Share Tech Mono", monospace', fontSize: 11, color: '#4b6880',
           }}>
-            <span style={{ color: '#22d3ee' }}>⬡ ISO</span>{' '}PROJECTION ·{' '}
-            <span style={{ color: '#22d3ee' }}>2.5D</span>
+             <span style={{ color: '#22d3ee' }}>⬡ BABYLON</span>{' '}ENGINE ·{' '}
+            <span style={{ color: '#22d3ee' }}>PBR 3D</span>
           </div>
         </motion.div>
       )}
