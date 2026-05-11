@@ -14,6 +14,10 @@
 /* Bổ sung overflow-y để cuộn nếu màn hình quá lùn */
 .content { padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 20px; overflow-y: auto; }
 
+.streakInfo { text-align: center; margin-bottom: 10px; }
+.streakText { font-family: 'Barlow Condensed', sans-serif; font-size: 18px; font-weight: bold; color: #38bdf8; margin-bottom: 5px; }
+.makeupInfo { font-family: 'Share Tech Mono', monospace; font-size: 14px; color: #94a3b8; }
+
 .daysGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; width: 100%; }
 .daySlot { background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px 5px; display: flex; flex-direction: column; align-items: center; gap: 5px; position: relative; transition: 0.3s; }
 .daySlot.claimed { border-color: #4ade80; background: rgba(74, 222, 128, 0.1); }
@@ -31,6 +35,10 @@
 .claimBtn.ready { background: #38bdf8; color: #000; box-shadow: 0 0 20px rgba(56, 189, 248, 0.5); }
 .claimBtn.ready:hover { background: #fff; box-shadow: 0 0 25px #fff; }
 .claimBtn.disabled { background: rgba(255,255,255,0.1); color: #64748b; cursor: not-allowed; }
+
+.buttonContainer { display: flex; flex-direction: column; gap: 10px; width: 100%; align-items: center; }
+.makeupBtn { width: 100%; padding: 12px; border: 2px solid #c084fc; border-radius: 25px; font-family: 'Barlow Condensed', sans-serif; font-size: 16px; font-weight: bold; letter-spacing: 1px; cursor: pointer; transition: 0.3s; background: rgba(192, 132, 252, 0.1); color: #c084fc; }
+.makeupBtn:hover { background: #c084fc; color: #000; box-shadow: 0 0 15px rgba(192, 132, 252, 0.5); }
 
 /* Animation Gacha Overlay */
 .gachaOverlay { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.95); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; }
@@ -107,3 +115,11 @@
     .resultImg { width: 35px; height: 35px; }
     .gachaCloseBtn { margin-top: 10px; padding: 8px 25px; }
 }
+
+/* Makeup Claims Section */
+.makeupSection { width: 100%; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.makeupTitle { font-family: 'Barlow Condensed', sans-serif; font-size: 16px; font-weight: bold; color: #c084fc; text-align: center; }
+.makeupDays { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; width: 100%; }
+.makeupDayBtn { display: flex; align-items: center; gap: 5px; padding: 8px 12px; border: 2px solid #c084fc; border-radius: 20px; font-family: 'Barlow Condensed', sans-serif; font-size: 14px; font-weight: bold; cursor: pointer; transition: 0.3s; background: rgba(192, 132, 252, 0.1); color: #c084fc; }
+.makeupDayBtn:hover { background: #c084fc; color: #000; box-shadow: 0 0 10px rgba(192, 132, 252, 0.5); }
+.makeupDayBtn svg { width: 16px; height: 16px; }
