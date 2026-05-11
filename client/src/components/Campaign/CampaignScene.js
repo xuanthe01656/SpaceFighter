@@ -674,7 +674,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
 
     const cfg    = curEnemyCfgs.find(e => e.tier === tier) || curEnemyCfgs[0];
     const spawnX = playerRoot.position.x + (Math.random() - .5) * boundX() * 1.6;
-    const spawnZ = playerRoot.position.z - ZOOM - 3;
+    const spawnZ = -ZOOM - 3;
 
     let mesh;
     if (cfg.imgSrc) {
@@ -817,10 +817,10 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
 
   const startWave = n => {
     currentWave   = n;
-    waveCount     = (stageConfig.baseEnemies||5) + currentWave * 2;
+    waveCount = (stageConfig.baseEnemies||5) + currentWave * 3;
     spawnInterval = Math.max(300, 1500 - (currentStage*100 + currentWave*50));
     waveSpawned   = 0;
-    lastSpawn     = Date.now();
+    lastSpawn     = Date.now() + 500;
 
     waveText.text = lang==='vi'
       ? `ẢI ${currentStage} | ĐỢT ${n}/${MAX_WAVES}`
@@ -899,103 +899,238 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     const earnedExp  = isReplay ? 0 : (stageConfig.expReward||100);
     const totalCoins = stageBonus + score + collectedCoins;
 
-    // ── Overlay background ──
+    // ── Overlay backdrop (fade in qua observable, giữ nguyên logic cũ) ──
     const overlay = new GUI.Rectangle('summaryOverlay');
     overlay.width = '100%'; overlay.height = '100%';
     overlay.background = 'rgba(0,0,0,0)'; overlay.thickness = 0;
     ui.addControl(overlay);
-
-    // ── Panel ──
-    const PW = Math.min(engine.getRenderWidth() * 0.90, Math.round(400 * dpr));
-    const panel = new GUI.Rectangle('summaryPanel');
+ 
+    // ── Constants layout ──
+    const RW  = engine.getRenderWidth();
+    const RH  = engine.getRenderHeight();
+    const PW  = Math.min(RW * 0.92, Math.round(420 * dpr));
+    const PH = Math.min(Math.round(580 * dpr), Math.round(RH * 0.88));
+ 
+    // ── Panel chính ──
+    const panel = new GUI.Rectangle('sPanel');
     panel.width        = `${PW}px`;
-    panel.height       = `${Math.round(540 * dpr)}px`;
-    panel.background   = 'rgba(5,11,20,0.97)';
+    panel.height       = `${PH}px`;
+    panel.background   = 'rgba(4,9,20,0.98)';
     panel.color        = themeHex;
     panel.thickness    = Math.round(2 * dpr);
-    panel.cornerRadius = Math.round(14 * dpr);
+    panel.cornerRadius = Math.round(16 * dpr);
+    // Viền neon glow (box shadow không có trong Babylon GUI → dùng 2 rect lồng)
     overlay.addControl(panel);
-
-    const stack = new GUI.StackPanel('summaryStack');
-    stack.isVertical  = true;
-    stack.paddingTop  = `${Math.round(16 * dpr)}px`;
+ 
+    // Đường kẻ accent ngang ở đỉnh panel (thay thế cho gradient header)
+    const topAccent = new GUI.Rectangle('topAccent');
+    topAccent.width            = `${Math.round(PW * 0.7)}px`;
+    topAccent.height           = `${Math.round(3 * dpr)}px`;
+    topAccent.background       = themeHex;
+    topAccent.thickness        = 0;
+    topAccent.verticalAlignment   = GUI.Control.VERTICAL_ALIGNMENT_TOP;
+    topAccent.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
+    topAccent.top              = `0px`;
+    panel.addControl(topAccent);
+ 
+    // ── Stack nội dung ──
+    const stack = new GUI.StackPanel('sStack');
+    stack.isVertical = true;
+    stack.paddingTop = `${Math.round(22 * dpr)}px`;
     panel.addControl(stack);
-
-    // Helper: add a text line
-    const addTxt = (text, color, fs, pt = 6) => {
-      const t = new GUI.TextBlock();
-      t.text = text; t.color = color;
-      t.fontFamily = '"VT323", monospace'; t.fontSize = Math.round(fs * dpr);
-      t.height     = `${Math.round((fs * 1.3 + pt) * dpr)}px`;
-      t.paddingTop = `${Math.round(pt * dpr)}px`;
-      stack.addControl(t); return t;
+ 
+    // ─── Helper: addSpacer ────────────────────────────────────────────────────
+    const addSpacer = (h = 8) => {
+      const s = new GUI.Rectangle();
+      s.height = `${Math.round(h * dpr)}px`; s.thickness = 0; s.background = 'transparent';
+      stack.addControl(s);
     };
-
-    // Helper: add a label + value row
-    const addRow = (label, value, vcol = '#00e5ff') => {
+ 
+    // ─── Helper: addTxt ───────────────────────────────────────────────────────
+    const addTxt = (text, color, fs, align = 'center', pt = 0) => {
+      const t = new GUI.TextBlock();
+      t.text        = text;
+      t.color       = color;
+      t.fontFamily  = '"VT323", monospace';
+      t.fontSize    = Math.round(fs * dpr);
+      t.height      = `${Math.round((fs * 1.35) * dpr)}px`;
+      t.paddingTop  = `${Math.round(pt * dpr)}px`;
+      t.textHorizontalAlignment = align === 'left'
+        ? GUI.Control.HORIZONTAL_ALIGNMENT_LEFT
+        : align === 'right'
+        ? GUI.Control.HORIZONTAL_ALIGNMENT_RIGHT
+        : GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
+      stack.addControl(t);
+      return t;
+    };
+ 
+    // ─── Helper: addRow (label trái + value phải) ─────────────────────────────
+    const addRow = (label, value, vcol = '#00e5ff', labelFs = 17, valueFs = 20) => {
       const row = new GUI.StackPanel();
-      row.isVertical  = false;
-      row.height      = `${Math.round(28 * dpr)}px`;
-      row.paddingTop  = `${Math.round(4 * dpr)}px`;
+      row.isVertical = false;
+      row.height     = `${Math.round(30 * dpr)}px`;
+      row.paddingLeft  = `${Math.round(24 * dpr)}px`;
+      row.paddingRight = `${Math.round(24 * dpr)}px`;
       stack.addControl(row);
+ 
       const lbl = new GUI.TextBlock();
-      lbl.text = label; lbl.color = '#94a3b8';
-      lbl.fontFamily = '"VT323", monospace'; lbl.fontSize = Math.round(17 * dpr);
-      lbl.width       = `${Math.round(PW * 0.55)}px`;
+      lbl.text       = label; lbl.color = '#64748b';
+      lbl.fontFamily = '"VT323", monospace'; lbl.fontSize = Math.round(labelFs * dpr);
+      lbl.width = `${Math.round((PW - Math.round(48 * dpr)) * 0.56)}px`;
       lbl.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
-      lbl.paddingLeft = `${Math.round(22 * dpr)}px`;
+ 
       const val = new GUI.TextBlock();
-      val.text = value; val.color = vcol;
-      val.fontFamily = '"VT323", monospace'; val.fontSize = Math.round(20 * dpr); val.fontStyle = 'bold';
-      val.width       = `${Math.round(PW * 0.45)}px`;
+      val.text       = value; val.color = vcol;
+      val.fontFamily = '"VT323", monospace'; val.fontSize = Math.round(valueFs * dpr); val.fontStyle = 'bold';
+      val.width = `${Math.round((PW - Math.round(48 * dpr)) * 0.44)}px`;
       val.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_RIGHT;
-      val.paddingRight = `${Math.round(22 * dpr)}px`;
+ 
       row.addControl(lbl); row.addControl(val);
     };
-
-    // Helper: thin divider
-    const addDiv = (color = '#00e5ff33') => {
+ 
+    // ─── Helper: addDivider ───────────────────────────────────────────────────
+    const addDiv = (opacity = '22') => {
       const d = new GUI.Rectangle();
-      d.width      = `${Math.round(PW * 0.88)}px`;
-      d.height     = `${Math.round(1.5 * dpr)}px`;
-      d.background = color; d.thickness = 0;
-      d.paddingTop = `${Math.round(8 * dpr)}px`;
+      d.width      = `${Math.round(PW * 0.86)}px`;
+      d.height     = `${Math.round(1 * dpr)}px`;
+      d.background = `${themeHex}${opacity}`; d.thickness = 0;
       stack.addControl(d);
+      addSpacer(6);
     };
-
-    // ── Content ──
-    addTxt(lang==='vi'?'BÁO CÁO CHIẾN DỊCH':'MISSION REPORT', '#facc15', 28, 0);
-
-    const starStr = [0,1,2].map(i => stars > i ? '★' : '☆').join(' ');
-    addTxt(starStr, '#facc15', 32, 4);
-
-    const cond = (met, label) => addTxt((met?'✅ ':'❌ ') + label, met?'#2ecc71':'#ff4757', 16, 4);
-    cond(c1Met, lang==='vi'?'Hoàn thành nhiệm vụ':'Mission Cleared');
-    cond(c2Met, lang==='vi'?'Giáp còn lại ≥ 50%':'Armor remaining ≥ 50%');
-    cond(c3Met, lang==='vi'?`Thời gian ≤ ${limStr}`:`Clear Time ≤ ${limStr}`);
-
-    addDiv();
-    addRow(lang==='vi'?'Thời gian:':'Clear Time:', timeStr, '#fff');
-    addRow(lang==='vi'?'Kinh nghiệm:':'EXP Gained:', `+${earnedExp}`, '#00ffcc');
-    addRow(lang==='vi'?'Điểm tác chiến:':'Combat Score:', `+${score}`, '#00e5ff');
-    addRow(lang==='vi'?'Nhặt được:':'Loot Collected:', `+${collectedCoins}`, '#00e5ff');
-    addDiv('#00e5ff55');
-    addRow(lang==='vi'?'TỔNG NHẬN:':'TOTAL EARNED:',
-      `${totalCoins} ${lang==='vi'?'XU':'COINS'}`, '#facc15');
-
-    // ── Confirm button ──
-    const btn = new GUI.Rectangle('btnConfirm');
-    btn.width        = `${Math.round(180 * dpr)}px`;
-    btn.height       = `${Math.round(46 * dpr)}px`;
-    btn.background   = '#00e5ff'; btn.cornerRadius = Math.round(10 * dpr); btn.thickness = 0;
-    btn.paddingTop   = `${Math.round(16 * dpr)}px`;
-    btn.isPointerBlocker = true;
-    const btnTxt = new GUI.TextBlock('btnTxt', lang==='vi'?'XÁC NHẬN':'ACCEPT');
-   btnTxt.color = '#000'; btnTxt.fontFamily = '"VT323", monospace';
-    btnTxt.fontSize = Math.round(22 * dpr); btnTxt.fontStyle = 'bold';
-    btn.addControl(btnTxt); stack.addControl(btn);
-
-    // Fade-in overlay
+ 
+    // ─── Helper: addConditionRow ──────────────────────────────────────────────
+    const addCond = (met, label) => {
+      const row = new GUI.StackPanel();
+      row.isVertical = false;
+      row.height     = `${Math.round(26 * dpr)}px`;
+      row.paddingLeft = `${Math.round(24 * dpr)}px`;
+      stack.addControl(row);
+ 
+      // Icon (ô vuông nhỏ thay cho emoji ✅/❌)
+      const iconBox = new GUI.Rectangle();
+      iconBox.width      = `${Math.round(16 * dpr)}px`;
+      iconBox.height     = `${Math.round(16 * dpr)}px`;
+      iconBox.background = met ? '#2ecc71' : '#ff4757';
+      iconBox.thickness  = 0;
+      iconBox.cornerRadius = Math.round(3 * dpr);
+ 
+      const iconTxt = new GUI.TextBlock();
+      iconTxt.text      = met ? '✓' : '✗';
+      iconTxt.color     = '#000';
+      iconTxt.fontFamily = '"VT323", monospace';
+      iconTxt.fontSize  = Math.round(13 * dpr);
+      iconBox.addControl(iconTxt);
+ 
+      const lbl = new GUI.TextBlock();
+      lbl.text       = `  ${label}`;
+      lbl.color      = met ? '#a3f7bf' : '#ff8a8a';
+      lbl.fontFamily = '"VT323", monospace';
+      lbl.fontSize   = Math.round(16 * dpr);
+      lbl.width = `${Math.round(PW - Math.round(16 * dpr) - Math.round(32 * dpr))}px`;
+      lbl.paddingLeft = `${Math.round(8 * dpr)}px`;
+      lbl.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+ 
+      row.addControl(iconBox); row.addControl(lbl);
+    };
+ 
+    // ══════════════════════════════════════════════════════════════════════════
+    // NỘI DUNG CHÍNH
+    // ══════════════════════════════════════════════════════════════════════════
+ 
+    // Tiêu đề
+    addTxt(
+      lang === 'vi' ? 'BÁO CÁO CHIẾN DỊCH' : 'MISSION REPORT',
+      themeHex, 26, 'center', 0,
+    );
+    addTxt(
+      lang === 'vi'
+        ? `ẢI ${currentStage} · ${planetConfig.name?.[lang] || ''}`
+        : `STAGE ${currentStage} · ${planetConfig.name?.[lang] || ''}`,
+      '#475569', 15, 'center',
+    );
+ 
+    addSpacer(10);
+ 
+    // ── Sao (3 sao lớn, đẹp) ──
+    // Dùng 3 TextBlock riêng để tô màu riêng từng sao
+    const starRow = new GUI.StackPanel('starRow');
+    starRow.isVertical = false;
+    starRow.height     = `${Math.round(52 * dpr)}px`;
+    stack.addControl(starRow);
+ 
+    for (let i = 0; i < 3; i++) {
+      const s = new GUI.TextBlock();
+      s.text       = '★';
+      s.color      = i < stars ? '#facc15' : '#1e293b';
+      s.fontFamily = '"VT323", monospace';
+      s.fontSize   = Math.round(44 * dpr);
+      s.width      = `${Math.round(60 * dpr)}px`;
+      // Sao giữa to hơn chút (sao 2, index 1)
+      if (i === 1) { s.fontSize = Math.round(50 * dpr); s.color = i < stars ? '#fde047' : '#1e293b'; }
+      starRow.addControl(s);
+    }
+ 
+    addSpacer(8);
+ 
+    // ── 3 điều kiện ──
+    addCond(c1Met, lang === 'vi' ? 'Hoàn thành nhiệm vụ'      : 'Mission Cleared');
+    addCond(c2Met, lang === 'vi' ? 'Giáp còn lại ≥ 50%'       : 'Armor ≥ 50%');
+    addCond(c3Met, lang === 'vi' ? `Thời gian ≤ ${limStr}`    : `Clear Time ≤ ${limStr}`);
+ 
+    addSpacer(10);
+    addDiv('33');
+ 
+    // ── Các chỉ số ──
+    addRow(lang === 'vi' ? 'Thời gian:'          : 'Clear Time:',     timeStr,             '#ffffff');
+    addSpacer(2);
+    addRow(lang === 'vi' ? 'Kinh nghiệm:'        : 'EXP Gained:',     `+${earnedExp}`,     '#34d399');
+    addSpacer(2);
+    addRow(lang === 'vi' ? 'Điểm tác chiến:'     : 'Combat Score:',   `+${score}`,         '#60a5fa');
+    addSpacer(2);
+    addRow(lang === 'vi' ? 'Chiến lợi phẩm:'     : 'Loot Collected:', `+${collectedCoins}`, '#60a5fa');
+ 
+    addSpacer(4);
+    addDiv('55');
+ 
+    // ── Tổng ──
+    addRow(
+      lang === 'vi' ? 'TỔNG NHẬN:' : 'TOTAL EARNED:',
+      `${totalCoins} ${lang === 'vi' ? 'XU' : 'COINS'}`,
+      '#facc15', 19, 24,
+    );
+ 
+    addSpacer(14);
+ 
+    // ── Nút XÁC NHẬN (thiết kế lại: nền đậm + viền cyan + text lớn) ──
+    const btnOuter = new GUI.Rectangle('btnOuter');
+    btnOuter.width        = `${Math.round(220 * dpr)}px`;
+    btnOuter.height       = `${Math.round(50 * dpr)}px`;
+    btnOuter.background   = 'rgba(0,229,255,0.12)';
+    btnOuter.color        = themeHex;
+    btnOuter.thickness    = Math.round(2 * dpr);
+    btnOuter.cornerRadius = Math.round(8 * dpr);
+    btnOuter.isPointerBlocker = true;
+    stack.addControl(btnOuter);
+ 
+    const btnTxt = new GUI.TextBlock('btnTxt');
+    btnTxt.text       = lang === 'vi' ? '✦  XÁC NHẬN  ✦' : '✦  CONFIRM  ✦';
+    btnTxt.color      = themeHex;
+    btnTxt.fontFamily = '"VT323", monospace';
+    btnTxt.fontSize   = Math.round(24 * dpr);
+    btnTxt.fontStyle  = 'bold';
+    btnOuter.addControl(btnTxt);
+ 
+    // Hover effect
+    btnOuter.onPointerEnterObservable.add(() => {
+      btnOuter.background = `${themeHex}33`;
+      btnTxt.color = '#ffffff';
+    });
+    btnOuter.onPointerOutObservable.add(() => {
+      btnOuter.background = 'rgba(0,229,255,0.12)';
+      btnTxt.color = themeHex;
+    });
+ 
+    // ── Fade in overlay (giữ nguyên logic cũ) ──
     let fadeT0 = null;
     const fadeObs = scene.onBeforeRenderObservable.add(() => {
       if (!fadeT0) fadeT0 = performance.now();
@@ -1005,9 +1140,9 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
 
     // Confirm click – save progress
     let clicked = false;
-    btn.onPointerDownObservable.addOnce(() => {
+    btnOuter.onPointerDownObservable.addOnce(() => {
       if (clicked) return; clicked = true;
-      btn.background = '#00b8d4';
+      btnOuter.background = `${themeHex}66`; btnTxt.color = '#000';
 
       const prog  = gsRef.current.campaignData.progress;
       const pId   = Number(prog.currentPlanet) || 1;

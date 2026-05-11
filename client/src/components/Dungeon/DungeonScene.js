@@ -863,7 +863,6 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         if (gameOver || scene.isDisposed) return;
         const now = Date.now();
         tick++;
-
         // A. Screen shake
         if (shakeFrames > 0) {
             camera.position.x = CAM_BASE.x + (Math.random() - 0.5) * shakeStr;
@@ -874,7 +873,6 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 camera.position.z = CAM_BASE.z;
             }
         }
-
         // B. Trả lái tàu về thẳng 
         if (!isDragging) {
             playerPlane.rotation.z = BABYLON.Scalar.Lerp(playerPlane.rotation.z, 0, 0.05);
@@ -886,7 +884,6 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         } else {
             playerPlane.visibility = 1;
         }
-
         // B. Di chuyển Vệ tinh (Drones Hovering)
         if (drones.length > 0) {
             const hoverZ = Math.sin(tick * 0.05) * 0.3;
@@ -895,7 +892,6 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 d.position.z = BABYLON.Scalar.Lerp(d.position.z, playerRoot.position.z + d.offsetY + hoverZ, 0.15);
             });
         }
-
         // C. Hồi HP tự động
         if (stats.hpRegenRate > 0 && stats.hp < stats.maxHp) {
             const dt = (now - lastRegenTime) / 1000;
@@ -903,7 +899,6 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             stats.hp = Math.min(stats.maxHp, stats.hp + stats.maxHp * stats.hpRegenRate * dt);
             updateHpUI();
         }
-
        // D. Khai Hỏa (Player + Drones + Wingman) - ĐỒNG BỘ THUỘC TÍNH VŨ KHÍ
        const activeEnemies = enemies.filter(e => !e.mesh.isDisposed());
        const lockTarget = activeEnemies.length > 0 ? activeEnemies[Math.floor(Math.random() * activeEnemies.length)] : null;
@@ -927,7 +922,6 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
            }
            lastFire = now;
        }
-
        // Bắn đạn Wingman (Homing từ 2 cánh)
        if (stats.wingmanId && now > nextWingFire) {
            const wColor = wingmanBase?.color ? '#' + wingmanBase.color.toString(16).padStart(6,'0') : '#ffa502';
@@ -935,7 +929,6 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
            fireBullet(playerRoot.position.x + 1.2, playerRoot.position.z + 0.5, 0, -0.8, stats.wingAtk, wColor, true, lockTarget);
            nextWingFire = now + stats.wingFireRate;
        }
-
        // Bắn đạn Drone (Ngắm thẳng vào mục tiêu giống hệ Sniper bên Campaign)
        if (stats.droneId && now > nextDroneFire && drones.length > 0) {
            const dColor = droneBase?.color ? '#' + droneBase.color.toString(16).padStart(6,'0') : '#2ecc71';
