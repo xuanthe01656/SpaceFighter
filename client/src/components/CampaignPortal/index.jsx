@@ -3,7 +3,7 @@ import { Capacitor } from '@capacitor/core';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import styles from './CampaignPortal.module.css';
-import { calculatePlayerLevel, calculateVIPLevel, MISSIONS_CONFIG} from '../../constants';
+import { calculatePlayerLevel, calculateVIPLevel, MISSIONS_CONFIG, getActiveEvents} from '../../constants';
 import { secureStorage } from '../../utils/storageHelper';
 import FirstTopupModal from './FirstTopupModal';
 import AttendanceModal from './AttendanceModal';
@@ -59,7 +59,7 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
   const playerName = gsRef.current.myName || 'Pilot';
   const playerAvatar = currentUser?.photoURL || null;
   const uid = currentUser?.uid || gsRef.current.deviceId || "GUEST-ID";
-  
+  const activeEventCount = getActiveEvents(getRealTime).length;
   const totalExp = campaignData?.progress?.exp || 0;
   const expData = calculatePlayerLevel(totalExp);
   
@@ -167,9 +167,10 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
           <span className={styles.sideText}>{lang === 'vi' ? 'ĐIỂM DANH' : 'ATTENDANCE'}</span>
           {canClaimAttendance && <span className={styles.notiBadge}>!</span>}
         </motion.button>
-        <motion.button variants={slideLeft} className={`${styles.sideBtn} ${styles.eventBtn}`} onClick={handleNotImplemented}>
+        <motion.button variants={slideLeft} className={`${styles.sideBtn} ${styles.eventBtn}`} onClick={() => setScreen('events')}>
           <div className={styles.sideIcon}><Icons.Event /></div>
           <span className={styles.sideText}>{lang === 'vi' ? 'SỰ KIỆN' : 'EVENTS'}</span>
+          {activeEventCount > 0 && <span className={styles.notiBadge}>{activeEventCount}</span>}
         </motion.button>
         <motion.button variants={slideLeft} className={styles.sideBtn} style={{ position: 'relative' }} onClick={() => setScreen('missions')}>
           <div className={styles.sideIcon}><Icons.Mission /></div>

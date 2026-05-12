@@ -12,7 +12,22 @@ const makeMat = (scene, emissive, disableLighting = true) => {
     if (disableLighting) m.disableLighting = true;
     return m;
 };
-
+const makeSpriteMat = (scene, imgSrc, onSuccess, onError) => {
+    const m   = new BABYLON.StandardMaterial(`sm_${Math.random()}`, scene);
+    const tex = new BABYLON.Texture(
+        imgSrc, scene, false, false, BABYLON.Texture.BILINEAR_SAMPLINGMODE,
+        () => { if (onSuccess) onSuccess(); },
+        () => { if (onError)   onError();   },
+    );
+    tex.hasAlpha                 = true;
+    m.diffuseTexture             = tex;
+    m.emissiveTexture            = tex;
+    m.emissiveColor              = new BABYLON.Color3(0.12, 0.12, 0.12);
+    m.disableLighting            = true;
+    m.useAlphaFromDiffuseTexture = true;
+    m.backFaceCulling            = false;
+    return m;
+};
 const safeDis = (mesh) => {
     if (mesh && typeof mesh.isDisposed === 'function' && !mesh.isDisposed()) mesh.dispose();
 };
@@ -102,7 +117,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         armor:         baseAcArmor,
         speed:         (aircraftBase.speed || 6.0) * moveSpeedMult,
         fireRate:      getFireRate(mainGunBase?.fireRate, mainGunItem?.level),
-        wingFireRate:  (wingmanBase?.fireRate || 900) * wingRateMult,
+        wingFireRate:  (wingmanBase?.fireRate ? (wingmanBase.fireRate * Math.pow(0.985, (wingmanItem?.level||1)-1)) * 1000 : 600) * wingRateMult,
         droneFireRate: droneBase?.fireRate ? (droneBase.fireRate * Math.pow(0.985, (droneItem?.level || 1) - 1)) : 800,
         mainGunId:     mainGunBase?.id || 'gun_laser',
         wingmanId:     wingmanBase?.id || null,
@@ -355,23 +370,28 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     // ══════════════════════════════════════════════════════════════════════════
 
     const playerRoot = new BABYLON.TransformNode('playerRoot', scene);
-    playerRoot.position.z = 8;
+    playerRoot.position.set(0, 0, ZOOM - 2.5);
 
     // --- 5A. TÀU CHÍNH ---
-    const playerPlane = BABYLON.MeshBuilder.CreatePlane('playerPlane', { size: 2 }, scene);
-    playerPlane.parent     = playerRoot;
+    const playerPlane = BABYLON.MeshBuilder.CreatePlane('playerPlane', { width: 2.4, height: 2.4 }, scene);
     playerPlane.rotation.x = Math.PI / 2;
-    playerPlane.rotation.z = Math.PI;
+    playerPlane.rotation.z = 0;   // ← bỏ Math.PI, mũi tàu hướng đúng về phía -Z
+    playerPlane.parent     = playerRoot;
 
-    const playerMat = new BABYLON.StandardMaterial('playerMat', scene);
-    const shipTex   = new BABYLON.Texture(aircraftBase.imgTop || '/images/ships/ship_default_top.png', scene, false, false);
-    shipTex.hasAlpha               = true;
-    playerMat.diffuseTexture       = shipTex;
-    playerMat.emissiveTexture      = shipTex;   
-    playerMat.disableLighting      = true;      
-    playerMat.useAlphaFromDiffuseTexture = true;
-    playerPlane.material           = playerMat;
-    glow.addExcludedMesh(playerPlane);
+    const playerMat = makeSpriteMat(
+        scene,
+        aircraftBase.imgTop || '/images/ships/ship_xwing_top.png',
+        null,
+        () => {
+            const fb = BABYLON.MeshBuilder.CreateCylinder('pFb',
+                { diameterTop: 0.4, diameterBottom: 2.0, height: 0.4, tessellation: 6 }, scene);
+            fb.parent    = playerRoot;
+            fb.position.y = 0.2;
+            fb.material  = makeMat(scene, new BABYLON.Color3(0.1, 0.85, 1.0));
+            playerPlane.isVisible = false;
+        },
+    );
+    playerPlane.material = playerMat;
 
     // --- 5B. WINGMAN (VŨ KHÍ PHỤ TRÊN 2 CÁNH TÀU) ---
     if (stats.wingmanId && wingmanBase) {
@@ -456,7 +476,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     }
     const engineMount = new BABYLON.TransformNode('engineMount', scene);
     engineMount.parent = playerRoot;
-    engineMount.position.set(0, 0, 1.9);
+    engineMount.position.set(0, 0, 1.1);
 
     const flameTintHex = aircraftBase.engineFlameTint ? '#' + aircraftBase.engineFlameTint.toString(16).padStart(6, '0') : '#38bdf8';
     const flameR = parseInt(flameTintHex.slice(1, 3), 16) / 255;
@@ -692,7 +712,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             }
         }
 
-        mesh.position.set((Math.random() - 0.5) * boundX() * 1.6, 0.2, -ZOOM - 3);
+        mesh.position.set((Math.random() - 0.5) * boundX() * 1.6, 0.2, -ZOOM - 2);
         mesh.material   = MAT[type];
         mesh.rotation.y += Math.random() * Math.PI * 2;
 
@@ -845,6 +865,10 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             '#2ecc71',
             2000,
         );
+        const evVic = gsRef.current.campaignData?.eventData || {};
+        const coinMultDungeon = Object.keys(evVic).some(k => k.startsWith('event_coin_fever')) ? 2 : 1;
+        const dungeonCoins = Math.floor(score * 0.1 * coinMultDungeon);
+        gsRef.current.coins = (Number(gsRef.current.coins) || 0) + dungeonCoins;
         setTimeout(() => onVictory({
             score,
             totalKills,
@@ -1025,6 +1049,12 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                     bossPanel.isVisible = false;
                     updateScore(500 * currentWave);
                     totalKills++;
+                    const evBoss = gsRef.current.campaignData?.eventData || {};
+                    Object.keys(evBoss).forEach(evId => {
+                        if (evId.startsWith('event_kill_rush')) {
+                            evBoss[evId].kills = (evBoss[evId].kills || 0) + 1;
+                        }
+                    });
                     showAnnouncement(lang === 'vi' ? '✦ BOSS ĐÃ TIÊU DIỆT ✦' : '✦ BOSS DEFEATED ✦', '#f1c40f');
                     if (typeof onBossDefeated === 'function') onBossDefeated();
                     advanceWave();
@@ -1108,6 +1138,12 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 if (e.hp <= 0) {
                     const gain = e.type === 'scout' ? 10 : e.type === 'heavy' ? 30 : 60;
                     updateScore(gain);
+                    const evDungeon = gsRef.current.campaignData?.eventData || {};
+                    Object.keys(evDungeon).forEach(evId => {
+                        if (evId.startsWith('event_kill_rush')) {
+                            evDungeon[evId].kills = (evDungeon[evId].kills || 0) + 1;
+                        }
+                    });
                     explode(e.mesh.position, e.type === 'heavy' ? 2 : 1);
                     cleanEnemy(e);
                     enemies.splice(i, 1);

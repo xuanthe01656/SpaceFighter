@@ -1,0 +1,230 @@
+/* Events.module.css */
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Share+Tech+Mono&display=swap');
+
+.container {
+  width: 100%; min-height: 100dvh;
+  background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(30,60,120,0.25), transparent), #03060e;
+  color: #e2e8f0; font-family: 'Barlow Condensed', sans-serif;
+  display: flex; flex-direction: column; align-items: center;
+  padding: max(12px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
+  box-sizing: border-box; overflow-y: auto;
+}
+.contentWrapper { width: 100%; max-width: 720px; display: flex; flex-direction: column; gap: 14px; }
+
+/* HEADER */
+.header { display: flex; align-items: center; gap: 12px; padding-bottom: 10px; border-bottom: 1px solid rgba(56,189,248,0.15); }
+.backBtn { display: flex; align-items: center; gap: 6px; background: rgba(15,24,50,0.7); color: #38bdf8; border: 1px solid rgba(56,189,248,0.2); padding: 8px 14px; border-radius: 6px; font-family: inherit; font-size: 18px; font-weight: 700; cursor: pointer; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; }
+.headerTitle { flex: 1; text-align: center; font-size: clamp(22px,5vw,30px); font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase; text-shadow: 0 0 20px rgba(56,189,248,0.4); }
+.headerSpacer { width: 80px; }
+
+/* EMPTY */
+.emptyState { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 60px 20px; opacity: 0.5; }
+.emptyIcon { font-size: 56px; }
+.emptyText { font-size: 20px; font-weight: 600; letter-spacing: 0.05em; }
+.emptyHint { font-size: 16px; color: #64748b; }
+
+/* EVENT LIST */
+.eventList { display: flex; flex-direction: column; gap: 12px; }
+
+/* EVENT CARD */
+.eventCard {
+  background: rgba(10,18,36,0.85);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-left: 3px solid var(--ec, #38bdf8);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.eventCard:hover { box-shadow: 0 4px 24px rgba(0,0,0,0.4); }
+.expanded { box-shadow: 0 0 24px color-mix(in srgb, var(--ec) 20%, transparent); }
+
+/* CARD TOP */
+.cardTop { display: flex; align-items: flex-start; gap: 14px; padding: 16px; cursor: pointer; }
+.cardIcon { font-size: 32px; flex-shrink: 0; width: 44px; text-align: center; line-height: 1; }
+.cardMeta { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.cardTitle { font-size: clamp(18px,4.5vw,22px); font-weight: 800; color: var(--ec,#38bdf8); letter-spacing: 0.06em; text-transform: uppercase; line-height: 1.1; }
+.cardDesc { font-family: 'Share Tech Mono', monospace; font-size: 13px; color: #94a3b8; line-height: 1.4; }
+.cardFooter { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.timeLabel { font-size: 12px; color: #475569; letter-spacing: 0.06em; }
+.countdown { font-family: 'Share Tech Mono', monospace; font-size: 13px; color: #facc15; font-weight: bold; }
+.chevron { font-size: 24px; color: #475569; transition: transform 0.25s; flex-shrink: 0; margin-top: 4px; }
+.chevronOpen { transform: rotate(90deg); }
+
+.divider { height: 1px; opacity: 0.3; margin: 0 16px; }
+
+/* DETAIL BODY */
+.detailBody { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+
+/* BIG STAT */
+.bigStat { display: flex; flex-direction: column; align-items: center; padding: 12px; background: rgba(0,0,0,0.3); border-radius: 10px; }
+.bigNum { font-size: 52px; font-weight: 900; color: #fff; line-height: 1; }
+.bigLabel { font-size: 13px; letter-spacing: 0.15em; color: #64748b; text-transform: uppercase; }
+
+/* MILESTONE */
+.milestoneList { display: flex; flex-direction: column; gap: 8px; }
+.milestoneRow {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 8px;
+  background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.2s;
+}
+.milestoneReady { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.1); }
+.milestoneDone { opacity: 0.45; }
+.milestoneLeft { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+.milestoneKills { font-size: 16px; font-weight: 700; color: #cbd5e1; }
+.milestoneReward { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 40px; font-family: 'Share Tech Mono', monospace; font-size: 13px; color: #94a3b8; }
+.rewardEmoji { font-size: 20px; }
+
+/* PROGRESS */
+.progressBg { position: relative; height: 8px; background: rgba(0,0,0,0.5); border-radius: 4px; overflow: hidden; }
+.progressFill { position: absolute; left: 0; top: 0; height: 100%; border-radius: 4px; transition: width 0.4s; }
+.progressText { position: absolute; right: 4px; top: -1px; font-family: 'Share Tech Mono', monospace; font-size: 10px; color: #94a3b8; }
+
+/* BUTTONS */
+.claimBtn { padding: 7px 14px; border-radius: 6px; border: none; font-family: 'Barlow Condensed', sans-serif; font-size: 16px; font-weight: 700; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+.readyBtn { background: var(--ec, #38bdf8); color: #000; box-shadow: 0 0 12px color-mix(in srgb, var(--ec) 40%, transparent); animation: pulse 2s infinite; }
+.lockedBtn { background: rgba(255,255,255,0.06); color: #475569; cursor: not-allowed; }
+.claimedBtn { background: rgba(74,222,128,0.15); color: #4ade80; border: 1px solid #4ade80; cursor: not-allowed; }
+@keyframes pulse { 0%,100%{box-shadow:0 0 8px color-mix(in srgb,var(--ec) 30%,transparent)} 50%{box-shadow:0 0 18px color-mix(in srgb,var(--ec) 60%,transparent)} }
+
+/* LOGIN BONUS GRID */
+.loginGrid { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; }
+.loginDay {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 10px 4px; border-radius: 8px; position: relative;
+  background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.06);
+  font-size: 11px; text-align: center;
+}
+.loginDayNum { font-size: 10px; color: #475569; letter-spacing: 0.06em; text-transform: uppercase; }
+.loginRewardLabel { font-family: 'Share Tech Mono', monospace; font-size: 11px; color: #94a3b8; }
+.loginDone { background: rgba(74,222,128,0.08); border-color: rgba(74,222,128,0.3); }
+.loginNext { border-color: var(--ec,#38bdf8); box-shadow: 0 0 10px color-mix(in srgb,var(--ec) 30%,transparent); animation: pulse 2s infinite; }
+.loginCheck { position: absolute; top: 4px; right: 4px; font-size: 12px; color: #4ade80; }
+
+.collectBtn {
+  width: 100%; padding: 13px; border-radius: 8px; border: none;
+  font-family: 'Barlow Condensed', sans-serif; font-size: 20px; font-weight: 800;
+  cursor: pointer; letter-spacing: 0.08em; text-transform: uppercase; transition: all 0.2s;
+}
+
+/* PASSIVE PANEL */
+.passiveBadge {
+  display: flex; align-items: center; gap: 12px; padding: 16px;
+  background: color-mix(in srgb, var(--ec) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ec) 35%, transparent);
+  border-radius: 10px;
+}
+.passiveIcon { font-size: 36px; }
+.passiveActive { font-size: 18px; font-weight: 700; letter-spacing: 0.08em; color: #e2e8f0; text-transform: uppercase; }
+.multiplierTag { font-size: 28px; font-weight: 900; text-align: center; letter-spacing: 0.06em; padding: 6px 0; }
+
+@media (max-width: 400px) {
+  .loginGrid { grid-template-columns: repeat(4,1fr); gap: 5px; }
+  .loginDay { padding: 8px 2px; }
+  .bigNum { font-size: 42px; }
+}
+/* Wrapper SVG cho reward icon */
+.rewardSvgWrap {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .rewardSvgWrap svg { width: 100%; height: 100%; }
+   
+  /* Wrapper SVG cho banner icon trong cardTop */
+  .bannerSvgWrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+  }
+  .bannerSvgWrap svg { width: 100%; height: 100%; }
+   
+  /* cardIcon giờ dùng SVG – cần kích thước cố định */
+  .cardIcon {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* Bỏ font-size: 32px cũ nếu có */
+  }
+   
+  /* Milestone: row chứa SVG Sword + số kills */
+  .milestoneKillsRow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+  .milestoneSvg {
+    display: inline-flex;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+  .milestoneSvg svg { width: 100%; height: 100%; }
+   
+  /* Button SVG (lock/check icon) */
+  .btnSvg {
+    display: inline-flex;
+    width: 16px;
+    height: 16px;
+  }
+  .btnSvg svg { width: 100%; height: 100%; }
+   
+  /* Login day: icon wrap */
+  .loginIconWrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 4px 0;
+  }
+   
+  /* Login check: SVG checkmark */
+  .loginCheck {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+   
+  /* Passive panel: SVG icon lớn */
+  .passiveSvgIcon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+  }
+  .passiveSvgIcon svg { width: 100%; height: 100%; }
+   
+  /* Multiplier tag: SVG icon nhỏ bên trái */
+  .multiplierTag {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .multiplierSvg {
+    display: inline-flex;
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+  }
+  .multiplierSvg svg { width: 100%; height: 100%; }
+   
+  /* Empty state: SVG icon lớn */
+  .emptyIcon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+  }
+  .emptyIcon svg { width: 100%; height: 100%; }

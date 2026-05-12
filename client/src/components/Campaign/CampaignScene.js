@@ -814,7 +814,15 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     score += delta;
     scoreText.text = `${lang==='vi'?'ĐIỂM':'SCORE'}: ${score}`;
   };
-
+  const trackEventKill = () => {
+    const now = getRealTime ? getRealTime() : Date.now();
+    const evData = gsRef.current.campaignData.eventData || {};
+    Object.keys(evData).forEach(evId => {
+      if (evId.startsWith('event_kill_rush')) {
+        evData[evId].kills = (evData[evId].kills || 0) + 1;
+      }
+    });
+  };
   const startWave = n => {
     currentWave   = n;
     waveCount = (stageConfig.baseEnemies||5) + currentWave * 3;
@@ -859,7 +867,9 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       explode(playerRoot.position, 4);
       showAnnouncement(lang==='vi'?'THẤT BẠI!':'MISSION FAILED!', '#ff0000', 3000);
       setTimeout(() => {
-        gsRef.current.coins = (Number(gsRef.current.coins)||0) + score + collectedCoins;
+        const evD = gsRef.current.campaignData?.eventData || {};
+        const coinMult = Object.keys(evD).some(k => k.startsWith('event_coin_fever')) ? 2 : 1;
+        gsRef.current.coins = (Number(gsRef.current.coins)||0) + score + (collectedCoins * coinMult);
         if (saveUserProfile) saveUserProfile();
         onDefeat();
       }, 4000);
@@ -897,8 +907,9 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
 
     const stageBonus = isReplay ? 10 : 50 + currentStage*50;
     const earnedExp  = isReplay ? 0 : (stageConfig.expReward||100);
-    const totalCoins = stageBonus + score + collectedCoins;
-
+    const evD2 = gsRef.current.campaignData?.eventData || {};
+    const coinMult2 = Object.keys(evD2).some(k => k.startsWith('event_coin_fever')) ? 2 : 1;
+    const totalCoins = stageBonus + score + (collectedCoins * coinMult2);
     // ── Overlay backdrop (fade in qua observable, giữ nguyên logic cũ) ──
     const overlay = new GUI.Rectangle('summaryOverlay');
     overlay.width = '100%'; overlay.height = '100%';
@@ -1322,6 +1333,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
           killed = true;
           explode(e.mesh.position, e.tier===3 ? 2 : 1.5);
           updateScore(e.points);
+          trackEventKill();
           const roll = Math.random()*100;
           if (roll < 4)       spawnDrop(e.mesh.position.x, e.mesh.position.z, 'power');
           else if (roll < 9)  spawnDrop(e.mesh.position.x, e.mesh.position.z, 'heal');
@@ -1403,6 +1415,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         if (bossHp <= 0) {
           explode(bossMesh.position, 5);
           updateScore(bossPts);
+          trackEventKill();
           bossPanel.isVisible = false;
           safeDispose(bossMesh); bossMesh = null;
           stageCleared(); break;

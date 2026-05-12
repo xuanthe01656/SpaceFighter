@@ -76,9 +76,13 @@ export default function Missions({ gsRef, setScreen, lang, saveUserProfile, getR
     }
     
     // Bù Nhiệm vụ Tuần (Lấy số ngày streak tối đa là 5 để đắp vào)
-    if (attData.streak > 0 && missionTrack.progress['w_login_5'] < attData.streak) {
-        missionTrack.progress['w_login_5'] = Math.min(5, attData.streak);
-        shouldSave = true;
+    if (attData.lastDate === todayStr) {
+      const lastWeeklyLogin = missionTrack.lastWeeklyLoginDate || '';
+      if (lastWeeklyLogin !== todayStr) {
+          missionTrack.lastWeeklyLoginDate = todayStr;
+          missionTrack.progress['w_login_5'] = Math.min(5, (missionTrack.progress['w_login_5'] || 0) + 1);
+          shouldSave = true;
+      }
     }
 
     // --- BỔ SUNG: Bù Nhiệm vụ Tháng ---
@@ -104,13 +108,18 @@ export default function Missions({ gsRef, setScreen, lang, saveUserProfile, getR
 
     // Reset Weekly
     if (!missionTrack.lastWeeklyReset || missionTrack.lastWeeklyReset < thisWeekTimestamp) {
-       missionTrack.lastWeeklyReset = thisWeekTimestamp;
-       MISSIONS_CONFIG.weekly.forEach(m => {
-          missionTrack.progress[m.id] = 0;
-          missionTrack.claimed = missionTrack.claimed.filter(id => id !== m.id);
-       });
-       missionTrack.progress['w_login_5'] = Math.min(5, attData.streak);
-       shouldSave = true;
+      missionTrack.lastWeeklyReset = thisWeekTimestamp;
+      missionTrack.lastWeeklyLoginDate = '';   // ← reset để tuần mới tính lại
+      MISSIONS_CONFIG.weekly.forEach(m => {
+         missionTrack.progress[m.id] = 0;
+         missionTrack.claimed = missionTrack.claimed.filter(id => id !== m.id);
+      });
+      // Nếu hôm nay là ngày đầu tuần mới VÀ đã đăng nhập hôm nay → tính ngay 1 ngày
+      if (attData.lastDate === todayStr) {
+          missionTrack.progress['w_login_5'] = 1;
+          missionTrack.lastWeeklyLoginDate = todayStr;
+      }
+      shouldSave = true;
     }
 
     // Reset Monthly

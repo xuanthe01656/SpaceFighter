@@ -19,7 +19,8 @@ import GalaxyMap from './components/GalaxyMap';
 import Missions from './components/Missions';
 import DungeonSelect from './components/DungeonSelect';
 import DungeonEngine from './components/Dungeon/DungeonEngine';
-import DungeonResult from './components/DungeonResult';
+import DungeonResult from './components/DungeonResult'
+import Events from './components/Events';;
 import { secureStorage } from './utils/storageHelper';
 import { DEFAULT_CAMPAIGN_DATA } from './constants';
 
@@ -196,6 +197,15 @@ export default function Game() {
       )}
       {screen === 'dungeon_result' && (
         <DungeonResult gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} />
+      )}
+      {screen === 'events' && (
+        <Events
+          gsRef={gsRef}
+          setScreen={setScreen}
+          lang={lang}
+          saveUserProfile={saveUserProfile}
+          getRealTime={getRealTime}
+        />
       )}
       {screen === 'shop_campaign' && (
         <ShopCampaign gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} />
