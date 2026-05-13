@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Engine, Scene } from '@babylonjs/core';
 import { createCampaignScene } from './CampaignScene';
 
-export default function CampaignEngine({ gsRef, setScreen, lang, saveUserProfile }) {
+export default function CampaignEngine({ gsRef, setScreen, lang, saveUserProfile, getRealTime }) {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const sceneRef  = useRef(null);
@@ -26,6 +26,7 @@ export default function CampaignEngine({ gsRef, setScreen, lang, saveUserProfile
       gsRef,
       lang,
       saveUserProfile,
+      getRealTime,
 
       /** Chiến thắng → quay về màn chọn ải */
       onVictory: () => {

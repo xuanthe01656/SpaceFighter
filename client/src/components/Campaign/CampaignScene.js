@@ -50,7 +50,7 @@ const hexToC3        = (hex)  => BABYLON.Color3.FromHexString(hex.startsWith('#'
  */
 export const createCampaignScene = (scene, canvas, engine, data) => {
 
-  const { gsRef, lang, onVictory, onDefeat, saveUserProfile } = data;
+  const { gsRef, lang, onVictory, onDefeat, saveUserProfile, getRealTime } = data;
 
   // ══════════════════════════════════════════════════════════════════════════
   // 1. TÍNH CHỈ SỐ RPG (KHỚP 100% VỚI PHASER VÀ DUNGEON)
@@ -815,7 +815,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     scoreText.text = `${lang==='vi'?'ĐIỂM':'SCORE'}: ${score}`;
   };
   const trackEventKill = () => {
-    const now = getRealTime ? getRealTime() : Date.now();
+    const now = typeof getRealTime === 'function' ? getRealTime() : Date.now();
     const evData = gsRef.current.campaignData.eventData || {};
     Object.keys(evData).forEach(evId => {
       if (evId.startsWith('event_kill_rush')) {

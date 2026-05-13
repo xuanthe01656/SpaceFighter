@@ -168,7 +168,7 @@ export default function Game() {
       )}
       
       {screen === 'campaign' && (
-        <CampaignEngine gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} />
+        <CampaignEngine gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} getRealTime={getRealTime}/>
       )}
       
       {screen === 'inventory' && (
