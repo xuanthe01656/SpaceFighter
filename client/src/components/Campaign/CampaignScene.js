@@ -1,4 +1,5 @@
 import * as BABYLON from '@babylonjs/core';
+import '@babylonjs/loaders/glTF';
 import * as GUI    from '@babylonjs/gui';
 import {
   AIRCRAFTS, GEAR_CATALOG, PILOTS,
@@ -402,30 +403,57 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   // 5. PLAYER SHIP
   // ══════════════════════════════════════════════════════════════════════════
 
-  const playerRoot  = new BABYLON.TransformNode('playerRoot', scene);
+  const playerRoot = new BABYLON.TransformNode('playerRoot', scene);
   playerRoot.position.set(0, 0, ZOOM - 2.5);
 
-  // Sprite plane (2D image, faces camera via rotation)
-  const playerPlane = BABYLON.MeshBuilder.CreatePlane('playerPlane', { width: 2.4, height: 2.4 }, scene);
-  playerPlane.rotation.x = Math.PI / 2;
-  playerPlane.rotation.z = 0;  // Hướng mũi tàu lên trên (về phía -Z)
-  playerPlane.parent     = playerRoot;
+  let playerPlane = null; // giữ ref để tilt animation vẫn hoạt động
 
-  const playerMat = makeSpriteMat(
-    scene,
-    aircraftBase.imgTop || '/images/ships/ship_xwing_top.png',
-    null,
-    () => {
-      // Fallback nếu không load được ảnh: dùng hình học đơn giản
-      const fb = BABYLON.MeshBuilder.CreateCylinder('pFb',
-        { diameterTop: 0.4, diameterBottom: 2.0, height: 0.4, tessellation: 6 }, scene);
-      fb.parent    = playerRoot;
-      fb.position.y = 0.2;
-      fb.material  = makeMat(scene, new BABYLON.Color3(0.1, 0.85, 1.0));
-      playerPlane.isVisible = false;
-    },
-  );
-  playerPlane.material = playerMat;
+  if (aircraftBase.modelSrc) {
+    // ── Load GLB 3D model ──
+    BABYLON.SceneLoader.ImportMeshAsync('', aircraftBase.modelSrc, '', scene).then(result => {
+      const root = result.meshes[0];
+      const wrapper = new BABYLON.TransformNode('shipWrapper', scene);
+      wrapper.parent   = playerRoot;
+      wrapper.position = BABYLON.Vector3.Zero();
+      const rot = aircraftBase.modelRotation || { x: 0, y: Math.PI, z: 0 };
+      wrapper.rotation.set(rot.x, rot.y, rot.z);
+      const s = aircraftBase.modelScale || 2.8;
+      wrapper.scaling.setAll(s);
+      root.parent = wrapper; // gắn GLB vào wrapper
+
+      playerPlane = wrapper; // dùng root làm target tilt
+      glow.addExcludedMesh(root);
+      result.meshes.forEach(m => { if (m !== root) glow.addExcludedMesh(m); });
+    }).catch(() => {
+      // Fallback: sprite image nếu GLB lỗi
+      const fb = BABYLON.MeshBuilder.CreatePlane('playerPlane', { width: 2.4, height: 2.4 }, scene);
+      fb.rotation.x = Math.PI / 2;
+      fb.parent     = playerRoot;
+      fb.material   = makeSpriteMat(scene, aircraftBase.imgTop || '/images/ships/ship_xwing_top.png');
+      playerPlane   = fb;
+    });
+  } else {
+    // ── Sprite image (các ship chưa có GLB) ──
+    const sp = BABYLON.MeshBuilder.CreatePlane('playerPlane', { width: 2.4, height: 2.4 }, scene);
+    sp.rotation.x = Math.PI / 2;
+    sp.rotation.z = 0;
+    sp.parent     = playerRoot;
+    const playerMat = makeSpriteMat(
+      scene,
+      aircraftBase.imgTop || '/images/ships/ship_xwing_top.png',
+      null,
+      () => {
+        const fb = BABYLON.MeshBuilder.CreateCylinder('pFb',
+          { diameterTop: 0.4, diameterBottom: 2.0, height: 0.4, tessellation: 6 }, scene);
+        fb.parent     = playerRoot;
+        fb.position.y = 0.2;
+        fb.material   = makeMat(scene, new BABYLON.Color3(0.1, 0.85, 1.0));
+        sp.isVisible  = false;
+      },
+    );
+    sp.material = playerMat;
+    playerPlane = sp;
+  }
 
   // ── Engine flame particles ────────────────────────────────────────────────
   const flameHex   = aircraftBase.engineFlameTint
@@ -437,7 +465,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
 
   const engineMount = new BABYLON.TransformNode('eMnt', scene);
   engineMount.parent   = playerRoot;
-  engineMount.position.set(0, 0, 1.1);
+  const eOff = aircraftBase.engineOffset || { x: 0, y: 0, z: 1.1 };
+  engineMount.position.set(eOff.x, eOff.y, eOff.z);
 
   const engineFx = new BABYLON.ParticleSystem('eFx', 160, scene);
   engineFx.particleTexture = new BABYLON.Texture('https://assets.babylonjs.com/textures/flare.png', scene);
@@ -450,8 +479,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   engineFx.minSize      = 0.12*fS; engineFx.maxSize   = 0.42*fS;
   engineFx.minLifeTime  = 0.08;    engineFx.maxLifeTime = 0.22;
   engineFx.emitRate     = 115;
-  engineFx.direction1   = new BABYLON.Vector3(-0.1, 0.07, 1);
-  engineFx.direction2   = new BABYLON.Vector3( 0.1, 0.10, 0.8);
+  engineFx.direction1 = new BABYLON.Vector3(-0.05, 0.1,  0.4);
+  engineFx.direction2 = new BABYLON.Vector3( 0.05, 0.3,  0.8);
   engineFx.minEmitPower = 4; engineFx.maxEmitPower = 8;
   engineFx.updateSpeed  = 0.02;
   engineFx.start();
@@ -481,42 +510,137 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       drones.push(node);
     });
   }
+  // THÊM WINGMAN
+  const wingNodes = [];
+  if (stats.wingmanId && wingmanBase) {
+    const wX = aircraftBase.wingmanOffset?.x || 1.8;
+    const wZ = aircraftBase.wingmanOffset?.z || 0.3;
+    const wOffsets = [-wX, wX];
+    const wColor = wingmanBase.color
+      ? '#' + wingmanBase.color.toString(16).padStart(6,'0') : '#ffa502';
+    wOffsets.forEach(ox => {
+      const wNode = new BABYLON.TransformNode('wNode', scene);
+      wNode.parent = playerRoot;               // ← gắn cứng vào tàu
+      wNode.position.set(ox, 0, wZ);          // ← chỉ cần offset local, không cần cộng playerRoot
+      wNode.offsetX = ox; wNode.offsetZ = wZ;
+
+      const wFb = BABYLON.MeshBuilder.CreateCylinder('wFb',
+        { diameterTop: 0.05, diameterBottom: 0.05, height: 0.8, tessellation: 8 }, scene);
+      wFb.rotation.x = Math.PI / 2;
+      wFb.material = makeMat(scene, BABYLON.Color3.FromHexString(wColor));
+      wFb.parent = wNode;
+
+      if (wingmanBase.modelSrc) {
+        // ── Load GLB wingman model ──
+        BABYLON.SceneLoader.ImportMeshAsync('', wingmanBase.modelSrc, '', scene)
+          .then(result => {
+            const wRoot = result.meshes[0];
+            wRoot.parent   = wNode;
+            wRoot.position = BABYLON.Vector3.Zero();
+            const ws = wingmanBase.modelScale || 0.4;
+            wRoot.scaling.setAll(ws);
+            const wr = wingmanBase.modelRotation || { x: 0, y: 0, z: 0 };
+            wRoot.rotation.set(wr.x, wr.y, wr.z);
+            wFb.isVisible = false; // ẩn fallback
+          })
+          .catch(() => {
+            // GLB lỗi → thử load sprite
+            if (wingmanBase.imgSrc) {
+              const wp = BABYLON.MeshBuilder.CreatePlane('wPlane', { size: 1.0 }, scene);
+              wp.rotation.x = Math.PI / 2;
+              wp.parent     = wNode;
+              wp.material   = makeSpriteMat(scene, wingmanBase.imgSrc,
+                () => { wFb.isVisible = false; },
+                () => { safeDispose(wp); });
+            }
+          });
+      } else if (wingmanBase.imgSrc) {
+        // ── Sprite fallback nếu không có GLB ──
+        const wp = BABYLON.MeshBuilder.CreatePlane('wPlane', { size: 1.0 }, scene);
+        wp.rotation.x = Math.PI / 2;
+        wp.parent     = wNode;
+        wp.material   = makeSpriteMat(scene, wingmanBase.imgSrc,
+          () => { wFb.isVisible = false; },
+          () => { safeDispose(wp); });
+      }
+      wingNodes.push(wNode);
+    });
+  }
 
   // ══════════════════════════════════════════════════════════════════════════
   // 6. INPUT – DRAG TO MOVE
   // ══════════════════════════════════════════════════════════════════════════
 
-  let isDragging = false, dragOrigin = null;
+  let isDragging = false;
+  let lastPtrX   = 0;
+  let lastPtrZ   = 0;
 
-  const getWorldPos = () => {
-    const ray = scene.createPickingRay(scene.pointerX, scene.pointerY, BABYLON.Matrix.Identity(), camera);
-    const t   = -ray.origin.y / ray.direction.y;
-    if (!isFinite(t) || t < 0) return null;
-    return ray.origin.add(ray.direction.scale(t));
+  // Dùng native pointer events thay Babylon observable
+  // → tránh Babylon picking gây khựng frame
+  canvas = engine.getRenderingCanvas();
+  canvas.style.touchAction = 'none';
+
+  const onPtrDown = (e) => {
+    if (gameOver || gameState === 'CLEAR') return;
+    const touch = e.touches ? e.touches[0] : e;
+    const rect  = canvas.getBoundingClientRect();
+    // Tọa độ CSS pixel, không bị DPR ảnh hưởng
+    lastPtrX   = touch.clientX;
+    lastPtrZ   = touch.clientY;
+    isDragging = true;
+  };
+
+  const onPtrMove = (e) => {
+    if (!isDragging || gameOver || gameState === 'CLEAR') return;
+    const touch = e.touches ? e.touches[0] : e;
+    const rect  = canvas.getBoundingClientRect();
+    const cx    = touch.clientX;
+    const cz    = touch.clientY;
+
+    // Delta CSS pixel → world unit
+    // rect.width ~ ZOOM*aspect*2 world units
+    const scaleX = (ZOOM * getAspect() * 2) / window.innerWidth;
+    const scaleZ = (ZOOM * 2) / window.innerHeight;
+    const dx = (cx - lastPtrX) * scaleX * speedMod * -1;
+    const dz = (cz - lastPtrZ) * scaleZ * speedMod;
+
+    playerRoot.position.x = clamp(playerRoot.position.x + dx, -boundX(), boundX());
+    playerRoot.position.z = clamp(playerRoot.position.z + dz, -ZOOM + 1.8, ZOOM - 1.8);
+
+    lastPtrX = cx;
+    lastPtrZ = cz;
+
+    // Tilt
+    if (playerPlane) {
+      const targetRoll = clamp(dx * 0.15, -0.3, 0.3);
+      playerPlane.rotation.z = BABYLON.Scalar.Lerp(playerPlane.rotation.z, targetRoll, .15);
+    }
+  };
+
+  const onPtrUp = (e) => {
+    isDragging = false;
   };
 
   const speedMod = 1 - (planetConfig.speedDebuff || 0);
 
-  scene.onPointerObservable.add(pi => {
-    if (gameOver || gameState === 'CLEAR') return;
-    const { POINTERDOWN, POINTERUP, POINTERMOVE } = BABYLON.PointerEventTypes;
-    if (pi.type === POINTERDOWN) {
-      dragOrigin = getWorldPos(); isDragging = !!dragOrigin;
-    } else if (pi.type === POINTERUP) {
-      isDragging = false; dragOrigin = null;
-    } else if (pi.type === POINTERMOVE && isDragging && dragOrigin) {
-      const cur = getWorldPos();
-      if (!cur) return;
-      const d = cur.subtract(dragOrigin);
-      playerRoot.position.x = clamp(playerRoot.position.x + d.x * speedMod, -boundX(), boundX());
-      playerRoot.position.z = clamp(playerRoot.position.z + d.z * speedMod, -ZOOM + 1.8, ZOOM - 1.8);
-      dragOrigin = cur;
-      // Roll tilt on X-axis drag
-      const targetRoll = clamp(d.x * -1.5, -0.45, 0.45);
-      if (!isDragging) {
-        playerPlane.rotation.z = BABYLON.Scalar.Lerp(playerPlane.rotation.z, 0, .06);
-      }
-    }
+  // Gắn cả mouse và touch
+  canvas.addEventListener('mousedown',  onPtrDown,  { passive: false });
+  canvas.addEventListener('mousemove',  onPtrMove,  { passive: false });
+  canvas.addEventListener('mouseup',    onPtrUp);
+  canvas.addEventListener('touchstart', onPtrDown,  { passive: false });
+  canvas.addEventListener('touchmove',  onPtrMove,  { passive: false });
+  canvas.addEventListener('touchend',   onPtrUp);
+  canvas.addEventListener('touchcancel',onPtrUp);
+
+  // Cleanup khi scene dispose
+  scene.onDisposeObservable.addOnce(() => {
+    canvas.removeEventListener('mousedown',   onPtrDown);
+    canvas.removeEventListener('mousemove',   onPtrMove);
+    canvas.removeEventListener('mouseup',     onPtrUp);
+    canvas.removeEventListener('touchstart',  onPtrDown);
+    canvas.removeEventListener('touchmove',   onPtrMove);
+    canvas.removeEventListener('touchend',    onPtrUp);
+    canvas.removeEventListener('touchcancel', onPtrUp);
   });
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -608,10 +732,13 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   };
 
   const fireWingman = () => {
-    if (!stats.wingmanId || drones.length === 0) return;
+    if (!stats.wingmanId || wingNodes.length === 0) return;
     const alive = enemies.filter(e => !e._dead);
     const tgt   = alive[Math.floor(Math.random() * alive.length)] || null;
-    drones.forEach(d => fireBullet(d.position.x, d.position.z - 1.0, 0, -.52, stats.wingAtk, wingMat, true, tgt));
+    wingNodes.forEach(w => {
+      const absPos = w.getAbsolutePosition();
+      fireBullet(absPos.x, absPos.z - 1.0, 0, -.52, stats.wingAtk, wingMat, true, tgt);
+    });
   };
 
   const fireDrones = () => {
@@ -1208,7 +1335,9 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     tick++;
 
     // ── Roll return ──
-    playerPlane.rotation.z = BABYLON.Scalar.Lerp(playerPlane.rotation.z, 0, .06);
+    if (playerPlane && !isDragging) {
+      playerPlane.rotation.z = BABYLON.Scalar.Lerp(playerPlane.rotation.z, 0, .04);
+    }
 
     // ── Drone hover float ──
     const hoverZ = Math.sin(tick * .04) * .18;
@@ -1216,7 +1345,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       d.position.x = BABYLON.Scalar.Lerp(d.position.x, playerRoot.position.x + d.offsetX, .22);
       d.position.z = BABYLON.Scalar.Lerp(d.position.z, playerRoot.position.z + d.offsetZ + hoverZ, .22);
     });
-
+    
     // ── Auto-fire ──
     if (now > lastFire + stats.fireRate)       { fireWeapons();  lastFire      = now; }
     if (stats.wingmanId && now > nextWingFire) { fireWingman();  nextWingFire  = now + stats.wingFireRate; }

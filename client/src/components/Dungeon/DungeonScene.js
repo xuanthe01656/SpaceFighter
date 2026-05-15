@@ -118,7 +118,9 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         speed:         (aircraftBase.speed || 6.0) * moveSpeedMult,
         fireRate:      getFireRate(mainGunBase?.fireRate, mainGunItem?.level),
         wingFireRate:  (wingmanBase?.fireRate ? (wingmanBase.fireRate * Math.pow(0.985, (wingmanItem?.level||1)-1)) * 1000 : 600) * wingRateMult,
-        droneFireRate: droneBase?.fireRate ? (droneBase.fireRate * Math.pow(0.985, (droneItem?.level || 1) - 1)) : 800,
+        droneFireRate: droneBase?.fireRate
+        ? (droneBase.fireRate * Math.pow(0.985, (droneItem?.level || 1) - 1)) * 1000
+        : 800,
         mainGunId:     mainGunBase?.id || 'gun_laser',
         wingmanId:     wingmanBase?.id || null,
         droneId:       droneBase?.id || null,
@@ -927,7 +929,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
        const activeEnemies = enemies.filter(e => !e.mesh.isDisposed());
        const lockTarget = activeEnemies.length > 0 ? activeEnemies[Math.floor(Math.random() * activeEnemies.length)] : null;
 
-       if (now - lastFire > stats.fireRate) {
+       if (now > lastFire + stats.fireRate) {
            const mColor = mainGunBase?.color ? '#' + mainGunBase.color.toString(16).padStart(6,'0') : '#00e5ff';
            const pX = playerRoot.position.x; const pZ = playerRoot.position.z + 1.8;
            

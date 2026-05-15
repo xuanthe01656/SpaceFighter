@@ -98,6 +98,12 @@ export const AIRCRAFTS = [
     imgHq: '/images/ships/ship_xwing_hq.png',
     imgTop: '/images/ships/ship_xwing_top.png',
     imgSrc: '/images/ships/ship_xwing_hq.png',
+    modelSrc: '/models/ships/ship_xwing.glb',
+    modelScale: 2.8,                             // ← THÊM (0.978*2.8 ≈ 2.74 units rộng)
+    modelRotation: { x: 0, y: Math.PI / 2, z: 0 }, // ← THÊM (y=180° quay mũi về -Z)\\
+    engineOffset:  { x: 0.22, y: -0.13, z: 1.01 }, // đuôi tàu +Z
+    wingmanOffset: { x: 1.20, y: -0.13, z: 0.00 }, // đầu cánh ±X
+    droneOffset:   { x: 0.00, y:  0.00, z: 0.80 }, // phía sau
     hitboxScale: 0.78,
     engineFlameScale: 1.0,
     engineFlameTint: 0x38bdf8,
@@ -588,13 +594,16 @@ export const GEAR_CATALOG = {
     },
     { 
       id: 'wing_dronelet',
-      name: { vi: 'Mini Drone Wingman', en: 'Drone Escort' },
+      name: { vi: 'Pháo Bầy Đàn', en: 'Swarm Cannon' },
       baseAtk: 12,
       imgSrc: '/images/weapons/wing_dronelet.png',
+      modelSrc: '/models/weapons/swarm_cannon.glb',
+      modelScale: 0.4,     // GLB size Z=0.978 * 0.4 ≈ 0.39 units – vừa đầu cánh
+      modelRotation: { x: 0, y: 0, z: 0 },
       behavior: 'swarm',
       fireRate: 950,
       color: 0x00e5ff,
-      description: { vi: 'Triệu hồi mini drone hỗ trợ', en: 'Summons mini escort drones' }
+      description: { vi: 'Bắn loạt đạn nhỏ theo đàn từ 2 cánh', en: 'Fires swarm of small shots from both wings' }
     },
     { 
       id: 'wing_emp',

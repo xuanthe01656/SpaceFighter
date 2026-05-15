@@ -11,6 +11,7 @@
   "dependencies": {
     "@babylonjs/core": "^9.5.1",
     "@babylonjs/gui": "^9.5.1",
+    "@babylonjs/loaders": "^9.5.1",
     "@capacitor-community/admob": "^7.0.0",
     "@capacitor-community/apple-sign-in": "^7.1.0",
     "@capacitor/android": "^7.0.0",
