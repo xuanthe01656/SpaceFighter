@@ -1,0 +1,122 @@
+{
+  "release": "Space Fighter Graphics 2.1.3 + Mission History Reconciliation",
+  "baseline": "Space Fighter Graphics 2.1.2 + Mission Sync Migration",
+  "baseline_file": "SpaceFighter_Graphics2.1.2_MissionSync_FULL_SOURCE.zip",
+  "baseline_sha256": "4c9e450311dbdc30f5e301d6e2d8043273aba8cd939bae9545019eec64831fe1",
+  "new_files": [
+    "client/tests/missionHistory213.test.mjs",
+    "docs/GRAPHICS213_MISSION_HISTORY_RELEASE_VI.md",
+    "server/lib/missionHistoryReconcile.cjs",
+    "server/scripts/reconcile-cloud-missions.cjs",
+    "server/tests/missionHistoryReconcile.test.cjs"
+  ],
+  "changed_files": [
+    "client/package-lock.json",
+    "client/package.json",
+    "client/src/components/CampaignPortal/AttendanceModal.jsx",
+    "client/src/game/rendering/ShipVisualCatalog.js",
+    "client/src/utils/attendanceWeek.js",
+    "client/src/utils/guestProgress.js",
+    "client/tests/missionSync212.test.mjs",
+    "client/tests/shipVisualPhase21.test.mjs",
+    "server/lib/economy.cjs",
+    "server/lib/gameService.cjs",
+    "server/package-lock.json",
+    "server/package.json"
+  ],
+  "deleted_files": [],
+  "file_hashes": [
+    {
+      "path": "client/package-lock.json",
+      "bytes": 343448,
+      "sha256": "138a28345a9343a97009e7eec82a8843d1cd801665267446a54e6c41b9e19787"
+    },
+    {
+      "path": "client/package.json",
+      "bytes": 2414,
+      "sha256": "1c86a5586c3913a7a67d20152c86b0916f58d564dd33e2b53ebd3d72e1705bab"
+    },
+    {
+      "path": "client/src/components/CampaignPortal/AttendanceModal.jsx",
+      "bytes": 14190,
+      "sha256": "b06a140a2d037e017f663948025bc47f35c909b906e7b38987488acfd21f5882"
+    },
+    {
+      "path": "client/src/game/rendering/ShipVisualCatalog.js",
+      "bytes": 4889,
+      "sha256": "1a45ae0876b09f45ccf01283e0a42997d3fff4e942ac5ae7c7d610bfa14a0e19"
+    },
+    {
+      "path": "client/src/utils/attendanceWeek.js",
+      "bytes": 4054,
+      "sha256": "7ed7b0b0e35feb8cc3bf038075622abf5316f08f8db828ce8776c4806dfe5ef8"
+    },
+    {
+      "path": "client/src/utils/guestProgress.js",
+      "bytes": 7560,
+      "sha256": "0e9dfe5aaa79286b6793ec185406c1c066ecd59fa6f01c2e7b2f5708eca7e17e"
+    },
+    {
+      "path": "client/tests/missionHistory213.test.mjs",
+      "bytes": 2284,
+      "sha256": "009f796525613d1a4b036238fdb0a06c88b1a7a88d6caade463b663d1e0a0e59"
+    },
+    {
+      "path": "client/tests/missionSync212.test.mjs",
+      "bytes": 2043,
+      "sha256": "0099bc1a3a50ce41357c455927befc7c35c2ec8e79d5282fad1005a07100c471"
+    },
+    {
+      "path": "client/tests/shipVisualPhase21.test.mjs",
+      "bytes": 3690,
+      "sha256": "caf2b2a9ea19c99ba815f34189b4cd74167b7578be9d7ea70938116a7edd0ff0"
+    },
+    {
+      "path": "docs/GRAPHICS213_MISSION_HISTORY_RELEASE_VI.md",
+      "bytes": 9034,
+      "sha256": "85f56d8a9038f76a91f5fda7541e9ab489108f09c11d1951eab0496e68e49a86"
+    },
+    {
+      "path": "server/lib/economy.cjs",
+      "bytes": 32561,
+      "sha256": "0633b05d2245c003adb6464f3d32b6622f38f9c91adf3f623efa7f3edda3b7d3"
+    },
+    {
+      "path": "server/lib/gameService.cjs",
+      "bytes": 5544,
+      "sha256": "d65d860817001d1758f5a366af938e7f4158f9956f0a0b1e5c5578aba23ac1f7"
+    },
+    {
+      "path": "server/lib/missionHistoryReconcile.cjs",
+      "bytes": 9048,
+      "sha256": "d1bde58a74ca5a1261dc26f228740f4e6e0e3d5b35e955eba9a727834cf0cf10"
+    },
+    {
+      "path": "server/package-lock.json",
+      "bytes": 125755,
+      "sha256": "52931d33833ae5587f58689bbd4b050476fae1b4d0f9298081ff6d07c780c8a7"
+    },
+    {
+      "path": "server/package.json",
+      "bytes": 709,
+      "sha256": "e966699b3df9904edf364e9e7b60dc5cfbbf12f39f4fbd801d555632269a8fd2"
+    },
+    {
+      "path": "server/scripts/reconcile-cloud-missions.cjs",
+      "bytes": 7365,
+      "sha256": "77deec357339d57e634ecb729274c72b1c2576b7df7f66057b1f916a9f3d8fbb"
+    },
+    {
+      "path": "server/tests/missionHistoryReconcile.test.cjs",
+      "bytes": 9262,
+      "sha256": "d2617b76280b87444d68b5fbded2939e071007e11a106533a6545cc35044437e"
+    }
+  ],
+  "notes": [
+    "Apply ONLY onto Graphics 2.1.2.",
+    "X-Wing heavy mismatched GLB now has sprite default on desktop and mobile; GLB preserved for explicit QA.",
+    "Canonical attendance.weeklyCompletedDays with deprecated weeklyStreak mirror.",
+    "Operator-only Firestore audit and guarded reconcile; historical unlogged events cannot be invented.",
+    "No changes to Firebase config/rules, GLB binaries, wallet authority, or payment config."
+  ]
+}

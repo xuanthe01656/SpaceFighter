@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { EVENT_CONFIG, getActiveEvents } from '../../constants';
 import styles from './Events.module.css';
 import toast from 'react-hot-toast';
+import { auth } from '../../firebase';
 
 // ─── SVG ICONS (tái sử dụng từ Missions/index.jsx) ───────────────────────────
 const Icons = {
@@ -301,7 +302,7 @@ function PassivePanel({ event, lang }) {
 // ═════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═════════════════════════════════════════════════════════════════════════════
-export default function Events({ gsRef, setScreen, lang, saveUserProfile, getRealTime }) {
+export default function Events({ gsRef, setScreen, lang, saveUserProfile, getRealTime, gameAction }) {
   const [selectedId, setSelectedId] = useState(null);
 
   if (!gsRef.current.campaignData.eventData) {
@@ -314,7 +315,12 @@ export default function Events({ gsRef, setScreen, lang, saveUserProfile, getRea
     return getActiveEvents(getRealTime);
   }, [getRealTime]);
 
-  const handleClaim = (event, milestoneIdx, reward) => {
+  const handleClaim = async (event, milestoneIdx, reward) => {
+    if (auth.currentUser) {
+      try { await gameAction('event.claim',{eventId:event.id,index:milestoneIdx});toast.success('Reward claimed'); }
+      catch(error){toast.error(error.message);}
+      return;
+    }
     const ed      = eventData[event.id] || {};
     const claimed = ed.claimedMilestones || [];
     if (claimed.includes(milestoneIdx)) return;
@@ -330,7 +336,12 @@ export default function Events({ gsRef, setScreen, lang, saveUserProfile, getRea
     toast.success(lang === 'vi' ? `Nhận thưởng! +${reward.amount}` : `Claimed! +${reward.amount}`);
   };
 
-  const handleCollectDay = (event, dayIdx) => {
+  const handleCollectDay = async (event, dayIdx) => {
+    if (auth.currentUser) {
+      try { await gameAction('event.claim',{eventId:event.id,index:dayIdx});toast.success('Reward claimed'); }
+      catch(error){toast.error(error.message);}
+      return;
+    }
     const ed        = eventData[event.id] || {};
     const collected = ed.daysCollected || [];
     const todayStr  = new Date(getRealTime()).toDateString();

@@ -1,0 +1,50 @@
+{
+  "version": "2.1.6.2",
+  "baseline": "2.1.6.1 Player VFX",
+  "applies_to": "SpaceFighter_Graphics2.1.6.1_PlayerVFX_FULL_SOURCE.zip",
+  "added": [
+    "client/tests/engineMakeup2162.test.mjs",
+    "docs/GRAPHICS2162_THRUSTER_ATTENDANCE_UX_VI.md"
+  ],
+  "modified": [
+    "client/package-lock.json",
+    "client/package.json",
+    "client/src/components/CampaignPortal/AttendanceModal.jsx",
+    "client/src/components/CampaignPortal/AttendanceModal.module.css",
+    "client/src/game/catalog/aircraft.js",
+    "client/src/game/rendering/PlayerFxProfiles.js",
+    "client/src/game/rendering/ShipEngineFx.js",
+    "client/src/utils/attendanceWeek.js",
+    "server/tests/economy.test.cjs"
+  ],
+  "deleted": [],
+  "baseline_file_sha256": {
+    "client/package-lock.json": "963e910e85c930d6ea6bcc8c0a6268b3dee5ac6546884e98eb31e62d9408b2cc",
+    "client/package.json": "7a0b9c82919336cbacd3e18d8cc5208a9a9ed47d5635f3d7b2a553805cd4c614",
+    "client/src/components/CampaignPortal/AttendanceModal.jsx": "b06a140a2d037e017f663948025bc47f35c909b906e7b38987488acfd21f5882",
+    "client/src/components/CampaignPortal/AttendanceModal.module.css": "1dab26691a77b1615724e6544b442283b1bcf82c9d0cf426c3e5040278fba4af",
+    "client/src/game/catalog/aircraft.js": "86b43768da4aa06b2909887ec6bf88cafa0fe98fe2aeb5c60d0a07483d7f2594",
+    "client/src/game/rendering/PlayerFxProfiles.js": "94fa939931d4cdba892f08863c250027cce9a499a11e8794c38889bd2b029ce5",
+    "client/src/game/rendering/ShipEngineFx.js": "baa0abe73f0fbec3323dc27aef75cd7233aeec1e26dfa2a6f4443b5d21573cbb",
+    "client/src/utils/attendanceWeek.js": "7ed7b0b0e35feb8cc3bf038075622abf5316f08f8db828ce8776c4806dfe5ef8",
+    "server/tests/economy.test.cjs": "141e57e677eac59fc2dbb990517f1f1fcd4374aa93c590c92ac2253cb92a2b36"
+  },
+  "result_file_sha256": {
+    "client/tests/engineMakeup2162.test.mjs": "9bf747fb89cedc0664badae63b560d2cbf6ae43278c4c4584e3457c4f61158dd",
+    "docs/GRAPHICS2162_THRUSTER_ATTENDANCE_UX_VI.md": "ed5cce017c794017886b3125da2ca76a4fb52f376ecb8b5b45266d80e0dfe322",
+    "client/package-lock.json": "6922531e607adca8904e9c1b9ca66dfb620cb95045d2880628f55ad706b73546",
+    "client/package.json": "50710a547aa8cd3b2d7c68a0337148d260d1303686da33d4d0d6de261a262e9b",
+    "client/src/components/CampaignPortal/AttendanceModal.jsx": "9cad76c209b680b1a4a403c50a09a2f516739216fea9ae7691340ee2b375fc87",
+    "client/src/components/CampaignPortal/AttendanceModal.module.css": "7ad4ad89eab4d313a2780662a9269be08449bf907dceea8e0cfbbc41cf8714d0",
+    "client/src/game/catalog/aircraft.js": "e4d5f6b29f48f6859d1712705ff16e9e0788af01a3f5909edb6b59b6606b17a2",
+    "client/src/game/rendering/PlayerFxProfiles.js": "3a5ada0237f1f7ac9e37e13670c31ca6590485dda2be395983b3563811f919d4",
+    "client/src/game/rendering/ShipEngineFx.js": "6950b06491e34b0e515ced14e9b69e2ecd4f42938e5f3583bd762c69e07f3d21",
+    "client/src/utils/attendanceWeek.js": "3e7f032649d30306a31a9de41e15721dc6c1e63f7dbc9f261ffaa89f3fc30aab",
+    "server/tests/economy.test.cjs": "fa6f4a27567d016577396dbb17486653b46a0a56ba022b05e04bf61881ff427c"
+  },
+  "unchanged_firebase": [
+    "client/src/firebase.js",
+    "security/firestore.rules"
+  ],
+  "note": "PATCH only replaces the files listed. No Firebase migration is needed."
+}

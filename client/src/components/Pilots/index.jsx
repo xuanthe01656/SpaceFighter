@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { PILOTS } from '../../constants';
 import styles from './Pilots.module.css';
 import toast from 'react-hot-toast';
+import { auth } from '../../firebase';
 
 // --- ICONS ---
 const Icons = {
@@ -19,7 +20,7 @@ const formatCompactNumber = (number) => {
   return shortValue + suffixes[suffixNum];
 };
 
-export default function Pilots({ gsRef, setScreen, lang, saveUserProfile }) {
+export default function Pilots({ gsRef, setScreen, lang, saveUserProfile, gameAction }) {
   const [refreshTick, setRefreshTick] = useState(0); 
   const campaignData = gsRef.current?.campaignData;
   if (!campaignData) return null;
@@ -51,7 +52,12 @@ export default function Pilots({ gsRef, setScreen, lang, saveUserProfile }) {
 
   const starInfo = getStarUpInfo(selectedPilot.stars);
 
-  const handleDeploy = () => {
+  const handleDeploy = async () => {
+    if (auth.currentUser) {
+      try {await gameAction('inventory.equip',{slot:'pilot',itemId:selectedPilot.id});setRefreshTick(x=>x+1);toast.success('Pilot deployed');}
+      catch(error){toast.error(error.message);}
+      return;
+    }
     if (!selectedPilot.owned) return toast.error(lang === 'vi' ? 'Bạn chưa mở khóa Phi công này!' : 'Pilot locked!');
     gsRef.current.campaignData.loadout.pilot = selectedPilot.id;
     saveUserProfile();
@@ -59,7 +65,15 @@ export default function Pilots({ gsRef, setScreen, lang, saveUserProfile }) {
     setRefreshTick(prev => prev + 1);
   };
 
-  const handleStarUp = () => {
+  const handleStarUp = async () => {
+    if (auth.currentUser) {
+      try {
+        const r=await gameAction('pilot.starup',{pilotId:selectedPilot.id});
+        toast[r.extra.success?'success':'error'](r.extra.success?'Star up success':'Star up failed');
+        setRefreshTick(x=>x+1);
+      }catch(error){toast.error(error.message);}
+      return;
+    }
     if (!selectedPilot.owned) return;
     if (selectedPilot.stars >= 5) return;
 

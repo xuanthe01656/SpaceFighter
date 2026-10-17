@@ -1,0 +1,186 @@
+{
+  "projectId": "distributed-inn-482605-c6",
+  "dayUTC": "2026-10-17",
+  "mode": "READ_ONLY_DRY_RUN",
+  "reachedEnd": true,
+  "nextStartAfter": null,
+  "accounts": [
+    {
+      "uid": "ATVsaOYTqdXRVfanGmDTLJ6XVDb2",
+      "status": "READY",
+      "reason": "Only current-period verifiable evidence is added; old rewards, wallet and unknown fields stay intact",
+      "fingerprint": "ec84b851926e5bdb79e90833e7a1aa1dba97f6a51f9896f16a1526f5db817173",
+      "preview": {
+        "periodKeys": {
+          "daily": "2026-10-17",
+          "weekly": "2026-10-12",
+          "monthly": "2026-10"
+        },
+        "auditedOperations": 0,
+        "verifiedNaturalDays": [],
+        "old": {
+          "d_login": 1,
+          "d_play_3": 0,
+          "d_kill_50": 0,
+          "w_login_5": 2,
+          "w_boss_3": 0,
+          "w_spend_coins": 0,
+          "m_login_30": 0,
+          "m_clear_planet": 0,
+          "m_pull_gacha": 0
+        },
+        "next": {
+          "d_login": 0,
+          "d_play_3": 0,
+          "d_kill_50": 0,
+          "w_login_5": 0,
+          "w_boss_3": 0,
+          "w_spend_coins": 0,
+          "m_login_30": 0,
+          "m_clear_planet": 0,
+          "m_pull_gacha": 0
+        },
+        "legacyWarnings": [],
+        "evidence": {
+          "naturalOperations": 0,
+          "legacyGachaOperations": 0,
+          "legacyBattlesWithoutMissionAudit": 0
+        }
+      }
+    },
+    {
+      "uid": "D9uodQ3XfdeLwbVdwScZAwr4UKB3",
+      "status": "READY",
+      "reason": "Only current-period verifiable evidence is added; old rewards, wallet and unknown fields stay intact",
+      "fingerprint": "028652476a1950bc2af963ac3f161fc304d0dd72ba8df3ec1ccc7620cc4bd2db",
+      "preview": {
+        "periodKeys": {
+          "daily": "2026-10-17",
+          "weekly": "2026-10-12",
+          "monthly": "2026-10"
+        },
+        "auditedOperations": 0,
+        "verifiedNaturalDays": [],
+        "old": {
+          "d_login": 1,
+          "d_play_3": 0,
+          "d_kill_50": 0,
+          "w_login_5": 5,
+          "w_boss_3": 0,
+          "w_spend_coins": 0,
+          "m_login_30": 9,
+          "m_clear_planet": 0,
+          "m_pull_gacha": 0
+        },
+        "next": {
+          "d_login": 0,
+          "d_play_3": 0,
+          "d_kill_50": 0,
+          "w_login_5": 0,
+          "w_boss_3": 0,
+          "w_spend_coins": 0,
+          "m_login_30": 0,
+          "m_clear_planet": 0,
+          "m_pull_gacha": 0
+        },
+        "legacyWarnings": [],
+        "evidence": {
+          "naturalOperations": 0,
+          "legacyGachaOperations": 0,
+          "legacyBattlesWithoutMissionAudit": 0
+        }
+      }
+    },
+    {
+      "uid": "RxVbkwuVRLTymIbEy6FZbbTfOUu1",
+      "status": "READY",
+      "reason": "Only current-period verifiable evidence is added; old rewards, wallet and unknown fields stay intact",
+      "fingerprint": "74b9b886ae20b7164c398e5f88d10c7eda3361b7c3b0f8527e462a7f325c06fc",
+      "preview": {
+        "periodKeys": {
+          "daily": "2026-10-17",
+          "weekly": "2026-10-12",
+          "monthly": "2026-10"
+        },
+        "auditedOperations": 0,
+        "verifiedNaturalDays": [],
+        "old": {
+          "d_login": 1,
+          "d_play_3": 0,
+          "d_kill_50": 0,
+          "w_login_5": 0,
+          "w_boss_3": 0,
+          "w_spend_coins": 0,
+          "m_login_30": 0,
+          "m_clear_planet": 0,
+          "m_pull_gacha": 0
+        },
+        "next": {
+          "d_login": 0,
+          "d_play_3": 0,
+          "d_kill_50": 0,
+          "w_login_5": 0,
+          "w_boss_3": 0,
+          "w_spend_coins": 0,
+          "m_login_30": 0,
+          "m_clear_planet": 0,
+          "m_pull_gacha": 0
+        },
+        "legacyWarnings": [],
+        "evidence": {
+          "naturalOperations": 0,
+          "legacyGachaOperations": 0,
+          "legacyBattlesWithoutMissionAudit": 0
+        }
+      }
+    },
+    {
+      "uid": "o9vfpijisnSbrvohmH5wNFRYgsn2",
+      "status": "READY",
+      "reason": "Only current-period verifiable evidence is added; old rewards, wallet and unknown fields stay intact",
+      "fingerprint": "07d778cba018520a18b41f4069a6d4268658134f716e9c08ae6ca55aa629b55a",
+      "preview": {
+        "periodKeys": {
+          "daily": "2026-10-17",
+          "weekly": "2026-10-12",
+          "monthly": "2026-10"
+        },
+        "auditedOperations": 34,
+        "verifiedNaturalDays": [
+          "2026-10-16",
+          "2026-10-17"
+        ],
+        "old": {
+          "d_login": 1,
+          "d_play_3": 0,
+          "d_kill_50": 0,
+          "w_login_5": 2,
+          "w_boss_3": 0,
+          "w_spend_coins": 0,
+          "m_login_30": 2,
+          "m_clear_planet": 0,
+          "m_pull_gacha": 0
+        },
+        "next": {
+          "d_login": 1,
+          "d_play_3": 0,
+          "d_kill_50": 0,
+          "w_login_5": 2,
+          "w_boss_3": 0,
+          "w_spend_coins": 0,
+          "m_login_30": 2,
+          "m_clear_planet": 0,
+          "m_pull_gacha": 0
+        },
+        "legacyWarnings": [
+          "Legacy battle.finish operations lack trustworthy mission deltas; preserve saved Campaign/Boss counters"
+        ],
+        "evidence": {
+          "naturalOperations": 1,
+          "legacyGachaOperations": 0,
+          "legacyBattlesWithoutMissionAudit": 2
+        }
+      }
+    }
+  ]
+}

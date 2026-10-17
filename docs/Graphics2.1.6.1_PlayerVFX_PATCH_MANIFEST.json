@@ -1,0 +1,73 @@
+{
+  "version": "2.1.6.1-player-vfx",
+  "baseline": "SpaceFighter Graphics 2.1.6 Startup Bundle",
+  "scope": "VFX only; no Firebase/server/economy changes",
+  "files": [
+    {
+      "path": "client/package-lock.json",
+      "action": "updated",
+      "before_sha256": "6d4b0b20544cc58508cc4bfab65d9ddc5236e990cec8d328250662c823a289a9",
+      "after_sha256": "963e910e85c930d6ea6bcc8c0a6268b3dee5ac6546884e98eb31e62d9408b2cc"
+    },
+    {
+      "path": "client/package.json",
+      "action": "updated",
+      "before_sha256": "d7694883fa6c7fdea76fdd9d8bebe270975ca207863e5729450f55b8812ba562",
+      "after_sha256": "7a0b9c82919336cbacd3e18d8cc5208a9a9ed47d5635f3d7b2a553805cd4c614"
+    },
+    {
+      "path": "client/public/images/effects/thruster_glow.png",
+      "action": "new",
+      "before_sha256": null,
+      "after_sha256": "7619a4e678e88802cd76b191b74abf4588ad36ea6be556db0e9516a0d83a527e"
+    },
+    {
+      "path": "client/src/components/Campaign/CampaignScene.js",
+      "action": "updated",
+      "before_sha256": "fc658417099e742cbf42bc57e63b6e0ef5d8a00aa14cc9f4b59b77abad855513",
+      "after_sha256": "21cb960c9449d11c8f6a2d5b5b109920c9f1f73d9fc59136dbadf5f4d51f93ec"
+    },
+    {
+      "path": "client/src/components/Dungeon/DungeonScene.js",
+      "action": "updated",
+      "before_sha256": "012b1be20fdd4aa203607896117edef3c9df522d092cba94e0c780d4f0cc1db4",
+      "after_sha256": "19911faefbe76feacd1bc8eac6264a91b51d44dfd952bec02710b1d4fba1da85"
+    },
+    {
+      "path": "client/src/game/combat/ProjectileEmitter.js",
+      "action": "updated",
+      "before_sha256": "18a83b4e6d04e8ba3e860d64fb4c30ac6fd955583475af51f20c3a5306224e28",
+      "after_sha256": "8851f7f0eb3e6c4ba3d4c1a8173fd4ec3df2ff21ab2d4f62da942c979121d903"
+    },
+    {
+      "path": "client/src/game/rendering/PlayerFxProfiles.js",
+      "action": "new",
+      "before_sha256": null,
+      "after_sha256": "94fa939931d4cdba892f08863c250027cce9a499a11e8794c38889bd2b029ce5"
+    },
+    {
+      "path": "client/src/game/rendering/ShipEngineFx.js",
+      "action": "new",
+      "before_sha256": null,
+      "after_sha256": "baa0abe73f0fbec3323dc27aef75cd7233aeec1e26dfa2a6f4443b5d21573cbb"
+    },
+    {
+      "path": "client/tests/playerFxParity2161.test.mjs",
+      "action": "new",
+      "before_sha256": null,
+      "after_sha256": "1a78804d50066e56e6168acd2ecf6e39424c427b1f194d34fa4d0dac03191367"
+    },
+    {
+      "path": "docs/Graphics2.1.6.1_PlayerVFX_HuongDan_VI.md",
+      "action": "new",
+      "before_sha256": null,
+      "after_sha256": "85f954ba6a106a499d824d893b04b38041c5c997eb515fda602b8d82d676a32b"
+    },
+    {
+      "path": "docs/Graphics2.1.6.1_PlayerVFX_TestReport_VI.md",
+      "action": "new",
+      "before_sha256": null,
+      "after_sha256": "3f17ff73a32e8c79af30fb04b15daba707a784f80e41373fb30013dd5ec4e266"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // All mutations to player progression, economy, inventory and audit logs
+    // must originate in the authenticated Admin SDK server; Admin bypasses
+    // rules. No client writes to any player document or subcollection.
+    match /users/{uid} {
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow list, create, update, delete: if false;
+      match /{child=**} { allow read, write: if false; }
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import styles from './ItemModal.module.css';
 import { GEAR_CATALOG, AIRCRAFTS, PILOTS } from '../../constants';
+import ShipImage from '../ShipImage/ShipImage';
 
 // ── Radar max values ──────────────────────────────────────────────
 const MAX_VALS = { atk: 1500, hp: 4000, armor: 400, speed: 12, fireRate: 0.1 };
@@ -262,7 +263,11 @@ export default function ItemModal({
               {/* Image or crate icon - Thêm logic onError */}
               {isCrate
                 ? <div className={styles.crateIconWrap}>{item.icon}</div>
-                : <img
+                : item.type === 'aircraft' ? <ShipImage aircraftId={item.id}
+                    className={styles.itemImage}
+                    alt={baseInfo?.name?.[lang] || 'aircraft'}
+                    style={{ filter: `drop-shadow(0 0 18px ${rarityColor}60)` }}
+                  /> : <img
                     src={baseInfo?.imgSrc || baseInfo?.imgHq || baseInfo?.imgTop || '/images/no_image.png'}
                     alt="item"
                     className={styles.itemImage}

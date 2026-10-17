@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Capacitor } from '@capacitor/core';
-import { Purchases } from '@revenuecat/purchases-capacitor';
 import { GEAR_CATALOG, PILOTS, CRATE_CONFIGS, TOPUP_PACKAGES, FIRST_TOPUP_REWARD, AIRCRAFTS } from '../../constants'; 
 import styles from './ShopCampaign.module.css';
 import toast from 'react-hot-toast';
+import { auth } from '../../firebase';
+import { recordGuestGacha, recordGuestCoinSpend } from '../../utils/guestProgress';
 
 // --- ĐỒNG BỘ HỆ THỐNG SVG ICONS CHUẨN SCI-FI ---
 const Icons = {
@@ -25,14 +25,16 @@ const formatCompactNumber = (number) => {
 const RARITY_COLOR = { 1: '#94a3b8', 2: '#4ade80', 3: '#60a5fa', 4: '#c084fc', 5: '#fbbf24' };
 const RARITY_LABELS = { 1: 'COMMON', 2: 'UNCOMMON', 3: 'RARE', 4: 'EPIC', 5: 'LEGENDARY' };
 
-export default function ShopCampaign({ gsRef, setScreen, lang, saveUserProfile }) {
+export default function ShopCampaign({ gsRef, setScreen, lang, saveUserProfile, gameAction, getRealTime }) {
   const [activeTab, setActiveTab] = useState(gsRef.current?.shopInitialTab || 'crates');
   
   useEffect(() => {
      if(gsRef.current?.shopInitialTab) gsRef.current.shopInitialTab = null;
   }, []);
   
-  const [rcOfferings, setRcOfferings] = useState(null); 
+  // Phase 0: IAP must remain disabled until backend verification and idempotent
+  // fulfillment are deployed. Never grant currency from client purchase callbacks.
+  const rcOfferings = null;
   
   const gachaCrates = CRATE_CONFIGS.map(c => {
     if(c.id === 'basic') return {...c, imgClosed: '/images/common.png', imgOpen: '/images/common_op.png'};
@@ -48,23 +50,6 @@ export default function ShopCampaign({ gsRef, setScreen, lang, saveUserProfile }
   const [gachaState, setGachaState] = useState('idle'); 
   const [gachaResults, setGachaResults] = useState([]);
 
-  useEffect(() => {
-    const initRevenueCat = async () => {
-      if (Capacitor.isNativePlatform()) {
-        try {
-          if (Capacitor.getPlatform() === 'ios') await Purchases.configure({ apiKey: "appl_YOUR_APPLE_KEY_HERE" });
-          else if (Capacitor.getPlatform() === 'android') await Purchases.configure({ apiKey: "goog_YOUR_GOOGLE_KEY_HERE" });
-          
-          const offerings = await Purchases.getOfferings();
-          if (offerings.current !== null && offerings.current.availablePackages.length !== 0) {
-            setRcOfferings(offerings.current);
-          }
-        } catch (error) { console.warn("Chưa setup RevenueCat, dùng luồng Test.", error); }
-      }
-    };
-    initRevenueCat();
-  }, []);
-
   const campaignData = gsRef.current.campaignData;
   if (!campaignData) return null;
 
@@ -77,72 +62,27 @@ export default function ShopCampaign({ gsRef, setScreen, lang, saveUserProfile }
 
   const activeCrate = gachaCrates.find(c => c.id === selectedCrateId);
 
-  // ==========================================
-  // THỰC THI LOGIC NẠP KIM CƯƠNG VÀ QUÀ NẠP ĐẦU CHUẨN
-  // ==========================================
-  const grantGemsSuccess = (pack) => {
-    const totalGems = pack.gems + (pack.bonus || 0);
-
-    // Kích hoạt quà nạp đầu nếu người chơi mua GÓI BẤT KỲ mà cờ chưa đánh dấu
-    if (!campaignData.hasClaimedFirstTopup) {
-      const { aircraftId, gems, coins } = FIRST_TOPUP_REWARD;
-      
-      gsRef.current.diamonds = currentDiamonds + totalGems + gems;
-      gsRef.current.coins = currentCoins + coins;
-      gsRef.current.vipPoints = (Number(gsRef.current.vipPoints) || 0) + totalGems; 
-
-      if (!campaignData.ownedAircrafts) campaignData.ownedAircrafts = {};
-      if (!campaignData.ownedAircrafts[aircraftId]) {
-         campaignData.ownedAircrafts[aircraftId] = { level: 1, stars: 1, isLocked: false };
-      }
-
-      campaignData.hasClaimedFirstTopup = true; // Khóa cờ nạp đầu vĩnh viễn
-
-      toast.success(
-        lang === 'vi' ? `Nhận thành công ${totalGems} Gem và QUÀ NẠP ĐẦU!` : `Claimed ${totalGems} Gems + FIRST TOP-UP BONUS!`,
-        { icon: '🎁', style: { border: '1px solid #ff47a3', background: '#000', color: '#fff' } }
-      );
-    } else {
-      gsRef.current.diamonds = currentDiamonds + totalGems;
-      gsRef.current.vipPoints = (Number(gsRef.current.vipPoints) || 0) + totalGems; 
-      toast.success(
-        lang === 'vi' ? `Nạp thành công ${totalGems} Kim cương!` : `Successfully topped up ${totalGems} Diamonds!`,
-        { icon: '💎', style: { border: '1px solid #c084fc', background: '#000', color: '#fff' } }
-      );
-    }
-
-    saveUserProfile();
-    setRefreshTick(t => t + 1);
+  // Phase 0 fail-closed: preview shop prices, but do not start a real purchase
+  // or award gems until Phase 1 server-side receipt verification exists.
+  const handleTopup = () => {
+    toast.error(lang === 'vi'
+      ? 'Nạp tiền đang tạm khóa để nâng cấp bảo mật. Chưa có giao dịch nào được thực hiện.'
+      : 'Purchases are disabled until secure server verification is ready. No payment was taken.');
   };
 
-  const handleTopup = async (pack) => {
-    if (!Capacitor.isNativePlatform()) {
-      toast.loading(lang === 'vi' ? '[Web Test] Đang xử lý...' : '[Web Test] Processing...');
-      setTimeout(() => { toast.dismiss(); grantGemsSuccess(pack); }, 600);
+  const handleOpenGacha = async (amount) => {
+    if (auth.currentUser) {
+      try {
+        setGachaState('opening');
+        const result = await gameAction('gacha.open',{crateId:activeCrate.id,amount});
+        setGachaResults(result.extra.pulls || []);
+        setRefreshTick(t=>t+1);
+        setGachaState('opened');
+      }catch(error){
+        setGachaState('idle');toast.error(error.message);
+      }
       return;
     }
-
-    try {
-      if (rcOfferings && rcOfferings.availablePackages) {
-        const storePackage = rcOfferings.availablePackages.find(p => p.identifier === pack.id);
-        if (storePackage) {
-          const { customerInfo } = await Purchases.purchasePackage({ package: storePackage });
-          if (typeof customerInfo.entitlements.active !== "undefined") {
-             grantGemsSuccess(pack); return;
-          }
-        }
-      }
-      throw new Error("Package not found in Store");
-    } catch (error) {
-      if (error.userCancelled) toast(lang === 'vi' ? 'Đã hủy thanh toán' : 'Purchase cancelled');
-      else {
-        toast.success(lang === 'vi' ? '[Dev Test] Thanh toán thành công!' : '[Dev Test] Payment Success!');
-        grantGemsSuccess(pack);
-      }
-    }
-  };
-
-  const handleOpenGacha = (amount) => {
     const inventoryStock = currentCrates[activeCrate.id] || 0;
     const cost = activeCrate.cost * amount;
 
@@ -153,7 +93,7 @@ export default function ShopCampaign({ gsRef, setScreen, lang, saveUserProfile }
         if (isCoin && currentCoins < cost) return toast.error(lang === 'vi' ? 'Không đủ Xu!' : 'Not enough Coins!');
         if (!isCoin && currentDiamonds < cost) return toast.error(lang === 'vi' ? 'Không đủ Kim cương!' : 'Not enough Diamonds!');
         
-        if (isCoin) gsRef.current.coins -= cost;
+        if (isCoin) { gsRef.current.coins -= cost; recordGuestCoinSpend(campaignData,cost,getRealTime()); }
         else gsRef.current.diamonds -= cost;
     }
 
@@ -190,6 +130,7 @@ export default function ShopCampaign({ gsRef, setScreen, lang, saveUserProfile }
         if (pulledItem) pullResults.push(pulledItem);
     }
 
+    recordGuestGacha(campaignData,amount,getRealTime());
     setGachaResults(pullResults);
     saveUserProfile();
     setRefreshTick(t => t + 1);
@@ -236,6 +177,9 @@ export default function ShopCampaign({ gsRef, setScreen, lang, saveUserProfile }
           {/* KHU VỰC NẠP KIM CƯƠNG */}
           {activeTab === 'topup' && (
             <div className={styles.topupGrid}>
+              <p style={{ gridColumn: '1 / -1', padding: 12, color: '#ffd166', border: '1px solid #ffd166', borderRadius: 8, textAlign: 'center' }}>
+                {lang === 'vi' ? 'THANH TOÁN TẠM KHÓA — HỆ THỐNG ĐANG NÂNG CẤP BẢO MẬT, KHÔNG TRỪ TIỀN' : 'PURCHASES DISABLED — SECURITY UPGRADE IN PROGRESS, NO CHARGES'}
+              </p>
               
               {/* BANNER NẠP LẦN ĐẦU */}
               {!campaignData.hasClaimedFirstTopup && (
@@ -272,7 +216,7 @@ export default function ShopCampaign({ gsRef, setScreen, lang, saveUserProfile }
                  const displayPrice = storePack ? storePack.product.priceString : pack.price[lang];
                  
                  return (
-                 <div key={pack.id} className={styles.topupCard} onClick={() => handleTopup(pack)}>
+                 <div key={pack.id} className={styles.topupCard} role="button" aria-disabled="true" title={lang === 'vi' ? 'Tạm ngừng thanh toán' : 'Purchases unavailable'} style={{opacity: 0.6, cursor: 'not-allowed'}} onClick={handleTopup}>
                     {pack.bonus > 0 && <div className={styles.bonusTag}>+ {pack.bonus}</div>}
                     
                     <div className={styles.topupIcon} style={{ width: '48px', height: '48px', margin: '0 auto 10px auto', color: 'var(--gem-color)' }}>

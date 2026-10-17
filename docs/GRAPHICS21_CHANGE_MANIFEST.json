@@ -1,0 +1,161 @@
+{
+  "product": "Space Fighter 4.0 / Galaxy Wars",
+  "release": "Graphics Phase 2.1 — V1.2.1",
+  "baselineArchive": "SpaceFighter_Phase2_V1_2_0_FULL_SOURCE.zip",
+  "baselineSha256": "698d874aa6afde938ee8eccaacb6f26dc031632701dd15a63e0c398edfea1428",
+  "scope": "Presentation only. Shared HQ/Campaign/Dungeon aircraft visuals; independent hitbox, asset manifest, mobile heavy-model guard.",
+  "changes": [
+    {
+      "path": ".github/workflows/phase0-ci.yml",
+      "action": "MODIFIED",
+      "sizeBytes": 1052,
+      "sha256": "77037c121d7a2fe9e8f147af79680b59de1344c57c963fae10da95ea7327d6de"
+    },
+    {
+      "path": "README_GRAPHICS21_VI.md",
+      "action": "ADDED",
+      "sizeBytes": 4853,
+      "sha256": "72098c07c236f2deec6a7928fbd6b488d90c1dd1004d0aba05fb77da07dd6444"
+    },
+    {
+      "path": "client/package-lock.json",
+      "action": "MODIFIED",
+      "sizeBytes": 343448,
+      "sha256": "e8e8d9b9d4271e6c46e6f8d239f9c57bab65eea087943f63ef974a157cb53df5"
+    },
+    {
+      "path": "client/package.json",
+      "action": "MODIFIED",
+      "sizeBytes": 2414,
+      "sha256": "1a61c7e77a8dde73ca321e653709f67b10840af6aca7ac2e911e41571976317e"
+    },
+    {
+      "path": "client/scripts/check-graphics21.mjs",
+      "action": "ADDED",
+      "sizeBytes": 2803,
+      "sha256": "0de798568eb3fc2d6877ab8bba7add3fc41bbe81b771e84a14ffc46de36ef1e2"
+    },
+    {
+      "path": "client/scripts/generate-ship-manifest.mjs",
+      "action": "ADDED",
+      "sizeBytes": 2952,
+      "sha256": "4da4b907ef12f89534122071c260dc1061103dfb73ee55f2a5b49e4c03cd841f"
+    },
+    {
+      "path": "client/src/components/Campaign/CampaignScene.js",
+      "action": "MODIFIED",
+      "sizeBytes": 72965,
+      "sha256": "a612f676948330e4a24bdc896031e68b454f4a7edce8f93928338e568747d7aa"
+    },
+    {
+      "path": "client/src/components/Dungeon/DungeonScene.js",
+      "action": "MODIFIED",
+      "sizeBytes": 52841,
+      "sha256": "430d201f04ded708b8259307cb2b1b1d4f62f4323dacf66270b8b3c2179362ce"
+    },
+    {
+      "path": "client/src/components/HQ/HQ.module.css",
+      "action": "MODIFIED",
+      "sizeBytes": 11452,
+      "sha256": "75050cf8ac61aa84c4a1064c889b2bcf838cd55bfdc2a2152db870946639e329"
+    },
+    {
+      "path": "client/src/components/HQ/index.jsx",
+      "action": "MODIFIED",
+      "sizeBytes": 24884,
+      "sha256": "8656419736618ca795f82f50bafc4113320e60517815be18c5371cf9d0147aba"
+    },
+    {
+      "path": "client/src/components/Inventory/index.jsx",
+      "action": "MODIFIED",
+      "sizeBytes": 40356,
+      "sha256": "7d1d19b86ed74e772bb21b3e1287424295578f727e9ecfc75cdfd2775a15ce2c"
+    },
+    {
+      "path": "client/src/components/ItemModal/ItemModal.jsx",
+      "action": "MODIFIED",
+      "sizeBytes": 28028,
+      "sha256": "319cd856c37342bbe968c8e0284cf36b9633247b295e82f17bc1e78ad1677568"
+    },
+    {
+      "path": "client/src/components/ShipImage/ShipImage.jsx",
+      "action": "ADDED",
+      "sizeBytes": 920,
+      "sha256": "111f6f408499023564c051f75e743f33f1de4ea72b2dd5983519d4e59a49a52e"
+    },
+    {
+      "path": "client/src/game/rendering/ShipVisualCatalog.js",
+      "action": "ADDED",
+      "sizeBytes": 4454,
+      "sha256": "06e861e15772c6bd1ab0722acbcd9c8c63cdc0a7595dd2bf7e715da04c514042"
+    },
+    {
+      "path": "client/src/game/rendering/ShipVisualFactory.js",
+      "action": "ADDED",
+      "sizeBytes": 7647,
+      "sha256": "e0b1d216dc91bd393ad6abab5a59ad706e3084cf30c0332741115859c05f7978"
+    },
+    {
+      "path": "client/src/game/rendering/shipAssets.generated.js",
+      "action": "ADDED",
+      "sizeBytes": 1862,
+      "sha256": "c1e37d454bb9978d55dbde11af04ba471bcc689b42779132211dc43e3145b70b"
+    },
+    {
+      "path": "client/tests/shipVisualPhase21.test.mjs",
+      "action": "ADDED",
+      "sizeBytes": 3653,
+      "sha256": "d3b0483924b632d64214e072d37621f68c857ff1899e52155203ea3f726e2e16"
+    },
+    {
+      "path": "client/tests/shipVisualRuntime.test.mjs",
+      "action": "ADDED",
+      "sizeBytes": 3931,
+      "sha256": "652039ad379bb00ae2d6b10fa47d93da9273d503bb0374cb80998f75b4aa58d9"
+    },
+    {
+      "path": "docs/GRAPHICS21_ARCHITECTURE_VI.md",
+      "action": "ADDED",
+      "sizeBytes": 3179,
+      "sha256": "8201c4771373e00289ba0f6d628ecd2871b8ea162973afe746914caa15d729c7"
+    },
+    {
+      "path": "docs/GRAPHICS21_TEST_REPORT_VI.md",
+      "action": "ADDED",
+      "sizeBytes": 1537,
+      "sha256": "07a512c1a9ce918600afe931b6b38aebc9a6ce01c0034a012b0466eb723fe8ad"
+    },
+    {
+      "path": "docs/GRAPHICS21_UAT_VI.md",
+      "action": "ADDED",
+      "sizeBytes": 3167,
+      "sha256": "4c1ca8bcd5952d0e1fbd2405d86f808becfe4f03dc597f21b1971ea6ced31491"
+    }
+  ],
+  "tests": {
+    "clientUnitWithNullEngine": "34 PASS, 0 FAIL",
+    "phase1Safety": "14/14 PASS",
+    "phase2Gameplay": "14/14 PASS",
+    "graphics21Audit": "12/12 PASS",
+    "relativeImports": "100/100 PASS",
+    "parseJsAndJsx": "39/39 PASS",
+    "server": "20 PASS, 0 FAIL, 3 SKIP due to unavailable Express deps",
+    "viteBuild": "UNTESTED: full dev dependencies unavailable to this environment",
+    "realDeviceUAT": "PENDING"
+  },
+  "knownAssetGaps": {
+    "catalogShips": 16,
+    "availableGlbShips": 1,
+    "availableTopSprites": 7,
+    "missingAllShipArt": 9,
+    "sourceMissingLiteralAssetReferences": 61
+  },
+  "xwingGlb": {
+    "sizeBytes": 57759760,
+    "triangles": 1871386
+  },
+  "noFirestoreSchemaChange": true,
+  "noSecurityRulesChange": true,
+  "noServerCodeChange": true,
+  "iapEnabled": false
+}

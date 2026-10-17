@@ -3,7 +3,10 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import styles from './AttendanceModal.module.css';
-import { CRATE_CONFIGS, GEAR_CATALOG, PILOTS, AIRCRAFTS } from '../../constants';
+import { CRATE_CONFIGS, GEAR_CATALOG } from '../../constants';
+import { ensureAttendanceWeek, mondayKeyUTC, weekdayMondayUTC, utcDayKey, lastNaturalClaimUTC, eligibleMakeupDaysUTC } from '../../utils/attendanceWeek';
+import { ensureGuestMissions, recordGuestAttendance } from '../../utils/guestProgress';
+import { auth } from '../../firebase';
 
 const Icons = {
   Coin: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" /><line x1="12" y1="2" x2="12" y2="6" /><line x1="12" y1="18" x2="12" y2="22" /><line x1="2" y1="12" x2="6" y2="12" /><line x1="18" y1="12" x2="22" y2="12" /></svg>,
@@ -12,249 +15,143 @@ const Icons = {
 
 const RARITY_COLOR = { 1: '#94a3b8', 2: '#4ade80', 3: '#60a5fa', 4: '#c084fc', 5: '#fbbf24' };
 
-export default function AttendanceModal({ isOpen, onClose, gsRef, saveUserProfile, lang, getRealTime }) {
+export default function AttendanceModal({ isOpen, onClose, gsRef, saveUserProfile, lang, getRealTime, gameAction, onProgressChange }) {
   const [gachaState, setGachaState] = useState('idle');
   const [gachaResults, setGachaResults] = useState([]);
 
   // --- THÊM STATE ĐỂ REACT RE-RENDER ---
   const [currentStreak, setCurrentStreak] = useState(0);
   const [hasClaimedToday, setHasClaimedToday] = useState(true);
-  const [weeklyStreak, setWeeklyStreak] = useState(0);
+  const [weeklyCompletedDays, setWeeklyCompletedDays] = useState(0);
   const [makeupCount, setMakeupCount] = useState(0);
 
-  // Khởi tạo Data và đồng bộ State khi Modal mở
+  // The calendar must match the server's UTC Monday/week, even for Guests.
   useEffect(() => {
-    if (isOpen) {
-      if (!gsRef.current.campaignData.attendance) {
-        gsRef.current.campaignData.attendance = {
-          streak: 0,
-          lastDate: '',
-          weeklyStreak: 0,
-          makeupCount: 0,
-          claimedDays: []
-        };
-      }
-      const attData = gsRef.current.campaignData.attendance;
-      
-      // Đảm bảo claimedDays là array
-      if (!attData.claimedDays) {
-        attData.claimedDays = [];
-      }
-      
-      const today = new Date(getRealTime());
-      const todayStr = today.toDateString();
-      const dayOfWeek = today.getDay(); // 0 = Chủ nhật, 1 = Thứ 2, ..., 6 = Thứ 7
-      
-      // Tính ngày trong tuần (1-7, bắt đầu từ Thứ 2)
-      const weekDayIndex = ((dayOfWeek - 1 + 7) % 7) + 1; // 1 = Thứ 2, 2 = Thứ 3, ..., 7 = Chủ nhật
-
-      // Tính số ngày đã điểm danh trong tuần này
-      const claimedThisWeek = attData.claimedDays.length;
-
-      setWeeklyStreak(claimedThisWeek);
-      setCurrentStreak(attData.streak);
-      setMakeupCount(attData.makeupCount || 0);
-      setHasClaimedToday(attData.claimedDays.includes(weekDayIndex));
+    if (!isOpen) return;
+    const campaign = gsRef.current.campaignData;
+    const att = (campaign.attendance ||= { streak: 0, lastDate: '', claimedDays: [], makeupCount: 0 });
+    const now = getRealTime();
+    if (!auth.currentUser) {
+      const before = JSON.stringify({ attendance: att, missions: campaign.missionData });
+      ensureAttendanceWeek(att, now);
+      ensureGuestMissions(campaign, now);
+      if (before !== JSON.stringify({ attendance: att, missions: campaign.missionData })) saveUserProfile();
     }
+    const claimed = att.weekKey === mondayKeyUTC(now) && Array.isArray(att.claimedDays) ? att.claimedDays : [];
+    setWeeklyCompletedDays(claimed.length);
+    setCurrentStreak(att.streak || 0);
+    setMakeupCount(att.weekKey === mondayKeyUTC(now) ? (att.makeupCount || 0) : 0);
+    setHasClaimedToday(claimed.includes(weekdayMondayUTC(now)) || lastNaturalClaimUTC(att) === utcDayKey(now));
   }, [isOpen, gsRef]);
 
   if (!isOpen) return null;
+  const viewNow = getRealTime();
+  const attendanceView = gsRef.current.campaignData.attendance || {};
+  const visibleClaimedDays = attendanceView.weekKey === mondayKeyUTC(viewNow) && Array.isArray(attendanceView.claimedDays)
+    ? attendanceView.claimedDays : [];
+  const currentUTCWeekday = weekdayMondayUTC(viewNow);
+  const eligibleMakeupDays = eligibleMakeupDaysUTC(attendanceView, viewNow);
 
-  const handleClaim = () => {
-    if (hasClaimedToday) return;
-
-    const today = new Date(getRealTime());
-    const todayStr = today.toDateString();
-    const dayOfWeek = today.getDay(); // 0 = Chủ nhật, 1 = Thứ 2, ..., 6 = Thứ 7
-    const weekDayIndex = ((dayOfWeek - 1 + 7) % 7) + 1; // 1 = Thứ 2, 2 = Thứ 3, ..., 7 = Chủ nhật
-    const attData = gsRef.current.campaignData.attendance;
-
-    // Đảm bảo claimedDays là array
-    if (!attData.claimedDays) {
-      attData.claimedDays = [];
-    }
-
-    // Thêm ngày hôm nay vào danh sách đã điểm danh
-    if (!attData.claimedDays.includes(weekDayIndex)) {
-      attData.claimedDays.push(weekDayIndex);
-    }
-
-    // Tính weekly streak mới
-    const claimedThisWeek = attData.claimedDays.length;
-
-    // Cập nhật streak thông thường (tăng dần)
-    let newStreak = currentStreak + 1;
-
-    // 1. Cập nhật State để UI đổi ngay lập tức
-    setCurrentStreak(newStreak);
-    setWeeklyStreak(claimedThisWeek);
-    setHasClaimedToday(true);
-
-    // 2. Cập nhật Dữ liệu gốc
-    attData.streak = newStreak;
-    attData.weeklyStreak = claimedThisWeek;
-    attData.lastDate = todayStr;
-
-    // 3. ĐỒNG BỘ TIẾN TRÌNH NHIỆM VỤ TỔNG HỢP
-    if (!gsRef.current.campaignData.missionData) {
-        gsRef.current.campaignData.missionData = { claimed: [], progress: {} };
-    }
-    
-    // - Nhiệm vụ Ngày
-    gsRef.current.campaignData.missionData.progress['d_login'] = 1;
-    
-    // - Nhiệm vụ Tuần (Tích lũy tối đa 5 ngày)
-    const currentWeeklyLogin = gsRef.current.campaignData.missionData.progress['w_login_5'] || 0;
-    gsRef.current.campaignData.missionData.progress['w_login_5'] = Math.min(5, currentWeeklyLogin + 1);
-
-    // - Nhiệm vụ Tháng (Tích lũy tối đa 30 ngày)
-    const currentMonthlyLogin = gsRef.current.campaignData.missionData.progress['m_login_30'] || 0;
-    gsRef.current.campaignData.missionData.progress['m_login_30'] = Math.min(30, currentMonthlyLogin + 1);
-
-
-    if (claimedThisWeek === 7) {
-      const basicCrate = CRATE_CONFIGS.find(c => c.id === 'basic');
-      const pullResults = [];
-
-      for (let i = 0; i < 5; i++) {
-        let roll = Math.random() * 100;
-        let cumulative = 0;
-        let rolledRarity = 1;
-
-        for (let r of [5, 4, 3, 2, 1]) {
-            if (basicCrate.dropRates[r] > 0) {
-                cumulative += basicCrate.dropRates[r];
-                if (roll <= cumulative) { rolledRarity = parseInt(r); break; }
-            }
-        }
-
-        const gearTypes = ['mainGun', 'wingman', 'armor', 'drone'];
-        const rType = gearTypes[Math.floor(Math.random() * gearTypes.length)];
-        const list = GEAR_CATALOG[rType];
-        const g = list[Math.floor(Math.random() * list.length)];
-        const uuid = 'item_' + Date.now() + '_' + Math.floor(Math.random() * 10000) + '_' + i;
-
-        const pulledItem = { uuid, baseId: g.id, rarity: rolledRarity, level: 1, type: rType };
-        gsRef.current.campaignData.items[uuid] = pulledItem;
-        pullResults.push(pulledItem);
+  const showGuestWeeklyReward = () => {
+    const basicCrate = CRATE_CONFIGS.find(c => c.id === 'basic');
+    const pullResults = [];
+    for (let i = 0; i < 5; i++) {
+      const roll = Math.random() * 100;
+      let cumulative = 0;
+      let rarity = 1;
+      for (const r of [5, 4, 3, 2, 1]) {
+        cumulative += basicCrate.dropRates[r] || 0;
+        if (roll <= cumulative) { rarity = r; break; }
       }
+      const gearTypes = ['mainGun', 'wingman', 'armor', 'drone'];
+      const type = gearTypes[Math.floor(Math.random() * gearTypes.length)];
+      const gears = GEAR_CATALOG[type];
+      const gear = gears[Math.floor(Math.random() * gears.length)];
+      const uuid = `item_${Date.now()}_${Math.floor(Math.random() * 10000)}_${i}`;
+      const pulled = { uuid, baseId: gear.id, rarity, level: 1, type };
+      gsRef.current.campaignData.items[uuid] = pulled;
+      pullResults.push(pulled);
+    }
+    setGachaResults(pullResults);
+    setGachaState('opened');
+  };
 
-      setGachaResults(pullResults);
-      setGachaState('opening');
-      setTimeout(() => setGachaState('idle'), 1500);
+  const handleClaim = async () => {
+    if (auth.currentUser) {
+      try {
+        const r=await gameAction('attendance.claim');
+        const a=gsRef.current.campaignData.attendance || {};
+        setCurrentStreak(a.streak||0);setWeeklyCompletedDays(a.weeklyCompletedDays ?? a.claimedDays?.length ?? a.weeklyStreak ?? 0);
+        setHasClaimedToday(true);setMakeupCount(a.makeupCount||0);
+        onProgressChange?.();
+        if (r.extra.pulls?.length) {setGachaResults(r.extra.pulls);setGachaState('opened');}
+        else toast.success(lang==='vi'?'Điểm danh thành công!':'Checked in!');
+      }catch(error){toast.error(error.message);}
+      return;
+    }
+    const result = recordGuestAttendance(gsRef.current.campaignData, {}, getRealTime());
+    if (!result.ok) {
+      toast.error(lang === 'vi' ? 'Hôm nay đã điểm danh!' : 'Already checked in today!');
+      return;
+    }
+    const attData = gsRef.current.campaignData.attendance;
+    setCurrentStreak(attData.streak);
+    setWeeklyCompletedDays(attData.weeklyCompletedDays ?? attData.claimedDays?.length ?? attData.weeklyStreak ?? 0);
+    setHasClaimedToday(true);
+    setMakeupCount(attData.makeupCount || 0);
 
+    if (result.weeklyComplete) {
+      showGuestWeeklyReward();
     } else {
       gsRef.current.coins += 10;
       toast.success(lang === 'vi' ? 'Điểm danh thành công! +10 Xu' : 'Attendance Claimed! +10 Coins', { icon: '🪙' });
     }
-
-    // 4. Đóng gói lưu lên mây
     saveUserProfile();
+    onProgressChange?.();
   };
 
-  const handleMakeupClaim = (targetDay) => {
-    const diamonds = gsRef.current.diamonds || 0;
-    const cost = makeupCount === 0 ? 50 : 150;
-
-    if (diamonds < cost) {
+  const handleMakeupClaim = async (targetDay) => {
+    if (auth.currentUser) {
+      try {
+        const r=await gameAction('attendance.makeup',{day:targetDay});
+        const a=gsRef.current.campaignData.attendance || {};
+        setWeeklyCompletedDays(a.weeklyCompletedDays ?? a.claimedDays?.length ?? a.weeklyStreak ?? 0);setMakeupCount(a.makeupCount||0);
+        onProgressChange?.();
+        if (r.extra.pulls?.length) {setGachaResults(r.extra.pulls);setGachaState('opened');}
+        else toast.success(lang==='vi'?'Điểm danh bù thành công!':'Makeup check-in successful!');
+      }catch(error){toast.error(error.message);}
+      return;
+    }
+    const attData = (gsRef.current.campaignData.attendance ||= { streak: 0, lastDate: '', claimedDays: [], makeupCount: 0 });
+    const now = getRealTime();
+    ensureAttendanceWeek(attData, now);
+    const count = attData.makeupCount || 0;
+    const cost = count === 0 ? 50 : 150;
+    if (count >= 2) {
+      toast.error(lang === 'vi' ? 'Đã dùng hết lượt điểm danh bù!' : 'Makeup claims exhausted!');
+      return;
+    }
+    if (gsRef.current.diamonds < cost) {
       toast.error(lang === 'vi' ? 'Không đủ kim cương!' : 'Not enough diamonds!', { icon: <Icons.Gem /> });
       return;
     }
-
-    if (makeupCount >= 2) {
-      toast.error(lang === 'vi' ? 'Đã dùng hết lượt điểm danh bù!' : 'Makeup claims exhausted!', { icon: '❌' });
+    const result = recordGuestAttendance(gsRef.current.campaignData, { makeupDay: targetDay }, now);
+    if (!result.ok) {
+      toast.error(lang === 'vi' ? 'Chỉ được bù ngày chưa điểm danh và đã qua trong tuần!' : 'Choose an unclaimed past weekday!');
       return;
     }
-
-    const attData = gsRef.current.campaignData.attendance;
-    
-    // Đảm bảo claimedDays là array
-    if (!attData.claimedDays) {
-      attData.claimedDays = [];
-    }
-
-    // Kiểm tra xem ngày target có thể điểm danh bù không
-    if (attData.claimedDays.includes(targetDay)) {
-      toast.error(lang === 'vi' ? 'Ngày này đã được điểm danh!' : 'This day is already claimed!', { icon: '❌' });
-      return;
-    }
-
-    // Trừ kim cương
+    // Diamonds are spent only after the validation succeeds; Ghosts do not
+    // modify the natural streak or day/week/month mission counters.
     gsRef.current.diamonds -= cost;
-
-    // Thêm ngày được chọn vào danh sách đã điểm danh
-    attData.claimedDays.push(targetDay);
-
-    // Tính weekly streak mới
-    const claimedThisWeek = attData.claimedDays.length;
-
-    // Cập nhật streak thông thường
-    let newStreak = currentStreak + 1;
-
-    // Cập nhật state
-    setCurrentStreak(newStreak);
-    setWeeklyStreak(claimedThisWeek);
-    setMakeupCount(makeupCount + 1);
-
-    // Cập nhật dữ liệu gốc
-    attData.streak = newStreak;
-    attData.weeklyStreak = claimedThisWeek;
-    attData.makeupCount = makeupCount + 1;
-
-    // 3. ĐỒNG BỘ TIẾN TRÌNH NHIỆM VỤ TỔNG HỢP
-    if (!gsRef.current.campaignData.missionData) {
-        gsRef.current.campaignData.missionData = { claimed: [], progress: {} };
-    }
-
-    // - Nhiệm vụ Ngày
-    gsRef.current.campaignData.missionData.progress['d_login'] = 1;
-
-    // - Nhiệm vụ Tuần (Tích lũy tối đa 5 ngày)
-    const currentWeeklyLogin = gsRef.current.campaignData.missionData.progress['w_login_5'] || 0;
-    gsRef.current.campaignData.missionData.progress['w_login_5'] = Math.min(5, currentWeeklyLogin + 1);
-
-    // - Nhiệm vụ Tháng (Tích lũy tối đa 30 ngày)
-    const currentMonthlyLogin = gsRef.current.campaignData.missionData.progress['m_login_30'] || 0;
-    gsRef.current.campaignData.missionData.progress['m_login_30'] = Math.min(30, currentMonthlyLogin + 1);
-
-    if (claimedThisWeek === 7) {
-      const basicCrate = CRATE_CONFIGS.find(c => c.id === 'basic');
-      const pullResults = [];
-
-      for (let i = 0; i < 5; i++) {
-        let roll = Math.random() * 100;
-        let cumulative = 0;
-        let rolledRarity = 1;
-
-        for (let r of [5, 4, 3, 2, 1]) {
-            if (basicCrate.dropRates[r] > 0) {
-                cumulative += basicCrate.dropRates[r];
-                if (roll <= cumulative) { rolledRarity = parseInt(r); break; }
-            }
-        }
-
-        const gearTypes = ['mainGun', 'wingman', 'armor', 'drone'];
-        const rType = gearTypes[Math.floor(Math.random() * gearTypes.length)];
-        const list = GEAR_CATALOG[rType];
-        const g = list[Math.floor(Math.random() * list.length)];
-        const uuid = 'item_' + Date.now() + '_' + Math.floor(Math.random() * 10000) + '_' + i;
-
-        const pulledItem = { uuid, baseId: g.id, rarity: rolledRarity, level: 1, type: rType };
-        gsRef.current.campaignData.items[uuid] = pulledItem;
-        pullResults.push(pulledItem);
-      }
-
-      setGachaResults(pullResults);
-      setGachaState('opening');
-      setTimeout(() => setGachaState('idle'), 1500);
-
-    } else {
+    setWeeklyCompletedDays(attData.weeklyCompletedDays ?? attData.claimedDays?.length ?? attData.weeklyStreak ?? 0);
+    setMakeupCount(attData.makeupCount);
+    if (result.weeklyComplete) showGuestWeeklyReward();
+    else {
       gsRef.current.coins += 10;
       toast.success(lang === 'vi' ? 'Điểm danh bù thành công! +10 Xu' : 'Makeup Claim Successful! +10 Coins', { icon: '🪙' });
     }
-
-    // Lưu dữ liệu
     saveUserProfile();
+    onProgressChange?.();
   };
 
   const days = [1, 2, 3, 4, 5, 6, 7];
@@ -277,20 +174,17 @@ export default function AttendanceModal({ isOpen, onClose, gsRef, saveUserProfil
         <div className={styles.content}>
           <div className={styles.streakInfo}>
             <div className={styles.streakText}>
-              {lang === 'vi' ? `Tuần này: ${weeklyStreak}/7 ngày` : `This Week: ${weeklyStreak}/7 days`}
+              {lang === 'vi' ? `Ô điểm danh tuần: ${weeklyCompletedDays}/7 (gồm cả bù)` : `Weekly slots: ${weeklyCompletedDays}/7 (incl. makeups)`}
             </div>
             <div className={styles.makeupInfo}>
-              {lang === 'vi' ? `Lượt điểm danh bù: ${makeupCount}/2` : `Makeup Claims: ${makeupCount}/2`}
+              {lang === 'vi' ? `Đã dùng lượt bù tuần (UTC): ${makeupCount}/2 · Còn ${Math.max(0, 2-makeupCount)}` : `UTC-week makeups used: ${makeupCount}/2 · ${Math.max(0,2-makeupCount)} left`}
             </div>
           </div>
 
           <div className={styles.daysGrid}>
              {days.map(day => {
-               const isClaimed = gsRef.current.campaignData.attendance.claimedDays?.includes(day) || false;
-               const today = new Date(getRealTime());
-               const dayOfWeek = today.getDay();
-               const weekDayIndex = ((dayOfWeek - 1 + 7) % 7) + 1;
-               const isToday = !isClaimed && day === weekDayIndex;
+               const isClaimed = visibleClaimedDays.includes(day) || false;
+               const isToday = !isClaimed && day === currentUTCWeekday;
                const isDay7 = day === 7;
 
                return (
@@ -316,22 +210,26 @@ export default function AttendanceModal({ isOpen, onClose, gsRef, saveUserProfil
                {!hasClaimedToday ? (lang === 'vi' ? 'BÁO CÁO CÓ MẶT' : 'REPORT IN') : (lang === 'vi' ? 'ĐÃ NHẬN HÔM NAY' : 'CLAIMED TODAY')}
             </button>
 
-            {makeupCount < 2 && (
-              <div className={styles.makeupSection}>
-                <div className={styles.makeupTitle}>
-                  {lang === 'vi' ? 'Điểm danh bù:' : 'Makeup Claims:'}
+            <div className={styles.makeupSection}>
+              {makeupCount >= 2 ? (
+                <div className={styles.makeupStatus} role="status">
+                  {lang === 'vi'
+                    ? 'Đã dùng hết 2 lượt điểm danh bù của tuần UTC này. Lượt mới bắt đầu từ thứ Hai tuần sau.'
+                    : 'Both weekly UTC makeups used. Two new allowances begin next Monday.'}
                 </div>
-                <div className={styles.makeupDays}>
-                  {(() => {
-                    const today = new Date(getRealTime());
-                    const dayOfWeek = today.getDay();
-                    const weekDayIndex = ((dayOfWeek - 1 + 7) % 7) + 1;
-                    
-                    // Chỉ hiển thị các ngày trước ngày hiện tại mà chưa điểm danh
-                    return days.filter(day => 
-                      day < weekDayIndex && 
-                      !gsRef.current.campaignData.attendance.claimedDays?.includes(day)
-                    ).map(day => (
+              ) : eligibleMakeupDays.length === 0 ? (
+                <div className={styles.makeupStatus} role="status">
+                  {lang === 'vi'
+                    ? 'Chưa có ngày đã qua và bỏ lỡ trong tuần để điểm danh bù.'
+                    : 'No missed earlier weekday is eligible for makeup this week.'}
+                </div>
+              ) : (
+                <>
+                  <div className={styles.makeupTitle}>
+                    {lang === 'vi' ? 'Điểm danh bù (tối đa 2 lượt/tuần UTC):' : 'Makeup claims (max 2 / UTC week):'}
+                  </div>
+                  <div className={styles.makeupDays}>
+                    {eligibleMakeupDays.map(day => (
                       <button
                         key={day}
                         className={styles.makeupDayBtn}
@@ -341,11 +239,11 @@ export default function AttendanceModal({ isOpen, onClose, gsRef, saveUserProfil
                         <Icons.Gem />
                         {makeupCount === 0 ? '50' : '150'}
                       </button>
-                    ));
-                  })()}
-                </div>
-              </div>
-            )}
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 

@@ -1,7 +1,11 @@
 import React, { useEffect, useRef } from 'react';
 import { Engine, Scene } from '@babylonjs/core';
+import { choosePerformancePreset, attachAdaptiveRenderQuality } from '../../game/config/PerformanceProfiles';
 import { createDungeonScene } from './DungeonScene';
-import { DUNGEON_CONFIG } from '../../constants';
+import { DUNGEON_CONFIG, EVENT_CONFIG } from '../../constants';
+import { activeCoinMultiplier } from '../../utils/guestProgress';
+import { auth } from '../../firebase';
+import toast from 'react-hot-toast';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -45,16 +49,23 @@ const calcRewards = (dungeonConfig, { score, totalKills }) => {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile }) {
+export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile, gameAction, getRealTime }) {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const sceneRef  = useRef(null);
+  const retreatLockRef = useRef(false);
+  const [retreating, setRetreating] = React.useState(false);
 
   useEffect(() => {
     if (!canvasRef.current) return;
 
+    const qualityProfile = choosePerformancePreset({
+      userAgent: navigator.userAgent,
+      deviceMemory: navigator.deviceMemory,
+      hardwareConcurrency: navigator.hardwareConcurrency,
+    });
     const engine = new Engine(canvasRef.current, true, {
-      preserveDrawingBuffer: true,
+      preserveDrawingBuffer: false,
       stencil: true,
       adaptToDeviceRatio: true,
     });
@@ -62,6 +73,8 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile 
 
     const scene = new Scene(engine);
     sceneRef.current = scene;
+    const performance = attachAdaptiveRenderQuality(engine, scene, qualityProfile, window.devicePixelRatio || 1);
+
 
     // Lấy config dungeon hiện tại để tính thưởng sau
     const dungeonId     = gsRef.current.selectedDungeonId;
@@ -70,6 +83,8 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile 
     const data = {
       gsRef,
       lang,
+      getRealTime,
+      isCloud: Boolean(auth.currentUser),
 
       // ── THUA: không có thưởng, vào màn hình kết quả để hiển thị thống kê
       onGameOver: (result) => {
@@ -87,7 +102,17 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile 
 
       // ── THẮNG: tính thưởng, lưu vào gsRef.current.dungeonResult
       onVictory: (result) => {
-        const earnedRewards = calcRewards(dungeonConfig, result);
+        // Cloud accounts receive only server-rolled rewards at claim time.
+        const earnedRewards = auth.currentUser ? [] : calcRewards(dungeonConfig, result);
+        if (!auth.currentUser) {
+          // Former scene-side bonus is now held until the player taps Claim.
+          const bonus = Math.floor(Math.max(0,Number(result.score)||0)*0.1*activeCoinMultiplier(EVENT_CONFIG));
+          if (bonus>0) {
+            const coinRow=earnedRewards.find(row=>row.type==='coins');
+            if (coinRow) coinRow.amount+=bonus;
+            else earnedRewards.push({type:'coins',amount:bonus});
+          }
+        }
 
         gsRef.current.dungeonResult = {
           isVictory    : true,
@@ -106,7 +131,7 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile 
       },
     };
 
-    createDungeonScene(scene, canvasRef.current, engine, data);
+    createDungeonScene(scene, canvasRef.current, engine, {...data, qualityProfile});
 
     engine.runRenderLoop(() => {
       if (scene && scene.activeCamera) scene.render();
@@ -117,6 +142,7 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile 
 
     return () => {
       window.removeEventListener('resize', handleResize);
+      performance.dispose();
       scene.dispose();
       engine.dispose();
     };
@@ -135,7 +161,24 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile 
 
       {/* Nút Rút Lui (chỉ UI React trong Dungeon) */}
       <button
-        onClick={() => setScreen('dungeon_select')}
+        disabled={retreating}
+        onClick={async () => {
+          if (retreatLockRef.current) return;
+          retreatLockRef.current = true;
+          setRetreating(true);
+          try {
+            if (auth.currentUser && gsRef.current.activeBattleId) {
+              // Never leave gameplay while the authoritative ticket is still open.
+              await gameAction('battle.abandon',{ticketId:gsRef.current.activeBattleId});
+            }
+            setScreen('dungeon_select');
+          } catch (error) {
+            toast.error(error?.message || (lang === 'vi' ? 'Không thể rút lui, thử lại.' : 'Retreat failed; retry.'));
+          } finally {
+            retreatLockRef.current = false;
+            setRetreating(false);
+          }
+        }}
         style={{
           position: 'absolute',
           top: 'calc(env(safe-area-inset-top) + 40px)',
@@ -151,7 +194,7 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile 
           textTransform: 'uppercase',
         }}
       >
-        ◀ {lang === 'vi' ? 'RÚT LUI' : 'RETREAT'}
+        ◀ {retreating ? (lang === 'vi' ? 'ĐANG ĐÓNG TRẬN…' : 'CLOSING…') : (lang === 'vi' ? 'RÚT LUI' : 'RETREAT')}
       </button>
     </div>
   );

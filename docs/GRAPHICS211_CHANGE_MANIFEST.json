@@ -1,0 +1,187 @@
+{
+  "release": "Space Fighter Graphics 2.1.1 + Mission Sync Hotfix",
+  "baseline": "Space Fighter Graphics 2.1 V1.2.1 / SpaceFighter_FULL_SOURCE_CLEAN.zip",
+  "created_utc": "2026-10-16T09:16:14+00:00",
+  "baseline_file_count": 291,
+  "unchanged_file_count": 276,
+  "changed_source_and_document_file_count": 21,
+  "protected_files_verified_unchanged": [
+    "firebase.json",
+    "security/firestore.rules",
+    "client/src/firebase.js",
+    "client/src/hooks/useAuth.jsx",
+    "client/src/utils/profileSchema.js",
+    "server/lib/gameService.cjs",
+    "client/package.json",
+    "client/package-lock.json",
+    "server/package.json",
+    "server/package-lock.json"
+  ],
+  "rules": {
+    "monthly_attendance_goal": "min(30, days_in_UTC_month)",
+    "february": "28 or 29",
+    "ghost_makeup": "weekly slot only; no consecutive streak or natural attendance mission counters",
+    "day_and_week": "UTC day; UTC Monday week"
+  },
+  "testing": {
+    "server": {
+      "pass": 27,
+      "fail": 0,
+      "skip": 3
+    },
+    "client_without_babylon": {
+      "pass": 40,
+      "fail": 0
+    },
+    "timezone_variants": [
+      "UTC",
+      "Asia/Ho_Chi_Minh",
+      "Pacific/Kiritimati",
+      "America/Los_Angeles"
+    ],
+    "vite_build_and_webgl": "not run: node_modules not available"
+  },
+  "file_changes": [
+    {
+      "status": "modified",
+      "path": "client/src/App.jsx",
+      "baseline_sha256": "99b96724193ea248f598b231b5325d519e68d8b55e8c01ff8e679e07bc762f1d",
+      "new_sha256": "244a5a8a63d111ec254e7b04899e92855fa827fe4d86bf46915e6b49555f18a1",
+      "bytes": 9279
+    },
+    {
+      "status": "modified",
+      "path": "client/src/components/Campaign/CampaignScene.js",
+      "baseline_sha256": "a612f676948330e4a24bdc896031e68b454f4a7edce8f93928338e568747d7aa",
+      "new_sha256": "8790051a4256bf8c69101d24fd84788e9d11f304b58e8d9b3b672d95b7276f11",
+      "bytes": 73027
+    },
+    {
+      "status": "modified",
+      "path": "client/src/components/CampaignPortal/AttendanceModal.jsx",
+      "baseline_sha256": "23e82e71280be77d8278e870dfd76b1b943d5b6928857cd7ea2542a485a80282",
+      "new_sha256": "b857da34566689b1908a22cb176b7d07953ca46f9943a4da73b3d233bf9e46a6",
+      "bytes": 13853
+    },
+    {
+      "status": "modified",
+      "path": "client/src/components/CampaignPortal/index.jsx",
+      "baseline_sha256": "b6656a57c8ceeea4bd891e5aabc70bc6861ad501379b2d36766012875576c11e",
+      "new_sha256": "c586da22d0a107f934d3403233ebc1309fbaca62f7f9ef1c3da58ec0f77bd120",
+      "bytes": 23359
+    },
+    {
+      "status": "modified",
+      "path": "client/src/components/Dungeon/DungeonEngine.jsx",
+      "baseline_sha256": "0d8232a2b5a71130714bd52a067c717fb61c55c0cb1d0540a9d380a6f12c60ef",
+      "new_sha256": "5e719a1a8e504f67221693e5a15a2be79d3a2f32e4edfc78c54fa1e53026cbe5",
+      "bytes": 7244
+    },
+    {
+      "status": "modified",
+      "path": "client/src/components/Dungeon/DungeonScene.js",
+      "baseline_sha256": "430d201f04ded708b8259307cb2b1b1d4f62f4323dacf66270b8b3c2179362ce",
+      "new_sha256": "da6f5331b0c2489de4bada3931f6614c3dfec68a1cb7e0e01dbdf5813bb4693e",
+      "bytes": 52918
+    },
+    {
+      "status": "modified",
+      "path": "client/src/components/DungeonResult/index.jsx",
+      "baseline_sha256": "6b93b21b28f1097531bec98b6fa4de937a8fb2477c325221ce71233c13d72578",
+      "new_sha256": "c18a469602707ddb77dc96394ac9f147f3bb0237e9c23bd7441a619f3e4ca8c3",
+      "bytes": 18149
+    },
+    {
+      "status": "modified",
+      "path": "client/src/components/Missions/index.jsx",
+      "baseline_sha256": "6178f97f97e955ee35d9a50d1b0f59df44f3243e9331d253c9ce0b7dd4b032cc",
+      "new_sha256": "83871e1cb4268471f0e674cef668a49a473c93832d43dcd5d6f8fe6cfe6a5d8f",
+      "bytes": 11831
+    },
+    {
+      "status": "modified",
+      "path": "client/src/components/ShopCampaign/index.jsx",
+      "baseline_sha256": "e486fbb835c779242cac2d6203c388a66458c8e6afc001febe630a79c50808e7",
+      "new_sha256": "d8bd457ada5a4223f2a2510c15e5c3939e8b8f24dd7f1cf20a4a47b2e5c234a5",
+      "bytes": 19477
+    },
+    {
+      "status": "modified",
+      "path": "client/src/constants.js",
+      "baseline_sha256": "d3b3ccdac5e7f0bdf9fe9b0f97aa7f4bb8fded37d8bc78945be79da6dead227d",
+      "new_sha256": "1fd48e093d2e201071e3fa207c1b156e8172a1b431da827bc00432ae3d46d9ef",
+      "bytes": 48090
+    },
+    {
+      "status": "modified",
+      "path": "client/src/utils/attendanceWeek.js",
+      "baseline_sha256": "67a2e75c4ae15e5e275c9154732a061448fb192899d8f124607fd89c5bd674ce",
+      "new_sha256": "e1ae1b1207f47fbd50d16b85f0cf9aeb45dde2a29c6b4134ea732747bfa5f43e",
+      "bytes": 3850
+    },
+    {
+      "status": "modified",
+      "path": "client/src/utils/guestProgress.js",
+      "baseline_sha256": "3603e781716d8289bb011a385a81935f9df1d7da5576e350ba504267eb14a2a7",
+      "new_sha256": "75b958aa85910a73a0b7b9ee3f59509f390916027b9553abd2f3ebdbae3716de",
+      "bytes": 6153
+    },
+    {
+      "status": "added",
+      "path": "client/src/utils/missionGoals.js",
+      "new_sha256": "62e7ee0a1f5f1cccd0008a686d744e9c852951366c6e082fe9fbef5d2628fbec",
+      "bytes": 1419
+    },
+    {
+      "status": "modified",
+      "path": "client/tests/attendanceWeek.test.mjs",
+      "baseline_sha256": "2e2ec06ed7ac48f3c0a693c42622df1f4d001155400490b7782d739bd7e57633",
+      "new_sha256": "c5917ea1102780d04dd9491bd4d0da6a15082bf4eca597016681beed3aac26f1",
+      "bytes": 1721
+    },
+    {
+      "status": "added",
+      "path": "client/tests/missionSync211.test.mjs",
+      "new_sha256": "7de03531e54544291c4a97ed12f0f0e40efbb77247e1f5ecf99041d015e3af01",
+      "bytes": 8116
+    },
+    {
+      "status": "added",
+      "path": "docs/GRAPHICS211_MISSION_SYNC_HOTFIX_VI.md",
+      "new_sha256": "3db4279503cb730cf29939a31b655cab53a5429cae3e98cdd3667eee07b3ad5e",
+      "bytes": 4565
+    },
+    {
+      "status": "added",
+      "path": "docs/GRAPHICS211_PATCH_INSTALL_VI.md",
+      "new_sha256": "26871d1882f3de466817afb9834d64748415c677022cb0db18a9e3ec3463a38d",
+      "bytes": 1215
+    },
+    {
+      "status": "added",
+      "path": "docs/GRAPHICS211_REGRESSION_LOG.txt",
+      "new_sha256": "22a3517b62be25ff32531887506c7b4f4cd635f4e60e23102da03ab1d6193b26",
+      "bytes": 21253
+    },
+    {
+      "status": "added",
+      "path": "docs/GRAPHICS211_TEST_REPORT_VI.md",
+      "new_sha256": "9ef1ef71bc335f451ad9cdcc247724b05b5b7e998b02a3b482c05b66e2f9d63c",
+      "bytes": 3144
+    },
+    {
+      "status": "modified",
+      "path": "server/lib/economy.cjs",
+      "baseline_sha256": "be8a1336cf358da19414cb18d17b6508ed55ad127360c3b0aeda4de3036d25f5",
+      "new_sha256": "2c1ecc65768ce027ff92d9f03665ddbe8698522e8a68a3b80b746b8b15a3507c",
+      "bytes": 27913
+    },
+    {
+      "status": "modified",
+      "path": "server/tests/economy.test.cjs",
+      "baseline_sha256": "3f8d94e88157e6b29d3ebf8ce21e702389abd2db7bb5e80be9910c5596020c82",
+      "new_sha256": "141e57e677eac59fc2dbb990517f1f1fcd4374aa93c590c92ac2253cb92a2b36",
+      "bytes": 18892
+    }
+  ]
+}

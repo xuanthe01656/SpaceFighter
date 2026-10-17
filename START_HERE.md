@@ -134,3 +134,7 @@ npx cap open android
 [x] Capacitor Native bridge configured
 
 🎉 Welcome to the Ultimate Astro Cat Experience! 🚀🐱
+### Graphics 2.1.5 Product Config
+
+Read `docs/PRODUCT_CONFIG_2_1_5_VI.md` before changing combat balance or uploading to App Store/Google Play.
+The game profile/Firebase schema was not changed; there is no new Firestore migration.

@@ -1,6 +1,21 @@
 import * as BABYLON from '@babylonjs/core';
 import * as GUI    from '@babylonjs/gui';
-import { AIRCRAFTS, GEAR_CATALOG, PILOTS, DUNGEON_CONFIG } from '../../constants';
+import { measureBattleHud } from '../../game/ui/BattleHudLayout';
+import { AIRCRAFTS, GEAR_CATALOG, PILOTS, DUNGEON_CONFIG, EVENT_CONFIG } from '../../constants';
+import { recordGuestEventKill } from '../../utils/guestProgress';
+import { deriveBattleLoadout, calculateProjectileDamage } from '../../utils/combatStats';
+import { frameScale, scaledLerpFactor } from '../../utils/frameTime';
+import { battleSpeedMultiplier, BATTLE_WORLD_HALF_HEIGHT } from '../../game/config/BattleRules';
+import { resolveDungeonDifficulty } from '../../game/config/DungeonDifficulty';
+import { createBattlePassiveState, receiveBattleHit, shouldEchoShot } from '../../game/combat/BattlePassives';
+import { createPlayerShipVisual } from '../../game/rendering/ShipVisualFactory';
+import { createShipEngineFx } from '../../game/rendering/ShipEngineFx';
+import { createShipInputController } from '../../game/combat/ShipInputController';
+import { describeMainSalvo, describeWingSalvo, describeDroneSalvo, pickWeaponTarget, enemySpeedFactor, shieldDamageFactor, repairAmount, projectileHitsPoint } from '../../game/combat/PlayerWeapons';
+import { createProjectileEmitter } from '../../game/combat/ProjectileEmitter';
+import { resolveBattleBackground, legacyBattleBackgroundRequested } from '../../game/catalog/BackgroundCatalog';
+import { createScrollingBattleBackground } from '../../game/rendering/ScrollingBackgroundRenderer';
+import { attachBattleBackgroundProfiler } from '../../game/rendering/BattleBackgroundProfiler.js';
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -37,7 +52,28 @@ const safeDisGui = (ctrl) => { if (ctrl) { try { ctrl.dispose(); } catch (_) {} 
 
 export const createDungeonScene = (scene, canvas, engine, data) => {
 
-    const { gsRef, lang, onGameOver, onVictory, onBossDefeated } = data;
+    const { gsRef, lang, onGameOver, onVictory, onBossDefeated, isCloud, getRealTime } = data;
+  const quality = data.qualityProfile || {starFraction:1, particleFraction:1, glow:true, maxModelBytes:8*1024*1024};
+
+  // Dispose all pending scene-owned timeouts to prevent late spawns/rewards
+  // or screen callbacks from a previous battle after React unmounts the scene.
+  let battleSceneDisposed = false;
+  const pendingTimers = new Set();
+  const scheduleBattleTimer = (callback, delay) => {
+    if (battleSceneDisposed) return null;
+    const timer = globalThis.setTimeout(() => {
+      pendingTimers.delete(timer);
+      if (!battleSceneDisposed) callback();
+    }, delay);
+    pendingTimers.add(timer);
+    return timer;
+  };
+  scene.onDisposeObservable.add(() => {
+    battleSceneDisposed = true;
+    pendingTimers.forEach(clearTimeout);
+    pendingTimers.clear();
+  });
+
 
     // ══════════════════════════════════════════════════════════════════════════
     // 1. LOAD TRANG BỊ & TÍNH TOÁN STATS CHUẨN RPG TỪ CAMPAIGN
@@ -45,93 +81,20 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
     const dungeonId     = gsRef.current.selectedDungeonId;
     const dungeonConfig = DUNGEON_CONFIG.find(d => d.id === dungeonId) || DUNGEON_CONFIG[0];
-    // difficulty 1 = dễ, 2 = thường, 3 = khó  (tham khảo tốc độ campaign)
-    const DIFF = ({
-        1: { speedBase: 0.038, speedInc: 0.004, spawnBase: 1600, spawnMin: 900,
-             countBase: 5,  countInc: 3, hpBase:  80, hpInc: 25,
-             bulletVel: 0.28, bossBase:  800, bossPerWave:  400 },
-        2: { speedBase: 0.052, speedInc: 0.006, spawnBase: 1400, spawnMin: 720,
-             countBase: 6,  countInc: 4, hpBase: 110, hpInc: 32,
-             bulletVel: 0.36, bossBase: 2000, bossPerWave:  900 },
-        3: { speedBase: 0.068, speedInc: 0.009, spawnBase: 1200, spawnMin: 580,
-             countBase: 8,  countInc: 5, hpBase: 150, hpInc: 48,
-             bulletVel: 0.44, bossBase: 4200, bossPerWave: 1600 },
-    })[dungeonConfig.difficulty || 1];
-    const { items, loadout } = gsRef.current.campaignData;
-
-    const pilotBase    = PILOTS.find(p => p.id === loadout.pilot)       || PILOTS[0];
-    const aircraftBase = AIRCRAFTS.find(a => a.id === loadout.aircraft) || AIRCRAFTS[0];
-
-    const ownedAircrafts = gsRef.current.campaignData.ownedAircrafts || {};
-    const acData = ownedAircrafts[loadout.aircraft];
-    const acLevel = (typeof acData === 'object' ? acData.level : 1) || 1;
-
-    const mainGunItem = items?.[loadout.mainGun] ?? null;
-    const mainGunBase = mainGunItem ? (GEAR_CATALOG.mainGun?.find(g => g.id === mainGunItem.baseId) ?? null) : null;
-    const armorItem   = items?.[loadout.armor] ?? null;
-    const armorBase   = armorItem ? (GEAR_CATALOG.armor?.find(g => g.id === armorItem.baseId) ?? null) : null;
-    const wingmanItem = items?.[loadout.wingman] ?? null;
-    const wingmanBase = wingmanItem ? (GEAR_CATALOG.wingman?.find(g => g.id === wingmanItem.baseId) ?? null) : null;
-    const droneItem   = items?.[loadout.drone] ?? null;
-    const droneBase   = droneItem ? (GEAR_CATALOG.drone?.find(g => g.id === droneItem.baseId) ?? null) : null;
-
-    const getDynamicStat = (baseStat, level = 1, rarity = 1, isHp = false) => {
-        if (!baseStat) return 0;
-        const perLv = Math.max(isHp ? 5 : 1, Math.round(baseStat * 0.1 + rarity * (isHp ? 10 : 2)));
-        return baseStat + perLv * (level - 1);
-    };
-    const getFireRate = (baseRate, level) => baseRate ? (baseRate * Math.pow(0.985, (level || 1) - 1)) * 1000 : 400;
-
-    const baseAcHp    = Math.floor((aircraftBase.baseHp || 1000) * (1 + (acLevel - 1) * 0.05));
-    const baseAcAtk   = Math.floor((aircraftBase.baseAtk || 10) * (1 + (acLevel - 1) * 0.05));
-    const baseAcArmor = Math.floor((aircraftBase.baseArmor || 20) * (1 + (acLevel - 1) * 0.05));
-
-    const gunAtk   = mainGunBase ? getDynamicStat(mainGunBase.baseAtk, mainGunItem?.level, mainGunItem?.rarity) : 0;
-    const wingAtk  = wingmanBase ? getDynamicStat(wingmanBase.baseAtk, wingmanItem?.level, wingmanItem?.rarity) : 0;
-    const droneAtk = droneBase ? getDynamicStat(droneBase.baseAtk, droneItem?.level, droneItem?.rarity) : 0;
-    const extraHp  = armorBase ? getDynamicStat(armorBase.baseHp, armorItem?.level, armorItem?.rarity, true) : 0;
-
-    let mainAtkMult = 1.0, wingRateMult = 1.0, moveSpeedMult = 1.0;
-    let dmgReduce = 0, hpRegenRate = 0, dodgeRate = 0, critDamageBoost = 0;
-
-    if (pilotBase.passive) {
-        const val = pilotBase.value;
-        switch (pilotBase.passive) {
-            case 'main_damage_boost': mainAtkMult = 1 + val; break;
-            case 'hp_regen':          hpRegenRate = val; break;
-            case 'wing_fire_rate':    wingRateMult = 1 - val; break;
-            case 'movement_speed':    moveSpeedMult = 1 + val; break;
-            case 'damage_reduction':  dmgReduce = val; break;
-            case 'dodge_and_crit':    dodgeRate = val.dodge || 0.15; critDamageBoost = val.critDamage || 0.25; break;
-        }
-    }
-
-    const doubleShot = pilotBase.passive === 'double_shot';
-
-    const stats = {
-        maxHp:         Math.floor(baseAcHp + extraHp),
-        hp:            Math.floor(baseAcHp + extraHp),
-        atk:           Math.floor((baseAcAtk + gunAtk) * mainAtkMult),
-        wingAtk:       wingAtk,
-        droneAtk:      droneAtk,
-        armor:         baseAcArmor,
-        speed:         (aircraftBase.speed || 6.0) * moveSpeedMult,
-        fireRate:      getFireRate(mainGunBase?.fireRate, mainGunItem?.level),
-        wingFireRate:  (wingmanBase?.fireRate ? (wingmanBase.fireRate * Math.pow(0.985, (wingmanItem?.level||1)-1)) * 1000 : 600) * wingRateMult,
-        droneFireRate: droneBase?.fireRate
-        ? (droneBase.fireRate * Math.pow(0.985, (droneItem?.level || 1) - 1)) * 1000
-        : 800,
-        mainGunId:     mainGunBase?.id || 'gun_laser',
-        wingmanId:     wingmanBase?.id || null,
-        droneId:       droneBase?.id || null,
-        hpRegenRate, dodgeRate, critDamageBoost, dmgReduce
-    };
+    const DIFF = resolveDungeonDifficulty(dungeonConfig);
+    const combat = deriveBattleLoadout(gsRef.current.campaignData, { PILOTS, AIRCRAFTS, GEAR_CATALOG },
+      {mode:'dungeon', location:dungeonConfig});
+    const passives = createBattlePassiveState(combat.stats, Date.now());
+    const { stats, pilotBase, aircraftBase } = combat;
+    const mainGunBase = combat.gear.mainGun.base;
+    const wingmanBase = combat.gear.wingman.base;
+    const droneBase = combat.gear.drone.base;
 
     // ══════════════════════════════════════════════════════════════════════════
     // 2. CAMERA
     // ══════════════════════════════════════════════════════════════════════════
 
-    const ZOOM = 15;
+    const ZOOM = BATTLE_WORLD_HALF_HEIGHT;
     const getAspect = () => engine.getRenderWidth() / Math.max(engine.getRenderHeight(), 1);
 
     const camera = new BABYLON.TargetCamera('cam', new BABYLON.Vector3(0, 50, 0), scene);
@@ -162,7 +125,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     scene.clearColor = hexToColor4(dungeonConfig.themeColor || '#010a1a');
 
     const glow = new BABYLON.GlowLayer('glow', scene);
-    glow.intensity = 0.2;
+    glow.intensity = quality.glow ? 0.2 : 0;
 
     const CAM_BASE = camera.position.clone();
 
@@ -170,15 +133,15 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     // 3. PARALLAX STARFIELD BACKGROUND
     // ══════════════════════════════════════════════════════════════════════════
 
-    (() => {
+    const createLegacyStarfield = () => {
         const r      = getAspect();
         const SPAN_X = ZOOM * r * 2.5;
         const SPAN_Z = ZOOM * 2.5;
 
         const layers = [
-            { count: 200, size: 0.07, speed: 0.025, brightness: new BABYLON.Color3(0.4, 0.5, 0.7) },
-            { count:  80, size: 0.14, speed: 0.060, brightness: new BABYLON.Color3(0.7, 0.8, 1.0) },
-            { count:  25, size: 0.24, speed: 0.110, brightness: new BABYLON.Color3(1.0, 1.0, 1.0) },
+            { count: Math.max(8,Math.round(200 * quality.starFraction)), size: 0.07, speed: 0.025, brightness: new BABYLON.Color3(0.4, 0.5, 0.7) },
+            { count:  Math.max(8,Math.round(80 * quality.starFraction)), size: 0.14, speed: 0.060, brightness: new BABYLON.Color3(0.7, 0.8, 1.0) },
+            { count:  Math.max(8,Math.round(25 * quality.starFraction)), size: 0.24, speed: 0.110, brightness: new BABYLON.Color3(1.0, 1.0, 1.0) },
         ];
 
         const allLayers = layers.map(({ count, size, speed, brightness }) => {
@@ -194,22 +157,38 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         });
 
         scene.onBeforeRenderObservable.add(() => {
+            const dtFactor = frameScale(engine.getDeltaTime());
             allLayers.forEach(({ stars, speed, span }) => {
                 stars.forEach(s => {
-                    s.position.z -= speed;
+                    s.position.z -= speed * dtFactor;
                     if (s.position.z < -span / 2) s.position.z += span;
                 });
             });
         });
-    })();
+    };
+    const selectedBackground = legacyBattleBackgroundRequested(globalThis.location?.search) ? null : resolveBattleBackground({ mode: 'dungeon', dungeonId });
+    // Keep the load frame dark for readable shots; avoid a bright-cyan flash before the texture is ready.
+    if (selectedBackground) scene.clearColor = hexToColor4(selectedBackground.fallbackColor);
+    if (selectedBackground) {
+        createScrollingBattleBackground({
+            BABYLON, scene, engine, config: selectedBackground, qualityId: quality.id || 'mobile',
+            worldHalfHeight: ZOOM, baseUrl: import.meta.env?.BASE_URL || '/',
+            onFallback: createLegacyStarfield,
+        });
+    } else createLegacyStarfield();
+    // Developer-only measurement: ?bgPerf=1; no mission or wallet writes.
+    attachBattleBackgroundProfiler({
+        scene, engine, mode: 'dungeon',
+        backgroundId: selectedBackground?.id || 'legacy',
+        queryString: globalThis.location?.search || '',
+    });
 
     // ══════════════════════════════════════════════════════════════════════════
     // 4. GUI - ĐÃ KHẮC PHỤC KÍCH THƯỚC (SCALE THEO THIẾT BỊ)
     // ══════════════════════════════════════════════════════════════════════════
     const ui = GUI.AdvancedDynamicTexture.CreateFullscreenUI('HUD');
     
-    // Tự động nhận diện độ nét màn hình (iPhone thường là 2 hoặc 3)
-    const dpr = window.devicePixelRatio || 1;
+    // Babylon GUI distances are CSS pixels; idealWidth tracks framebuffer changes.
 
     const topBar = new GUI.Image("topBar", "");
     topBar.width = "100%";
@@ -224,8 +203,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     scoreText.fontFamily = '"VT323", monospace';
     scoreText.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
     scoreText.textVerticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP;
-    scoreText.left = `${15 * dpr}px`; 
-    scoreText.top = `${10 * dpr}px`;
+    scoreText.left = `15px`; 
+    scoreText.top = `10px`;
     ui.addControl(scoreText);
 
     // Sóng
@@ -235,8 +214,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     waveText.fontFamily = '"VT323", monospace';
     waveText.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_RIGHT;
     waveText.textVerticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP;
-    waveText.left = `-${15 * dpr}px`; 
-    waveText.top = `${10 * dpr}px`;
+    waveText.left = `-15px`; 
+    waveText.top = `10px`;
     ui.addControl(waveText);
 
     // Chữ Hệ Thống Giáp
@@ -248,49 +227,45 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     ui.addControl(hpLabel);
 
     const drawHudSvg = () => {
-        const w = engine.getRenderWidth() || 1000;
-        const cssW = w / dpr; // Tính toán chiều rộng thực tế CSS
-        const cx = w / 2;
-        const h1 = 35 * dpr; const h2 = 65 * dpr;
-        const dx1 = 90 * dpr; const dx2 = 70 * dpr;
+        const { w, cssW, cx, h1, h2, dx1, dx2, stroke } = measureBattleHud(engine, canvas, ui);
 
         const svgHex = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h2}" viewBox="0 0 ${w} ${h2}">
             <polygon points="0,0 ${w},0 ${w},${h1} ${cx + dx1},${h1} ${cx + dx2},${h2} ${cx - dx2},${h2} ${cx - dx1},${h1} 0,${h1}" fill="rgba(5,11,20,0.85)"/>
-            <polyline points="0,${h1} ${cx - dx1},${h1} ${cx - dx2},${h2} ${cx + dx2},${h2} ${cx + dx1},${h1} ${w},${h1}" fill="none" stroke="rgba(0,229,255,0.6)" stroke-width="${2.5 * dpr}"/>
+            <polyline points="0,${h1} ${cx - dx1},${h1} ${cx - dx2},${h2} ${cx + dx2},${h2} ${cx + dx1},${h1} ${w},${h1}" fill="none" stroke="rgba(0,229,255,0.6)" stroke-width="${stroke}"/>
         </svg>`.replace(/"/g, "'").replace(/#/g, "%23").replace(/</g, "%3C").replace(/>/g, "%3E");
         topBar.source = "data:image/svg+xml;utf8," + svgHex;
-        topBar.height = `${h2}px`;
+        topBar.height = '65px';
 
         // KHẮC PHỤC LỖI TRÀN CHỮ: Tự động thu nhỏ font trên thiết bị di động y hệt CampaignScene
         const isSmallScreen = cssW < 400;
-        scoreText.fontSize = (isSmallScreen ? 18 : 22) * dpr;
-        waveText.fontSize  = (isSmallScreen ? 14 : 18) * dpr; // Ép về 16 nếu tên ải dài
-        hpLabel.fontSize   = (isSmallScreen ? 12 : 14) * dpr;
-        hpLabel.top        = `${(isSmallScreen ? 20 : 22) * dpr}px`;
+        scoreText.fontSize = (isSmallScreen ? 18 : 22);
+        waveText.fontSize  = (isSmallScreen ? 14 : 18); // Ép về 16 nếu tên ải dài
+        hpLabel.fontSize   = (isSmallScreen ? 12 : 14);
+        hpLabel.top        = `${(isSmallScreen ? 20 : 22)}px`;
     };
     drawHudSvg();
     engine.onResizeObservable.add(drawHudSvg);
 
     // Thanh HP người chơi (10 đoạn)
     const hpBarContainer = new GUI.Rectangle("hpBarContainer");
-    hpBarContainer.width = `${120 * dpr}px`; 
-    hpBarContainer.height = `${12 * dpr}px`;
+    hpBarContainer.width = `120px`; 
+    hpBarContainer.height = `12px`;
     hpBarContainer.background = "rgba(0,0,0,0.8)";
     hpBarContainer.color = "rgba(0,229,255,0.4)";
-    hpBarContainer.thickness = 1 * dpr;
+    hpBarContainer.thickness = 1;
     hpBarContainer.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP;
-    hpBarContainer.top = `${40 * dpr}px`;
+    hpBarContainer.top = `40px`;
     ui.addControl(hpBarContainer);
 
     const hpSegments = [];
     for (let i = 0; i < 10; i++) {
         const seg = new GUI.Rectangle(`seg_${i}`);
-        seg.width = `${10 * dpr}px`; 
-        seg.height = `${8 * dpr}px`;
+        seg.width = `10px`; 
+        seg.height = `8px`;
         seg.background = "#00e5ff"; 
         seg.thickness = 0;
         seg.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
-        seg.left = `${(i * 12 + 1) * dpr}px`;
+        seg.left = `${(i * 12 + 1)}px`;
         hpBarContainer.addControl(seg);
         hpSegments.push(seg);
     }
@@ -306,26 +281,26 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
     // Boss Bar
     const bossPanel = new GUI.StackPanel();
-    bossPanel.width = `${300 * dpr}px`;
+    bossPanel.width = `300px`;
     bossPanel.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP;
-    bossPanel.top = `${80 * dpr}px`;
+    bossPanel.top = `80px`;
     bossPanel.isVisible = false;
     ui.addControl(bossPanel);
 
     const bossNameText = new GUI.TextBlock('bossNameText');
     bossNameText.text = "⚠ BOSS";
     bossNameText.color = "#ff4757";
-    bossNameText.fontSize = 20 * dpr;
+    bossNameText.fontSize = 20;
     bossNameText.fontFamily = '"VT323", monospace';
-    bossNameText.height = `${25 * dpr}px`;
+    bossNameText.height = `25px`;
     bossPanel.addControl(bossNameText);
 
     const bossHpContainer = new GUI.Rectangle("bossHpContainer");
     bossHpContainer.width = "100%"; 
-    bossHpContainer.height = `${10 * dpr}px`;
+    bossHpContainer.height = `10px`;
     bossHpContainer.background = "rgba(30,0,0,0.8)";
     bossHpContainer.color = "#ff4757"; 
-    bossHpContainer.thickness = 2 * dpr;
+    bossHpContainer.thickness = 2;
     bossPanel.addControl(bossHpContainer);
 
     const bossHpFill = new GUI.Rectangle("bossHpFill");
@@ -337,10 +312,10 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     // Chữ chạy cảnh báo (Announcement)
     const annPanel = new GUI.Rectangle('annPanel');
     annPanel.width = "100%"; 
-    annPanel.height = `${70 * dpr}px`;
+    annPanel.height = `70px`;
     annPanel.background = "rgba(5,11,20,0.92)"; 
     annPanel.color = "rgba(102, 252, 241, 0.5)";
-    annPanel.thickness = 2 * dpr; 
+    annPanel.thickness = 2; 
     annPanel.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_CENTER;
     annPanel.top = "-15%"; 
     annPanel.alpha = 0;
@@ -348,7 +323,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
     const annText = new GUI.TextBlock('annText');
     annText.color = "#66fcf1"; 
-    annText.fontSize = 32 * dpr; 
+    annText.fontSize = 32; 
     annText.fontWeight = "bold";
     annText.fontFamily = '"VT323", monospace';
     annPanel.addControl(annText);
@@ -374,35 +349,25 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     const playerRoot = new BABYLON.TransformNode('playerRoot', scene);
     playerRoot.position.set(0, 0, ZOOM - 2.5);
 
-    // --- 5A. TÀU CHÍNH ---
-    const playerPlane = BABYLON.MeshBuilder.CreatePlane('playerPlane', { width: 2.4, height: 2.4 }, scene);
-    playerPlane.rotation.x = Math.PI / 2;
-    playerPlane.rotation.z = 0;   // ← bỏ Math.PI, mũi tàu hướng đúng về phía -Z
-    playerPlane.parent     = playerRoot;
-
-    const playerMat = makeSpriteMat(
-        scene,
-        aircraftBase.imgTop || '/images/ships/ship_xwing_top.png',
-        null,
-        () => {
-            const fb = BABYLON.MeshBuilder.CreateCylinder('pFb',
-                { diameterTop: 0.4, diameterBottom: 2.0, height: 0.4, tessellation: 6 }, scene);
-            fb.parent    = playerRoot;
-            fb.position.y = 0.2;
-            fb.material  = makeMat(scene, new BABYLON.Color3(0.1, 0.85, 1.0));
-            playerPlane.isVisible = false;
-        },
-    );
-    playerPlane.material = playerMat;
+    // --- 5A. One player-ship visual pipeline shared with Campaign ---
+    const shipVisual = createPlayerShipVisual(scene, playerRoot, {
+        aircraftId: gsRef.current.campaignData.loadout.aircraft,
+        aircraftCatalog: AIRCRAFTS, glowLayer: glow,
+    });
+    const playerPlane = shipVisual.tiltNode; // visual tilt, NOT collision geometry
 
     // --- 5B. WINGMAN (VŨ KHÍ PHỤ TRÊN 2 CÁNH TÀU) ---
+    const wingNodes = [];
     if (stats.wingmanId && wingmanBase) {
-        const wingOffsets = [-1.2, 1.2]; // Tọa độ gắn 2 bên cánh
+        const wingMountX = aircraftBase.wingmanOffset?.x || 1.8;
+        const wingMountZ = aircraftBase.wingmanOffset?.z || 0.3;
+        const wingOffsets = [-wingMountX, wingMountX]; // Match Campaign aircraft mounts
         wingOffsets.forEach(offsetX => {
             // Tạo Node chứa để gộp Plane và Khối Fallback
             const wNode = new BABYLON.TransformNode('wNode', scene);
             wNode.parent = playerRoot;
-            wNode.position.set(offsetX, 0, 0.2);
+            wNode.position.set(offsetX, 0, wingMountZ);
+            wingNodes.push(wNode);
 
             // 1. Dựng sẵn Khối Fallback (Ống trụ cam)
             const wFallback = BABYLON.MeshBuilder.CreateCylinder('wingman_fb', { diameter: 0.25, height: 0.8 }, scene);
@@ -476,75 +441,19 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             drones.push(dNode); // Push cái Node chứa vào mảng để vòng lặp cập nhật nó di chuyển
         });
     }
-    const engineMount = new BABYLON.TransformNode('engineMount', scene);
-    engineMount.parent = playerRoot;
-    engineMount.position.set(0, 0, 1.1);
-
-    const flameTintHex = aircraftBase.engineFlameTint ? '#' + aircraftBase.engineFlameTint.toString(16).padStart(6, '0') : '#38bdf8';
-    const flameR = parseInt(flameTintHex.slice(1, 3), 16) / 255;
-    const flameG = parseInt(flameTintHex.slice(3, 5), 16) / 255;
-    const flameB = parseInt(flameTintHex.slice(5, 7), 16) / 255;
-    const flameScale = aircraftBase.engineFlameScale || 1.0;
-
-    const engineFx = new BABYLON.ParticleSystem('engineFx', 160, scene);
-    engineFx.particleTexture = new BABYLON.Texture('https://assets.babylonjs.com/textures/flare.png', scene);
-    engineFx.emitter      = engineMount;
-    engineFx.minEmitBox   = new BABYLON.Vector3(-0.12 * flameScale, 0, 0);
-    engineFx.maxEmitBox   = new BABYLON.Vector3( 0.12 * flameScale, 0, 0);
-    engineFx.color1       = new BABYLON.Color4(Math.min(1, flameR + 0.2), Math.min(1, flameG + 0.2), Math.min(1, flameB + 0.2), 1.0);
-    engineFx.color2       = new BABYLON.Color4(flameR * 0.4, flameG * 0.4, flameB * 0.4, 0.9);
-    engineFx.colorDead    = new BABYLON.Color4(0, 0, 0.3, 0);
-    engineFx.minSize      = 0.12 * flameScale;
-    engineFx.maxSize      = 0.45 * flameScale;
-    engineFx.minLifeTime  = 0.08;
-    engineFx.maxLifeTime  = 0.22;
-    engineFx.emitRate     = 120;
-    engineFx.direction1   = new BABYLON.Vector3(-0.1, 0.07, 1);
-    engineFx.direction2   = new BABYLON.Vector3( 0.1, 0.10, 0.8);
-    engineFx.minEmitPower = 4;
-    engineFx.maxEmitPower = 8;
-    engineFx.updateSpeed  = 0.02;
-    engineFx.start();
+    // Shared aircraft-aware engine VFX (same mount, colors, particles, texture as Campaign).
+    const engineFx = createShipEngineFx({ scene, BABYLON, playerRoot, aircraft: aircraftBase, quality });
 
     // ══════════════════════════════════════════════════════════════════════════
     // 6. INPUT – KÉO ĐỂ DI CHUYỂN
     // ══════════════════════════════════════════════════════════════════════════
 
-    let isDragging = false;
-    let dragOrigin = null;
-
-    const getWorldPos = () => {
-        const ray = scene.createPickingRay(scene.pointerX, scene.pointerY, BABYLON.Matrix.Identity(), camera);
-        const t = -ray.origin.y / ray.direction.y;
-        if (!isFinite(t) || t < 0) return null;
-        return ray.origin.add(ray.direction.scale(t));
-    };
-
     const boundX = () => ZOOM * getAspect() - 1.8;
-
-    scene.onPointerObservable.add((pi) => {
-        if (gameOver) return;
-        const { POINTERDOWN, POINTERUP, POINTERMOVE } = BABYLON.PointerEventTypes;
-
-        if (pi.type === POINTERDOWN) {
-            dragOrigin = getWorldPos();
-            isDragging = !!dragOrigin;
-        } else if (pi.type === POINTERUP) {
-            isDragging = false;
-            dragOrigin = null;
-        } else if (pi.type === POINTERMOVE && isDragging && dragOrigin) {
-            const cur = getWorldPos();
-            if (!cur) return;
-            const diff = cur.subtract(dragOrigin);
-            playerRoot.position.addInPlace(diff);
-            dragOrigin = cur;
-
-            playerRoot.position.x = clamp(playerRoot.position.x, -boundX(), boundX());
-            playerRoot.position.z = clamp(playerRoot.position.z, -ZOOM + 1.8, ZOOM - 1.8);
-
-            const targetRoll = BABYLON.Scalar.Clamp(diff.x * -1.5, -0.45, 0.45);
-            playerPlane.rotation.z = BABYLON.Scalar.Lerp(playerPlane.rotation.z, targetRoll, 0.14);
-        }
+    const shipInput = createShipInputController({
+        canvas: engine.getRenderingCanvas(), scene, engine, playerRoot, tiltNode: playerPlane,
+        halfHeight: ZOOM, aspect: getAspect,
+        speedMultiplier: battleSpeedMultiplier(stats),
+        enabled: () => !gameOver,
     });
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -569,7 +478,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     const triggerShake = (str = 0.2, frames = 8) => { shakeStr = str; shakeFrames = frames; };
 
     const explode = (pos, scale = 1) => {
-        const ps = new BABYLON.ParticleSystem(`exp_${Date.now()}`, Math.ceil(80 * scale), scene);
+        const ps = new BABYLON.ParticleSystem(`exp_${Date.now()}`, Math.max(24,Math.ceil(80 * scale * quality.particleFraction)), scene);
         ps.particleTexture     = new BABYLON.Texture('https://assets.babylonjs.com/textures/flare.png', scene);
         ps.emitter             = pos.clone();
         ps.color1              = new BABYLON.Color4(1, 0.8, 0.1, 1);
@@ -642,7 +551,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         if (currentWave >= MAX_WAVES) {
             triggerVictory();
         } else {
-            setTimeout(() => startWave(currentWave + 1), 1800);
+            scheduleBattleTimer(() => startWave(currentWave + 1), 1800);
         }
     };
 
@@ -723,18 +632,17 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         const speed   = enemyBaseSpeed * (type === 'heavy'  ? 0.55 : type === 'elite'  ? 1.35 : 1.0);
         const shootMs = type === 'heavy'  ? 2200 : type === 'elite'  ? 1400 : Infinity;
 
-        const dpr = window.devicePixelRatio || 1;
         const miniHpBg = new GUI.Rectangle(`ehp_bg_${mesh.uniqueId}`);
-        miniHpBg.width     = `${54 * dpr}px`;
-        miniHpBg.height    = `${6 * dpr}px`;
+        miniHpBg.width     = `54px`;
+        miniHpBg.height    = `6px`;
         miniHpBg.background   = '#111';
         miniHpBg.color        = '#ffffff40';
-        miniHpBg.cornerRadius = 4 * dpr;
-        miniHpBg.thickness    = 1 * dpr;
+        miniHpBg.cornerRadius = 4;
+        miniHpBg.thickness    = 1;
         miniHpBg.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
         ui.addControl(miniHpBg);
         miniHpBg.linkWithMesh(mesh);
-        miniHpBg.linkOffsetY = -34 * dpr;
+        miniHpBg.linkOffsetY = -34;
 
         const miniHp = new GUI.Rectangle(`ehp_${mesh.uniqueId}`);
         miniHp.width      = '100%';
@@ -770,22 +678,11 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     let   nextWingFire  = 0;
     let   nextDroneFire = 0;
 
-    const fireBullet = (x, z, velX, velZ, atk, colorHex, isHoming = false, target = null) => {
-        const b = BABYLON.MeshBuilder.CreateCylinder(`b_${Date.now()}_${Math.random()}`, { height: 1.2, diameter: 0.15, tessellation: 6 }, scene);
-        b.position.set(x, 0, z);
-        b.rotation.x = Math.PI / 2;
-        // Bẻ góc nghiêng của viên đạn nếu súng bắn chéo (spread3)
-        if (velX !== 0) b.rotation.z = Math.atan2(velX, -velZ);
-        
-        b.material = makeMat(scene, BABYLON.Color3.FromHexString(colorHex));
-        b.atk = atk;
-        b._velX = velX;
-        b._velZ = velZ;
-        b.isHoming = isHoming;
-        b.target = target;
-        playerBullets.push(b);
-    };
-
+    const shots = createProjectileEmitter({ scene, BABYLON, bullets: playerBullets, scheduleBattleTimer });
+    const liveTargets = () => [
+        ...enemies.filter(e => !e.mesh.isDisposed()),
+        ...(bossMesh && !bossMesh.isDisposed() ? [{ mesh: bossMesh }] : []),
+    ];
     const fireEnemyBullet = (pos, velX = 0, velZ = enemyBulletVelZ) => {
         const b = BABYLON.MeshBuilder.CreateSphere(`eb_${Date.now()}_${Math.random()}`, { diameter: 0.5 }, scene);
         b.position = pos.clone();
@@ -808,31 +705,33 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     let invincibleMs = 0;
     const INV_DUR    = 1500;   
     let tick         = 0;
-    let lastRegenTime = Date.now();
+
 
     const updateScore = (delta) => {
         score += delta;
         scoreText.text = `${lang === 'vi' ? 'ĐIỂM' : 'SCORE'}: ${score}`;
     };
 
-    const damagePlayer = (rawDmg) => {
+    const damagePlayer = (rawDmg, source = 'contact') => {
+        rawDmg *= shieldDamageFactor(droneBase);
         const now = Date.now();
         if (now < invincibleMs) return;
 
-        // Tính năng NÉ TRÁNH từ chỉ số phi công
-        if (stats.dodgeRate > 0 && Math.random() < stats.dodgeRate) {
+        const result = receiveBattleHit(stats, passives, rawDmg, {source, nowMs: now});
+        if (result.dodged) {
             showAnnouncement(lang === 'vi' ? 'NÉ TRÁNH!' : 'DODGED!', '#4ade80', 1000);
             return;
         }
-
-        // TÍNH TOÁN GIÁP TỪ PHI CƠ (Armor) - Giống hệt Campaign
-        let damage = rawDmg;
-        if (stats.armor) damage = Math.floor(damage * (1 - stats.armor / 100));
-
-        // TÍNH TOÁN KỸ NĂNG GIẢM SÁT THƯƠNG TỪ PILOT
-        const finalDmg = Math.floor(damage * (1 - stats.dmgReduce));
-        
-        stats.hp -= finalDmg;
+        // Battle passives hit nearby enemies, without changing cloud rewards.
+        if (result.reflected || result.novaDamage) {
+            for(const enemy of [...enemies]) {
+                if(!enemy.mesh?.position || enemy.hp<=0) continue;
+                const dx=enemy.mesh.position.x-playerRoot.position.x;
+                const dz=enemy.mesh.position.z-playerRoot.position.z;
+                if(dx*dx+dz*dz <= (result.novaDamage ? 25 : 9))
+                    applyPlayerDamageToEnemy(enemy,result.reflected+result.novaDamage);
+            }
+        }
         invincibleMs = now + INV_DUR;
         triggerShake(0.28, 10);
         updateHpUI();
@@ -844,14 +743,14 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         gameOver = true;
         explode(playerRoot.position, 4);
         triggerShake(0.6, 20);
-        playerPlane.visibility = 0;
+        shipVisual.setVisibility(0);
         engineFx.stop();
         showAnnouncement(
             lang === 'vi' ? 'THẤT BẠI!' : 'MISSION FAILED!',
             '#ff4757',
             2000,
         );
-        setTimeout(() => onGameOver({
+        scheduleBattleTimer(() => onGameOver({
             score,
             totalKills,
             wavesCleared : Math.max(0, currentWave - 1),
@@ -867,11 +766,9 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             '#2ecc71',
             2000,
         );
-        const evVic = gsRef.current.campaignData?.eventData || {};
-        const coinMultDungeon = Object.keys(evVic).some(k => k.startsWith('event_coin_fever')) ? 2 : 1;
-        const dungeonCoins = Math.floor(score * 0.1 * coinMultDungeon);
-        gsRef.current.coins = (Number(gsRef.current.coins) || 0) + dungeonCoins;
-        setTimeout(() => onVictory({
+        // All guest dungeon rewards are paid only after Result -> Claim.
+        // Cloud rewards remain server-authoritative.
+        scheduleBattleTimer(() => onVictory({
             score,
             totalKills,
             wavesCleared : currentWave,
@@ -879,16 +776,46 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         }), 2800);
     };
 
-    setTimeout(() => { if (!scene.isDisposed) startWave(1); }, 800);
+    scheduleBattleTimer(() => startWave(1), 800);
+
+    const applyPlayerDamageToEnemy = (enemy, damage) => {
+        if (!enemy || enemy.mesh.isDisposed() || enemy.hp <= 0) return false;
+        enemy.hp -= damage;
+        const ratio = clamp(enemy.hp / enemy.maxHp, 0, 1);
+        enemy.miniHp.width = `${(ratio * 100).toFixed(0)}%`;
+        enemy.miniHp.background = ratio < .4 ? '#ff8800'
+          : enemy.type === 'heavy' ? '#ff8a66' : enemy.type === 'elite' ? '#ffdd55' : '#66ddff';
+        if (enemy.hp > 0) return false;
+        const gain = enemy.type === 'scout' ? 10 : enemy.type === 'heavy' ? 30 : 60;
+        updateScore(gain);
+        if (!isCloud) recordGuestEventKill(gsRef.current.campaignData, EVENT_CONFIG, getRealTime?.() ?? Date.now());
+        explode(enemy.mesh.position, enemy.type === 'heavy' ? 2 : 1);
+        cleanEnemy(enemy);
+        const index = enemies.indexOf(enemy);
+        if (index >= 0) enemies.splice(index, 1);
+        waveKilled++;
+        return true;
+    };
+    const applyDungeonSplash = (bullet, impact, damage, primary) => {
+        if (!bullet._splashRadius) return;
+        explode(new BABYLON.Vector3(impact.x, 0, impact.z), bullet._splashRadius * .45);
+        const nearby = enemies.filter(other => other !== primary && !other.mesh.isDisposed()
+          && projectileHitsPoint({ position: impact }, other.mesh.position, bullet._splashRadius));
+        nearby.forEach(other => {
+            if (bullet._slowMs) other._slowUntil = Date.now() + bullet._slowMs;
+            applyPlayerDamageToEnemy(other, damage * .4);
+        });
+    };
 
     // ══════════════════════════════════════════════════════════════════════════
     // 14. MAIN RENDER LOOP
     // ══════════════════════════════════════════════════════════════════════════
 
     scene.onBeforeRenderObservable.add(() => {
-        if (gameOver || scene.isDisposed) return;
+        if (gameOver || (typeof scene.isDisposed === 'function' ? scene.isDisposed() : scene.isDisposed)) return;
         const now = Date.now();
-        tick++;
+        const frameFactor = frameScale(engine.getDeltaTime());
+        tick += frameFactor;
         // A. Screen shake
         if (shakeFrames > 0) {
             camera.position.x = CAM_BASE.x + (Math.random() - 0.5) * shakeStr;
@@ -900,75 +827,53 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             }
         }
         // B. Trả lái tàu về thẳng 
-        if (!isDragging) {
-            playerPlane.rotation.z = BABYLON.Scalar.Lerp(playerPlane.rotation.z, 0, 0.05);
+        if (!shipInput.isDragging()) {
+            playerPlane.rotation.z = BABYLON.Scalar.Lerp(playerPlane.rotation.z, 0, scaledLerpFactor(0.05,frameFactor));
         }
 
         // C. Blink khi bất tử 
         if (now < invincibleMs) {
-            playerPlane.visibility = Math.sin(now * 0.025) > 0 ? 1 : 0.3;
+            shipVisual.setVisibility(Math.sin(now * 0.025) > 0 ? 1 : 0.3);
         } else {
-            playerPlane.visibility = 1;
+            shipVisual.setVisibility(1);
         }
         // B. Di chuyển Vệ tinh (Drones Hovering)
         if (drones.length > 0) {
-            const hoverZ = Math.sin(tick * 0.05) * 0.3;
+            const hoverZ = Math.sin(tick * 0.04) * 0.18;
             drones.forEach(d => {
-                d.position.x = BABYLON.Scalar.Lerp(d.position.x, playerRoot.position.x + d.offsetX, 0.15);
-                d.position.z = BABYLON.Scalar.Lerp(d.position.z, playerRoot.position.z + d.offsetY + hoverZ, 0.15);
+                d.position.x = BABYLON.Scalar.Lerp(d.position.x, playerRoot.position.x + d.offsetX, scaledLerpFactor(0.22,frameFactor));
+                d.position.z = BABYLON.Scalar.Lerp(d.position.z, playerRoot.position.z + d.offsetY + hoverZ, scaledLerpFactor(0.22,frameFactor));
             });
         }
         // C. Hồi HP tự động
         if (stats.hpRegenRate > 0 && stats.hp < stats.maxHp) {
-            const dt = (now - lastRegenTime) / 1000;
-            lastRegenTime = now;
+            const dt = frameFactor / 60;
             stats.hp = Math.min(stats.maxHp, stats.hp + stats.maxHp * stats.hpRegenRate * dt);
             updateHpUI();
         }
-       // D. Khai Hỏa (Player + Drones + Wingman) - ĐỒNG BỘ THUỘC TÍNH VŨ KHÍ
-       const activeEnemies = enemies.filter(e => !e.mesh.isDisposed());
-       const lockTarget = activeEnemies.length > 0 ? activeEnemies[Math.floor(Math.random() * activeEnemies.length)] : null;
-
+       // D. Shared weapon policy, unchanged across Campaign and Dungeon.
+       const target = pickWeaponTarget(liveTargets(), playerRoot.position);
        if (now > lastFire + stats.fireRate) {
-           const mColor = mainGunBase?.color ? '#' + mainGunBase.color.toString(16).padStart(6,'0') : '#00e5ff';
-           const pX = playerRoot.position.x; const pZ = playerRoot.position.z + 1.8;
-           
-           // XỬ LÝ KIỂU BẮN (FIRE PATTERN) TỪ CONSTANTS
-           switch (mainGunBase?.firePattern) {
-               case 'spread3': // Bắn tỏa 3 tia
-                   fireBullet(pX, pZ, 0, -1.0, stats.atk, mColor); // Đạn giữa thẳng
-                   fireBullet(pX - 0.4, pZ - 0.1, -0.25, -0.9, stats.atk * 0.88, mColor); // Đạn chéo trái
-                   fireBullet(pX + 0.4, pZ - 0.1, 0.25, -0.9, stats.atk * 0.88, mColor); // Đạn chéo phải
-                   break;
-               case 'homing':  // Đạn tự dẫn đường
-                   fireBullet(pX, pZ, 0, -0.8, stats.atk, mColor, true, lockTarget);
-                   break;
-               default:        // Bắn thẳng cơ bản
-                   fireBullet(pX, pZ, 0, -1.1, stats.atk, mColor);
+           const salvo=describeMainSalvo(mainGunBase || GEAR_CATALOG.mainGun[0], playerRoot.position, stats.atk, target);
+           shots.fire(salvo);
+           if(salvo.length && shouldEchoShot(stats, passives, Date.now())) {
+             const extra=salvo[0];
+             shots.fire(Array.from({length:stats.echoCount},(_,i)=>({...extra,x:extra.x+(i%2===0?-.28:.28),delayMs:0})));
            }
            lastFire = now;
        }
-       // Bắn đạn Wingman (Homing từ 2 cánh)
-       if (stats.wingmanId && now > nextWingFire) {
-           const wColor = wingmanBase?.color ? '#' + wingmanBase.color.toString(16).padStart(6,'0') : '#ffa502';
-           fireBullet(playerRoot.position.x - 1.2, playerRoot.position.z + 0.5, 0, -0.8, stats.wingAtk, wColor, true, lockTarget);
-           fireBullet(playerRoot.position.x + 1.2, playerRoot.position.z + 0.5, 0, -0.8, stats.wingAtk, wColor, true, lockTarget);
+       if (stats.wingmanId && wingmanBase && now > nextWingFire) {
+           const mounts = wingNodes.map(w => w.getAbsolutePosition());
+           shots.fire(describeWingSalvo(wingmanBase, mounts, stats.wingAtk, target));
            nextWingFire = now + stats.wingFireRate;
        }
-       // Bắn đạn Drone (Ngắm thẳng vào mục tiêu giống hệ Sniper bên Campaign)
-       if (stats.droneId && now > nextDroneFire && drones.length > 0) {
-           const dColor = droneBase?.color ? '#' + droneBase.color.toString(16).padStart(6,'0') : '#2ecc71';
-           drones.forEach(d => {
-               let dVx = 0, dVz = -0.9; // Mặc định bắn thẳng nếu không có mục tiêu
-               if (lockTarget && lockTarget.mesh && !lockTarget.mesh.isDisposed()) {
-                   // Tính vector hướng bay thẳng đến kẻ địch
-                   const dx = lockTarget.mesh.position.x - d.position.x;
-                   const dz = lockTarget.mesh.position.z - d.position.z;
-                   const dist = Math.sqrt(dx*dx + dz*dz);
-                   if (dist > 0) { dVx = (dx/dist) * 0.9; dVz = (dz/dist) * 0.9; }
-               }
-               fireBullet(d.position.x, d.position.z - 0.2, dVx, dVz, stats.droneAtk, dColor, false, null);
-           });
+       if (stats.droneId && droneBase && now > nextDroneFire && drones.length > 0) {
+           if (droneBase.behavior === 'repair') {
+               stats.hp = Math.min(stats.maxHp, stats.hp + repairAmount(droneBase, stats.maxHp));
+               updateHpUI();
+           } else {
+               shots.fire(describeDroneSalvo(droneBase, drones.map(dr => dr.position), stats.droneAtk, target));
+           }
            nextDroneFire = now + stats.droneFireRate;
        }
 
@@ -977,22 +882,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
            const b = playerBullets[i];
            if (b.isDisposed()) { playerBullets.splice(i, 1); continue; }
            
-           if (b.isHoming && b.target && b.target.mesh && !b.target.mesh.isDisposed()) {
-               const dx = b.target.mesh.position.x - b.position.x;
-               const dz = b.target.mesh.position.z - b.position.z;
-               const dist = Math.sqrt(dx*dx + dz*dz);
-               if (dist > 0.1) {
-                   b.position.x += (dx/dist) * 0.6;
-                   b.position.z += (dz/dist) * 0.6; 
-               } else {
-                   b.position.x += b._velX;
-                   b.position.z += b._velZ;
-               }
-           } else {
-               // Áp dụng vector cho súng Spread hoặc Sniper Drone
-               b.position.x += b._velX;
-               b.position.z += b._velZ;
-           }
+           shots.advance(b, frameFactor);
 
            // Hủy đạn nếu bay ra khỏi màn hình
            if (b.position.z < -ZOOM - 3 || b.position.z > ZOOM + 3 || Math.abs(b.position.x) > boundX() + 3) { 
@@ -1020,9 +910,9 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
         // J. Logic boss 
         if (bossActive && bossMesh && !bossMesh.isDisposed()) {
-            bossMesh.position.z = BABYLON.Scalar.Lerp(bossMesh.position.z, -ZOOM * 0.45, 0.004);
+            bossMesh.position.z = BABYLON.Scalar.Lerp(bossMesh.position.z, -ZOOM * 0.45, scaledLerpFactor(0.004,frameFactor));
             bossMesh.position.x = Math.sin(tick * 0.012) * boundX() * 0.65;
-            bossMesh.rotation.y += 0.025;
+            bossMesh.rotation.y += 0.025 * frameFactor;
 
             if (now - (bossMesh._lastShoot || 0) > 2000) {
                 for (let k = -2; k <= 2; k++) {
@@ -1034,13 +924,14 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             for (let j = playerBullets.length - 1; j >= 0; j--) {
                 const b = playerBullets[j];
                 if (b.isDisposed()) { playerBullets.splice(j, 1); continue; }
-                if (!b.intersectsMesh(bossMesh, false)) continue;
+                if (!projectileHitsPoint(b, bossMesh.position, 2.8)) continue;
+                const hit = shots.registerHit(b, { mesh: bossMesh });
+                if (!hit.accepted) continue;
 
-                bossHp -= stats.atk;
+                bossHp -= calculateProjectileDamage(b.atk, stats.critDamageBoost);
                 bossHpFill.width = `${clamp(bossHp / bossMaxHp, 0, 1) * 100}%`;
 
-                safeDis(b);
-                playerBullets.splice(j, 1);
+                if (hit.consumed || b._splashRadius) { safeDis(b); playerBullets.splice(j, 1); }
 
                 if (bossHp <= 0) {
                     explode(bossMesh.position, 3.5);
@@ -1051,12 +942,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                     bossPanel.isVisible = false;
                     updateScore(500 * currentWave);
                     totalKills++;
-                    const evBoss = gsRef.current.campaignData?.eventData || {};
-                    Object.keys(evBoss).forEach(evId => {
-                        if (evId.startsWith('event_kill_rush')) {
-                            evBoss[evId].kills = (evBoss[evId].kills || 0) + 1;
-                        }
-                    });
+                    if (!isCloud) recordGuestEventKill(gsRef.current.campaignData, EVENT_CONFIG, getRealTime?.() ?? Date.now());
                     showAnnouncement(lang === 'vi' ? '✦ BOSS ĐÃ TIÊU DIỆT ✦' : '✦ BOSS DEFEATED ✦', '#f1c40f');
                     if (typeof onBossDefeated === 'function') onBossDefeated();
                     advanceWave();
@@ -1069,15 +955,15 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         for (let i = enemyBullets.length - 1; i >= 0; i--) {
             const eb = enemyBullets[i];
             if (eb.isDisposed()) { enemyBullets.splice(i, 1); continue; }
-            eb.position.x += eb._velX;
-            eb.position.z += eb._velZ;
+            eb.position.x += eb._velX * frameFactor;
+            eb.position.z += eb._velZ * frameFactor;
             if (eb.position.z > ZOOM + 3) {
                 safeDis(eb);
                 enemyBullets.splice(i, 1);
                 continue;
             }
-            if (eb.intersectsMesh(playerPlane, false)) {
-                damagePlayer(70);
+            if (eb.intersectsMesh(shipVisual.collider, false)) {
+                damagePlayer(70, 'projectile');
                 safeDis(eb);
                 enemyBullets.splice(i, 1);
             }
@@ -1088,9 +974,10 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             const e = enemies[i];
             if (e.mesh.isDisposed()) { enemies.splice(i, 1); continue; }
 
-            e.mesh.position.z += e.speed;
-            e.mesh.position.x += Math.sin(tick * 0.025 + e.sineOff) * 0.05;
-            e.mesh.rotation.y += 0.025;
+            const enemyFrame = frameFactor * enemySpeedFactor(e, now);
+            e.mesh.position.z += e.speed * enemyFrame;
+            e.mesh.position.x += Math.sin(tick * 0.025 + e.sineOff) * 0.05 * enemyFrame;
+            e.mesh.rotation.y += 0.025 * frameFactor;
 
             if (e.type !== 'scout' && now - e.lastShoot > e.shootMs) {
                 fireEnemyBullet(e.mesh.position, 0, enemyBulletVelZ);
@@ -1104,7 +991,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 continue;
             }
 
-            if (e.mesh.intersectsMesh(playerPlane, false)) {
+            if (e.mesh.intersectsMesh(shipVisual.collider, false)) {
                 explode(e.mesh.position);
                 damagePlayer(150);
                 cleanEnemy(e);
@@ -1115,44 +1002,21 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
             let destroyed = false;
             for (let j = playerBullets.length - 1; j >= 0; j--) {
-                const b = playerBullets[j];
-                if (b.isDisposed()) { playerBullets.splice(j, 1); continue; }
-                if (!b.intersectsMesh(e.mesh, false)) continue;
-                let dmgToApply = b.atk;
-                if (stats.critDamageBoost > 0 && Math.random() < 0.15) dmgToApply *= (1 + stats.critDamageBoost);
-                e.hp -= dmgToApply;
-                e.hp -= stats.atk;
-                const pct = clamp(e.hp / e.maxHp, 0, 1);
-                e.miniHp.width = `${(pct * 100).toFixed(0)}%`;
-                if (pct < 0.4) {
-                    e.miniHp.background = '#ff8800';
-                } else if (e.type === 'heavy') {
-                    e.miniHp.background = '#ff8a66';
-                } else if (e.type === 'elite') {
-                    e.miniHp.background = '#ffdd55';
-                } else {
-                    e.miniHp.background = '#66ddff';
+                const bullet = playerBullets[j];
+                if (bullet.isDisposed()) { playerBullets.splice(j, 1); continue; }
+                if (!projectileHitsPoint(bullet, e.mesh.position, 1.5)) continue;
+                const hit = shots.registerHit(bullet, e);
+                if (!hit.accepted) continue;
+                const impact = { x: e.mesh.position.x, z: e.mesh.position.z };
+                const damage = calculateProjectileDamage(bullet.atk, stats.critDamageBoost);
+                if (bullet._slowMs) e._slowUntil = now + bullet._slowMs;
+                destroyed = applyPlayerDamageToEnemy(e, damage);
+                if (bullet._splashRadius) applyDungeonSplash(bullet, impact, damage, e);
+                if (hit.consumed || bullet._splashRadius) {
+                    safeDis(bullet);
+                    playerBullets.splice(j, 1);
                 }
-
-                safeDis(b);
-                playerBullets.splice(j, 1);
-
-                if (e.hp <= 0) {
-                    const gain = e.type === 'scout' ? 10 : e.type === 'heavy' ? 30 : 60;
-                    updateScore(gain);
-                    const evDungeon = gsRef.current.campaignData?.eventData || {};
-                    Object.keys(evDungeon).forEach(evId => {
-                        if (evId.startsWith('event_kill_rush')) {
-                            evDungeon[evId].kills = (evDungeon[evId].kills || 0) + 1;
-                        }
-                    });
-                    explode(e.mesh.position, e.type === 'heavy' ? 2 : 1);
-                    cleanEnemy(e);
-                    enemies.splice(i, 1);
-                    waveKilled++;
-                    destroyed = true;
-                    break;
-                }
+                if (destroyed) break;
             }
             if (destroyed) continue;
         }

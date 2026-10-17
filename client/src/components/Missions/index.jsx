@@ -4,6 +4,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { MISSIONS_CONFIG } from '../../constants';
 import styles from './Missions.module.css';
 import toast from 'react-hot-toast';
+import { auth } from '../../firebase';
+import { ensureGuestMissions } from '../../utils/guestProgress';
+import { utcDayKey, lastNaturalClaimUTC } from '../../utils/attendanceWeek';
+import { missionGoal, viewCloudMissions } from '../../utils/missionGoals';
 
 const Icons = {
   Coin: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" /><line x1="12" y1="2" x2="12" y2="6" /><line x1="12" y1="18" x2="12" y2="22" /><line x1="2" y1="12" x2="6" y2="12" /><line x1="18" y1="12" x2="22" y2="12" /></svg>,
@@ -35,113 +39,44 @@ const getRewardColor = (type) => {
   }
 };
 
-export default function Missions({ gsRef, setScreen, lang, saveUserProfile, getRealTime }) {
+export default function Missions({ gsRef, setScreen, lang, saveUserProfile, getRealTime, gameAction }) {
   const [activeTab, setActiveTab] = useState('daily');
   
-  if (!gsRef.current.campaignData.missionData) {
-    gsRef.current.campaignData.missionData = {
-      claimed: [], 
-      progress: { 'd_login': 1, 'w_login_5': 2, 'd_kill_50': 15 },
-      lastDailyReset: 0,
-      lastWeeklyReset: 0,
-      lastMonthlyReset: 0
-    };
-  }
-
-  const missionTrack = gsRef.current.campaignData.missionData;
+  const rawTrack = gsRef.current.campaignData.missionData ||= { claimed: [], progress: {} };
+  const missionTrack = auth.currentUser ? viewCloudMissions(rawTrack, getRealTime()) : rawTrack;
   const [claimedMissions, setClaimedMissions] = useState(missionTrack.claimed || []);
 
   useEffect(() => {
-    const now = new Date(getRealTime());
-    const todayTimestamp = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const todayStr = now.toDateString();
-    
-    // Tính ngày đầu tuần (Giả sử Thứ 2 là đầu tuần)
-    const dayOfWeek = now.getDay();
-    const diffToMonday = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
-    const thisWeekTimestamp = new Date(now.getFullYear(), now.getMonth(), diffToMonday).getTime();
-    
-    // Tính ngày đầu tháng
-    const thisMonthTimestamp = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-
-    let shouldSave = false;
-
-    // --- 1. BACK-SYNC TỪ ĐIỂM DANH (ATTENDANCE) SANG MISSIONS ---
-    const attData = gsRef.current.campaignData.attendance || { streak: 0, lastDate: '' };
-    
-    // Bù Nhiệm vụ Ngày
-    if (attData.lastDate === todayStr && missionTrack.progress['d_login'] !== 1) {
-        missionTrack.progress['d_login'] = 1;
-        shouldSave = true;
+    // Cloud is read-only here: the API is authoritative for resets and rewards.
+    if (auth.currentUser) {
+      setClaimedMissions(viewCloudMissions(gsRef.current.campaignData.missionData, getRealTime()).claimed);
+      return;
     }
-    
-    // Bù Nhiệm vụ Tuần (Lấy số ngày streak tối đa là 5 để đắp vào)
-    if (attData.lastDate === todayStr) {
-      const lastWeeklyLogin = missionTrack.lastWeeklyLoginDate || '';
-      if (lastWeeklyLogin !== todayStr) {
-          missionTrack.lastWeeklyLoginDate = todayStr;
-          missionTrack.progress['w_login_5'] = Math.min(5, (missionTrack.progress['w_login_5'] || 0) + 1);
-          shouldSave = true;
-      }
-    }
-
-    // --- BỔ SUNG: Bù Nhiệm vụ Tháng ---
-    if (attData.streak > 0 && (missionTrack.progress['m_login_30'] || 0) < attData.streak) {
-        missionTrack.progress['m_login_30'] = Math.min(30, attData.streak);
-        shouldSave = true;
-    }
-
-
-    // --- 2. RESET QUÀ THEO THỜI GIAN ---
-    // Reset Daily
-    if (!missionTrack.lastDailyReset || missionTrack.lastDailyReset < todayTimestamp) {
-       missionTrack.lastDailyReset = todayTimestamp;
-       MISSIONS_CONFIG.daily.forEach(m => {
-          missionTrack.progress[m.id] = 0;
-          missionTrack.claimed = missionTrack.claimed.filter(id => id !== m.id);
-       });
-       if (attData.lastDate === todayStr) {
-           missionTrack.progress['d_login'] = 1;
-       }
-       shouldSave = true;
-    }
-
-    // Reset Weekly
-    if (!missionTrack.lastWeeklyReset || missionTrack.lastWeeklyReset < thisWeekTimestamp) {
-      missionTrack.lastWeeklyReset = thisWeekTimestamp;
-      missionTrack.lastWeeklyLoginDate = '';   // ← reset để tuần mới tính lại
-      MISSIONS_CONFIG.weekly.forEach(m => {
-         missionTrack.progress[m.id] = 0;
-         missionTrack.claimed = missionTrack.claimed.filter(id => id !== m.id);
-      });
-      // Nếu hôm nay là ngày đầu tuần mới VÀ đã đăng nhập hôm nay → tính ngay 1 ngày
-      if (attData.lastDate === todayStr) {
-          missionTrack.progress['w_login_5'] = 1;
-          missionTrack.lastWeeklyLoginDate = todayStr;
-      }
-      shouldSave = true;
-    }
-
-    // Reset Monthly
-    if (!missionTrack.lastMonthlyReset || missionTrack.lastMonthlyReset < thisMonthTimestamp) {
-       missionTrack.lastMonthlyReset = thisMonthTimestamp;
-       MISSIONS_CONFIG.monthly.forEach(m => {
-          missionTrack.progress[m.id] = 0;
-          missionTrack.claimed = missionTrack.claimed.filter(id => id !== m.id);
-       });
-       // Khi qua tháng mới, reset luôn cả nhiệm vụ tháng
-       missionTrack.progress['m_login_30'] = 0;
-       shouldSave = true;
-    }
-
-    if (shouldSave) {
-       setClaimedMissions([...missionTrack.claimed]);
-       saveUserProfile();
-    }
+    const campaign = gsRef.current.campaignData;
+    const before = JSON.stringify(campaign.missionData);
+    const now = getRealTime();
+    const track = ensureGuestMissions(campaign, now);
+    // Migration can restore TODAY's genuine daily claim, but cannot infer
+    // historical monthly/weekly counts from the lifetime streak (or Ghosts).
+    if (lastNaturalClaimUTC(campaign.attendance) === utcDayKey(now)) track.progress.d_login = 1;
+    setClaimedMissions([...track.claimed]);
+    if (before !== JSON.stringify(track)) saveUserProfile();
   }, []);
 
-  const handleClaim = (mission) => {
+  const handleClaim = async (mission) => {
     if (claimedMissions.includes(mission.id)) return;
+    if (!auth.currentUser) {
+      ensureGuestMissions(gsRef.current.campaignData, getRealTime());
+      if ((missionTrack.progress[mission.id] || 0) < missionGoal(mission, getRealTime())) return;
+    }
+    if (auth.currentUser) {
+      try {
+        await gameAction('mission.claim',{missionId:mission.id});
+        setClaimedMissions([...(gsRef.current.campaignData.missionData?.claimed||[])]);
+        toast.success(lang==='vi'?'Đã nhận thưởng từ máy chủ!':'Reward claimed!');
+      }catch(error){toast.error(error.message);}
+      return;
+    }
 
     const r = mission.reward;
     if (r.type === 'coins') gsRef.current.coins += r.amount;
@@ -204,15 +139,11 @@ export default function Missions({ gsRef, setScreen, lang, saveUserProfile, getR
           {tabs.map(tab => {
             // Đếm realtime số nhiệm vụ hoàn thành ở tab hiện tại
             let badgeCount = 0;
-            const nowForGoal = new Date(getRealTime());
-            const currentMonthDays = new Date(nowForGoal.getFullYear(), nowForGoal.getMonth() + 1, 0).getDate();
-
             MISSIONS_CONFIG[tab.id].forEach(m => {
               const prog = missionTrack.progress[m.id] || 0;
               const isClaimed = claimedMissions.includes(m.id);
               
-              let actualGoal = m.goal;
-              if (m.id === 'm_login_30') actualGoal = currentMonthDays;
+              const actualGoal = missionGoal(m, getRealTime());
 
               if (prog >= actualGoal && !isClaimed) badgeCount++;
             });
@@ -232,15 +163,9 @@ export default function Missions({ gsRef, setScreen, lang, saveUserProfile, getR
              const currentProg = missionTrack.progress[mission.id] || 0;
              const isClaimed = claimedMissions.includes(mission.id);
              
-             // --- TỰ ĐỘNG TÍNH NGÀY CHO THÁNG 2 (HOẶC CÁC THÁNG 31 NGÀY) ---
-             let actualGoal = mission.goal;
-             if (mission.id === 'm_login_30') {
-                 const now = new Date(getRealTime());;
-                 // Lấy chính xác tổng số ngày của tháng hiện tại
-                 actualGoal = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate(); 
-             }
-
+             const actualGoal = missionGoal(mission, getRealTime());
              const isCompleted = currentProg >= actualGoal;
+             const displayProg = Math.min(currentProg, actualGoal);
              const percent = Math.min(100, (currentProg / actualGoal) * 100);
              const rColor = getRewardColor(mission.reward.type);
 
@@ -256,7 +181,7 @@ export default function Missions({ gsRef, setScreen, lang, saveUserProfile, getR
                     
                     <div className={styles.mProgressWrap}>
                       {/* Đổi mission.goal thành actualGoal ở đây */}
-                      <div className={styles.mProgressText}>{currentProg} / {actualGoal}</div>
+                      <div className={styles.mProgressText}>{displayProg} / {actualGoal}</div>
                       <div className={styles.mProgressBarBg}>
                         <div className={styles.mProgressBarFill} style={{ width: `${percent}%`, background: isCompleted ? '#4ade80' : '#38bdf8' }}></div>
                       </div>

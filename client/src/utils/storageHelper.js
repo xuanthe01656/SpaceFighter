@@ -1,6 +1,7 @@
 import CryptoJS from 'crypto-js';
 
-// Hãy đổi chuỗi này thành một mã bí mật riêng của bạn
+// Backwards-compatible guest cache obfuscation; NOT tamper-proof security.
+// Do not rotate the key without migrating existing guest saves.
 const SECRET_KEY = import.meta.env.VITE_STORAGE_KEY || "AstroCat_Secure_Key_99@2026";
 
 export const secureStorage = {
@@ -15,10 +16,9 @@ export const secureStorage = {
   },
 
   getItem: (key, defaultValue = null) => {
-    const data = localStorage.getItem(key);
-    if (!data) return defaultValue;
-
     try {
+      const data = localStorage.getItem(key);
+      if (!data) return defaultValue;
       const bytes = CryptoJS.AES.decrypt(data, SECRET_KEY);
       const decrypted = bytes.toString(CryptoJS.enc.Utf8);
       
@@ -27,11 +27,11 @@ export const secureStorage = {
 
       return JSON.parse(decrypted);
     } catch (e) {
-      // Trả về dữ liệu gốc nếu đó là dữ liệu cũ (chưa mã hóa) từ phiên bản trước
-      return data; 
+      // Private mode / storage denied / corrupted ciphertext: fail safely.
+      return defaultValue;
     }
   },
   removeItem: (key) => {
-    localStorage.removeItem(key);
+    try { localStorage.removeItem(key); } catch (_) { /* blocked storage */ }
   }
 };

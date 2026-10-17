@@ -1,0 +1,294 @@
+{
+  "phase": 1,
+  "version": "1.1.0-phase1.0",
+  "from": "SpaceFighter_Phase0_V1_0_0_FULL_SOURCE.zip",
+  "date": "2026-10-16",
+  "full_source_excludes": [
+    "client/node_modules/",
+    "client/client.7z"
+  ],
+  "modified_files": 29,
+  "new_files": 12,
+  "changes": [
+    {
+      "path": ".github/workflows/phase0-ci.yml",
+      "change": "modified",
+      "bytes": 1032,
+      "sha256_before": "d7426989b65313acb98032035ed6372d2d5fdba4f86ebbca77d7560e6e7afa10",
+      "sha256_after": "1d99c301eeb9959999c26261ef3035786aa1b40b0be31d2b42b021de0a8ab0ba"
+    },
+    {
+      "path": "README_PHASE1_VI.md",
+      "change": "new",
+      "bytes": 7711,
+      "sha256_before": null,
+      "sha256_after": "61adf29027e6cfd819bc0db87b27ac10139f68f6ffecdd7e8370872395e8b95b"
+    },
+    {
+      "path": "client/.env.example",
+      "change": "modified",
+      "bytes": 188,
+      "sha256_before": "cbaf86b704aade9f1449a2ed5f0f4073e5b0819efdf930d828f598c2ceacd8aa",
+      "sha256_after": "da3c5693719abbc1873a865a813fd8f50d510f0b04f6a61a1a7b1b4e7b4a6d33"
+    },
+    {
+      "path": "client/package-lock.json",
+      "change": "modified",
+      "bytes": 343440,
+      "sha256_before": "ce609729e0680065da05080a2bc9fa78a4cf3c11c92766b0978da86b244b6b7a",
+      "sha256_after": "acfb550f54225689feb3eef5c4137170f876b814f0187e5e851cf57ebc87e464"
+    },
+    {
+      "path": "client/package.json",
+      "change": "modified",
+      "bytes": 1949,
+      "sha256_before": "b177be14c8bb49ebf8e8c0ad030606674e0646bf37c6bacd3b1f98de76451a20",
+      "sha256_after": "7480545929ef2b8cac15bf78ebaaa32bb9bd6aebb76e71962dadbc930f8a974c"
+    },
+    {
+      "path": "client/scripts/check-phase1-security.mjs",
+      "change": "new",
+      "bytes": 3035,
+      "sha256_before": null,
+      "sha256_after": "3d01eeaff305164ab8358e5c121140b87593bfd2acd11ce22d566c7e5a3b8c87"
+    },
+    {
+      "path": "client/scripts/check-safety.mjs",
+      "change": "modified",
+      "bytes": 187,
+      "sha256_before": "20dcd15960471572079d040fd4c29747a5ce4164ac22804297ef6efe9b8fbe2a",
+      "sha256_after": "e74eeb12f1e6b5affd707eacebbdc3f0c0603bd2ee05b3f30c303029ed236ff4"
+    },
+    {
+      "path": "client/src/App.jsx",
+      "change": "modified",
+      "bytes": 9201,
+      "sha256_before": "0b45b91543931968276d3d0b39a5e1435156531f4ea35b5798279e9f7f694899",
+      "sha256_after": "99b96724193ea248f598b231b5325d519e68d8b55e8c01ff8e679e07bc762f1d"
+    },
+    {
+      "path": "client/src/components/Campaign/CampaignEngine.jsx",
+      "change": "modified",
+      "bytes": 3778,
+      "sha256_before": "766bf6f33f194193768957f754d5740f2f728f8e219a64f2ceb559af4690a875",
+      "sha256_after": "7c65291157c7ed03bc4cb2c3033bffd1ac6fea3a409c53cc78b11fff9a260881"
+    },
+    {
+      "path": "client/src/components/Campaign/CampaignScene.js",
+      "change": "modified",
+      "bytes": 75445,
+      "sha256_before": "050252737e21be704b3c59cdebdbc118e537935a26a6a7a207a979dc30e02ab7",
+      "sha256_after": "ae956c3ec3493190602e0828edabefb8c0aaf9dcea77dfb8cdf1d005a43e9b65"
+    },
+    {
+      "path": "client/src/components/CampaignPortal/AttendanceModal.jsx",
+      "change": "modified",
+      "bytes": 18989,
+      "sha256_before": "e31c0c316bc0e40f0dfa90670d795c84f715a7cf24f19e151be6bf51af3509a1",
+      "sha256_after": "23e82e71280be77d8278e870dfd76b1b943d5b6928857cd7ea2542a485a80282"
+    },
+    {
+      "path": "client/src/components/CampaignPortal/index.jsx",
+      "change": "modified",
+      "bytes": 22808,
+      "sha256_before": "b36df6753bde9a58cff6bac834553011f55450ab044521b2b801985f1d5900d1",
+      "sha256_after": "b6656a57c8ceeea4bd891e5aabc70bc6861ad501379b2d36766012875576c11e"
+    },
+    {
+      "path": "client/src/components/Dungeon/DungeonEngine.jsx",
+      "change": "modified",
+      "bytes": 6021,
+      "sha256_before": "7f1d4fbff281037723d6188488e3f11d4bc685de841c9553607716136dc056e2",
+      "sha256_after": "fbacf674b6acddc987232c0ebda1e5d0a1c888b0f25856bcd6b8a938e4b13111"
+    },
+    {
+      "path": "client/src/components/Dungeon/DungeonScene.js",
+      "change": "modified",
+      "bytes": 56540,
+      "sha256_before": "2329a40aa917c20b6558910501466c61cbe3e4b6bec904517b9cc43395fbce44",
+      "sha256_after": "22ea1f287f1c45ba4cd5021a32d87e0a87b12466dfb8a4b45c806a882657389c"
+    },
+    {
+      "path": "client/src/components/DungeonResult/index.jsx",
+      "change": "modified",
+      "bytes": 17733,
+      "sha256_before": "7d3b2e3a9be37509be15f3c6de760a22fb5e4b16b7414e486fa67b1b4646a6a0",
+      "sha256_after": "6fef6c662f9448902c94ba2020f685516983b9b81df97c9fa1b3f95e179f9424"
+    },
+    {
+      "path": "client/src/components/Events/index.jsx",
+      "change": "modified",
+      "bytes": 22185,
+      "sha256_before": "73755a3fa62776c07f7f42b3edbff86689688713a1cfc6974eb92f453a6629ec",
+      "sha256_after": "058773c80e87701d5793465180addeba276db97447c9e8b97ed20169bb304cb7"
+    },
+    {
+      "path": "client/src/components/HQ/index.jsx",
+      "change": "modified",
+      "bytes": 25301,
+      "sha256_before": "9685c8d99f9af7347ae4fc76e2207b255396e3dfbe3baccef0d7b6a31fb30dcb",
+      "sha256_after": "127f1b261b62eeca34de304b07201f4e447e103f9c618097f5ddc0c9a84935d9"
+    },
+    {
+      "path": "client/src/components/Inventory/index.jsx",
+      "change": "modified",
+      "bytes": 40510,
+      "sha256_before": "c70082654821c3bc2583c13e5969e74c7af978d74dfffc14ccb9d21969c1ecfd",
+      "sha256_after": "d9155ce35ab04c5ff63230d768f9e0b714c9b97e7f85ef6d36d05bfd72f1b5cf"
+    },
+    {
+      "path": "client/src/components/Missions/index.jsx",
+      "change": "modified",
+      "bytes": 14980,
+      "sha256_before": "1cb61437e35d40e7185da1acd04e4b1d01e5044cfe73439d1652c7a15584c664",
+      "sha256_after": "37469cd785a70df2de6fd76cd2b349c8ef53ed576409b6ea31dbf2637c73b605"
+    },
+    {
+      "path": "client/src/components/Pilots/index.jsx",
+      "change": "modified",
+      "bytes": 11318,
+      "sha256_before": "cafccf30c1766056d2f302d2193070ceebd1d18944154a497cc5e00985840b3a",
+      "sha256_after": "2e5a05417453ffbb5623f00a8db6b11dee3a8dd29c9788379a9408e56b9cf8a0"
+    },
+    {
+      "path": "client/src/components/Portal/index.jsx",
+      "change": "modified",
+      "bytes": 8294,
+      "sha256_before": "c9b85b66e2cec0184e902e3a837d6c2695be44ac9325f67c417ff6c00ef925cf",
+      "sha256_after": "7046e763faffcccb42487b1ab3e296f5bf1eee22b189b5b3ad7314fdf0a3f8ce"
+    },
+    {
+      "path": "client/src/components/ShopCampaign/index.jsx",
+      "change": "modified",
+      "bytes": 19264,
+      "sha256_before": "4ce18c4388bfa37850c483d04e5ddb8efa4760b5250e8475cfd66a937732158b",
+      "sha256_after": "4bb4b287648863bd9ec512c7d04fb2667dde02ae60355b243e2cfbe4fc961e8e"
+    },
+    {
+      "path": "client/src/hooks/useAuth.jsx",
+      "change": "modified",
+      "bytes": 12187,
+      "sha256_before": "e91ed85de6391240609c2609e2d07eab6e74e9702e2c55e98b04912520d27a29",
+      "sha256_after": "fa2ea4da6451f5e78bfb03cdac022cdc4b135c1764bd86535da26364fb27152c"
+    },
+    {
+      "path": "client/src/services/gameApi.js",
+      "change": "new",
+      "bytes": 2807,
+      "sha256_before": null,
+      "sha256_after": "e71343ad195846892d1842c7afdaff54d122cfe10f63981b312371a017542233"
+    },
+    {
+      "path": "client/src/utils/attendanceWeek.js",
+      "change": "modified",
+      "bytes": 1965,
+      "sha256_before": "347acb0b2cfc8c7fcb5cffa8ec767374201f99aa45e4cb5fd248b84aa141804b",
+      "sha256_after": "67a2e75c4ae15e5e275c9154732a061448fb192899d8f124607fd89c5bd674ce"
+    },
+    {
+      "path": "client/tests/attendanceWeek.test.mjs",
+      "change": "modified",
+      "bytes": 1772,
+      "sha256_before": "44ca6d99aaef1c69b4320824a52861abfe73704e3eee1c7872ecf4abd68556c4",
+      "sha256_after": "2e2ec06ed7ac48f3c0a693c42622df1f4d001155400490b7782d739bd7e57633"
+    },
+    {
+      "path": "client/vite.config.js",
+      "change": "modified",
+      "bytes": 1600,
+      "sha256_before": "d0174df94787d498904911b074ce1437a3f55e7c86c4735a22ec6f8a5c078d11",
+      "sha256_after": "c91ae00a55a55add7a46f151d152d3dd08345328b10c8f1e71201588b72b476a"
+    },
+    {
+      "path": "docs/PHASE1_KNOWN_LIMITATIONS_VI.md",
+      "change": "new",
+      "bytes": 2858,
+      "sha256_before": null,
+      "sha256_after": "343949c7f334646204072d0d0dd493ebd52ae34fd86aec99a90c9c9252d43489"
+    },
+    {
+      "path": "docs/PHASE1_MIGRATION_RUNBOOK_VI.md",
+      "change": "new",
+      "bytes": 4862,
+      "sha256_before": null,
+      "sha256_after": "337dfcef9f0d3745f14c31ae757ef57b3d9618b96b28eb150e595ac4f21c54a5"
+    },
+    {
+      "path": "docs/PHASE1_SECURITY_TEST_REPORT_VI.md",
+      "change": "new",
+      "bytes": 3281,
+      "sha256_before": null,
+      "sha256_after": "465b3fff42f1abee39465039cf15a59f4c34c59dfa3c62f00275741f8a67ea47"
+    },
+    {
+      "path": "firebase.json",
+      "change": "new",
+      "bytes": 151,
+      "sha256_before": null,
+      "sha256_after": "ad655190fde33d007f75e5867513c6000d61c4c3f8b574acacac2f676cc9007a"
+    },
+    {
+      "path": "security/firestore.rules",
+      "change": "new",
+      "bytes": 588,
+      "sha256_before": null,
+      "sha256_after": "559742e1df00c0eb6f38f42172af526cfdf4c3184d0e2fad7b42d637ff10e674"
+    },
+    {
+      "path": "server/.env.example",
+      "change": "modified",
+      "bytes": 849,
+      "sha256_before": "26f40c122c3befff9123758f0af075255898ce7885d8c11393584c651a4dd04e",
+      "sha256_after": "84cad6ca005d430f6e03e3a30fd85d2c5cad7b9767355f667253f7e67bead7bb"
+    },
+    {
+      "path": "server/lib/economy.cjs",
+      "change": "new",
+      "bytes": 25109,
+      "sha256_before": null,
+      "sha256_after": "438ae0024fec8ff2debe9ca497d5414155d817baf74c0a4dbb06816bb5eb377c"
+    },
+    {
+      "path": "server/lib/gameService.cjs",
+      "change": "new",
+      "bytes": 5113,
+      "sha256_before": null,
+      "sha256_after": "a15d78a421c827253b1e49b7d9bed25f529dc263700a0f597d9c04ec6f2f377f"
+    },
+    {
+      "path": "server/package-lock.json",
+      "change": "modified",
+      "bytes": 125745,
+      "sha256_before": "d3f68fe6074b9e6caa3609b8d2bd39b739de1ee926a8d2ae3b3ef6df258531ce",
+      "sha256_after": "4cf062cb5412551e66f24e6f493189b6d56ea243d9381a71274f145b9ceaf52b"
+    },
+    {
+      "path": "server/package.json",
+      "change": "modified",
+      "bytes": 672,
+      "sha256_before": "cb16b1173f802b36c835203d1f54f3477954939055c1e2ce5b20b72423d99582",
+      "sha256_after": "aff1160be687a929fe26b70a6306f23de13ee9e58a1061a353fc993967f0c7ce"
+    },
+    {
+      "path": "server/server.js",
+      "change": "modified",
+      "bytes": 5880,
+      "sha256_before": "3709e7d8ee92ddabde054d26ac0cb27203f6f05eae6687d09fd637870c05e986",
+      "sha256_after": "6c9c253148a3e3731fa20d39eea08605d8051a92b834055256a4ea0dcaf6e3bb"
+    },
+    {
+      "path": "server/tests/economy.test.cjs",
+      "change": "new",
+      "bytes": 11259,
+      "sha256_before": null,
+      "sha256_after": "86a5cde6f87300603dda42f036a393c103a2c76646ec91ca2d934cd9fc4f767e"
+    },
+    {
+      "path": "server/tests/server.test.cjs",
+      "change": "modified",
+      "bytes": 2149,
+      "sha256_before": "633cc526c71b7ea8b8f4af322c22b5546c094bd04f0868fbacc8033be22d5e8e",
+      "sha256_after": "f4e59e502140cb1c4315aa20620ce4244bda2e9e8a629dc4fd9225d0054c371c"
+    }
+  ]
+}

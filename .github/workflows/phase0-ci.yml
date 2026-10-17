@@ -1,0 +1,38 @@
+name: Space Fighter Graphics Phase 2.1
+on:
+  push:
+  pull_request:
+jobs:
+  client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - name: Install client dependencies
+        run: npm ci
+        working-directory: client
+      - name: Unit and safety checks
+        run: npm run check:graphics21:full
+        working-directory: client
+      - name: Compile production web bundle
+        run: npm run build
+        working-directory: client
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Install server dependencies
+        run: npm ci
+        working-directory: server
+      - name: Node server tests
+        run: npm test
+        working-directory: server

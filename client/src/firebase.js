@@ -6,13 +6,13 @@ import { getFirestore } from "firebase/firestore"; // nếu bạn dùng Firestor
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyD1B8Q5KtS_NOI8KOnpEbJBp1kb7tEiUww",
-  authDomain: "distributed-inn-482605-c6.firebaseapp.com",
-  projectId: "distributed-inn-482605-c6",
-  storageBucket: "distributed-inn-482605-c6.firebasestorage.app",
-  messagingSenderId: "528039759292",
-  appId: "1:528039759292:web:4aab5ad9ac2bddd9362fb9",
-  measurementId: "G-Y5CS812JKF"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyD1B8Q5KtS_NOI8KOnpEbJBp1kb7tEiUww",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "distributed-inn-482605-c6.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "distributed-inn-482605-c6",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "distributed-inn-482605-c6.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "528039759292",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:528039759292:web:4aab5ad9ac2bddd9362fb9",
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-Y5CS812JKF"
 };
 
 // Initialize Firebase

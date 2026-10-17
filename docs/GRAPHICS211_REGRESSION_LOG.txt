@@ -1,0 +1,563 @@
+### SERVER UNIT
+TAP version 13
+# Subtest: Gacha charges on server, rolls from authoritative catalogs, cannot overdraft
+ok 1 - Gacha charges on server, rolls from authoritative catalogs, cannot overdraft
+  ---
+  duration_ms: 12.797171
+  type: 'test'
+  ...
+# Subtest: Client supplied balances and rewards are ignored/rejected
+ok 2 - Client supplied balances and rewards are ignored/rejected
+  ---
+  duration_ms: 0.619731
+  type: 'test'
+  ...
+# Subtest: Attendance cannot be claimed twice or made up for future day
+ok 3 - Attendance cannot be claimed twice or made up for future day
+  ---
+  duration_ms: 1.400705
+  type: 'test'
+  ...
+# Subtest: Mission grants only after server progress, not arbitrary client claim
+ok 4 - Mission grants only after server progress, not arbitrary client claim
+  ---
+  duration_ms: 1.103499
+  type: 'test'
+  ...
+# Subtest: Battle ticket consumes energy, requires elapsed time and rejects forgeries
+ok 5 - Battle ticket consumes energy, requires elapsed time and rejects forgeries
+  ---
+  duration_ms: 0.768605
+  type: 'test'
+  ...
+# Subtest: Inventory upgrade validates blueprint/coins and ownership
+ok 6 - Inventory upgrade validates blueprint/coins and ownership
+  ---
+  duration_ms: 0.329485
+  type: 'test'
+  ...
+# Subtest: Events expire by server clock, not client timestamp
+ok 7 - Events expire by server clock, not client timestamp
+  ---
+  duration_ms: 0.555385
+  type: 'test'
+  ...
+# Subtest: Monday UTC key stable within week
+ok 8 - Monday UTC key stable within week
+  ---
+  duration_ms: 0.387002
+  type: 'test'
+  ...
+# Subtest: Production service loads ESM catalog and profile without dependency injection
+ok 9 - Production service loads ESM catalog and profile without dependency injection
+  ---
+  duration_ms: 1.376418
+  type: 'test'
+  ...
+# Subtest: Concurrent retries with same requestId apply only once (durable ledger)
+ok 10 - Concurrent retries with same requestId apply only once (durable ledger)
+  ---
+  duration_ms: 2.022539
+  type: 'test'
+  ...
+# Subtest: Session replacement prevents stale token replay
+ok 11 - Session replacement prevents stale token replay
+  ---
+  duration_ms: 0.973793
+  type: 'test'
+  ...
+# Subtest: Rules deny every client-side write under users and hide other players
+ok 12 - Rules deny every client-side write under users and hide other players
+  ---
+  duration_ms: 0.328794
+  type: 'test'
+  ...
+# Subtest: Server limits gacha frequency without trusting a client-provided balance
+ok 13 - Server limits gacha frequency without trusting a client-provided balance
+  ---
+  duration_ms: 0.288904
+  type: 'test'
+  ...
+# Subtest: Only one active battle ticket is accepted, with daily caps
+ok 14 - Only one active battle ticket is accepted, with daily caps
+  ---
+  duration_ms: 1.24481
+  type: 'test'
+  ...
+# Subtest: Battle report cannot inject coins, diamonds, stars or arbitrary mission kills
+ok 15 - Battle report cannot inject coins, diamonds, stars or arbitrary mission kills
+  ---
+  duration_ms: 0.500011
+  type: 'test'
+  ...
+# Subtest: Existing legacy profile data survives a server command
+ok 16 - Existing legacy profile data survives a server command
+  ---
+  duration_ms: 0.794024
+  type: 'test'
+  ...
+# Subtest: Account owner boundaries are enforced on reads and writes
+ok 17 - Account owner boundaries are enforced on reads and writes
+  ---
+  duration_ms: 0.484778
+  type: 'test'
+  ...
+# Subtest: Legacy attendance date preserves daily streak when moving to UTC server
+ok 18 - Legacy attendance date preserves daily streak when moving to UTC server
+  ---
+  duration_ms: 0.609536
+  type: 'test'
+  ...
+# Subtest: Legacy attendance migration preserves streak across host timezones
+ok 19 - Legacy attendance migration preserves streak across host timezones
+  ---
+  duration_ms: 156.853565
+  type: 'test'
+  ...
+# Subtest: Legacy attendance rejects malformed calendar dates rather than normalizing them
+ok 20 - Legacy attendance rejects malformed calendar dates rather than normalizing them
+  ---
+  duration_ms: 0.784269
+  type: 'test'
+  ...
+# Subtest: Monthly attendance goal uses UTC Feb=28/29, 30 day cap for October/December
+ok 21 - Monthly attendance goal uses UTC Feb=28/29, 30 day cap for October/December
+  ---
+  duration_ms: 0.168223
+  type: 'test'
+  ...
+# Subtest: Cloud mission.claim accepts February 28/29 after valid natural claims only
+ok 22 - Cloud mission.claim accepts February 28/29 after valid natural claims only
+  ---
+  duration_ms: 1.347735
+  type: 'test'
+  ...
+# Subtest: Cloud Ghost makeups never inflate natural streak or day/week/month missions
+ok 23 - Cloud Ghost makeups never inflate natural streak or day/week/month missions
+  ---
+  duration_ms: 0.809958
+  type: 'test'
+  ...
+# Subtest: Cloud natural check-ins complete February in UTC; never count Ghost toward monthly total
+ok 24 - Cloud natural check-ins complete February in UTC; never count Ghost toward monthly total
+  ---
+  duration_ms: 5.843761
+  type: 'test'
+  ...
+# Subtest: Cloud 31st UTC day caps monthly progress at 30, while sequential streak continues
+ok 25 - Cloud 31st UTC day caps monthly progress at 30, while sequential streak continues
+  ---
+  duration_ms: 3.545198
+  type: 'test'
+  ...
+# Subtest: Cloud missing-weekKey migration retains this-week legacy days but no past-week slots
+ok 26 - Cloud missing-weekKey migration retains this-week legacy days but no past-week slots
+  ---
+  duration_ms: 0.616727
+  type: 'test'
+  ...
+# Subtest: Cloud natural attendance resists duplicate same UTC date when legacy claimedDays is missing
+ok 27 - Cloud natural attendance resists duplicate same UTC date when legacy claimedDays is missing
+  ---
+  duration_ms: 0.2458
+  type: 'test'
+  ...
+# Subtest: server answers /ping and /health without Firebase Admin credentials
+ok 28 - server answers /ping and /health without Firebase Admin credentials # SKIP
+  ---
+  duration_ms: 0.664058
+  type: 'test'
+  ...
+# Subtest: server returns 503 for a missing build, not an uncaught exception
+ok 29 - server returns 503 for a missing build, not an uncaught exception # SKIP
+  ---
+  duration_ms: 0.139179
+  type: 'test'
+  ...
+# Subtest: server serves index.html and SPA fallback
+ok 30 - server serves index.html and SPA fallback # SKIP
+  ---
+  duration_ms: 0.068092
+  type: 'test'
+  ...
+1..30
+# tests 30
+# suites 0
+# pass 27
+# fail 0
+# cancelled 0
+# skipped 3
+# todo 0
+# duration_ms 263.151418
+### CLIENT UNIT WITHOUT BABYLON NULLENGINE (deps unavailable)
+TAP version 13
+# Subtest: Monday through Sunday share one key; Monday starts a new week
+ok 1 - Monday through Sunday share one key; Monday starts a new week
+  ---
+  duration_ms: 1.094094
+  type: 'test'
+  ...
+# Subtest: attendance resets weekly claims and makeups but preserves lifetime streak
+ok 2 - attendance resets weekly claims and makeups but preserves lifetime streak
+  ---
+  duration_ms: 0.636497
+  type: 'test'
+  ...
+# Subtest: current-week legacy claims are preserved on migration
+ok 3 - current-week legacy claims are preserved on migration
+  ---
+  duration_ms: 1.443429
+  type: 'test'
+  ...
+# Subtest: past-week legacy claims are reset on migration
+ok 4 - past-week legacy claims are reset on migration
+  ---
+  duration_ms: 0.245018
+  type: 'test'
+  ...
+# Subtest: authenticated calendar boundaries align with server UTC week
+ok 5 - authenticated calendar boundaries align with server UTC week
+  ---
+  duration_ms: 0.117496
+  type: 'test'
+  ...
+# Subtest: HQ, Campaign, Dungeon all read same starter attack/HP/armor and CP
+ok 6 - HQ, Campaign, Dungeon all read same starter attack/HP/armor and CP
+  ---
+  duration_ms: 1.328927
+  type: 'test'
+  ...
+# Subtest: mixed fireRate units: main gun seconds, wingman and drone milliseconds
+ok 7 - mixed fireRate units: main gun seconds, wingman and drone milliseconds
+  ---
+  duration_ms: 0.247792
+  type: 'test'
+  ...
+# Subtest: level raises gear stat; fire cadence improves without falling below limit
+ok 8 - level raises gear stat; fire cadence improves without falling below limit
+  ---
+  duration_ms: 0.824499
+  type: 'test'
+  ...
+# Subtest: pilot damage bonus, damage reduction, dodge/crit and regen have consistent effects
+ok 9 - pilot damage bonus, damage reduction, dodge/crit and regen have consistent effects
+  ---
+  duration_ms: 0.496657
+  type: 'test'
+  ...
+# Subtest: armor and pilot reduction cannot turn an incoming hit into healing
+ok 10 - armor and pilot reduction cannot turn an incoming hit into healing
+  ---
+  duration_ms: 0.162574
+  type: 'test'
+  ...
+# Subtest: frame correction preserves old 60 FPS speeds and handles 30/120 FPS
+ok 11 - frame correction preserves old 60 FPS speeds and handles 30/120 FPS
+  ---
+  duration_ms: 0.124587
+  type: 'test'
+  ...
+# Subtest: lerp over 2x frame time matches two original frames
+ok 12 - lerp over 2x frame time matches two original frames
+  ---
+  duration_ms: 0.097346
+  type: 'test'
+  ...
+# Subtest: guest mission progress increments by true guest battle result, not arbitrary seed
+ok 13 - guest mission progress increments by true guest battle result, not arbitrary seed
+  ---
+  duration_ms: 0.750818
+  type: 'test'
+  ...
+# Subtest: guest gacha and coin spend counters accrue and cap
+ok 14 - guest gacha and coin spend counters accrue and cap
+  ---
+  duration_ms: 0.726242
+  type: 'test'
+  ...
+# Subtest: guest login/mission claims reset on day/week/month boundaries
+ok 15 - guest login/mission claims reset on day/week/month boundaries
+  ---
+  duration_ms: 0.932622
+  type: 'test'
+  ...
+# Subtest: seasonal coin multiplier only follows active server-matching calendar
+ok 16 - seasonal coin multiplier only follows active server-matching calendar
+  ---
+  duration_ms: 0.203346
+  type: 'test'
+  ...
+# Subtest: guest mission helpers do not change currency or inventory
+ok 17 - guest mission helpers do not change currency or inventory
+  ---
+  duration_ms: 0.221242
+  type: 'test'
+  ...
+# Subtest: dungeon availability matches server UTC day near local midnight
+ok 18 - dungeon availability matches server UTC day near local midnight
+  ---
+  duration_ms: 0.23303
+  type: 'test'
+  ...
+# Subtest: guest kill-rush counters ignore expired and unrelated events
+ok 19 - guest kill-rush counters ignore expired and unrelated events
+  ---
+  duration_ms: 0.197457
+  type: 'test'
+  ...
+# Subtest: UTC monthly attendance max 30 and February 28/29: all mission UI goals agree
+ok 20 - UTC monthly attendance max 30 and February 28/29: all mission UI goals agree
+  ---
+  duration_ms: 0.877308
+  type: 'test'
+  ...
+# Subtest: Guest natural attendance counts once, Ghosts do not change lifetime streak or mission counters
+ok 21 - Guest natural attendance counts once, Ghosts do not change lifetime streak or mission counters
+  ---
+  duration_ms: 1.968959
+  type: 'test'
+  ...
+# Subtest: Guest first check-in of new month resets monthly counter before the increment; never backfills streak
+ok 22 - Guest first check-in of new month resets monthly counter before the increment; never backfills streak
+  ---
+  duration_ms: 0.984249
+  type: 'test'
+  ...
+# Subtest: Guest month-long attendance in February cannot exceed real UTC day count
+ok 23 - Guest month-long attendance in February cannot exceed real UTC day count
+  ---
+  duration_ms: 0.648625
+  type: 'test'
+  ...
+# Subtest: Guest battle mission rules preserved: 3 Campaign runs, 30 Campaign stage wins including replays
+ok 24 - Guest battle mission rules preserved: 3 Campaign runs, 30 Campaign stage wins including replays
+  ---
+  duration_ms: 0.417488
+  type: 'test'
+  ...
+# Subtest: UTC midnight+weekly calendar is invariant across local timezone offsets
+ok 25 - UTC midnight+weekly calendar is invariant across local timezone offsets
+  ---
+  duration_ms: 0.128133
+  type: 'test'
+  ...
+# Subtest: Guest attendance migration preserves this week, resets expired week without altering lifetime streak
+ok 26 - Guest attendance migration preserves this week, resets expired week without altering lifetime streak
+  ---
+  duration_ms: 0.246901
+  type: 'test'
+  ...
+# Subtest: Guest first UTC mission migration preserves local-current saved progress without rewriting wallet
+ok 27 - Guest first UTC mission migration preserves local-current saved progress without rewriting wallet
+  ---
+  duration_ms: 0.183737
+  type: 'test'
+  ...
+# Subtest: Cloud mission preview hides an expired period without writing user data
+ok 28 - Cloud mission preview hides an expired period without writing user data
+  ---
+  duration_ms: 0.424398
+  type: 'test'
+  ...
+# Subtest: GLB X-Wing nose -X is rotated toward combat -Z, not toward player tail
+ok 29 - GLB X-Wing nose -X is rotated toward combat -Z, not toward player tail
+  ---
+  duration_ms: 0.353712
+  type: 'test'
+  ...
+# Subtest: new profile serializes all previously missing persistent fields
+ok 30 - new profile serializes all previously missing persistent fields
+  ---
+  duration_ms: 1.998293
+  type: 'test'
+  ...
+# Subtest: round-trip retains crates, events, dungeon history, loadout and wallet
+ok 31 - round-trip retains crates, events, dungeon history, loadout and wallet
+  ---
+  duration_ms: 0.576897
+  type: 'test'
+  ...
+# Subtest: legacy flattened and nested documents retain unknown campaign fields
+ok 32 - legacy flattened and nested documents retain unknown campaign fields
+  ---
+  duration_ms: 0.307091
+  type: 'test'
+  ...
+# Subtest: mergeFields replaces owned top-level maps but preserves unknown document fields
+ok 33 - mergeFields replaces owned top-level maps but preserves unknown document fields
+  ---
+  duration_ms: 0.444649
+  type: 'test'
+  ...
+# Subtest: guest campaign supports legacy JSON string and new object without crashing
+ok 34 - guest campaign supports legacy JSON string and new object without crashing
+  ---
+  duration_ms: 0.32615
+  type: 'test'
+  ...
+# Subtest: each catalog ship resolves to its own ID; no silent X-Wing substitution
+ok 35 - each catalog ship resolves to its own ID; no silent X-Wing substitution
+  ---
+  duration_ms: 1.067193
+  type: 'test'
+  ...
+# Subtest: asset manifest reflects known Phase 2 ships, models and missing art
+ok 36 - asset manifest reflects known Phase 2 ships, models and missing art
+  ---
+  duration_ms: 1.033573
+  type: 'test'
+  ...
+# Subtest: missing art uses a readable, stable, per-ID placeholder, not broken URL
+ok 37 - missing art uses a readable, stable, per-ID placeholder, not broken URL
+  ---
+  duration_ms: 0.735285
+  type: 'test'
+  ...
+# Subtest: 2D top preview and Babylon procedural fallback share the same silhouette data
+ok 38 - 2D top preview and Babylon procedural fallback share the same silhouette data
+  ---
+  duration_ms: 1.485583
+  type: 'test'
+  ...
+# Subtest: ship catalog does not mutate account progress or combat stats
+ok 39 - ship catalog does not mutate account progress or combat stats
+  ---
+  duration_ms: 1.210539
+  type: 'test'
+  ...
+# Subtest: high-poly GLB defaults to sprite on mobile, desktop retains GLB option
+ok 40 - high-poly GLB defaults to sprite on mobile, desktop retains GLB option
+  ---
+  duration_ms: 0.45892
+  type: 'test'
+  ...
+1..40
+# tests 40
+# suites 0
+# pass 40
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 86.672473
+### GRAPHICS
+PASS Both battle scenes use shared ShipVisualFactory
+PASS No separate player GLB importer remains in Campaign
+PASS Dungeon no longer constructs playerPlane directly
+PASS Dungeon collision uses stable independent ship hitbox
+PASS Ship visual blink and death work for both 2D and 3D
+PASS GLB import completion checks scene lifecycle
+PASS Both 2D sprite and hitbox lie flat, sprite nose towards -Z
+PASS Ship factory uses generated manifest to skip missing asset requests
+PASS HQ preview uses catalog ID not first ship fallback image
+PASS HQ prevents launching an invalid aircraft
+PASS Inventory and modal use same ship image component
+PASS Progress/battle server authority remains separate from visuals
+Ship manifest: 16 aircraft, 9 procedural-only (assets not provided).
+Graphics 2.1 static checks: 12/12
+### SHIP MANIFEST
+PASS generated ship manifest matches 16 aircraft and actual public assets
+### GAMEPLAY
+PASS HQ and both battle scenes share combat stat model
+PASS HQ aircraft level is defined
+PASS Main/wingman/drone fire rate units normalized
+PASS Dungeon damage applies to enemy exactly once per projectile
+PASS Campaign and Dungeon use FPS-independent frame scaler
+PASS Campaign and Dungeon clean scheduled callbacks on disposal
+PASS Dungeon calendar consistently uses UTC
+PASS Retreat waits for server ticket settlement
+PASS Guest counters are not sent as proof of cloud battle
+PASS Paid gem purchase remains disabled
+PASS Dungeon guest rewards paid only at claim
+PASS Guest event kill-rush filters active dates
+PASS Dungeon cloud rewards always use battle.finish
+PASS Campaign cloud victory uses battle.finish
+Phase2 gameplay static checks: 14/14 PASS
+### SECURITY
+PASS Client has no Firestore document writes
+PASS Auth cloud economic calls use server commands
+PASS API sends Firebase ID token and session
+PASS Network retries use the same idempotency ID
+PASS IAP cannot create gems in client
+PASS Cloud gacha server settled
+PASS Server verifies Firebase ID token
+PASS Server command uses Firestore transaction and immutable ledger
+PASS Server economy uses secure RNG
+PASS Server limits battle and gacha daily
+PASS Strict owner read/deny-write rules exist
+PASS API feature disabled unless explicitly enabled
+PASS Dungeon cloud victory can claim server-rolled rewards
+PASS No cleartext guest campaign storage in battle scene
+Phase1 static security checks: 14/14 PASS
+### IMPORTS
+Import audit: 40 source files, 109 relative imports
+All relative import targets exist.
+### ASSETS
+Source asset audit: 59 missing literal references.
+  /images/armor/armor_crystal.png (in src/constants.js)
+  /images/armor/armor_heavy.png (in src/constants.js)
+  /images/armor/armor_light.png (in src/constants.js)
+  /images/armor/armor_nano.png (in src/constants.js)
+  /images/armor/armor_reactive.png (in src/constants.js)
+  /images/armor/armor_shield.png (in src/constants.js)
+  /images/armor/armor_void.png (in src/constants.js)
+  /images/drone/drone_bomber.png (in src/constants.js)
+  /images/drone/drone_emp.png (in src/constants.js)
+  /images/drone/drone_laser.png (in src/constants.js)
+  /images/drone/drone_repair.png (in src/constants.js)
+  /images/drone/drone_shield.png (in src/constants.js)
+  /images/drone/drone_swarm.png (in src/constants.js)
+  /images/dungeon_abaddon.jpg (in src/constants.js)
+  /images/dungeon_nereus.jpg (in src/constants.js)
+  /images/dungeon_taurus.jpg (in src/constants.js)
+  /images/pilots/pilot_alpha.png (in src/constants.js)
+  /images/pilots/pilot_bear.png (in src/constants.js)
+  /images/pilots/pilot_echo.png (in src/constants.js)
+  /images/pilots/pilot_fox.png (in src/constants.js)
+  /images/pilots/pilot_ghost.png (in src/constants.js)
+  /images/pilots/pilot_nova.png (in src/constants.js)
+  /images/pilots/pilot_titan.png (in src/constants.js)
+  /images/pilots/pilot_viper.png (in src/constants.js)
+  /images/ships/abyss_hq.png (in src/constants.js)
+  /images/ships/abyss_top.png (in src/constants.js)
+  /images/ships/celestial_hq.png (in src/constants.js)
+  /images/ships/celestial_top.png (in src/constants.js)
+  /images/ships/eternal_hq.png (in src/constants.js)
+  /images/ships/eternal_top.png (in src/constants.js)
+  /images/ships/leviathan_hq.png (in src/constants.js)
+  /images/ships/leviathan_top.png (in src/constants.js)
+  /images/ships/nova_hq.png (in src/components/ShopCampaign/index.jsx)
+  /images/ships/nova_hq.png (in src/constants.js)
+  /images/ships/nova_top.png (in src/constants.js)
+  /images/ships/spectre_hq.png (in src/constants.js)
+  /images/ships/spectre_top.png (in src/constants.js)
+  /images/ships/storm_hq.png (in src/constants.js)
+  /images/ships/storm_top.png (in src/constants.js)
+  /images/ships/titanforge_hq.png (in src/constants.js)
+  /images/ships/titanforge_top.png (in src/constants.js)
+  /images/ships/vortex_hq.png (in src/constants.js)
+  /images/ships/vortex_top.png (in src/constants.js)
+  /images/weapons/gun_charge.png (in src/constants.js)
+  /images/weapons/gun_homing.png (in src/constants.js)
+  /images/weapons/gun_ion.png (in src/constants.js)
+  /images/weapons/gun_laser.png (in src/constants.js)
+  /images/weapons/gun_neutron.png (in src/constants.js)
+  /images/weapons/gun_photon.png (in src/constants.js)
+  /images/weapons/gun_plasma.png (in src/constants.js)
+  /images/weapons/gun_pulse.png (in src/constants.js)
+  /images/weapons/gun_rail.png (in src/constants.js)
+  /images/weapons/gun_shotgun.png (in src/constants.js)
+  /images/weapons/gun_spread.png (in src/constants.js)
+  /images/weapons/gun_wave.png (in src/constants.js)
+  /images/weapons/wing_dronelet.png (in src/constants.js)
+  /images/weapons/wing_emp.png (in src/constants.js)
+  /images/weapons/wing_homing.png (in src/constants.js)
+  /images/weapons/wing_torpedo.png (in src/constants.js)
+### CONFIG
+Application identifiers:
+  Capacitor: com.ban.astrocat
+  Android: com.theIT.spacefighter4; targetSdk: 36
+  iOS Xcode: com.ban.astrocat
+WARN: Capacitor appId differs from Android applicationId. Do NOT change a published ID without migration planning.
+WARN: Android google-services.json absent from source package; supply your real file locally before native build.
+Configuration audit: 2 warning(s). Release remains blocked until reconciled.

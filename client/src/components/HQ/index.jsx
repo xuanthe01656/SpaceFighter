@@ -1,8 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion'; 
 import toast from 'react-hot-toast';
-import { PILOTS, AIRCRAFTS, GEAR_CATALOG } from '../../constants'; 
+import { PILOTS, AIRCRAFTS, GEAR_CATALOG } from '../../constants';
+import { deriveCombatLoadout } from '../../utils/combatStats'; 
 import styles from './HQ.module.css';
+import { auth } from '../../firebase';
+import { preloadBattleScreen } from '../../game/routing/BattleScreenLoaders';
+import ShipImage from '../ShipImage/ShipImage';
+import { resolveShipVisual } from '../../game/rendering/ShipVisualCatalog';
 
 // Hàm tiện ích: Định dạng số liệu ngắn gọn (1K, 1.5M, 2B) đồng bộ toàn App
 const formatCompactNumber = (number) => {
@@ -14,10 +19,53 @@ const formatCompactNumber = (number) => {
   return shortValue + suffixes[suffixNum];
 };
 
-export default function HQ({ gsRef, setScreen, lang, saveUserProfile }) {
+export default function HQ({ gsRef, setScreen, lang, saveUserProfile, gameAction }) {
   const campaignData = gsRef.current?.campaignData;
   const [refreshTick, setRefreshTick] = useState(0);
-  const [selectingSlot, setSelectingSlot] = useState(null); 
+  const [selectingSlot, setSelectingSlot] = useState(null);
+  const [isLaunching, setIsLaunching] = useState(false);
+  const launchLockRef = useRef(false); 
+  const handleLaunch = async () => {
+    if (launchLockRef.current) return;
+    const equipId = gsRef.current?.campaignData?.loadout?.aircraft;
+    if (!AIRCRAFTS.some(a => a.id === equipId)) {
+      toast.error(lang === 'vi' ? 'Phi cơ đã chọn không hợp lệ!' : 'Invalid selected aircraft!');
+      return;
+    }
+    const mode = gsRef.current.gameMode === 'dungeon' ? 'dungeon' : 'campaign';
+    const cost = Number(gsRef.current.pendingEnergyCost);
+    if (mode==='dungeon' && (!Number.isFinite(cost) || cost<=0 || gsRef.current.energy < cost)) {
+      toast.error(lang === 'vi' ? 'Không đủ năng lượng!' : 'Not enough Energy!'); return;
+    }
+    launchLockRef.current=true;setIsLaunching(true);
+    try {
+      // Download/parse the lazily loaded Babylon scene before any Cloud
+      // battle.start (ticket time starts on the server) or Guest energy spend.
+      await preloadBattleScreen(mode);
+      if (auth.currentUser) {
+        // Recover a ticket left after app crash/reload. Energy from an
+        // interrupted dungeon run is not refunded (documented game policy).
+        if (gsRef.current.activeBattleId) {
+          await gameAction('battle.abandon',{ticketId:gsRef.current.activeBattleId});
+          toast(lang==='vi'?'Đã đóng trận trước chưa hoàn tất.':'Previous interrupted battle closed.');
+        }
+        const progress=gsRef.current.campaignData.progress || {};
+        const payload=mode==='dungeon' ? {mode,dungeonId:gsRef.current.selectedDungeonId}
+          : {mode,planetId:Number(progress.currentPlanet)||1,stage:Number(progress.selectedStage)||1};
+        const reply=await gameAction('battle.start',payload);
+        gsRef.current.activeBattleId=reply.extra.ticket.id;
+      } else if (mode==='dungeon') {
+        const before=gsRef.current.energy;
+        gsRef.current.energy=before-cost;
+        const saved=await saveUserProfile();
+        if (!saved) { gsRef.current.energy=before; throw new Error('Cannot save guest energy'); }
+      }
+      gsRef.current.pendingEnergyCost=0;
+      setScreen(mode);
+    }catch(error){
+      toast.error(error.message || (lang==='vi'?'Không thể xuất kích!':'Unable to launch!'));
+    }finally{launchLockRef.current=false;setIsLaunching(false);}
+  };
   const gameMode = gsRef.current?.gameMode || 'campaign'; 
   const targetDungeon = gsRef.current?.selectedDungeonId || '';
   const dName = targetDungeon ? targetDungeon.replace('dung_', '').toUpperCase() : '';
@@ -52,8 +100,10 @@ export default function HQ({ gsRef, setScreen, lang, saveUserProfile }) {
   const { progress, loadout, items, materials } = campaignData;
   const targetStage = progress.selectedStage || progress.currentStage || 1; 
   const currentPilot = PILOTS.find(p => p.id === loadout.pilot) || PILOTS[0];
-  const currentAircraft = AIRCRAFTS.find(a => a.id === loadout.aircraft) || AIRCRAFTS[0];
+  const shipVisualInfo = resolveShipVisual(loadout.aircraft, AIRCRAFTS);
+  const currentAircraft = shipVisualInfo.aircraft || AIRCRAFTS[0];
   const aircraftInfo = campaignData.ownedAircrafts?.[loadout.aircraft] || { level: 1, stars: 1 };
+  const acLevel = aircraftInfo.level || 1;
 
   const energy = gsRef.current?.energy ?? 50;
   const coins = gsRef.current?.coins ?? 0;
@@ -76,49 +126,19 @@ export default function HQ({ gsRef, setScreen, lang, saveUserProfile }) {
     return baseStat + (perLevel * ((level || 1) - 1));
   };
 
-  let totalAtk = 0; let totalHp = 0;
-  const acLevel = aircraftInfo.level || 1;
-  totalAtk += Math.floor((currentAircraft.baseAtk || 0) * (1 + (acLevel - 1) * 0.05));
-  totalHp += Math.floor((currentAircraft.baseHp || 0) * (1 + (acLevel - 1) * 0.05));
-  const totalArmor = Math.floor((currentAircraft.baseArmor || 0) * (1 + (acLevel - 1) * 0.05));
-
-  if (currentMainGun) totalAtk += getDynamicStat(currentMainGun.baseAtk, mainGunItem?.level, mainGunItem?.rarity);
-  if (currentWingman) totalAtk += getDynamicStat(currentWingman.baseAtk, wingmanItem?.level, wingmanItem?.rarity);
-  if (currentDrone) totalAtk += getDynamicStat(currentDrone.baseAtk, droneItem?.level, droneItem?.rarity);
-  if (currentArmor) totalHp += getDynamicStat(currentArmor.baseHp, armorItem?.level, armorItem?.rarity, true);
-
-  // ==========================================
-  // THUẬT TOÁN TÍNH CP THEO PASSIVE MỚI
-  // ==========================================
-  let atkMultiplier = 1.0;
-  let hpMultiplier = 1.0;
-  let extraCP = 0;
-
-  if (currentPilot.passive) {
-    const val = currentPilot.value;
-    if (currentPilot.passive === 'main_damage_boost') atkMultiplier = 1 + val;
-    if (currentPilot.passive === 'damage_reduction') hpMultiplier = 1 / (1 - val); // Giảm sát thương tương đương tăng máu hiệu dụng
-    
-    // Các chỉ số phụ khác (Né, Chí mạng, Hồi máu) cộng điểm CP cố định hoặc theo độ hiếm
-    if (['dodge_and_crit', 'hp_regen', 'nova_shield', 'bullet_duplicate'].includes(currentPilot.passive)) {
-        extraCP = (currentPilot.rarity || 1) * 500;
-    }
-  }
-
-  const finalAtk = Math.floor(totalAtk * atkMultiplier);
-  const finalHp = Math.floor(totalHp * hpMultiplier);
-
-  const calculatedCP = Math.floor((finalAtk * 3) + (finalHp * 0.5) + (totalArmor * 10)) + extraCP;
+  // Identical combat formulas to Campaign and Dungeon; CP is a display
+  // estimate, not a trusted stat used by the economy server.
+  const { cp: calculatedCP } = deriveCombatLoadout(campaignData, { PILOTS, AIRCRAFTS, GEAR_CATALOG });
 
   const getAvailableItemsForPopup = () => {
     if (selectingSlot === 'aircraft') {
-      return Object.keys(campaignData.ownedAircrafts || {}).map(id => {
+      return Object.keys(campaignData.ownedAircrafts || {}).filter(id => AIRCRAFTS.some(a => a.id === id)).map(id => {
         const base = AIRCRAFTS.find(a => a.id === id);
         const acData = campaignData.ownedAircrafts[id];
         const lvl = typeof acData === 'object' ? (acData.level || 1) : 1;
         return {
           uuid: id, id: id, type: 'aircraft', level: lvl, rarity: base?.tier || 1,
-          name: base?.name, imgSrc: base?.imgHq || base?.imgTop, 
+          name: base?.name, imgSrc: resolveShipVisual(id, AIRCRAFTS).previewHQSrc, 
           stats: `ATK: ${Math.floor(base.baseAtk * (1 + (lvl-1)*0.05))} | HP: ${Math.floor(base.baseHp * (1 + (lvl-1)*0.05))}`
         };
       });
@@ -137,7 +157,12 @@ export default function HQ({ gsRef, setScreen, lang, saveUserProfile }) {
     }).sort((a, b) => (b.rarity || 1) - (a.rarity || 1));
   };
 
-  const handleEquipFromPopup = (uuid) => {
+  const handleEquipFromPopup = async (uuid) => {
+    if (auth.currentUser) {
+      try { await gameAction('inventory.equip',{slot:selectingSlot,itemId:uuid});setRefreshTick(r=>r+1);setSelectingSlot(null);toast.success('Equipped'); }
+      catch(error){ toast.error(error.message); }
+      return;
+    }
     if (selectingSlot === 'aircraft') {
         gsRef.current.campaignData.loadout.aircraft = uuid;
     } else {
@@ -149,7 +174,12 @@ export default function HQ({ gsRef, setScreen, lang, saveUserProfile }) {
     toast.success(lang === 'vi' ? 'Đã đổi trang bị!' : 'Equipped successfully!');
   };
 
-  const handleUnequipFromPopup = () => {
+  const handleUnequipFromPopup = async () => {
+    if (auth.currentUser) {
+      try {await gameAction('inventory.equip',{slot:selectingSlot,itemId:''});setRefreshTick(r=>r+1);setSelectingSlot(null);toast.success('Unequipped');}
+      catch(error){toast.error(error.message);}
+      return;
+    }
     if (selectingSlot === 'aircraft') return; 
     gsRef.current.campaignData.loadout[selectingSlot] = '';
     if (saveUserProfile) saveUserProfile();
@@ -201,9 +231,14 @@ export default function HQ({ gsRef, setScreen, lang, saveUserProfile }) {
 
         <motion.div className={`${styles.glassPanel} ${styles.hangar}`} onClick={() => setSelectingSlot('aircraft')} whileTap={{ scale: 0.98 }}>
           <motion.div animate={{ y: [0, -10, 0] }} transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}>
-            <img src={currentAircraft.imgHq || '/images/ship_xwing_hq.jpg'} alt={currentAircraft.name[lang]} className={styles.shipImage} />
+            <ShipImage aircraftId={loadout.aircraft} alt={currentAircraft.name[lang]} className={styles.shipImage} />
           </motion.div>
-          <h3 className={styles.shipName}>{currentAircraft.name[lang]} (Lv.{aircraftInfo.level})</h3>
+          <div className={styles.battlePreview}>
+            <ShipImage aircraftId={loadout.aircraft} view="top" className={styles.battlePreviewImg} />
+            <span>{lang === 'vi' ? 'HÌNH DẠNG TRONG TRẬN' : 'IN-BATTLE VIEW'}
+              {' · '}{shipVisualInfo.runtimeMode.toUpperCase()}</span>
+          </div>
+          <h3 className={styles.shipName}>{shipVisualInfo.known ? currentAircraft.name[lang] : (lang === 'vi' ? 'PHI CƠ KHÔNG HỢP LỆ' : 'UNKNOWN AIRCRAFT')} (Lv.{aircraftInfo.level})</h3>
           
           <div className={styles.shipStats}>
              <span style={{ color: '#2ed573' }}>HP: {Math.floor((currentAircraft.baseHp || 0) * (1 + (acLevel - 1) * 0.05))}</span>
@@ -273,19 +308,14 @@ export default function HQ({ gsRef, setScreen, lang, saveUserProfile }) {
         </div>
         
         <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <motion.button whileTap={{ scale: 0.95 }} className={styles.launchBtn} 
-            onClick={() => {
-              if (gameMode === 'dungeon') {
-                gsRef.current.energy -= (gsRef.current.pendingEnergyCost || 0);
-                setScreen('dungeon'); // Lưu ý thay bằng đúng tên key màn hình Dungeon của bác
-              } else {
-                setScreen('campaign');
-              }
-            }} 
+          <motion.button whileTap={{ scale: 0.95 }} className={styles.launchBtn}
+            disabled={isLaunching} onClick={handleLaunch}
           >
-            {lang === 'vi' 
-              ? `XUẤT KÍCH (${gameMode === 'dungeon' ? dName : `ẢI ${targetStage}`})` 
-              : `LAUNCH ${gameMode === 'dungeon' ? dName : `STAGE ${targetStage}`}`}
+            {isLaunching
+              ? (lang === 'vi' ? 'ĐANG CHUẨN BỊ TRẬN...' : 'PREPARING BATTLE...')
+              : (lang === 'vi'
+                ? `XUẤT KÍCH (${gameMode === 'dungeon' ? dName : `ẢI ${targetStage}`})`
+                : `LAUNCH ${gameMode === 'dungeon' ? dName : `STAGE ${targetStage}`}`)}
           </motion.button>
         </div>
         
@@ -324,7 +354,9 @@ export default function HQ({ gsRef, setScreen, lang, saveUserProfile }) {
                        <div key={itm.uuid} className={`${styles.popupItem} ${isEquipped ? styles.popupItemActive : ''}`} onClick={() => handleEquipFromPopup(itm.uuid)}>
                           
                           <div className={styles.popupItemImgWrap} style={{ border: `1px solid ${rColor}`, boxShadow: `inset 0 0 15px ${rColor}40` }}>
-                             {itm.imgSrc ? <img src={itm.imgSrc} alt="item" className={styles.popupItemImg}/> : <div className={styles.popupItemEmoji} style={{width:'30px', height:'30px', color: rColor}}><FallbackIcon /></div>}
+                             {itm.type === 'aircraft'
+                               ? <ShipImage aircraftId={itm.uuid} alt={itm.name[lang]} className={styles.popupItemImg} />
+                               : itm.imgSrc ? <img src={itm.imgSrc} alt="item" className={styles.popupItemImg}/> : <div className={styles.popupItemEmoji} style={{width:'30px', height:'30px', color: rColor}}><FallbackIcon /></div>}
                              <span className={styles.popupItemLvl} style={{ color: rColor }}>Lv.{itm.level}</span>
                           </div>
                           

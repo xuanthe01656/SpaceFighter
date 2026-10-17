@@ -1,0 +1,26 @@
+{
+  "name": "Space Fighter Phase 1 Windows ESM Hotfix H1",
+  "base_archive": "SpaceFighter_Phase1_V1_1_0_FULL_SOURCE.zip",
+  "date": "2026-10-16",
+  "target": "Phase 1 V1.1.0",
+  "changes": [
+    {
+      "path": "server/lib/gameService.cjs",
+      "sha256_before": "a15d78a421c827253b1e49b7d9bed25f529dc263700a0f597d9c04ec6f2f377f",
+      "sha256_after": "7a1bf64a9b6b9b9925e41c0ff1a5e3d420cce5efa649b83714c48e47b584b8dd"
+    },
+    {
+      "path": "server/tests/economy.test.cjs",
+      "sha256_before": "86a5cde6f87300603dda42f036a393c103a2c76646ec91ca2d934cd9fc4f767e",
+      "sha256_after": "eceecce7ae5cb9d17fb34d182fe4917e6d8f7307509588781b9a111cea123b07"
+    }
+  ],
+  "test_environment": {
+    "platform": "Linux",
+    "node": "v22.16.0",
+    "tests": 21,
+    "pass": 18,
+    "fail": 0,
+    "skip": 3
+  }
+}

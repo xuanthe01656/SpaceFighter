@@ -3,7 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { GEAR_CATALOG, AIRCRAFTS, PILOTS } from '../../constants';
 import styles from './Inventory.module.css';
 import toast from 'react-hot-toast';
+import { auth } from '../../firebase';
 import ItemModal from '../ItemModal/ItemModal';
+import ShipImage from '../ShipImage/ShipImage';
 
  // --- ĐỒNG BỘ HỆ THỐNG SVG ICONS CHUẨN SCI-FI ---
  const Icons = {
@@ -64,7 +66,7 @@ const getTabLabel = (type, lang) => {
   return labels[type]?.[lang] || type;
 };
 
-export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
+export default function Inventory({ gsRef, setScreen, lang, saveUserProfile, gameAction }) {
   const [mainTab,     setMainTab]     = useState('bag');
   const [bagFilter,   setBagFilter]   = useState('all');
   const [selectedId,  setSelectedId]  = useState(null);
@@ -273,7 +275,7 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
   };
 
   // --- HÀM BÁN ĐỒ LẤY XU ---
-  const executeSell = () => {
+  const executeSell = async () => {
     if (sellSelection.length === 0) return;
 
     const itemsToProcess = [];
@@ -298,6 +300,16 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
         if (!window.confirm(confirmMsg)) return;
     }
 
+    if (auth.currentUser) {
+      try {
+        const result=await gameAction('inventory.salvage',{
+          items:itemsToProcess.map(i=>({kind:i.type==='pilot'?'pilot':i.type==='aircraft'?'aircraft':'gear',itemId:i.type==='pilot'||i.type==='aircraft'?i.id:i.uuid}))
+        });
+        setIsSelectMode(false);setSellSelection([]);setSelectedId(null);setRefreshTick(t=>t+1);
+        toast.success(`Salvaged: +${result.extra.earnedCoins||0} coins`);
+      }catch(error){toast.error(error.message);}
+      return;
+    }
     let earnedCoins = 0;
     itemsToProcess.forEach(item => {
         const r = item.rarity || 1;
@@ -318,7 +330,7 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
   };
 
   // --- HÀM XÓA VĨNH VIỄN (KHÔNG NHẬN LẠI GÌ) ---
-  const executeDelete = () => {
+  const executeDelete = async () => {
     if (sellSelection.length === 0) return;
 
     const itemsToProcess = [];
@@ -341,7 +353,16 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
       : (lang === 'vi' ? 'Bạn chắc chắn muốn xóa vĩnh viễn các vật phẩm này? (Không nhận lại Xu)' : 'Are you sure you want to permanently delete these items?');
 
     if (!window.confirm(confirmMsg)) return;
-
+    if (auth.currentUser) {
+      try {
+        await gameAction('inventory.delete',{
+          items:itemsToProcess.map(i=>({kind:i.type==='pilot'?'pilot':i.type==='aircraft'?'aircraft':'gear',itemId:i.type==='pilot'||i.type==='aircraft'?i.id:i.uuid}))
+        });
+        setIsSelectMode(false);setSellSelection([]);setSelectedId(null);setRefreshTick(t=>t+1);
+        toast.success('Items deleted');
+      }catch(error){toast.error(error.message);}
+      return;
+    }
     itemsToProcess.forEach(item => {
         if (item.type === 'pilot') delete gsRef.current.campaignData.ownedPilots[item.id];
         else if (item.type === 'aircraft') delete gsRef.current.campaignData.ownedAircrafts[item.id];
@@ -355,8 +376,15 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
     toast.success(lang === 'vi' ? `Đã xóa vĩnh viễn ${itemsToProcess.length} vật phẩm.` : `Deleted ${itemsToProcess.length} items.`);
   };
 
-  const toggleLock = () => {
+  const toggleLock = async () => {
     if (!selectedItem || !selectedItem.isOwned) return;
+    if (auth.currentUser) {
+      try {
+        await gameAction('inventory.lock',{kind:selectedItem.type==='pilot'?'pilot':selectedItem.type==='aircraft'?'aircraft':'gear',itemId:selectedItem.type==='pilot'||selectedItem.type==='aircraft'?selectedItem.id:selectedItem.uuid});
+        setRefreshTick(t=>t+1);toast.success('Lock updated');
+      }catch(error){toast.error(error.message);}
+      return;
+    }
     const isCurrentlyLocked = !!selectedItem.isLocked;
     
     if (selectedItem.type === 'pilot') {
@@ -372,8 +400,15 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
     toast.success(lang === 'vi' ? (isCurrentlyLocked ? 'Đã mở khóa vật phẩm!' : 'Đã khóa an toàn!') : (isCurrentlyLocked ? 'Item Unlocked!' : 'Item Locked!'));
   };
 
-  const handleUpgrade = () => {
+  const handleUpgrade = async () => {
     if (!selectedItem || selectedItem.type === 'pilot') return;
+    if (auth.currentUser) {
+      try {
+        await gameAction('inventory.upgrade',{kind:selectedItem.type==='aircraft'?'aircraft':'gear',itemId:selectedItem.type==='aircraft'?selectedItem.id:selectedItem.uuid});
+        setRefreshTick(t=>t+1);toast.success('Upgrade successful');
+      }catch(error){toast.error(error.message);}
+      return;
+    }
     if (selectedItem.isOwned === false) return toast.error(lang === 'vi' ? 'Bạn chưa sở hữu vật phẩm này!' : 'Item not owned!');
     const currentLvl = selectedItem.level || 1;
     const limits = getItemLimits(selectedItem);
@@ -396,8 +431,16 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
     saveUserProfile(); setRefreshTick(p => p + 1); toast.success(lang === 'vi' ? 'Nâng cấp thành công!' : 'Upgrade Success!');
   };
 
-  const handleStarUp = (sacrificeIds) => {
+  const handleStarUp = async (sacrificeIds) => {
     if (!selectedItem || selectedItem.type === 'pilot' || !sacrificeIds) return false;
+    if (auth.currentUser) {
+      try {
+        const r=await gameAction('inventory.starup',{kind:selectedItem.type==='aircraft'?'aircraft':'gear',itemId:selectedItem.type==='aircraft'?selectedItem.id:selectedItem.uuid,sacrifices:sacrificeIds});
+        setRefreshTick(t=>t+1);
+        toast[r.extra.success?'success':'error'](r.extra.success?'Star up success':'Star up failed');
+        return Boolean(r.extra.success);
+      }catch(error){toast.error(error.message);return false;}
+    }
     if (selectedItem.isOwned === false) { toast.error(lang === 'vi' ? 'Bạn chưa sở hữu vật phẩm này!' : 'Item not owned!'); return false; }
     if (sacrificeIds.length !== (starUpInfo?.reqDupes || 0)) { toast.error(lang === 'vi' ? 'Vui lòng chọn đủ phôi!' : 'Select enough materials!'); return false; }
 
@@ -448,8 +491,18 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
     return <img src="/images/no_image.png" alt="icon" style={{ maxWidth: size, maxHeight: size, objectFit: 'contain', opacity: 0.5 }} />;
   };
 
-  const toggleEquip = () => {
+  const toggleEquip = async () => {
     if (!selectedItem) return;
+    if (auth.currentUser) {
+      try {
+        const slot=selectedItem.type==='pilot'?'pilot':selectedItem.type;
+        const itemId=slot==='pilot'?selectedItem.id:selectedItem.uuid;
+        const fallback=slot==='pilot'?'pilot_alpha':'';
+        await gameAction('inventory.equip',{slot,itemId:loadout[slot]===itemId?fallback:itemId});
+        setRefreshTick(t=>t+1);toast.success('Loadout updated');
+      }catch(error){toast.error(error.message);}
+      return;
+    }
     if (selectedItem.isOwned === false) return toast.error(lang === 'vi' ? 'Bạn chưa sở hữu trang bị này!' : 'Item not owned!');
     if (selectedItem.type === 'pilot') {
       const eq = loadout.pilot === selectedItem.id;
@@ -463,7 +516,12 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
     saveUserProfile(); setRefreshTick(p => p + 1);
   };
 
-  const handleEquipAircraft = (id) => {
+  const handleEquipAircraft = async (id) => {
+    if (auth.currentUser) {
+      try {await gameAction('inventory.equip',{slot:'aircraft',itemId:id});setRefreshTick(t=>t+1);toast.success('Aircraft equipped');}
+      catch(error){toast.error(error.message);}
+      return;
+    }
     if (!ownedAircrafts?.[id]) return toast.error(lang === 'vi' ? 'Bạn chưa sở hữu Phi cơ này!' : 'Aircraft not owned!');
     gsRef.current.campaignData.loadout.aircraft = id;
     saveUserProfile(); setRefreshTick(t => t + 1); toast.success(lang === 'vi' ? 'Đã đổi Phi cơ!' : 'Aircraft Equipped!');
@@ -503,12 +561,8 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile }) {
 
         <div className={styles.itemIconWrap}>
            {item.type === 'aircraft' ? (
-              <img 
-                src={AIRCRAFTS.find(a=>a.id===item.id)?.imgHq || '/images/ship_xwing_hq.png'} 
-                alt="aircraft" 
-                style={{ maxWidth: isForgeMode ? '36px' : '40px', objectFit: 'contain' }} 
-                onError={(e) => { e.target.onerror = null; e.target.src = '/images/no_image.png'; }}
-              />
+              <ShipImage aircraftId={item.id} alt="aircraft"
+                style={{ maxWidth: isForgeMode ? '36px' : '40px', objectFit: 'contain' }} />
            ) : renderIcon(item, isForgeMode ? '36px' : '40px')}
         </div>
         <div className={styles.itemFooter}><span className={styles.itemLevel}>{item.isOwned ? `LV ${item.level || 1}` : '🔒'}</span></div>

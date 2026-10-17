@@ -1,0 +1,90 @@
+{
+  "release": "Graphics 2.1.2 + Mission Sync Migration Hotfix",
+  "baseline_filename": "SpaceFighter_Graphics2.1.1_MissionSync_FULL_SOURCE.zip",
+  "baseline_sha256": "f286c33436c9c6f75bd970903439434123a94570c01db8a2fcd7ef7a4740b4e1",
+  "added": [
+    "client/tests/missionSync212.test.mjs",
+    "docs/GRAPHICS212_MISSION_SYNC_MIGRATION_VI.md",
+    "docs/GRAPHICS212_TEST_REPORT_VI.md",
+    "server/lib/legacyAttendanceRepair.cjs",
+    "server/scripts/repair-legacy-attendance.cjs",
+    "server/tests/legacyAttendanceRepair.test.cjs"
+  ],
+  "modified": [
+    "client/src/constants.js",
+    "client/src/game/rendering/ShipVisualCatalog.js",
+    "client/src/game/rendering/ShipVisualFactory.js",
+    "client/src/utils/guestProgress.js",
+    "client/tests/missionSync211.test.mjs",
+    "server/lib/economy.cjs"
+  ],
+  "deleted": [],
+  "files": [
+    {
+      "path": "client/src/constants.js",
+      "size": 48287,
+      "sha256": "9f61e1a539d66fd83476eca3b66d0fe432a5a2c0dbe767ae7f94066ae98c3836"
+    },
+    {
+      "path": "client/src/game/rendering/ShipVisualCatalog.js",
+      "size": 4590,
+      "sha256": "521ce0bc01b05502910ad840afe4499912c2e4b478eb78e6eb57812024705f7e"
+    },
+    {
+      "path": "client/src/game/rendering/ShipVisualFactory.js",
+      "size": 7708,
+      "sha256": "ce06ccbe1ec1654518ed2156a3c40cf568268c0ccec8c567a9aa7d004670dbc3"
+    },
+    {
+      "path": "client/src/utils/guestProgress.js",
+      "size": 7490,
+      "sha256": "82f41b86a61017652c1ed5ed16790fa6b797afa8a298bd3ea3ceb63330ccf4e5"
+    },
+    {
+      "path": "client/tests/missionSync211.test.mjs",
+      "size": 8390,
+      "sha256": "833ce8d246f901da7d66ebbae2f39c3a33740259348e404934a677289d1b644b"
+    },
+    {
+      "path": "client/tests/missionSync212.test.mjs",
+      "size": 2041,
+      "sha256": "ff41c9777c98603cb3342c63dc0b1cf068cf0d1fa7800eef4b4aac9730e052b1"
+    },
+    {
+      "path": "docs/GRAPHICS212_MISSION_SYNC_MIGRATION_VI.md",
+      "size": 7826,
+      "sha256": "5feca038bfba1be8459702110c43cf6f80394fbeeb35ebc5da391ebb5df0ce18"
+    },
+    {
+      "path": "docs/GRAPHICS212_TEST_REPORT_VI.md",
+      "size": 3227,
+      "sha256": "375373cc135dd921e0ea9348bd21b58f3de3b6ca9403ce83a36c5ce0fa281303"
+    },
+    {
+      "path": "server/lib/economy.cjs",
+      "size": 29788,
+      "sha256": "09e22784e61096dae01ce9c6f53463786d549f188f58e68bb2d06a0adc55d5c1"
+    },
+    {
+      "path": "server/lib/legacyAttendanceRepair.cjs",
+      "size": 4560,
+      "sha256": "c833e954ccb2bd24e7c5b7f697059f9880cc4218cee3822448f9009fb1814668"
+    },
+    {
+      "path": "server/scripts/repair-legacy-attendance.cjs",
+      "size": 3049,
+      "sha256": "05a6d0be3bb92fff368f1e6eb4d572810b998c3be24755403c7afff3fe20ca59"
+    },
+    {
+      "path": "server/tests/legacyAttendanceRepair.test.cjs",
+      "size": 5496,
+      "sha256": "e5867b2fb46854a2f6d801afcf5bef9d0815014bf9499cb080fadbd0d05e18c0"
+    }
+  ],
+  "notes": [
+    "PATCH must overlay Graphics2.1.1 FULL SOURCE",
+    "Firebase config/security and GLB binaries unchanged",
+    "Operator-only repair requires dryrun + fingerprint + explicit local confirmation",
+    "Full browser WebGL and Vite build require npm modules on Windows"
+  ]
+}

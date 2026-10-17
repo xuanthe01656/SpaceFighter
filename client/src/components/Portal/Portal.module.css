@@ -20,8 +20,8 @@
   z-index: -1; pointer-events: none;
 }
 
-@media (orientation: landscape) { .backgroundLayer { background-image: url('../images/portal_landscape.png'); } }
-@media (orientation: portrait) { .backgroundLayer { background-image: url('../images/portal_portrait.png'); } }
+@media (orientation: landscape) { .backgroundLayer { background-image: var(--portal-bg-landscape); } }
+@media (orientation: portrait) { .backgroundLayer { background-image: var(--portal-bg-portrait); } }
 
 .topNav {
   position: absolute; top: calc(env(safe-area-inset-top) + 15px); width: 100%; 

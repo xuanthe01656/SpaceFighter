@@ -1,189 +1,94 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { signInWithPopup, signInWithCredential, GoogleAuthProvider, OAuthProvider, updateProfile, deleteUser, signOut, onAuthStateChanged, browserPopupRedirectResolver } from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
 import { SignInWithApple } from '@capacitor-community/apple-sign-in';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
-import { Purchases } from '@revenuecat/purchases-capacitor';
 import toast from 'react-hot-toast';
 import { auth, db } from '../firebase';
 import { secureStorage } from '../utils/storageHelper';
 import { t } from '../utils/translations';
 import { DEFAULT_CAMPAIGN_DATA } from '../constants';
+import { createDefaultCampaignData, parseGuestCampaign } from '../utils/profileSchema';
+import { openGameSession, executeGameCommand, changePlayerName, deleteCloudAccount } from '../services/gameApi';
 
 export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
   const [currentUser, setCurrentUser] = useState(null);
   const sessionListenerRef = useRef(null);
-  const saveUserProfile = async (specificUpdates = null) => {
-    const safeNum = (val, fallback) => (typeof val === 'number' && !isNaN(val)) ? val : fallback;
-    const safeStr = (val, fallback) => (typeof val === 'string') ? val : fallback;
+  const saveQueueRef = useRef(Promise.resolve());
 
-    if (!currentUser) {
-      secureStorage.setItem('astro_guest_coins', safeNum(gsRef.current.coins, 0));
-      secureStorage.setItem('astro_guest_diamonds', safeNum(gsRef.current.diamonds, 0));
-      secureStorage.setItem('astro_guest_energy', safeNum(gsRef.current.energy, 50));
-      if (gsRef.current.campaignData) {
-         secureStorage.setItem('astro_guest_campaign', JSON.stringify(gsRef.current.campaignData));
-      }
-      return; 
+  // Reconcile only the server-signed canonical economic/profile state.
+  const applyServerState = useCallback((data) => {
+    if (!data) return;
+    const s = gsRef.current;
+    s.coins = data.coins; s.diamonds = data.diamonds;
+    s.energy = data.energy; s.vipPoints = data.vipPoints;
+    s.campaignData = data.campaignData;
+    s.activeBattleId = data.activeBattle?.id || null;
+    setUIUpdates(prev => ({...prev,coins:s.coins,diamonds:s.diamonds,energy:s.energy,vipPoints:s.vipPoints}));
+  }, [gsRef,setUIUpdates]);
+
+  const runQueued = useCallback(task => {
+    const running = saveQueueRef.current.then(task,task);
+    saveQueueRef.current = running.then(()=>undefined,()=>undefined);
+    return running;
+  }, []);
+
+  const gameAction = useCallback((command, payload = {}, requestId = null) => runQueued(async () => {
+    // The API rejects unauthenticated and stale sessions. No local fallback.
+    const reply = await executeGameCommand(command, payload, requestId);
+    applyServerState(reply.state);
+    return reply;
+  }), [runQueued,applyServerState]);
+
+  // Phase1: saveUserProfile may update ONLY validated, non-economic preferences.
+  // Legacy components calling save after local rewards cannot mint currency.
+  const saveUserProfile = useCallback((specificUpdates = null) => {
+    if (!auth.currentUser) {
+      const state = gsRef.current;
+      secureStorage.setItem('astro_guest_coins', Number.isFinite(state.coins) ? state.coins : 0);
+      secureStorage.setItem('astro_guest_diamonds', Number.isFinite(state.diamonds) ? state.diamonds : 0);
+      secureStorage.setItem('astro_guest_energy', Number.isFinite(state.energy) ? state.energy : 50);
+      if (state.campaignData) secureStorage.setItem('astro_guest_campaign', state.campaignData);
+      return Promise.resolve(true);
     }
+    const c=gsRef.current.campaignData || {};
+    const progress=c.progress || {};
+    const prefs={
+      loadout: {...(c.loadout||{})},
+      currentPlanet: Number(progress.currentPlanet)||1,
+      selectedStage: Number(progress.selectedStage)||1,
+    };
+    return gameAction('profile.preferences',prefs).then(()=>true).catch(error=>{
+      console.warn('Profile preferences rejected:',error);
+      return false;
+    });
+  }, [gsRef,gameAction]);
 
+  const loadUserProfile = async (user) => {
+    if (!user) return false;
     try {
-      const userRef = doc(db, "users", currentUser.uid);
-      if (specificUpdates) {
-        await setDoc(userRef, specificUpdates, { merge: true });
-        return; 
-      }
-
-      // ==========================================
-      // CẤU TRÚC FIRESTORE MỚI: SẠCH, PHẲNG VÀ DỄ QUẢN LÝ
-      // ==========================================
-      const cData = gsRef.current.campaignData || DEFAULT_CAMPAIGN_DATA;
-
-      const updateData = {
-        // 1. Thông tin cơ bản
-        profile: {
-          displayName: currentUser.displayName || gsRef.current.myName,
-          photoURL: currentUser.photoURL || '',
-          isOnline: true,
-          last_update_ms: Date.now()
-        },
-
-        // 2. Ví tài nguyên (Gộp toàn bộ Tiền & Vật liệu vào 1 chỗ)
-        wallet: {
-          coins: safeNum(gsRef.current.coins, 0),
-          diamonds: safeNum(gsRef.current.diamonds, 0),
-          energy: safeNum(gsRef.current.energy, 50),
-          gears: safeNum(cData.materials?.gears, 0),
-          blueprints: safeNum(cData.materials?.blueprints, 0),
-          vipPoints: safeNum(gsRef.current.vipPoints, 0)
-        },
-
-        // 3. Theo dõi Quảng cáo & VIP
-        ads_tracking: {
-          lastCoinDate: safeStr(gsRef.current.lastCoinDate, ''),
-          hourlyCoinCount: safeNum(gsRef.current.hourlyCoinCount, 0),
-          lastCoinHour: safeStr(gsRef.current.lastCoinHour, '')
-        },
-
-        // 4. Tiến trình Chiến dịch, Nhiệm vụ và ĐIỂM DANH (Attendance)
-        progress: {
-          ...(cData.progress || DEFAULT_CAMPAIGN_DATA.progress),
-          hasClaimedFirstTopup: cData.hasClaimedFirstTopup || false
-        },
-        missions: cData.missionData || { claimed: [], progress: {} },
-        attendance: cData.attendance || { streak: 0, lastDate: '' }, // <-- THÊM DÒNG NÀY ĐỂ LƯU LÊN MÂY
-        
-        // 5. Trang bị đang sử dụng
-        loadout: cData.loadout || DEFAULT_CAMPAIGN_DATA.loadout,
-
-        // 6. Kho đồ các loại
-        inventory: {
-          items: cData.items || DEFAULT_CAMPAIGN_DATA.items,
-          aircrafts: cData.ownedAircrafts || DEFAULT_CAMPAIGN_DATA.ownedAircrafts,
-          pilots: cData.ownedPilots || DEFAULT_CAMPAIGN_DATA.ownedPilots
-        }
-      };
-      // Giữ lại sessionId hiện tại để không bị xóa khi ghi đè document
-      const existingSessionId = secureStorage.getItem('astro_session_id');
-      if (existingSessionId) updateData.sessionId = existingSessionId;
-      // Dùng setDoc để đẩy toàn bộ cấu trúc siêu gọn này lên Firebase
-      await setDoc(userRef, updateData);
-
-    } catch (e) {
-      console.error("Lỗi đồng bộ hồ sơ lên mây:", e);
+      const reply=await openGameSession();
+      secureStorage.setItem('astro_session_id',reply.sessionId);
+      applyServerState(reply.state);
+      gsRef.current.myName=user.displayName||'Player';
+      setUIUpdates(prev=>({...prev,displayName:gsRef.current.myName,photoURL:user.photoURL||''}));
+      setScreen(prev=>prev==='portal'?'campaign_portal':prev);
+      return true;
+    }catch(error){
+      console.error('Cloud profile API unavailable:',error);
+      toast.error('Máy chủ game không khả dụng. Không thể ghi tài nguyên hoặc tiến trình.');
+      return false;
     }
   };
 
-  const loadUserProfile = async (user) => {
-    if (!user) return;
-    const userRef = doc(db, "users", user.uid);
-    
-    try {
-      if (Capacitor.isNativePlatform()) {
-        const isIOS = Capacitor.getPlatform() === 'ios'; 
-        Purchases.configure({ apiKey: isIOS ? "appl_Dien_Key_Apple_Vao_Day" : "goog_CbZGtaRbTZyJqImOJePIWqxjpXr", appUserID: user.uid }).catch(()=>{});
-      }
-
-      const snap = await getDoc(userRef);
-      let authName = user.displayName; let authPhoto = user.photoURL;
-
-      if (user.providerData?.length > 0) {
-        user.providerData.forEach(p => {
-          if (p.displayName && !authName) authName = p.displayName;
-          if (p.photoURL && !authPhoto) authPhoto = p.photoURL;
-        });
-      }
-
-      let finalName = authName || 'Player';
-      let finalPhoto = authPhoto || "";
-
-      if (snap.exists()) {
-        const data = snap.data();
-        const now = getRealTime();
-
-        finalName = authName || data.profile?.displayName || data.displayName || 'Player';
-        finalPhoto = authPhoto || data.profile?.photoURL || data.photoURL || '';
-        gsRef.current.myName = finalName;
-
-        const wallet = data.wallet || {};
-        const ads = data.ads_tracking || {};
-
-        gsRef.current.coins = wallet.coins ?? (data.coins || 0);
-        gsRef.current.diamonds = wallet.diamonds ?? (data.diamonds || 0);
-        gsRef.current.energy = wallet.energy ?? (data.energy || 50);
-        gsRef.current.vipPoints = wallet.vipPoints ?? (data.vipPoints || 0);
-        
-        const realTimeNow = new Date(now);
-        const today = `${realTimeNow.getFullYear()}-${realTimeNow.getMonth() + 1}-${realTimeNow.getDate()}`;
-        const currentHourStr = `${today}-${realTimeNow.getHours()}`;
-        
-        gsRef.current.lastCoinDate = today;
-        gsRef.current.lastCoinHour = currentHourStr;
-        gsRef.current.hourlyCoinCount = (ads.lastCoinHour === currentHourStr) ? (ads.hourlyCoinCount || 0) : 0;
-
-        // BÓC TÁCH PROGRESS BAO GỒM CỜ NẠP ĐẦU
-        const loadedProgress = data.progress || data.campaignData?.progress || {};
-        
-        gsRef.current.campaignData = {
-          progress: { ...DEFAULT_CAMPAIGN_DATA.progress, ...loadedProgress },
-          // Gắn cờ Nạp Đầu vào campaignData
-          hasClaimedFirstTopup: loadedProgress.hasClaimedFirstTopup || data.campaignData?.hasClaimedFirstTopup || false,
-          
-          loadout: data.loadout || data.campaignData?.loadout || DEFAULT_CAMPAIGN_DATA.loadout,
-          materials: {
-            gears: wallet.gears ?? (data.campaignData?.materials?.gears || 0),
-            blueprints: wallet.blueprints ?? (data.campaignData?.materials?.blueprints || 0)
-          },
-          items: data.inventory?.items || data.campaignData?.items || DEFAULT_CAMPAIGN_DATA.items,
-          ownedAircrafts: data.inventory?.aircrafts || data.campaignData?.ownedAircrafts || DEFAULT_CAMPAIGN_DATA.ownedAircrafts,
-          ownedPilots: data.inventory?.pilots || data.campaignData?.ownedPilots || DEFAULT_CAMPAIGN_DATA.ownedPilots,
-          missionData: data.missions || data.campaignData?.missionData || { claimed: [], progress: {} },
-          attendance: data.attendance || data.campaignData?.attendance || { streak: 0, lastDate: '' } // <-- THÊM DÒNG NÀY ĐỂ KÉO TỪ MÂY XUỐNG
-        };
-        setScreen(prev => prev === 'portal' ? 'campaign_portal' : prev);
-        const newSessionId = `s_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-        secureStorage.setItem('astro_session_id', newSessionId);
-        await setDoc(userRef, { sessionId: newSessionId }, { merge: true }).catch(() => {});
-      } else {
-        // TẠO MỚI HOÀN TOÀN
-        finalName = authName || `Astro_${Math.floor(Math.random() * 10000)}`;
-        gsRef.current.myName = finalName;
-        gsRef.current.coins = 0; gsRef.current.diamonds = 0; gsRef.current.energy = 50; gsRef.current.isVIP = false;
-        gsRef.current.campaignData = JSON.parse(JSON.stringify(DEFAULT_CAMPAIGN_DATA));
-        
-        await saveUserProfile();
-        const newSessionId = `s_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-        secureStorage.setItem('astro_session_id', newSessionId);
-        await setDoc(userRef, { sessionId: newSessionId }, { merge: true }).catch(() => {});
-      }
-
-      if (user.displayName !== finalName || user.photoURL !== finalPhoto) {
-        updateProfile(user, { displayName: finalName, photoURL: finalPhoto }).catch(()=>{});
-      }
-      
-      setUIUpdates(prev => ({ ...prev, coins: gsRef.current.coins, diamonds: gsRef.current.diamonds, energy: gsRef.current.energy, vipPoints: gsRef.current.vipPoints, displayName: finalName, photoURL: finalPhoto }));
-    } catch (error) { console.error("Lỗi tải hồ sơ:", error); }
+  const renamePlayer = async (name) => {
+    const reply=await changePlayerName(name);
+    applyServerState(reply.state);
+    gsRef.current.myName=name;
+    if(auth.currentUser) updateProfile(auth.currentUser,{displayName:name}).catch(()=>{});
+    setUIUpdates(prev=>({...prev,displayName:name}));
+    return true;
   };
 
   const loginWithGoogle = async () => { 
@@ -237,10 +142,7 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
  const logout = async () => {
     try {
       // 1. Đánh dấu Offline trên DB
-      if (currentUser) {
-        const userRef = doc(db, "users", currentUser.uid);
-        await setDoc(userRef, { profile: { isOnline: false } }, { merge: true }).catch(() => {});
-      }
+      // Presence is server-maintained. Client is forbidden to write users/{uid}.
 
       // 2. XÓA SẠCH DỮ LIỆU CỤC BỘ BẢO MẬT (Tránh rò rỉ tài nguyên)
       secureStorage.removeItem('astro_session_id');
@@ -291,9 +193,8 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
 
     const loadingToast = toast.loading(t[langRef.current]?.deletingAccount || "Đang xóa dữ liệu...");
     try {
-      const userRef = doc(db, "users", currentUser.uid);
-      await deleteDoc(userRef);
-      await deleteUser(currentUser);
+      await deleteCloudAccount();
+      await signOut(auth).catch(() => {});
       secureStorage.removeItem('astro_session_id');
       if (Capacitor.isNativePlatform()) GoogleAuth.signOut().catch(() => {});
       setCurrentUser(null); setScreen('portal'); toast.dismiss(loadingToast); toast.success(t[langRef.current]?.deleteSuccess || "Đã xóa!");
@@ -310,7 +211,8 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
       setCurrentUser(user);      
       if (user) {
         gsRef.current.myName = user.displayName || 'Player';
-        await loadUserProfile(user);
+        const loaded = await loadUserProfile(user);
+        if (!loaded || !isMounted || auth.currentUser?.uid !== user.uid) return;
         // --- CHỐNG ĐA THIẾT BỊ: Lắng nghe sessionId, đăng xuất nếu bị chiếm ---
         if (sessionListenerRef.current) sessionListenerRef.current(); // hủy listener cũ nếu có
         const userDocRef = doc(db, 'users', user.uid);
@@ -327,6 +229,10 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
           }
         });
       } else {
+        if (sessionListenerRef.current) {
+          sessionListenerRef.current();
+          sessionListenerRef.current = null;
+        }
         let guestCoins = parseInt(secureStorage.getItem('astro_guest_coins')) || 0;
         let guestDiamonds = parseInt(secureStorage.getItem('astro_guest_diamonds')) || 0;
         let guestEnergy = parseInt(secureStorage.getItem('astro_guest_energy')) || 50;
@@ -337,31 +243,14 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
 
         setUIUpdates(prev => ({ ...prev, coins: guestCoins, diamonds: guestDiamonds, energy: guestEnergy, vipPoints: gsRef.current.vipPoints, displayName: 'Guest', photoURL: '' }));
 
-        let guestCampaign = secureStorage.getItem('astro_guest_campaign');
-        if (guestCampaign) {
-          gsRef.current.campaignData = JSON.parse(guestCampaign);
-        } else {
-          gsRef.current.campaignData = JSON.parse(JSON.stringify(DEFAULT_CAMPAIGN_DATA));
-        }
+        const guestCampaign = parseGuestCampaign(secureStorage.getItem('astro_guest_campaign'));
+        gsRef.current.campaignData = guestCampaign || createDefaultCampaignData();
       }
     });
 
     return () => { isMounted = false; unsubscribe(); if (sessionListenerRef.current) sessionListenerRef.current(); };
   }, []);
 
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (!currentUser) return;
-      const userRef = doc(db, "users", currentUser.uid);
-      if (document.visibilityState === 'hidden') {
-         setDoc(userRef, { profile: { isOnline: false, last_update_ms: Date.now() } }, { merge: true }).catch(() => {});
-      } else {
-         setDoc(userRef, { profile: { isOnline: true, last_update_ms: Date.now() } }, { merge: true }).catch(() => {});
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [currentUser]);
 
-  return { currentUser, loginWithGoogle, loginWithApple, logout, deleteAccount, saveUserProfile };
+  return { currentUser, loginWithGoogle, loginWithApple, logout, deleteAccount, saveUserProfile, gameAction, renamePlayer };
 }

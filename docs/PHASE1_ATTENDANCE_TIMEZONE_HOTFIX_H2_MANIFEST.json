@@ -1,0 +1,31 @@
+{
+  "name": "Space Fighter Phase 1 V1.1.0 Attendance Timezone Hotfix H2",
+  "base_archive": "SpaceFighter_Phase1_V1_1_0_WINDOWS_ESM_HOTFIX_FULL_SOURCE.zip",
+  "date": "2026-10-16",
+  "target": "Phase 1 V1.1.0 with Windows ESM Hotfix H1",
+  "modified_files": [
+    {
+      "file": "server/lib/economy.cjs",
+      "sha256_before": "438ae0024fec8ff2debe9ca497d5414155d817baf74c0a4dbb06816bb5eb377c",
+      "sha256_after": "be8a1336cf358da19414cb18d17b6508ed55ad127360c3b0aeda4de3036d25f5"
+    },
+    {
+      "file": "server/tests/economy.test.cjs",
+      "sha256_before": "eceecce7ae5cb9d17fb34d182fe4917e6d8f7307509588781b9a111cea123b07",
+      "sha256_after": "3f8d94e88157e6b29d3ebf8ce21e702389abd2db7bb5e80be9910c5596020c82"
+    }
+  ],
+  "validation": {
+    "node_version": "v22.16.0",
+    "tested_timezones": [
+      "UTC",
+      "Asia/Ho_Chi_Minh",
+      "America/Los_Angeles"
+    ],
+    "test_count": 23,
+    "pass": 20,
+    "fail": 0,
+    "skip": 3
+  },
+  "notes": "Do not apply patch to Phase 0 or Phase 1 without Windows ESM Hotfix H1."
+}

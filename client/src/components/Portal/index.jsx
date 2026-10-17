@@ -2,17 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { collection, query, where, getDocs, doc, setDoc } from 'firebase/firestore';
-import { updateProfile } from 'firebase/auth';
-import { db, auth } from '../../firebase';
 import { secureStorage } from '../../utils/storageHelper';
 import styles from './Portal.module.css';
 
 export default function Portal({ 
   gsRef, setScreen, currentUser, loginWithGoogle, loginWithApple, 
-  logout, lang, toggleLanguage 
+  logout, lang, toggleLanguage, renamePlayer 
 }) {
   const platform = Capacitor.getPlatform();
+  // Public assets must resolve through the deployment base, not relative
+  // to the CSS module's src/components/Portal directory. Works with Vite's
+  // base:'./' and Capacitor's local origin as well as hosted subpaths.
+  const assetBase = import.meta.env.BASE_URL;
+  const portalBackgrounds = {
+    '--portal-bg-landscape': `url("${assetBase}images/portal_landscape.png")`,
+    '--portal-bg-portrait': `url("${assetBase}images/portal_portrait.png")`,
+  };
   
   // Các trạng thái của sảnh: 'login' (chưa đăng nhập) -> 'name' (nhập tên) -> 'ready' (sẵn sàng vào game)
   const [step, setStep] = useState('login');
@@ -64,31 +69,8 @@ export default function Portal({
 
     setIsLoading(true);
     try {
-      // 3. Truy vấn Firestore xem tên này đã có ai dùng chưa
-      const q = query(collection(db, "users"), where("profile.displayName", "==", trimmedName));
-      const querySnapshot = await getDocs(q);
-      
-      let isDuplicate = false;
-      querySnapshot.forEach((docSnap) => {
-        // Nếu tìm thấy ID khác với ID của chính mình thì nghĩa là có người khác đang xài
-        if (docSnap.id !== currentUser.uid) {
-          isDuplicate = true;
-        }
-      });
-
-      if (isDuplicate) {
-        toast.error(lang === 'vi' ? 'Danh xưng này đã được đăng ký, vui lòng chọn tên khác!' : 'Identity already taken!');
-        setIsLoading(false);
-        return;
-      }
-
-      // 4. Cập nhật thành công -> Ghi vào Auth & DB
-      if (auth.currentUser) {
-        await updateProfile(auth.currentUser, { displayName: trimmedName });
-      }
-      
-      const userRef = doc(db, "users", currentUser.uid);
-      await setDoc(userRef, { profile: { displayName: trimmedName } }, { merge: true });
+      // API validates player names. Client must not list or write users/*.
+      await renamePlayer(trimmedName);
 
       gsRef.current.myName = trimmedName;
       toast.success(lang === 'vi' ? 'Định danh Phi công thành công!' : 'Identity Confirmed!');
@@ -127,7 +109,7 @@ export default function Portal({
 
   return (
     <motion.div variants={containerVariants} initial="hidden" animate="visible" className={styles.container}>
-      <div className={styles.backgroundLayer} />
+      <div className={styles.backgroundLayer} style={portalBackgrounds} />
       
       <div className={styles.topNav}>
         <motion.button whileTap={{ scale: 0.9 }} onClick={toggleLanguage} className={styles.langBtn}>

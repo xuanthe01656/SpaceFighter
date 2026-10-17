@@ -98,3 +98,8 @@ AdMob Not Showing on Web: The game is designed to run a "Fake 3-second Ad" on we
 
 📄 License
 Created and maintained by the Astro Cat Development Team. 2025-2026.
+## Graphics 2.1.5 — Product Combat Config v1
+
+Danh mục nội dung đã được tách trong `client/src/game/catalog/` nhưng đường import cũ `client/src/constants.js` vẫn giữ nguyên.
+Xem `docs/PRODUCT_CONFIG_2_1_5_VI.md` để hiểu stat modifier, nội tại, cấu hình desktop/mobile và giới hạn trước commercial release.
+Kiểm thử catalog: `cd client && npm run check:catalog`; build native gọn: `npm run build:mobile` trước khi `npx cap sync`.

@@ -31,3 +31,5 @@ Thumbs.db
 # 5. Build Artifacts (Các bản build App bạn vừa tạo)
 *.aab
 *.apk
+.env.*
+!.env.example

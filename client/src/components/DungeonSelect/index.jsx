@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { DUNGEON_CONFIG } from '../../constants';
 import styles from './DungeonSelect.module.css';
 import toast from 'react-hot-toast';
+import { dungeonDayUTC, isDungeonOpenUTC } from '../../utils/dungeonSchedule';
 
 // --- HỆ THỐNG SVG ICONS CHUẨN SCI-FI ---
 const Icons = {
@@ -38,10 +39,14 @@ const getRewardColor = (type) => {
 };
 
 export default function DungeonSelect({ gsRef, setScreen, lang, getRealTime }) {
-  // LẤY NGÀY TRONG TUẦN (0: Chủ Nhật, 1: Thứ 2,...) BẰNG GIỜ SERVER CHỐNG HACK
-  const currentDay = new Date(getRealTime()).getDay();
+  // Server Phase 1 uses UTC weekdays; local getDay() may disagree in UTC+7.
+  const currentDay = dungeonDayUTC(getRealTime());
 
   const handleEnter = (dungeon) => {
+    if (!isDungeonOpenUTC(dungeon,getRealTime())) {
+      toast.error(lang==='vi'?'Phó bản hiện chưa mở (lịch UTC).':'Dungeon is closed (UTC schedule).');
+      return;
+    }
     if (gsRef.current.energy < dungeon.energyCost) {
       toast.error(lang === 'vi' ? 'Không đủ Năng lượng!' : 'Not enough Energy!', { icon: '⚡' });
       return;
@@ -89,7 +94,7 @@ export default function DungeonSelect({ gsRef, setScreen, lang, getRealTime }) {
               <div className={styles.cardContent}>
                 <div className={styles.cardHeader}>
                   <div className={`${styles.statusBadge} ${isOpen ? styles.open : styles.closed}`}>
-                    {isOpen ? (lang === 'vi' ? 'ĐANG MỞ' : 'OPEN') : (lang === 'vi' ? 'ĐÓNG CỬA' : 'CLOSED')}
+                    {isOpen ? (lang === 'vi' ? 'ĐANG MỞ (UTC)' : 'OPEN (UTC)') : (lang === 'vi' ? 'ĐÓNG CỬA (UTC)' : 'CLOSED (UTC)')}
                   </div>
                   <div className={styles.difficulty}>
                     {[1, 2, 3].map(star => (

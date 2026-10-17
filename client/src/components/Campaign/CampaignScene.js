@@ -1,10 +1,26 @@
 import * as BABYLON from '@babylonjs/core';
 import '@babylonjs/loaders/glTF';
 import * as GUI    from '@babylonjs/gui';
+import { measureBattleHud } from '../../game/ui/BattleHudLayout';
 import {
   AIRCRAFTS, GEAR_CATALOG, PILOTS,
-  PLANET_CONFIG, STAGE_CONFIG, PLANET_ENEMIES, PLANET_BOSSES,
+  PLANET_CONFIG, STAGE_CONFIG, PLANET_ENEMIES, PLANET_BOSSES, EVENT_CONFIG,
 } from '../../constants';
+import { deriveBattleLoadout, calculateProjectileDamage } from '../../utils/combatStats';
+import { frameScale, scaledLerpFactor } from '../../utils/frameTime';
+import { battleSpeedMultiplier, BATTLE_WORLD_HALF_HEIGHT } from '../../game/config/BattleRules';
+import { createBattlePassiveState, receiveBattleHit, shouldEchoShot } from '../../game/combat/BattlePassives';
+import { createActiveEffects } from '../../game/combat/ActiveEffects';
+import { createPlayerShipVisual } from '../../game/rendering/ShipVisualFactory';
+import { createShipEngineFx } from '../../game/rendering/ShipEngineFx';
+import { createShipInputController } from '../../game/combat/ShipInputController';
+import { describeMainSalvo, describeWingSalvo, describeDroneSalvo, pickWeaponTarget, enemySpeedFactor, shieldDamageFactor, repairAmount, projectileHitsPoint } from '../../game/combat/PlayerWeapons';
+import { createProjectileEmitter } from '../../game/combat/ProjectileEmitter';
+import { canAutoLoadModel } from '../../game/config/PerformanceProfiles';
+import { resolveBattleBackground, legacyBattleBackgroundRequested } from '../../game/catalog/BackgroundCatalog';
+import { createScrollingBattleBackground } from '../../game/rendering/ScrollingBackgroundRenderer';
+import { attachBattleBackgroundProfiler } from '../../game/rendering/BattleBackgroundProfiler.js';
+import { recordGuestBattle, recordGuestEventKill, activeCoinMultiplier } from '../../utils/guestProgress';
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -51,7 +67,28 @@ const hexToC3        = (hex)  => BABYLON.Color3.FromHexString(hex.startsWith('#'
  */
 export const createCampaignScene = (scene, canvas, engine, data) => {
 
-  const { gsRef, lang, onVictory, onDefeat, saveUserProfile, getRealTime } = data;
+  const { gsRef, lang, onVictory, onDefeat, saveUserProfile, getRealTime, gameAction, isCloud } = data;
+  const quality = data.qualityProfile || {starFraction:1, particleFraction:1, glow:true, maxModelBytes:8*1024*1024};
+
+  // Dispose all pending scene-owned timeouts to prevent late spawns/rewards
+  // or screen callbacks from a previous battle after React unmounts the scene.
+  let battleSceneDisposed = false;
+  const pendingTimers = new Set();
+  const scheduleBattleTimer = (callback, delay) => {
+    if (battleSceneDisposed) return null;
+    const timer = globalThis.setTimeout(() => {
+      pendingTimers.delete(timer);
+      if (!battleSceneDisposed) callback();
+    }, delay);
+    pendingTimers.add(timer);
+    return timer;
+  };
+  scene.onDisposeObservable.add(() => {
+    battleSceneDisposed = true;
+    pendingTimers.forEach(clearTimeout);
+    pendingTimers.clear();
+  });
+
 
   // ══════════════════════════════════════════════════════════════════════════
   // 1. TÍNH CHỈ SỐ RPG (KHỚP 100% VỚI PHASER VÀ DUNGEON)
@@ -65,75 +102,21 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   const isReplay        = currentStage < (progress.planets?.[currentPlanetId]?.highestStage ?? 1);
   const stageConfig     = STAGE_CONFIG[currentStage] || STAGE_CONFIG[1];
 
-  const pilotBase    = PILOTS.find(p => p.id === loadout.pilot)       || PILOTS[0];
-  const aircraftBase = AIRCRAFTS.find(a => a.id === loadout.aircraft) || AIRCRAFTS[0];
-
-  const ownedAircrafts = gsRef.current.campaignData.ownedAircrafts || {};
-  const acData  = ownedAircrafts[loadout.aircraft];
-  const acLevel = (typeof acData === 'object' ? acData.level : 1) || 1;
-
-  const mainGunItem = items?.[loadout.mainGun]  ?? null;
-  const mainGunBase = mainGunItem ? (GEAR_CATALOG.mainGun?.find(g => g.id === mainGunItem.baseId) ?? null) : null;
-  const armorItem   = items?.[loadout.armor]    ?? null;
-  const armorBase   = armorItem ? (GEAR_CATALOG.armor?.find(g => g.id === armorItem.baseId) ?? null) : null;
-  const wingmanItem = items?.[loadout.wingman]  ?? null;
-  const wingmanBase = wingmanItem ? (GEAR_CATALOG.wingman?.find(g => g.id === wingmanItem.baseId) ?? null) : null;
-  const droneItem   = items?.[loadout.drone]    ?? null;
-  const droneBase   = droneItem ? (GEAR_CATALOG.drone?.find(g => g.id === droneItem.baseId) ?? null) : null;
-
-  const getDynamicStat = (base, lv = 1, rar = 1, isHp = false) => {
-    if (!base) return 0;
-    const perLv = Math.max(isHp ? 5 : 1, Math.round(base * 0.1 + rar * (isHp ? 10 : 2)));
-    return base + perLv * (lv - 1);
-  };
-  const getFireRate = (baseRate, lv) =>
-    baseRate ? (baseRate * Math.pow(0.985, (lv || 1) - 1)) * 1000 : 400;
-
-  const baseAcHp    = Math.floor((aircraftBase.baseHp    || 1000) * (1 + (acLevel - 1) * 0.05));
-  const baseAcAtk   = Math.floor((aircraftBase.baseAtk   || 10)   * (1 + (acLevel - 1) * 0.05));
-  const baseAcArmor = Math.floor((aircraftBase.baseArmor || 20)   * (1 + (acLevel - 1) * 0.05));
-
-  const gunAtk    = mainGunBase ? getDynamicStat(mainGunBase.baseAtk,  mainGunItem?.level,  mainGunItem?.rarity)       : 0;
-  const wingAtk   = wingmanBase ? getDynamicStat(wingmanBase.baseAtk,  wingmanItem?.level,  wingmanItem?.rarity)       : 0;
-  const droneAtk  = droneBase   ? getDynamicStat(droneBase.baseAtk,    droneItem?.level,    droneItem?.rarity)         : 0;
-  const extraHp   = armorBase   ? getDynamicStat(armorBase.baseHp,     armorItem?.level,    armorItem?.rarity, true)   : 0;
-
-  let mainAtkMult = 1.0, wingRateMult = 1.0, moveSpeedMult = 1.0;
-
-  if (pilotBase.passive) {
-    const val = pilotBase.value;
-    switch (pilotBase.passive) {
-      case 'main_damage_boost': mainAtkMult    = 1 + val;             break;
-      case 'hp_regen':          /* hpRegenRate    = val; */             break;
-      case 'wing_fire_rate':    wingRateMult   = 1 - val;             break;
-      case 'movement_speed':    moveSpeedMult  = 1 + val;             break;
-      case 'damage_reduction':  /* damageReduc      = val; */             break;
-      case 'dodge_and_crit':    /* dodgeRate      = val.dodge ?? 0.15;
-                                critDmgBoost   = val.critDamage ?? 0.25; */ break;
-    }
-  }
-
-  const stats = {
-    maxHp:        Math.floor(baseAcHp + extraHp),
-    hp:           Math.floor(baseAcHp + extraHp),
-    atk:          Math.floor((baseAcAtk + gunAtk) * mainAtkMult),
-    wingAtk, droneAtk,
-    armor:        baseAcArmor,
-    fireRate:     getFireRate(mainGunBase?.fireRate, mainGunItem?.level),
-    wingFireRate: 600 * wingRateMult,
-    droneFireRate: droneBase?.fireRate
-      ? (droneBase.fireRate * Math.pow(0.985, (droneItem?.level || 1) - 1))
-      : 800,
-    mainGunId: mainGunBase?.id || 'gun_laser',
-    wingmanId: wingmanBase?.id || null,
-    droneId:   droneBase?.id   || null,
-  };
+  // One ruleset for HQ, Campaign and Dungeon: catalog fire rates are mixed
+  // (main gun = seconds, wing/drone = milliseconds). See combatStats.js.
+  const combat = deriveBattleLoadout(gsRef.current.campaignData, { PILOTS, AIRCRAFTS, GEAR_CATALOG },
+    { mode: 'campaign', location: planetConfig });
+  const passives = createBattlePassiveState(combat.stats, Date.now());
+  const activeEffects = createActiveEffects(combat.stats);
+  const { stats, pilotBase, aircraftBase } = combat;
+  const wingmanBase = combat.gear.wingman.base;
+  const droneBase = combat.gear.drone.base;
 
   // ══════════════════════════════════════════════════════════════════════════
   // 2. CAMERA ORTHOGRAPHIC TOP-DOWN
   // ══════════════════════════════════════════════════════════════════════════
 
-  const ZOOM      = 15;
+  const ZOOM      = BATTLE_WORLD_HALF_HEIGHT;
   const getAspect = () => engine.getRenderWidth() / Math.max(engine.getRenderHeight(), 1);
   const boundX    = () => ZOOM * getAspect() - 1.8;
 
@@ -159,21 +142,21 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   scene.clearColor = new BABYLON.Color4(0.008, 0.047, 0.105, 1);
 
   const glow = new BABYLON.GlowLayer('cGlow', scene);
-  glow.intensity = 0.22;
+  glow.intensity = quality.glow ? 0.22 : 0;
 
   // ══════════════════════════════════════════════════════════════════════════
   // 3. STARFIELD + SCROLLING GRID (PLANET-THEMED)
   // ══════════════════════════════════════════════════════════════════════════
 
-  (() => {
+  const createLegacyStarfield = () => {
     const r = getAspect();
     const SX = ZOOM * r * 2.5, SZ = ZOOM * 2.5;
 
     // Parallax stars – 3 layers
     const layers = [
-      { count: 220, size: 0.06, speed: 0.020, bright: new BABYLON.Color3(0.35, 0.45, 0.65) },
-      { count:  90, size: 0.13, speed: 0.048, bright: new BABYLON.Color3(0.65, 0.75, 1.00) },
-      { count:  28, size: 0.22, speed: 0.095, bright: new BABYLON.Color3(1.00, 1.00, 1.00) },
+      { count: Math.max(8,Math.round(220 * quality.starFraction)), size: 0.06, speed: 0.020, bright: new BABYLON.Color3(0.35, 0.45, 0.65) },
+      { count:  Math.max(8,Math.round(90 * quality.starFraction)), size: 0.13, speed: 0.048, bright: new BABYLON.Color3(0.65, 0.75, 1.00) },
+      { count:  Math.max(8,Math.round(28 * quality.starFraction)), size: 0.22, speed: 0.095, bright: new BABYLON.Color3(1.00, 1.00, 1.00) },
     ];
     const allLayers = layers.map(({ count, size, speed, bright }) => {
       const mat   = makeMat(scene, bright);
@@ -198,20 +181,36 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     });
 
     scene.onBeforeRenderObservable.add(() => {
+      const dtFactor = frameScale(engine.getDeltaTime());
       allLayers.forEach(({ stars, speed, span }) =>
-        stars.forEach(s => { s.position.z += speed; if (s.position.z > span / 2) s.position.z -= span; })
+        stars.forEach(s => { s.position.z += speed * dtFactor; if (s.position.z > span / 2) s.position.z -= span; })
       );
       const span = GRID * rowCount;
-      gridRows.forEach(m => { m.position.z += 0.038; if (m.position.z > ZOOM + GRID) m.position.z -= span; });
+      gridRows.forEach(m => { m.position.z += 0.038 * dtFactor; if (m.position.z > ZOOM + GRID) m.position.z -= span; });
     });
-  })();
+  };
+  const selectedBackground = legacyBattleBackgroundRequested(globalThis.location?.search) ? null : resolveBattleBackground({
+    mode: 'campaign', planetId: currentPlanetId, stage: currentStage,
+  });
+  if (selectedBackground) {
+    createScrollingBattleBackground({
+      BABYLON, scene, engine, config: selectedBackground, qualityId: quality.id || 'mobile',
+      worldHalfHeight: ZOOM, baseUrl: import.meta.env?.BASE_URL || '/',
+      onFallback: createLegacyStarfield,
+    });
+  } else createLegacyStarfield();
+  // Developer-only measurement: ?bgPerf=1; same probe works with ?bg=legacy.
+  attachBattleBackgroundProfiler({
+    scene, engine, mode: 'campaign',
+    backgroundId: selectedBackground?.id || 'legacy',
+    queryString: globalThis.location?.search || '',
+  });
 
   // ══════════════════════════════════════════════════════════════════════════
   // 4. GUI
   // ══════════════════════════════════════════════════════════════════════════
 
   const ui  = GUI.AdvancedDynamicTexture.CreateFullscreenUI('CampaignUI', true, scene);
-  const dpr = window.devicePixelRatio || 1;
 
   // ── SVG HUD top-bar (hexagon shape – planet theme colour) ─────────────────
    const topBar = new GUI.Image('topBar', '');
@@ -227,8 +226,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   scoreText.fontFamily              = '"VT323", monospace';
   scoreText.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
   scoreText.textVerticalAlignment   = GUI.Control.VERTICAL_ALIGNMENT_TOP;
-  scoreText.left                    = `${15 * dpr}px`;
-  scoreText.top                     = `${10 * dpr}px`;
+  scoreText.left                    = `15px`;
+  scoreText.top                     = `10px`;
   ui.addControl(scoreText);
 
   // ── Wave info (right) ─────────────────────────────────────────────────────
@@ -238,8 +237,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   waveText.fontFamily              = '"VT323", monospace';
   waveText.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_RIGHT;
   waveText.textVerticalAlignment   = GUI.Control.VERTICAL_ALIGNMENT_TOP;
-  waveText.left                    = `-${15 * dpr}px`;
-  waveText.top                     = `${10 * dpr}px`;
+  waveText.left                    = `-15px`;
+  waveText.top                     = `10px`;
   ui.addControl(waveText);
   // ── HP system label (center) ──────────────────────────────────────────────
   const hpLabel = new GUI.TextBlock('hpLabel');
@@ -251,51 +250,47 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
 
    // ── Rebuild SVG whenever resolution changes ───────────────────────────────
   const drawHudSvg = () => {
-  const w    = engine.getRenderWidth() || 1000;
-  const cssW = w / dpr;
-  const cx   = w / 2;
-  const h1   = 35 * dpr, h2 = 65 * dpr;
-  const dx1  = 90 * dpr, dx2 = 70 * dpr;
+  const { w, cssW, cx, h1, h2, dx1, dx2, stroke } = measureBattleHud(engine, canvas, ui);
   const accent = themeHex.replace('#', '%23');   // URL-encode '#'
 
    const svgStr = [
       `<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h2}' viewBox='0 0 ${w} ${h2}'>`,
       `<polygon points='0,0 ${w},0 ${w},${h1} ${cx+dx1},${h1} ${cx+dx2},${h2} ${cx-dx2},${h2} ${cx-dx1},${h1} 0,${h1}' fill='rgba(5,11,20,0.85)'/>`,
-      `<polyline points='0,${h1} ${cx-dx1},${h1} ${cx-dx2},${h2} ${cx+dx2},${h2} ${cx+dx1},${h1} ${w},${h1}' fill='none' stroke='${accent}99' stroke-width='${2.5*dpr}'/>`,
+      `<polyline points='0,${h1} ${cx-dx1},${h1} ${cx-dx2},${h2} ${cx+dx2},${h2} ${cx+dx1},${h1} ${w},${h1}' fill='none' stroke='${accent}99' stroke-width='${stroke}'/>`,
       `</svg>`,
     ].join('');
     topBar.source = 'data:image/svg+xml;utf8,' + svgStr;
-    topBar.height = `${h2}px`;
+    topBar.height = '65px';
 
     const isSmall = cssW < 400;
-    scoreText.fontSize = (isSmall ? 18 : 22) * dpr;
-    waveText.fontSize  = (isSmall ? 14 : 18) * dpr;
-    hpLabel.fontSize   = (isSmall ? 12 : 14) * dpr;
-    hpLabel.top        = `${(isSmall ? 20 : 22) * dpr}px`;
+    scoreText.fontSize = (isSmall ? 18 : 22);
+    waveText.fontSize  = (isSmall ? 14 : 18);
+    hpLabel.fontSize   = (isSmall ? 12 : 14);
+    hpLabel.top        = `${(isSmall ? 20 : 22)}px`;
   };
   drawHudSvg();
   engine.onResizeObservable.add(drawHudSvg);
 
   // ── HP bar – 10 segmented blocks (same as DungeonScene) ──────────────────
   const hpBarContainer = new GUI.Rectangle('hpBarCon');
-  hpBarContainer.width             = `${120 * dpr}px`;
-  hpBarContainer.height            = `${12 * dpr}px`;
+  hpBarContainer.width             = `120px`;
+  hpBarContainer.height            = `12px`;
   hpBarContainer.background        = 'rgba(0,0,0,0.8)';
   hpBarContainer.color             = 'rgba(0,229,255,0.4)';
-  hpBarContainer.thickness         = 1 * dpr;
+  hpBarContainer.thickness         = 1;
   hpBarContainer.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP;
-  hpBarContainer.top               = `${40 * dpr}px`;
+  hpBarContainer.top               = `40px`;
   ui.addControl(hpBarContainer);
 
   const hpSegments = [];
   for (let i = 0; i < 10; i++) {
     const seg = new GUI.Rectangle(`hseg_${i}`);
-    seg.width               = `${10 * dpr}px`;
-    seg.height              = `${8  * dpr}px`;
+    seg.width               = `10px`;
+    seg.height              = `8px`;
     seg.background          = '#00e5ff';
     seg.thickness           = 0;
     seg.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
-    seg.left                = `${(i * 12 + 1) * dpr}px`;
+    seg.left                = `${(i * 12 + 1)}px`;
     hpBarContainer.addControl(seg);
     hpSegments.push(seg);
   }
@@ -311,26 +306,26 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
 
  // ── Boss HP panel (StackPanel, same as DungeonScene) ──────────────────────
   const bossPanel = new GUI.StackPanel('bossPanel');
-  bossPanel.width             = `${300 * dpr}px`;
+  bossPanel.width             = `300px`;
   bossPanel.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP;
-  bossPanel.top               = `${80 * dpr}px`;
+  bossPanel.top               = `80px`;
   bossPanel.isVisible         = false;
   ui.addControl(bossPanel);
 
   const bossNameText = new GUI.TextBlock('bossNameText');
   bossNameText.text       = '⚠ BOSS';
   bossNameText.color      = '#ff4757';
-  bossNameText.fontSize   = 20 * dpr;
+  bossNameText.fontSize   = 20;
   bossNameText.fontFamily = '"VT323", monospace';
-  bossNameText.height     = `${25 * dpr}px`;
+  bossNameText.height     = `25px`;
   bossPanel.addControl(bossNameText);
 
   const bossHpContainer = new GUI.Rectangle('bossHpCon');
   bossHpContainer.width      = '100%';
-  bossHpContainer.height     = `${10 * dpr}px`;
+  bossHpContainer.height     = `10px`;
   bossHpContainer.background = 'rgba(30,0,0,0.8)';
   bossHpContainer.color      = '#ff4757';
-  bossHpContainer.thickness  = 2 * dpr;
+  bossHpContainer.thickness  = 2;
   bossPanel.addControl(bossHpContainer);
 
   const bossHpFill = new GUI.Rectangle('bossHpFill');
@@ -342,10 +337,10 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
    // ── Announcement banner (CENTER-based + '-15%', same as DungeonScene) ────
   const annPanel = new GUI.Rectangle('annPanel');
   annPanel.width             = '100%';
-  annPanel.height            = `${70 * dpr}px`;
+  annPanel.height            = `70px`;
   annPanel.background        = 'rgba(5,11,20,0.92)';
   annPanel.color             = 'rgba(102,252,241,0.5)';
-  annPanel.thickness         = 2 * dpr;
+  annPanel.thickness         = 2;
   annPanel.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_CENTER;
   annPanel.top               = '-15%';
   annPanel.alpha             = 0;
@@ -353,7 +348,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
 
   const annText = new GUI.TextBlock('annText');
   annText.color      = '#66fcf1';
-  annText.fontSize   = 32 * dpr;
+  annText.fontSize   = 32;
   annText.fontWeight = 'bold';
   annText.fontFamily = '"VT323", monospace';
   annPanel.addControl(annText);
@@ -382,12 +377,12 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     const lbl = new GUI.TextBlock(`fl_${Date.now()}`, text);
     lbl.color      = color;
     lbl.fontFamily = '"VT323", monospace';
-    lbl.fontSize   = 20 * dpr;
+    lbl.fontSize   = 20;
     lbl.fontStyle  = 'bold';
     lbl.isPickable = false;
     ui.addControl(lbl);
     lbl.linkWithMesh(dummy);
-    lbl.linkOffsetYInPixels = -10 * dpr;
+    lbl.linkOffsetYInPixels = -10;
 
     let t0 = null;
     const obs = scene.onBeforeRenderObservable.add(() => {
@@ -406,84 +401,16 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   const playerRoot = new BABYLON.TransformNode('playerRoot', scene);
   playerRoot.position.set(0, 0, ZOOM - 2.5);
 
-  let playerPlane = null; // giữ ref để tilt animation vẫn hoạt động
+  // One visual factory shared by Campaign and Dungeon. Sprite/procedural
+  // appears immediately; GLB takes its place only after successful import.
+  // Visuals never control the combat hitbox or server-issued battle rewards.
+  const shipVisual = createPlayerShipVisual(scene, playerRoot, {
+    aircraftId: loadout.aircraft, aircraftCatalog: AIRCRAFTS, glowLayer: glow,
+  });
+  const playerPlane = shipVisual.tiltNode; // tilt animation lives on visual root
 
-  if (aircraftBase.modelSrc) {
-    // ── Load GLB 3D model ──
-    BABYLON.SceneLoader.ImportMeshAsync('', aircraftBase.modelSrc, '', scene).then(result => {
-      const root = result.meshes[0];
-      const wrapper = new BABYLON.TransformNode('shipWrapper', scene);
-      wrapper.parent   = playerRoot;
-      wrapper.position = BABYLON.Vector3.Zero();
-      const rot = aircraftBase.modelRotation || { x: 0, y: Math.PI, z: 0 };
-      wrapper.rotation.set(rot.x, rot.y, rot.z);
-      const s = aircraftBase.modelScale || 2.8;
-      wrapper.scaling.setAll(s);
-      root.parent = wrapper; // gắn GLB vào wrapper
-
-      playerPlane = wrapper; // dùng root làm target tilt
-      glow.addExcludedMesh(root);
-      result.meshes.forEach(m => { if (m !== root) glow.addExcludedMesh(m); });
-    }).catch(() => {
-      // Fallback: sprite image nếu GLB lỗi
-      const fb = BABYLON.MeshBuilder.CreatePlane('playerPlane', { width: 2.4, height: 2.4 }, scene);
-      fb.rotation.x = Math.PI / 2;
-      fb.parent     = playerRoot;
-      fb.material   = makeSpriteMat(scene, aircraftBase.imgTop || '/images/ships/ship_xwing_top.png');
-      playerPlane   = fb;
-    });
-  } else {
-    // ── Sprite image (các ship chưa có GLB) ──
-    const sp = BABYLON.MeshBuilder.CreatePlane('playerPlane', { width: 2.4, height: 2.4 }, scene);
-    sp.rotation.x = Math.PI / 2;
-    sp.rotation.z = 0;
-    sp.parent     = playerRoot;
-    const playerMat = makeSpriteMat(
-      scene,
-      aircraftBase.imgTop || '/images/ships/ship_xwing_top.png',
-      null,
-      () => {
-        const fb = BABYLON.MeshBuilder.CreateCylinder('pFb',
-          { diameterTop: 0.4, diameterBottom: 2.0, height: 0.4, tessellation: 6 }, scene);
-        fb.parent     = playerRoot;
-        fb.position.y = 0.2;
-        fb.material   = makeMat(scene, new BABYLON.Color3(0.1, 0.85, 1.0));
-        sp.isVisible  = false;
-      },
-    );
-    sp.material = playerMat;
-    playerPlane = sp;
-  }
-
-  // ── Engine flame particles ────────────────────────────────────────────────
-  const flameHex   = aircraftBase.engineFlameTint
-    ? '#' + aircraftBase.engineFlameTint.toString(16).padStart(6, '0') : '#38bdf8';
-  const fR = parseInt(flameHex.slice(1,3),16)/255;
-  const fG = parseInt(flameHex.slice(3,5),16)/255;
-  const fB = parseInt(flameHex.slice(5,7),16)/255;
-  const fS = aircraftBase.engineFlameScale || 1.0;
-
-  const engineMount = new BABYLON.TransformNode('eMnt', scene);
-  engineMount.parent   = playerRoot;
-  const eOff = aircraftBase.engineOffset || { x: 0, y: 0, z: 1.1 };
-  engineMount.position.set(eOff.x, eOff.y, eOff.z);
-
-  const engineFx = new BABYLON.ParticleSystem('eFx', 160, scene);
-  engineFx.particleTexture = new BABYLON.Texture('https://assets.babylonjs.com/textures/flare.png', scene);
-  engineFx.emitter      = engineMount;
-  engineFx.minEmitBox   = new BABYLON.Vector3(-0.12*fS, 0, 0);
-  engineFx.maxEmitBox   = new BABYLON.Vector3( 0.12*fS, 0, 0);
-  engineFx.color1       = new BABYLON.Color4(Math.min(1,fR+.2), Math.min(1,fG+.2), Math.min(1,fB+.2), 1);
-  engineFx.color2       = new BABYLON.Color4(fR*.4, fG*.4, fB*.4, .9);
-  engineFx.colorDead    = new BABYLON.Color4(0, 0, .3, 0);
-  engineFx.minSize      = 0.12*fS; engineFx.maxSize   = 0.42*fS;
-  engineFx.minLifeTime  = 0.08;    engineFx.maxLifeTime = 0.22;
-  engineFx.emitRate     = 115;
-  engineFx.direction1 = new BABYLON.Vector3(-0.05, 0.1,  0.4);
-  engineFx.direction2 = new BABYLON.Vector3( 0.05, 0.3,  0.8);
-  engineFx.minEmitPower = 4; engineFx.maxEmitPower = 8;
-  engineFx.updateSpeed  = 0.02;
-  engineFx.start();
+  // Shared aircraft-aware engine VFX (same mount, colors, particles, texture as Dungeon).
+  const engineFx = createShipEngineFx({ scene, BABYLON, playerRoot, aircraft: aircraftBase, quality });
 
   // ── Wingman drones ────────────────────────────────────────────────────────
   const drones = [];
@@ -530,7 +457,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       wFb.material = makeMat(scene, BABYLON.Color3.FromHexString(wColor));
       wFb.parent = wNode;
 
-      if (wingmanBase.modelSrc) {
+      if (wingmanBase.modelSrc && canAutoLoadModel(wingmanBase.modelBytes || Infinity, quality)) {
         // ── Load GLB wingman model ──
         BABYLON.SceneLoader.ImportMeshAsync('', wingmanBase.modelSrc, '', scene)
           .then(result => {
@@ -571,76 +498,11 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   // 6. INPUT – DRAG TO MOVE
   // ══════════════════════════════════════════════════════════════════════════
 
-  let isDragging = false;
-  let lastPtrX   = 0;
-  let lastPtrZ   = 0;
-
-  // Dùng native pointer events thay Babylon observable
-  // → tránh Babylon picking gây khựng frame
-  canvas = engine.getRenderingCanvas();
-  canvas.style.touchAction = 'none';
-
-  const onPtrDown = (e) => {
-    if (gameOver || gameState === 'CLEAR') return;
-    const touch = e.touches ? e.touches[0] : e;
-    const rect  = canvas.getBoundingClientRect();
-    // Tọa độ CSS pixel, không bị DPR ảnh hưởng
-    lastPtrX   = touch.clientX;
-    lastPtrZ   = touch.clientY;
-    isDragging = true;
-  };
-
-  const onPtrMove = (e) => {
-    if (!isDragging || gameOver || gameState === 'CLEAR') return;
-    const touch = e.touches ? e.touches[0] : e;
-    const rect  = canvas.getBoundingClientRect();
-    const cx    = touch.clientX;
-    const cz    = touch.clientY;
-
-    // Delta CSS pixel → world unit
-    // rect.width ~ ZOOM*aspect*2 world units
-    const scaleX = (ZOOM * getAspect() * 2) / window.innerWidth;
-    const scaleZ = (ZOOM * 2) / window.innerHeight;
-    const dx = (cx - lastPtrX) * scaleX * speedMod * -1;
-    const dz = (cz - lastPtrZ) * scaleZ * speedMod;
-
-    playerRoot.position.x = clamp(playerRoot.position.x + dx, -boundX(), boundX());
-    playerRoot.position.z = clamp(playerRoot.position.z + dz, -ZOOM + 1.8, ZOOM - 1.8);
-
-    lastPtrX = cx;
-    lastPtrZ = cz;
-
-    // Tilt
-    if (playerPlane) {
-      const targetRoll = clamp(dx * 0.15, -0.3, 0.3);
-      playerPlane.rotation.z = BABYLON.Scalar.Lerp(playerPlane.rotation.z, targetRoll, .15);
-    }
-  };
-
-  const onPtrUp = (e) => {
-    isDragging = false;
-  };
-
-  const speedMod = 1 - (planetConfig.speedDebuff || 0);
-
-  // Gắn cả mouse và touch
-  canvas.addEventListener('mousedown',  onPtrDown,  { passive: false });
-  canvas.addEventListener('mousemove',  onPtrMove,  { passive: false });
-  canvas.addEventListener('mouseup',    onPtrUp);
-  canvas.addEventListener('touchstart', onPtrDown,  { passive: false });
-  canvas.addEventListener('touchmove',  onPtrMove,  { passive: false });
-  canvas.addEventListener('touchend',   onPtrUp);
-  canvas.addEventListener('touchcancel',onPtrUp);
-
-  // Cleanup khi scene dispose
-  scene.onDisposeObservable.addOnce(() => {
-    canvas.removeEventListener('mousedown',   onPtrDown);
-    canvas.removeEventListener('mousemove',   onPtrMove);
-    canvas.removeEventListener('mouseup',     onPtrUp);
-    canvas.removeEventListener('touchstart',  onPtrDown);
-    canvas.removeEventListener('touchmove',   onPtrMove);
-    canvas.removeEventListener('touchend',    onPtrUp);
-    canvas.removeEventListener('touchcancel', onPtrUp);
+  const speedMod = battleSpeedMultiplier(stats);
+  const shipInput = createShipInputController({
+    canvas: engine.getRenderingCanvas(), scene, engine, playerRoot, tiltNode: playerPlane,
+    halfHeight: ZOOM, aspect: getAspect, speedMultiplier: speedMod,
+    enabled: () => !gameOver && gameState !== 'CLEAR' && gameState !== 'GAMEOVER',
   });
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -648,7 +510,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   // ══════════════════════════════════════════════════════════════════════════
 
   const explode = (pos, scale = 1) => {
-    const ps = new BABYLON.ParticleSystem('exp', 80, scene);
+    const ps = new BABYLON.ParticleSystem('exp', Math.max(24,Math.round(80*quality.particleFraction)), scene);
     ps.particleTexture = new BABYLON.Texture('https://assets.babylonjs.com/textures/flare.png', scene);
     ps.emitter     = pos.clone();
     ps.color1      = new BABYLON.Color4(1, .8, .1, 1); ps.color2 = new BABYLON.Color4(1, .3, 0, 1);
@@ -684,27 +546,13 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   let nextDroneFire = 0;
   let nextRegenTime = 0;
 
-  const gun       = GEAR_CATALOG.mainGun?.find(g => g.id === stats.mainGunId);
-  const gunPattern = gun?.firePattern || 'default';
-  const gunC       = gun?.color
-    ? new BABYLON.Color3(((gun.color>>16)&0xff)/255, ((gun.color>>8)&0xff)/255, (gun.color&0xff)/255)
-    : new BABYLON.Color3(0, .9, 1);
-  const gunMat    = makeMat(scene, gunC);
-  const wingMat   = makeMat(scene, new BABYLON.Color3(.8, .8, 0));
-  const droneMat  = makeMat(scene, new BABYLON.Color3(.2, 1, .4));
+  const mainGunBase = combat.gear.mainGun.base || GEAR_CATALOG.mainGun[0];
   const enemyBulMat = makeMat(scene, new BABYLON.Color3(1, .28, .34));
-
-  const fireBullet = (x, z, vx, vz, atk, mat, isHoming = false, target = null) => {
-    const b = BABYLON.MeshBuilder.CreateCylinder(
-      `pb_${Date.now()}_${Math.random()}`, { height: 1.1, diameter: 0.13, tessellation: 6 }, scene);
-    b.position.set(x, 0, z);
-    b.rotation.x = Math.PI/2;
-    if (vx !== 0) b.rotation.z = Math.atan2(vx, -vz);
-    b.material = mat; b.atk = atk; b._vx = vx; b._vz = vz;
-    b.isHoming = isHoming; b.target = target;
-    playerBullets.push(b);
-  };
-
+  const shots = createProjectileEmitter({ scene, BABYLON, bullets: playerBullets, scheduleBattleTimer });
+  const liveTargets = () => [
+    ...enemies.filter(e => !e._dead && !e.mesh.isDisposed?.()),
+    ...(bossMesh && !bossMesh.isDisposed?.() ? [{ mesh: bossMesh }] : []),
+  ];
   const fireEnemyBullet = (pos, vx = 0, vz = 0.24) => {
     const b = BABYLON.MeshBuilder.CreateSphere(`eb_${Date.now()}_${Math.random()}`, { diameter: 0.44 }, scene);
     b.position = pos.clone(); b.position.y = 0;
@@ -713,48 +561,30 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   };
 
   const fireWeapons = () => {
-    const x = playerRoot.position.x, z = playerRoot.position.z - 1.2;
-    const atk = stats.atk;
-    switch (gunPattern) {
-      case 'spread3':
-        fireBullet(x,      z,     0,      -.58, atk,      gunMat);
-        fireBullet(x-.35,  z+.2, -.14,   -.52,  atk*.88, gunMat);
-        fireBullet(x+.35,  z+.2,  .14,   -.52,  atk*.88, gunMat);
-        break;
-      case 'homing': {
-        const tgt = enemies.find(e => !e._dead);
-        fireBullet(x, z, 0, -.54, atk, gunMat, true, tgt || null);
-        break;
-      }
-      default:
-        fireBullet(x, z, 0, -.60, atk, gunMat);
+    const target = pickWeaponTarget(liveTargets(), playerRoot.position);
+    const salvo = describeMainSalvo(mainGunBase, playerRoot.position, stats.atk, target);
+    shots.fire(salvo);
+    if (salvo.length && shouldEchoShot(stats, passives, Date.now())) {
+      // One extra shot per cooldown, even for spread/shotgun (no exponential fanout).
+      const extra = salvo[0];
+      shots.fire(Array.from({length:stats.echoCount},(_,i)=>({...extra, x:extra.x+(i%2===0?-.28:.28), delayMs:0})));
     }
   };
-
   const fireWingman = () => {
-    if (!stats.wingmanId || wingNodes.length === 0) return;
-    const alive = enemies.filter(e => !e._dead);
-    const tgt   = alive[Math.floor(Math.random() * alive.length)] || null;
-    wingNodes.forEach(w => {
-      const absPos = w.getAbsolutePosition();
-      fireBullet(absPos.x, absPos.z - 1.0, 0, -.52, stats.wingAtk, wingMat, true, tgt);
-    });
+    if (!wingmanBase || !wingNodes.length) return;
+    const target = pickWeaponTarget(liveTargets(), playerRoot.position);
+    const mounts = wingNodes.map(w => w.getAbsolutePosition());
+    shots.fire(describeWingSalvo(wingmanBase, mounts, stats.wingAtk, target));
   };
-
   const fireDrones = () => {
-    if (drones.length === 0) return;
-    const alive = enemies.filter(e => !e._dead);
-    const tgt   = alive[Math.floor(Math.random() * alive.length)] || null;
-    drones.forEach(d => {
-      let vx = 0, vz = -.68;
-      if (tgt) {
-        const dx = tgt.mesh.position.x - d.position.x;
-        const dz = tgt.mesh.position.z - d.position.z;
-        const dn = Math.sqrt(dx*dx + dz*dz) || 1;
-        vx = (dx/dn)*.68; vz = (dz/dn)*.68;
-      }
-      fireBullet(d.position.x, d.position.z-.5, vx, vz, stats.droneAtk, droneMat, !!tgt, tgt);
-    });
+    if (!droneBase || !drones.length) return;
+    if (droneBase.behavior === 'repair') {
+      stats.hp = Math.min(stats.maxHp, stats.hp + repairAmount(droneBase, stats.maxHp));
+      updateHpBar();
+      return;
+    }
+    const target = pickWeaponTarget(liveTargets(), playerRoot.position);
+    shots.fire(describeDroneSalvo(droneBase, drones.map(d => d.position), stats.droneAtk, target));
   };
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -821,17 +651,17 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     const speed    = rawSpeed / 1200;   // pixels/s → Babylon units/frame@60fps
 
     let baseHp = cfg.baseHp + currentStage * 15 + currentWave * 5;
-    baseHp     = Math.floor(baseHp * (planetConfig.enemyHpBuff || 1));
+    baseHp     = Math.floor(baseHp * combat.environment.enemyHpMultiplier);
     const pts  = isReplay ? Math.max(1, Math.floor(cfg.score / 2)) : cfg.score;
 
     // Mini HP bar
     const miniHpBg = new GUI.Rectangle(`ehb_${mesh.uniqueId}`);
-    miniHpBg.width = `${Math.round(46*dpr)}px`; miniHpBg.height = `${Math.round(5*dpr)}px`;
+    miniHpBg.width = `${46}px`; miniHpBg.height = `${5}px`;
     miniHpBg.background = '#111'; miniHpBg.color = '#ffffff30';
     miniHpBg.cornerRadius = 3; miniHpBg.thickness = 1;
     ui.addControl(miniHpBg);
     miniHpBg.linkWithMesh(mesh);
-    miniHpBg.linkOffsetYInPixels = -Math.round(28*dpr);
+    miniHpBg.linkOffsetYInPixels = -28;
 
     const miniHp = new GUI.Rectangle(`ehf_${mesh.uniqueId}`);
     miniHp.width = '100%'; miniHp.height = '100%';
@@ -875,7 +705,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     const bType   = stageConfig.bossType || 'mech';
     const bossCfg = curBossCfgs[bType] || Object.values(curBossCfgs)[0];
 
-    bossHp    = Math.floor((bossCfg.baseHp || 25000) * (planetConfig.enemyHpBuff || 1));
+    bossHp    = Math.floor((bossCfg.baseHp || 25000) * combat.environment.enemyHpMultiplier);
     bossMaxHp = bossHp; bossEnraged = false;
     bossPts   = isReplay ? Math.max(10, Math.floor((bossCfg.score||100)/3)) : (bossCfg.score||100);
 
@@ -931,6 +761,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   let gameOver      = false;
   let gameState     = 'TRANSITION';  // PLAYING | BOSS_FIGHT | TRANSITION | GAMEOVER | CLEAR
   let score         = 0;
+  let verifiedClientKills = 0;
   let collectedCoins = 0;
   let startTime     = Date.now();
   let invincibleUntil = 0;
@@ -942,13 +773,9 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     scoreText.text = `${lang==='vi'?'ĐIỂM':'SCORE'}: ${score}`;
   };
   const trackEventKill = () => {
-    const now = typeof getRealTime === 'function' ? getRealTime() : Date.now();
-    const evData = gsRef.current.campaignData.eventData || {};
-    Object.keys(evData).forEach(evId => {
-      if (evId.startsWith('event_kill_rush')) {
-        evData[evId].kills = (evData[evId].kills || 0) + 1;
-      }
-    });
+    verifiedClientKills++;
+    if (isCloud) return; // Cloud kill milestones await trusted combat telemetry.
+    recordGuestEventKill(gsRef.current.campaignData, EVENT_CONFIG, getRealTime?.() || Date.now());
   };
   const startWave = n => {
     currentWave   = n;
@@ -966,7 +793,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         lang==='vi' ? 'CẢNH BÁO:\nTRÙM CUỐI XUẤT HIỆN!' : 'WARNING:\nBOSS APPROACHING!',
         '#ff4757', 3000);
       gameState = 'BOSS_FIGHT';
-      setTimeout(() => spawnBoss(), 3500);
+      scheduleBattleTimer(() => spawnBoss(), 3500);
       return;
     }
     showAnnouncement(
@@ -978,12 +805,27 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   // 13. PLAYER DAMAGE / DEATH
   // ══════════════════════════════════════════════════════════════════════════
 
-  const damagePlayer = rawDmg => {
-    if (Date.now() < invincibleUntil) return;
-    invincibleUntil = Date.now() + INV_DUR;
-    let dmg = rawDmg;
-    if (stats.armor) dmg = Math.floor(dmg * (1 - stats.armor / 100));
-    stats.hp = Math.max(0, stats.hp - dmg);
+  const damagePlayer = (rawDmg, source = 'contact') => {
+    rawDmg *= shieldDamageFactor(droneBase);
+    const nowMs = Date.now();
+    if (nowMs < invincibleUntil) return;
+    const impact = receiveBattleHit(stats, passives, rawDmg, { source, nowMs });
+    if (impact.dodged) {
+      showAnnouncement(lang==='vi'?'NÉ TRÁNH!':'DODGED!', '#4ade80', 900);
+      return;
+    }
+    invincibleUntil = nowMs + INV_DUR;
+    // Retaliation hits enemies near the player. This is purely battle-local.
+    if (impact.reflected || impact.novaDamage) {
+      for (const enemy of [...enemies]) {
+        if (!enemy.mesh?.position || enemy._dead) continue;
+        const dx=enemy.mesh.position.x-playerRoot.position.x;
+        const dz=enemy.mesh.position.z-playerRoot.position.z;
+        if (dx*dx+dz*dz <= (impact.novaDamage ? 25 : 9)) {
+          applyPlayerDamageToEnemy(enemy, impact.reflected+impact.novaDamage);
+        }
+      }
+    }
     updateHpBar();
     explode(playerRoot.position, 2);
     shakeCamera();
@@ -993,12 +835,19 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       engineFx.stop(); playerRoot.isVisible = false;
       explode(playerRoot.position, 4);
       showAnnouncement(lang==='vi'?'THẤT BẠI!':'MISSION FAILED!', '#ff0000', 3000);
-      setTimeout(() => {
-        const evD = gsRef.current.campaignData?.eventData || {};
-        const coinMult = Object.keys(evD).some(k => k.startsWith('event_coin_fever')) ? 2 : 1;
-        gsRef.current.coins = (Number(gsRef.current.coins)||0) + score + (collectedCoins * coinMult);
-        if (saveUserProfile) saveUserProfile();
-        onDefeat();
+      scheduleBattleTimer(async () => {
+        if (isCloud) {
+          try {
+            await gameAction('battle.finish',{ticketId:gsRef.current.activeBattleId,victory:false,kills:verifiedClientKills});
+            onDefeat();
+          } catch(error) {console.error('Battle settlement failed',error);showAnnouncement(lang==='vi'?'LỖI MÁY CHỦ - HÃY RÚT LUI':'SERVER ERROR - PLEASE RETREAT', '#ff4757');}
+        } else {
+          const coinMult = activeCoinMultiplier(EVENT_CONFIG, getRealTime?.() || Date.now());
+          gsRef.current.coins = (Number(gsRef.current.coins)||0) + score + (collectedCoins * coinMult);
+          recordGuestBattle(gsRef.current.campaignData,{mode:"campaign",victory:false,kills:verifiedClientKills}, getRealTime?.() ?? Date.now());
+          if (saveUserProfile) saveUserProfile();
+          onDefeat();
+        }
       }, 4000);
     }
   };
@@ -1010,7 +859,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   const stageCleared = () => {
     gameState = 'CLEAR'; engineFx.stop();
     showAnnouncement(lang==='vi'?'HOÀN THÀNH\nCHIẾN DỊCH!':'CAMPAIGN\nCLEARED!', '#2ecc71', 2000);
-    setTimeout(() => showRewardSummary(), 2600);
+    scheduleBattleTimer(() => showRewardSummary(), 2600);
   };
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -1034,8 +883,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
 
     const stageBonus = isReplay ? 10 : 50 + currentStage*50;
     const earnedExp  = isReplay ? 0 : (stageConfig.expReward||100);
-    const evD2 = gsRef.current.campaignData?.eventData || {};
-    const coinMult2 = Object.keys(evD2).some(k => k.startsWith('event_coin_fever')) ? 2 : 1;
+    const coinMult2 = activeCoinMultiplier(EVENT_CONFIG, getRealTime?.() || Date.now());
     const totalCoins = stageBonus + score + (collectedCoins * coinMult2);
     // ── Overlay backdrop (fade in qua observable, giữ nguyên logic cũ) ──
     const overlay = new GUI.Rectangle('summaryOverlay');
@@ -1044,10 +892,11 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     ui.addControl(overlay);
  
     // ── Constants layout ──
-    const RW  = engine.getRenderWidth();
-    const RH  = engine.getRenderHeight();
-    const PW  = Math.min(RW * 0.92, Math.round(420 * dpr));
-    const PH = Math.min(Math.round(580 * dpr), Math.round(RH * 0.88));
+    // The report panel shares the same CSS-pixel sizing as the battle HUD.
+    // Using framebuffer dimensions here would overflow after adaptive scaling.
+    const { cssW: RW, cssH: RH } = measureBattleHud(engine, canvas, ui);
+    const PW = Math.min(RW * 0.92, 420);
+    const PH = Math.min(580, RH * 0.88);
  
     // ── Panel chính ──
     const panel = new GUI.Rectangle('sPanel');
@@ -1055,15 +904,15 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     panel.height       = `${PH}px`;
     panel.background   = 'rgba(4,9,20,0.98)';
     panel.color        = themeHex;
-    panel.thickness    = Math.round(2 * dpr);
-    panel.cornerRadius = Math.round(16 * dpr);
+    panel.thickness    = Math.round(2);
+    panel.cornerRadius = Math.round(16);
     // Viền neon glow (box shadow không có trong Babylon GUI → dùng 2 rect lồng)
     overlay.addControl(panel);
  
     // Đường kẻ accent ngang ở đỉnh panel (thay thế cho gradient header)
     const topAccent = new GUI.Rectangle('topAccent');
     topAccent.width            = `${Math.round(PW * 0.7)}px`;
-    topAccent.height           = `${Math.round(3 * dpr)}px`;
+    topAccent.height           = `${Math.round(3)}px`;
     topAccent.background       = themeHex;
     topAccent.thickness        = 0;
     topAccent.verticalAlignment   = GUI.Control.VERTICAL_ALIGNMENT_TOP;
@@ -1074,13 +923,13 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     // ── Stack nội dung ──
     const stack = new GUI.StackPanel('sStack');
     stack.isVertical = true;
-    stack.paddingTop = `${Math.round(22 * dpr)}px`;
+    stack.paddingTop = `${Math.round(22)}px`;
     panel.addControl(stack);
  
     // ─── Helper: addSpacer ────────────────────────────────────────────────────
     const addSpacer = (h = 8) => {
       const s = new GUI.Rectangle();
-      s.height = `${Math.round(h * dpr)}px`; s.thickness = 0; s.background = 'transparent';
+      s.height = `${Math.round(h)}px`; s.thickness = 0; s.background = 'transparent';
       stack.addControl(s);
     };
  
@@ -1090,9 +939,9 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       t.text        = text;
       t.color       = color;
       t.fontFamily  = '"VT323", monospace';
-      t.fontSize    = Math.round(fs * dpr);
-      t.height      = `${Math.round((fs * 1.35) * dpr)}px`;
-      t.paddingTop  = `${Math.round(pt * dpr)}px`;
+      t.fontSize    = Math.round(fs);
+      t.height      = `${Math.round((fs * 1.35))}px`;
+      t.paddingTop  = `${Math.round(pt)}px`;
       t.textHorizontalAlignment = align === 'left'
         ? GUI.Control.HORIZONTAL_ALIGNMENT_LEFT
         : align === 'right'
@@ -1106,21 +955,21 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     const addRow = (label, value, vcol = '#00e5ff', labelFs = 17, valueFs = 20) => {
       const row = new GUI.StackPanel();
       row.isVertical = false;
-      row.height     = `${Math.round(30 * dpr)}px`;
-      row.paddingLeft  = `${Math.round(24 * dpr)}px`;
-      row.paddingRight = `${Math.round(24 * dpr)}px`;
+      row.height     = `${Math.round(30)}px`;
+      row.paddingLeft  = `${Math.round(24)}px`;
+      row.paddingRight = `${Math.round(24)}px`;
       stack.addControl(row);
  
       const lbl = new GUI.TextBlock();
       lbl.text       = label; lbl.color = '#64748b';
-      lbl.fontFamily = '"VT323", monospace'; lbl.fontSize = Math.round(labelFs * dpr);
-      lbl.width = `${Math.round((PW - Math.round(48 * dpr)) * 0.56)}px`;
+      lbl.fontFamily = '"VT323", monospace'; lbl.fontSize = Math.round(labelFs);
+      lbl.width = `${Math.round((PW - Math.round(48)) * 0.56)}px`;
       lbl.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
  
       const val = new GUI.TextBlock();
       val.text       = value; val.color = vcol;
-      val.fontFamily = '"VT323", monospace'; val.fontSize = Math.round(valueFs * dpr); val.fontStyle = 'bold';
-      val.width = `${Math.round((PW - Math.round(48 * dpr)) * 0.44)}px`;
+      val.fontFamily = '"VT323", monospace'; val.fontSize = Math.round(valueFs); val.fontStyle = 'bold';
+      val.width = `${Math.round((PW - Math.round(48)) * 0.44)}px`;
       val.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_RIGHT;
  
       row.addControl(lbl); row.addControl(val);
@@ -1130,7 +979,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     const addDiv = (opacity = '22') => {
       const d = new GUI.Rectangle();
       d.width      = `${Math.round(PW * 0.86)}px`;
-      d.height     = `${Math.round(1 * dpr)}px`;
+      d.height     = `${Math.round(1)}px`;
       d.background = `${themeHex}${opacity}`; d.thickness = 0;
       stack.addControl(d);
       addSpacer(6);
@@ -1140,32 +989,32 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     const addCond = (met, label) => {
       const row = new GUI.StackPanel();
       row.isVertical = false;
-      row.height     = `${Math.round(26 * dpr)}px`;
-      row.paddingLeft = `${Math.round(24 * dpr)}px`;
+      row.height     = `${Math.round(26)}px`;
+      row.paddingLeft = `${Math.round(24)}px`;
       stack.addControl(row);
  
       // Icon (ô vuông nhỏ thay cho emoji ✅/❌)
       const iconBox = new GUI.Rectangle();
-      iconBox.width      = `${Math.round(16 * dpr)}px`;
-      iconBox.height     = `${Math.round(16 * dpr)}px`;
+      iconBox.width      = `${Math.round(16)}px`;
+      iconBox.height     = `${Math.round(16)}px`;
       iconBox.background = met ? '#2ecc71' : '#ff4757';
       iconBox.thickness  = 0;
-      iconBox.cornerRadius = Math.round(3 * dpr);
+      iconBox.cornerRadius = Math.round(3);
  
       const iconTxt = new GUI.TextBlock();
       iconTxt.text      = met ? '✓' : '✗';
       iconTxt.color     = '#000';
       iconTxt.fontFamily = '"VT323", monospace';
-      iconTxt.fontSize  = Math.round(13 * dpr);
+      iconTxt.fontSize  = Math.round(13);
       iconBox.addControl(iconTxt);
  
       const lbl = new GUI.TextBlock();
       lbl.text       = `  ${label}`;
       lbl.color      = met ? '#a3f7bf' : '#ff8a8a';
       lbl.fontFamily = '"VT323", monospace';
-      lbl.fontSize   = Math.round(16 * dpr);
-      lbl.width = `${Math.round(PW - Math.round(16 * dpr) - Math.round(32 * dpr))}px`;
-      lbl.paddingLeft = `${Math.round(8 * dpr)}px`;
+      lbl.fontSize   = Math.round(16);
+      lbl.width = `${Math.round(PW - Math.round(16) - Math.round(32))}px`;
+      lbl.paddingLeft = `${Math.round(8)}px`;
       lbl.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
  
       row.addControl(iconBox); row.addControl(lbl);
@@ -1193,7 +1042,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     // Dùng 3 TextBlock riêng để tô màu riêng từng sao
     const starRow = new GUI.StackPanel('starRow');
     starRow.isVertical = false;
-    starRow.height     = `${Math.round(52 * dpr)}px`;
+    starRow.height     = `${Math.round(52)}px`;
     stack.addControl(starRow);
  
     for (let i = 0; i < 3; i++) {
@@ -1201,10 +1050,10 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       s.text       = '★';
       s.color      = i < stars ? '#facc15' : '#1e293b';
       s.fontFamily = '"VT323", monospace';
-      s.fontSize   = Math.round(44 * dpr);
-      s.width      = `${Math.round(60 * dpr)}px`;
+      s.fontSize   = Math.round(44);
+      s.width      = `${Math.round(60)}px`;
       // Sao giữa to hơn chút (sao 2, index 1)
-      if (i === 1) { s.fontSize = Math.round(50 * dpr); s.color = i < stars ? '#fde047' : '#1e293b'; }
+      if (i === 1) { s.fontSize = Math.round(50); s.color = i < stars ? '#fde047' : '#1e293b'; }
       starRow.addControl(s);
     }
  
@@ -1241,12 +1090,12 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
  
     // ── Nút XÁC NHẬN (thiết kế lại: nền đậm + viền cyan + text lớn) ──
     const btnOuter = new GUI.Rectangle('btnOuter');
-    btnOuter.width        = `${Math.round(220 * dpr)}px`;
-    btnOuter.height       = `${Math.round(50 * dpr)}px`;
+    btnOuter.width        = `${Math.round(220)}px`;
+    btnOuter.height       = `${Math.round(50)}px`;
     btnOuter.background   = 'rgba(0,229,255,0.12)';
     btnOuter.color        = themeHex;
-    btnOuter.thickness    = Math.round(2 * dpr);
-    btnOuter.cornerRadius = Math.round(8 * dpr);
+    btnOuter.thickness    = Math.round(2);
+    btnOuter.cornerRadius = Math.round(8);
     btnOuter.isPointerBlocker = true;
     stack.addControl(btnOuter);
  
@@ -1254,7 +1103,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     btnTxt.text       = lang === 'vi' ? '✦  XÁC NHẬN  ✦' : '✦  CONFIRM  ✦';
     btnTxt.color      = themeHex;
     btnTxt.fontFamily = '"VT323", monospace';
-    btnTxt.fontSize   = Math.round(24 * dpr);
+    btnTxt.fontSize   = Math.round(24);
     btnTxt.fontStyle  = 'bold';
     btnOuter.addControl(btnTxt);
  
@@ -1278,9 +1127,20 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
 
     // Confirm click – save progress
     let clicked = false;
-    btnOuter.onPointerDownObservable.addOnce(() => {
+    btnOuter.onPointerDownObservable.add(async () => {
       if (clicked) return; clicked = true;
       btnOuter.background = `${themeHex}66`; btnTxt.color = '#000';
+      if (isCloud) {
+        try {
+          await gameAction('battle.finish',{ticketId:gsRef.current.activeBattleId,victory:true,stars,kills:verifiedClientKills});
+          scheduleBattleTimer(() => onVictory(), 200);
+        } catch(error) {
+          clicked=false;
+          btnTxt.text=lang==='vi'?'LỖI MÁY CHỦ - THỬ LẠI':'SERVER ERROR - RETRY';
+          console.error('Campaign reward settlement failed',error);
+        }
+        return;
+      }
 
       const prog  = gsRef.current.campaignData.progress;
       const pId   = Number(prog.currentPlanet) || 1;
@@ -1312,13 +1172,12 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       prog.exp += earnedExp;
       gsRef.current.coins = (Number(gsRef.current.coins)||0) + totalCoins;
 
+      recordGuestBattle(gsRef.current.campaignData,{mode:'campaign',victory:true,kills:verifiedClientKills,boss:Boolean(stageConfig.hasBoss)}, getRealTime?.() ?? Date.now());
+      // saveUserProfile handles both authenticated Firestore and guest cache.
+      // Do not overwrite guest cache with plaintext after encrypted storage.
       if (saveUserProfile) saveUserProfile();
-      try {
-        localStorage.setItem('astro_guest_campaign', JSON.stringify(gsRef.current.campaignData));
-        localStorage.setItem('astro_guest_coins', String(gsRef.current.coins));
-      } catch(_) {}
 
-      setTimeout(() => onVictory(), 200);
+      scheduleBattleTimer(() => onVictory(), 200);
     });
   };
 
@@ -1326,24 +1185,67 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   // 16. MAIN GAME LOOP (scene.onBeforeRenderObservable)
   // ══════════════════════════════════════════════════════════════════════════
 
+  // Identical projectile hit semantics in Campaign and Dungeon; this scene
+  // retains only its own scoring, drop and enemy-health UI callbacks.
+  const applyPlayerDamageToEnemy = (enemy, damage) => {
+    if (!enemy || enemy._dead || enemy.mesh.isDisposed?.()) return false;
+    enemy.hp -= damage;
+    showTextEffect(enemy.mesh.position.x, enemy.mesh.position.z, `-${Math.round(damage)}`, '#ff4757');
+    enemy.miniHp.width = `${Math.max(0, Math.round(enemy.hp / enemy.maxHp * 100))}%`;
+    if (enemy.mesh.material?.emissiveColor) {
+      const original = enemy.mesh.material.emissiveColor.clone();
+      enemy.mesh.material.emissiveColor = new BABYLON.Color3(1, 1, 1);
+      scheduleBattleTimer(() => { if (enemy.mesh?.material) enemy.mesh.material.emissiveColor = original; }, 60);
+    }
+    if (enemy.hp > 0) return false;
+    explode(enemy.mesh.position, enemy.tier === 3 ? 2 : 1.5);
+    updateScore(enemy.points);
+    trackEventKill();
+    const roll = Math.random() * 100;
+    if (roll < 4) spawnDrop(enemy.mesh.position.x, enemy.mesh.position.z, 'power');
+    else if (roll < 9) spawnDrop(enemy.mesh.position.x, enemy.mesh.position.z, 'heal');
+    else if (roll < 20) spawnDrop(enemy.mesh.position.x, enemy.mesh.position.z, 'coin');
+    cleanEnemy(enemy);
+    const index = enemies.indexOf(enemy);
+    if (index >= 0) enemies.splice(index, 1);
+    return true;
+  };
+  const applyCampaignSplash = (bullet, impact, damage, primary) => {
+    if (!bullet._splashRadius) return;
+    explode(new BABYLON.Vector3(impact.x, 0, impact.z), bullet._splashRadius * .45);
+    const nearby = enemies.filter(other => other !== primary && !other._dead && !other.mesh.isDisposed?.()
+      && projectileHitsPoint({ position: impact }, other.mesh.position, bullet._splashRadius));
+    nearby.forEach(other => {
+      if (bullet._slowMs) other._slowUntil = Date.now() + bullet._slowMs;
+      applyPlayerDamageToEnemy(other, damage * .4);
+    });
+  };
+
   // Kick off first wave
-  setTimeout(() => startWave(1), 1000);
+  scheduleBattleTimer(() => startWave(1), 1000);
 
   scene.onBeforeRenderObservable.add(() => {
     if (gameOver || gameState === 'CLEAR') return;
     const now = Date.now();
-    tick++;
+    activeEffects.update(now);
+    const frameFactor = frameScale(engine.getDeltaTime());
+    tick += frameFactor;
+    // Regen normalized to elapsed simulation time; paused tabs cannot heal instantly.
+    if (stats.hpRegenRate > 0 && stats.hp > 0 && stats.hp < stats.maxHp) {
+      stats.hp = Math.min(stats.maxHp, stats.hp + stats.maxHp * stats.hpRegenRate * frameFactor / 60);
+      updateHpBar();
+    }
 
     // ── Roll return ──
-    if (playerPlane && !isDragging) {
-      playerPlane.rotation.z = BABYLON.Scalar.Lerp(playerPlane.rotation.z, 0, .04);
+    if (playerPlane && !shipInput.isDragging()) {
+      playerPlane.rotation.z = BABYLON.Scalar.Lerp(playerPlane.rotation.z, 0, scaledLerpFactor(.04,frameFactor));
     }
 
     // ── Drone hover float ──
     const hoverZ = Math.sin(tick * .04) * .18;
     drones.forEach(d => {
-      d.position.x = BABYLON.Scalar.Lerp(d.position.x, playerRoot.position.x + d.offsetX, .22);
-      d.position.z = BABYLON.Scalar.Lerp(d.position.z, playerRoot.position.z + d.offsetZ + hoverZ, .22);
+      d.position.x = BABYLON.Scalar.Lerp(d.position.x, playerRoot.position.x + d.offsetX, scaledLerpFactor(.22,frameFactor));
+      d.position.z = BABYLON.Scalar.Lerp(d.position.z, playerRoot.position.z + d.offsetZ + hoverZ, scaledLerpFactor(.22,frameFactor));
     });
     
     // ── Auto-fire ──
@@ -1359,15 +1261,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       const b = playerBullets[i];
       if (b.isDisposed?.()) { playerBullets.splice(i,1); continue; }
 
-      // Homing steering
-      if (b.isHoming && b.target && !b.target._dead && b.target.mesh && !b.target.mesh.isDisposed?.()) {
-        const dx = b.target.mesh.position.x - b.position.x;
-        const dz = b.target.mesh.position.z - b.position.z;
-        const dn = Math.sqrt(dx*dx + dz*dz) || 1;
-        b._vx = BABYLON.Scalar.Lerp(b._vx, (dx/dn)*.55, .08);
-        b._vz = BABYLON.Scalar.Lerp(b._vz, (dz/dn)*.55, .08);
-      }
-      b.position.x += b._vx; b.position.z += b._vz;
+      shots.advance(b, frameFactor);
 
       if (b.position.z < -ZOOM-3 || b.position.z > ZOOM+3 || Math.abs(b.position.x) > cullX) {
         safeDispose(b); playerBullets.splice(i,1);
@@ -1378,7 +1272,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     for (let i = enemyBullets.length-1; i >= 0; i--) {
       const b = enemyBullets[i];
       if (b.isDisposed?.()) { enemyBullets.splice(i,1); continue; }
-      b.position.x += b._vx; b.position.z += b._vz;
+      b.position.x += b._vx * frameFactor; b.position.z += b._vz * frameFactor;
 
       if (b.position.z > ZOOM+3 || b.position.z < -ZOOM-3 || Math.abs(b.position.x) > cullX) {
         safeDispose(b); enemyBullets.splice(i,1); continue;
@@ -1386,7 +1280,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       const dx = b.position.x - playerRoot.position.x;
       const dz = b.position.z - playerRoot.position.z;
       if (dx*dx + dz*dz < 1.44) {   // hit radius 1.2
-        damagePlayer(200); safeDispose(b); enemyBullets.splice(i,1);
+        damagePlayer(200, 'projectile'); safeDispose(b); enemyBullets.splice(i,1);
       }
     }
 
@@ -1395,17 +1289,18 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       const e = enemies[i];
       if (e._dead) { enemies.splice(i,1); continue; }
 
+      const enemyFrame = frameFactor * enemySpeedFactor(e, now);
       if (!e.canShoot) {
         // Kamikaze / melee – chase player
         const dx = playerRoot.position.x - e.mesh.position.x;
         const dz = playerRoot.position.z - e.mesh.position.z;
         const dn = Math.sqrt(dx*dx + dz*dz) || 1;
-        e.mesh.position.x += (dx/dn) * e.speed * 1.2;
-        e.mesh.position.z += (dz/dn) * e.speed * 1.2;
+        e.mesh.position.x += (dx/dn) * e.speed * 1.2 * enemyFrame;
+        e.mesh.position.z += (dz/dn) * e.speed * 1.2 * enemyFrame;
       } else {
         // Patrol + shoot
-        e.mesh.position.z += e.speed;
-        e.mesh.position.x += e.velX + Math.sin(tick * .03 + e.sineOff) * .04;
+        e.mesh.position.z += e.speed * enemyFrame;
+        e.mesh.position.x += (e.velX + Math.sin(tick * .03 + e.sineOff) * .04) * enemyFrame;
         const bx = boundX();
         if (e.mesh.position.z > ZOOM * .65 && e.speed > 0) e.speed = -Math.abs(e.speed);
         if (e.mesh.position.z < -ZOOM + 1 && e.speed < 0) e.speed = Math.abs(e.speed);
@@ -1435,41 +1330,23 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         }
       }
 
-      // Bullet hits
+      // Shared bullet collision radius, pierce ledger, status and splash.
       let killed = false;
-      for (let j = playerBullets.length-1; j >= 0; j--) {
-        const b = playerBullets[j];
-        if (b.isDisposed?.()) continue;
-        const dx = b.position.x - e.mesh.position.x;
-        const dz = b.position.z - e.mesh.position.z;
-        if (dx*dx + dz*dz > 2.25) continue;  // hit radius 1.5
-
-        let dmg = b.atk;
-        e.hp -= dmg;
-        showTextEffect(e.mesh.position.x, e.mesh.position.z, `-${Math.round(dmg)}`, '#ff4757');
-        e.miniHp.width = `${Math.max(0, Math.round(e.hp/e.maxHp*100))}%`;
-
-        // Hit flash
-        if (e.mesh.material?.emissiveColor) {
-          const orig = e.mesh.material.emissiveColor.clone();
-          e.mesh.material.emissiveColor = new BABYLON.Color3(1,1,1);
-          setTimeout(()=>{ if (e.mesh?.material) e.mesh.material.emissiveColor = orig; }, 60);
+      for (let j = playerBullets.length - 1; j >= 0; j--) {
+        const bullet = playerBullets[j];
+        if (bullet.isDisposed?.() || !projectileHitsPoint(bullet, e.mesh.position, 1.5)) continue;
+        const hit = shots.registerHit(bullet, e);
+        if (!hit.accepted) continue; // pierced target already hit: never double damage
+        const impact = { x: e.mesh.position.x, z: e.mesh.position.z };
+        const damage = calculateProjectileDamage(bullet.atk, stats.critDamageBoost);
+        if (bullet._slowMs) e._slowUntil = now + bullet._slowMs;
+        killed = applyPlayerDamageToEnemy(e, damage);
+        if (bullet._splashRadius) applyCampaignSplash(bullet, impact, damage, e);
+        if (hit.consumed || bullet._splashRadius) {
+          safeDispose(bullet);
+          playerBullets.splice(j, 1);
         }
-
-        safeDispose(b); playerBullets.splice(j,1);
-
-        if (e.hp <= 0) {
-          killed = true;
-          explode(e.mesh.position, e.tier===3 ? 2 : 1.5);
-          updateScore(e.points);
-          trackEventKill();
-          const roll = Math.random()*100;
-          if (roll < 4)       spawnDrop(e.mesh.position.x, e.mesh.position.z, 'power');
-          else if (roll < 9)  spawnDrop(e.mesh.position.x, e.mesh.position.z, 'heal');
-          else if (roll < 20) spawnDrop(e.mesh.position.x, e.mesh.position.z, 'coin');
-          cleanEnemy(e); enemies.splice(i,1);
-          break;
-        }
+        if (killed) break;
       }
       if (killed) continue;
     }
@@ -1478,12 +1355,12 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     if (gameState==='BOSS_FIGHT' && bossMesh && !bossMesh.isDisposed?.()) {
       // Entry slide
       if (bossMesh.position.z < -ZOOM + 7)
-        bossMesh.position.z = BABYLON.Scalar.Lerp(bossMesh.position.z, -ZOOM+7, .018);
+        bossMesh.position.z = BABYLON.Scalar.Lerp(bossMesh.position.z, -ZOOM+7, scaledLerpFactor(.018,frameFactor));
 
       // Patrol
-      bossFloatT += .010;
+      bossFloatT += .010 * frameFactor;
       bossMesh.position.z = (-ZOOM+7) + Math.sin(bossFloatT*.7) * .9;
-      bossMesh.position.x += bossVelX * (bossEnraged ? 1.8 : 1);
+      bossMesh.position.x += bossVelX * (bossEnraged ? 1.8 : 1) * frameFactor;
       const bx = boundX() - 2;
       if (Math.abs(bossMesh.position.x) > bx) {
         bossVelX *= -1; bossMesh.position.x = clamp(bossMesh.position.x, -bx, bx);
@@ -1516,8 +1393,10 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         const dx = b.position.x - bossMesh.position.x;
         const dz = b.position.z - bossMesh.position.z;
         if (dx*dx + dz*dz > 7.84) continue;  // hit radius 2.8
+        const hit = shots.registerHit(b, { mesh: bossMesh });
+        if (!hit.accepted) continue;
 
-        let dmg = b.atk;
+        const dmg = calculateProjectileDamage(b.atk, stats.critDamageBoost);
         bossHp -= dmg;
         showTextEffect(bossMesh.position.x, bossMesh.position.z, `-${Math.round(dmg)}`, '#ff4757');
         bossHpFill.width = `${Math.max(0, Math.round(bossHp/bossMaxHp*100))}%`;
@@ -1526,9 +1405,9 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         if (bossMesh.material?.emissiveColor) {
           const orig = bossMesh.material.emissiveColor.clone();
           bossMesh.material.emissiveColor = new BABYLON.Color3(1,1,1);
-          setTimeout(()=>{ if (bossMesh?.material) bossMesh.material.emissiveColor=orig; }, 60);
+          scheduleBattleTimer(()=>{ if (bossMesh?.material) bossMesh.material.emissiveColor=orig; }, 60);
         }
-        safeDispose(b); playerBullets.splice(j,1);
+        if (hit.consumed || b._splashRadius) { safeDispose(b); playerBullets.splice(j,1); }
 
         // Enrage at 30%
         if (!bossEnraged && bossHp <= bossMaxHp*.3) {
@@ -1563,7 +1442,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     for (let i = drops.length-1; i >= 0; i--) {
       const d = drops[i];
       if (d._dead) { drops.splice(i,1); continue; }
-      d.mesh.position.z += .055;
+      d.mesh.position.z += .055 * frameFactor;
       // Magnet collect
       const dx = d.mesh.position.x - playerRoot.position.x;
       const dz = d.mesh.position.z - playerRoot.position.z;
@@ -1575,9 +1454,9 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
           stats.hp = Math.min(stats.maxHp, stats.hp+200); updateHpBar();
           showTextEffect(playerRoot.position.x, playerRoot.position.z-.5, '+200 HP', '#2ecc71');
         } else {
-          stats.atk += 50;
+          activeEffects.add({id:'campaign_attack_boost',stat:'atk',op:'add',value:50,
+            durationMs:5000,stackGroup:'campaign_attack_boost',maxStacks:3},now);
           showTextEffect(playerRoot.position.x, playerRoot.position.z-.5, lang==='vi'?'TĂNG SỨC MẠNH!':'POWER UP!', '#3498db');
-          setTimeout(()=>{ stats.atk -= 50; }, 5000);
         }
         safeDispose(d.mesh); d._dead=true; drops.splice(i,1); continue;
       }
@@ -1595,7 +1474,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
           if (currentWave < MAX_WAVES) {
             gameState = 'TRANSITION';
             showAnnouncement(lang==='vi'?'DỌN SẠCH!':'SECTOR CLEARED!', '#2ecc71', 1000);
-            setTimeout(() => startWave(currentWave+1), 2000);
+            scheduleBattleTimer(() => startWave(currentWave+1), 2000);
           } else if (!stageConfig.hasBoss) {
             stageCleared();
           }

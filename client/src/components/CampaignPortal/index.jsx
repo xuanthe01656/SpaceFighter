@@ -1,3 +1,6 @@
+import { mondayKeyUTC, weekdayMondayUTC, utcDayKey, lastNaturalClaimUTC } from '../../utils/attendanceWeek';
+import { ensureGuestMissions } from '../../utils/guestProgress';
+import { missionGoal, viewCloudMissions } from '../../utils/missionGoals';
 import React, { useState, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -39,7 +42,7 @@ const formatCompactNumber = (number) => {
   return shortValue + suffixes[suffixNum];
 };
 
-export default function CampaignPortal({ gsRef, setScreen, lang, setLang, currentUser, logout, deleteAccount, loginWithGoogle, loginWithApple, saveUserProfile, getRealTime }) {
+export default function CampaignPortal({ gsRef, setScreen, lang, setLang, currentUser, logout, deleteAccount, loginWithGoogle, loginWithApple, saveUserProfile, getRealTime, gameAction }) {
   const platform = Capacitor.getPlatform();
   const [showProfile, setShowProfile] = useState(false);
   
@@ -65,22 +68,34 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
   
   const totalVipPoints = gsRef.current.vipPoints || 0;
   const vipData = calculateVIPLevel(totalVipPoints);
-  const missionData = gsRef.current.campaignData?.missionData || { claimed: [], progress: {} };
+  const [, setMissionRefresh] = useState(0);
+  useEffect(() => {
+    if (currentUser) return;
+    const campaign = gsRef.current.campaignData;
+    const before = JSON.stringify(campaign.missionData);
+    ensureGuestMissions(campaign, getRealTime());
+    if (before !== JSON.stringify(campaign.missionData)) {
+      saveUserProfile();
+      setMissionRefresh(tick => tick + 1);
+    }
+  }, [currentUser]);
+  const nowMs = getRealTime();
+  const sourceMissions = gsRef.current.campaignData?.missionData || { claimed: [], progress: {} };
+  const missionData = currentUser ? viewCloudMissions(sourceMissions, nowMs) : sourceMissions;
   let missionBadgeCount = 0;
-  const now = new Date(getRealTime());
-  const currentMonthDays = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   ['daily', 'weekly', 'monthly'].forEach(type => {
     MISSIONS_CONFIG[type]?.forEach(m => {
-      const prog = missionData.progress[m.id] || 0;
-      const isClaimed = missionData.claimed.includes(m.id);
-      let actualGoal = m.goal;
-      if (m.id === 'm_login_30') actualGoal = currentMonthDays;
-      if (prog >= m.goal && !isClaimed) missionBadgeCount++; // Hoàn thành nhưng chưa nhận
+      const prog = missionData.progress?.[m.id] || 0;
+      const isClaimed = missionData.claimed?.includes(m.id);
+      if (prog >= missionGoal(m, nowMs) && !isClaimed) missionBadgeCount++;
     });
   });
 
   const attData = gsRef.current.campaignData?.attendance || { lastDate: '' };
-  const canClaimAttendance = attData.lastDate !== new Date(getRealTime()).toDateString();
+  const currentWeek = mondayKeyUTC(nowMs);
+  const utcDayIndex = weekdayMondayUTC(nowMs);
+  const canClaimAttendance = lastNaturalClaimUTC(attData) !== utcDayKey(nowMs) &&
+    (attData.weekKey !== currentWeek || !attData.claimedDays?.includes(utcDayIndex));
   const handleNav = (screenName) => setScreen(screenName);
 
   const handleNotImplemented = () => {
@@ -217,13 +232,14 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
           setScreen('shop_campaign'); 
         }} 
       />
-      <AttendanceModal 
+      <AttendanceModal gameAction={gameAction} 
         isOpen={showAttendance}
         onClose={() => setShowAttendance(false)}
         gsRef={gsRef}
         saveUserProfile={saveUserProfile}
         lang={lang}
         getRealTime={getRealTime}
+        onProgressChange={() => setMissionRefresh(tick => tick + 1)}
       />
       {/* POPUP THÔNG TIN HỒ SƠ (MODAL) */}
       <AnimatePresence>

@@ -1,28 +1,60 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 import { Capacitor } from '@capacitor/core';
 import { Device } from '@capacitor/device';
 import { t } from './utils/translations';
 import { AppUpdate } from '@capawesome/capacitor-app-update';
 import { useAuth } from './hooks/useAuth';
+import { loadCampaignEngine, loadDungeonEngine } from './game/routing/BattleScreenLoaders';
 
-// --- IMPORT COMPONENT CHIẾN DỊCH ---
+// Keep Portal eagerly loaded for fast first paint/login. Other screens are
+// route-level chunks: Babylon is downloaded only when battle/map opens.
 import Portal from './components/Portal';
-import HQ from './components/HQ';
-import Pilots from './components/Pilots';
-import Inventory from './components/Inventory';
-import CampaignEngine from './components/Campaign/CampaignEngine';
-import StageSelect from './components/StageSelect';
-import CampaignPortal from './components/CampaignPortal';
-import ShopCampaign from './components/ShopCampaign';
-import GalaxyMap from './components/GalaxyMap';
-import Missions from './components/Missions';
-import DungeonSelect from './components/DungeonSelect';
-import DungeonEngine from './components/Dungeon/DungeonEngine';
-import DungeonResult from './components/DungeonResult'
-import Events from './components/Events';;
+const HQ = lazy(() => import('./components/HQ'));
+const Pilots = lazy(() => import('./components/Pilots'));
+const Inventory = lazy(() => import('./components/Inventory'));
+const CampaignEngine = lazy(loadCampaignEngine);
+const StageSelect = lazy(() => import('./components/StageSelect'));
+const CampaignPortal = lazy(() => import('./components/CampaignPortal'));
+const ShopCampaign = lazy(() => import('./components/ShopCampaign'));
+const GalaxyMap = lazy(() => import('./components/GalaxyMap'));
+const Missions = lazy(() => import('./components/Missions'));
+const DungeonSelect = lazy(() => import('./components/DungeonSelect'));
+const DungeonEngine = lazy(loadDungeonEngine);
+const DungeonResult = lazy(() => import('./components/DungeonResult'));
+const Events = lazy(() => import('./components/Events'));
+
 import { secureStorage } from './utils/storageHelper';
 import { DEFAULT_CAMPAIGN_DATA } from './constants';
+
+// A failed lazy chunk (offline, version mismatch, aborted download) must
+// show an actionable UI instead of crashing into an empty WebView.
+class ScreenLoadBoundary extends React.Component {
+  state = { error: null };
+  static getDerivedStateFromError(error) { return { error }; }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div role="alert" style={{
+        minHeight: '100dvh', display: 'grid', placeContent: 'center',
+        gap: '14px', padding: '24px', textAlign: 'center',
+        background: '#020c1b', color: '#66fcf1',
+        fontFamily: "'VT323', monospace", fontSize: '22px',
+      }}>
+        <span>{this.props.lang === 'vi'
+          ? 'KHÔNG THỂ TẢI KHU VỰC. VUI LÒNG KIỂM TRA MẠNG.'
+          : 'UNABLE TO LOAD THIS AREA. PLEASE CHECK YOUR CONNECTION.'}</span>
+        <button type="button" onClick={() => window.location.reload()} style={{
+          padding: '10px 20px', border: '1px solid #66fcf1',
+          borderRadius: '6px', background: '#12223b', color: '#66fcf1',
+          cursor: 'pointer', fontFamily: 'inherit', fontSize: '20px',
+        }}>
+          {this.props.lang === 'vi' ? 'TẢI LẠI' : 'RELOAD'}
+        </button>
+      </div>
+    );
+  }
+}
 
 export default function Game() {
   const [screen, setScreen] = useState('portal');
@@ -65,7 +97,7 @@ export default function Game() {
 
   const getRealTime = () => Date.now() + (gsRef.current.timeOffset || 0);
   
-  const { currentUser, loginWithGoogle, loginWithApple, logout, deleteAccount, saveUserProfile } = useAuth(
+  const { currentUser, loginWithGoogle, loginWithApple, logout, deleteAccount, saveUserProfile, gameAction, renamePlayer } = useAuth(
     gsRef, setUIUpdates, setScreen, langRef, getRealTime
   );
   
@@ -150,8 +182,19 @@ export default function Game() {
       position: 'relative',
       backgroundColor: '#0d0e15'
     }}>
+      <ScreenLoadBoundary key={screen} lang={lang}>
+      <Suspense fallback={
+        <div role="status" aria-live="polite" style={{
+          position: 'absolute', inset: 0, zIndex: 50, display: 'flex',
+          justifyContent: 'center', alignItems: 'center',
+          background: '#020c1b', color: '#66fcf1',
+          fontFamily: "'VT323', monospace", fontSize: '24px',
+        }}>
+          {lang === 'vi' ? 'ĐANG TẢI KHU VỰC...' : 'LOADING AREA...'}
+        </div>
+      }>
       {screen === 'portal' && (
-        <Portal 
+        <Portal renamePlayer={renamePlayer} 
           gsRef={gsRef} setScreen={setScreen}
           currentUser={currentUser} loginWithGoogle={loginWithGoogle}
           loginWithApple={loginWithApple} logout={logout}
@@ -160,19 +203,19 @@ export default function Game() {
       )}
       
       {screen === 'hq' && (
-        <HQ gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} />
+        <HQ gameAction={gameAction} gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} />
       )}
       
       {screen === 'pilots' && (
-        <Pilots gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} />
+        <Pilots gameAction={gameAction} gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} />
       )}
       
       {screen === 'campaign' && (
-        <CampaignEngine gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} getRealTime={getRealTime}/>
+        <CampaignEngine gameAction={gameAction} gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} getRealTime={getRealTime}/>
       )}
       
       {screen === 'inventory' && (
-        <Inventory gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} />
+        <Inventory gameAction={gameAction} gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} />
       )}
       
       {screen === 'stage_select' && (
@@ -180,27 +223,26 @@ export default function Game() {
       )}
       
       {screen === 'galaxy_map' && (
-        <GalaxyMap gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} />
+        <GalaxyMap gameAction={gameAction} gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} />
       )}
       
       {screen === 'campaign_portal' && (
-        <CampaignPortal gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} currentUser={currentUser} logout={logout} deleteAccount={deleteAccount} loginWithGoogle={loginWithGoogle} loginWithApple={loginWithApple} toggleLanguage={toggleLanguage} setLang={setLang} getRealTime={getRealTime}/>
+        <CampaignPortal gameAction={gameAction} gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} currentUser={currentUser} logout={logout} deleteAccount={deleteAccount} loginWithGoogle={loginWithGoogle} loginWithApple={loginWithApple} toggleLanguage={toggleLanguage} setLang={setLang} getRealTime={getRealTime}/>
       )}
       {screen === 'missions' && (
-        <Missions gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} getRealTime={getRealTime}/>
+        <Missions gameAction={gameAction} gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} getRealTime={getRealTime}/>
       )}
       {screen === 'dungeon_select' && (
         <DungeonSelect gsRef={gsRef} setScreen={setScreen} lang={lang} getRealTime={getRealTime} />
       )}
       {screen === 'dungeon' && (
-        <DungeonEngine gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} />
+        <DungeonEngine gameAction={gameAction} gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} getRealTime={getRealTime} />
       )}
       {screen === 'dungeon_result' && (
-        <DungeonResult gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} />
+        <DungeonResult gameAction={gameAction} gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} getRealTime={getRealTime} />
       )}
       {screen === 'events' && (
-        <Events
-          gsRef={gsRef}
+        <Events gameAction={gameAction}           gsRef={gsRef}
           setScreen={setScreen}
           lang={lang}
           saveUserProfile={saveUserProfile}
@@ -208,9 +250,12 @@ export default function Game() {
         />
       )}
       {screen === 'shop_campaign' && (
-        <ShopCampaign gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} />
+        <ShopCampaign gameAction={gameAction} gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} getRealTime={getRealTime} />
       )}
       
+      </Suspense>
+      </ScreenLoadBoundary>
+
       {/* KHUNG THÔNG BÁO (TOAST) */}
       <Toaster 
         position="top-center" 

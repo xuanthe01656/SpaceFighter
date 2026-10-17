@@ -1,0 +1,160 @@
+{
+  "product": "Space Fighter 4.0",
+  "release": "Phase 2 V1.2.0",
+  "baselineArchive": "SpaceFighter_Phase1_V1_1_0_ATTENDANCE_TIMEZONE_H2_FULL_SOURCE.zip",
+  "baselineSha256": "9066794e19e580475ca41f37f38ea2c04b25e160d1bb22ee363d3e44dcaf5bb9",
+  "phase2Scope": "Gameplay hardening. Phase1 economic API unchanged; not approved for commercial release.",
+  "files": [
+    {
+      "path": ".github/workflows/phase0-ci.yml",
+      "action": "MODIFIED",
+      "sizeBytes": 1032,
+      "sha256": "37af128e5fe78c2bc5f4cd9e17702803ee76d326ef2b59856d1c408cbee58765"
+    },
+    {
+      "path": "README_PHASE2_VI.md",
+      "action": "ADDED",
+      "sizeBytes": 6491,
+      "sha256": "8fea8c2f4ea7818f80a9ca71a58f58f63e913ee5066a443d5f26a736b5fd5d7f"
+    },
+    {
+      "path": "client/package-lock.json",
+      "action": "MODIFIED",
+      "sizeBytes": 343440,
+      "sha256": "6df0cfe8baa50b0bb7199993c5cde16150c478a0c53334987ee3ead41ed0a449"
+    },
+    {
+      "path": "client/package.json",
+      "action": "MODIFIED",
+      "sizeBytes": 2083,
+      "sha256": "ca73b985bfa39353521b2cb8a42dac1a1b72a2e52679731a0e42582cfd7e9520"
+    },
+    {
+      "path": "client/scripts/check-phase2-gameplay.mjs",
+      "action": "ADDED",
+      "sizeBytes": 3104,
+      "sha256": "7036b946d26c3b026c2c1a878da98abbe27091fcd5f8b3fcd9923e330518ff17"
+    },
+    {
+      "path": "client/src/components/Campaign/CampaignEngine.jsx",
+      "action": "MODIFIED",
+      "sizeBytes": 4440,
+      "sha256": "1553407b5ff4e917c85bad8daeffffdc305450c1681218ba0c73ce3ad3904ede"
+    },
+    {
+      "path": "client/src/components/Campaign/CampaignScene.js",
+      "action": "MODIFIED",
+      "sizeBytes": 74471,
+      "sha256": "a24a0795874e9da986c08c89b3e3446a99d45a8da04557fe562e1770e81dfcd9"
+    },
+    {
+      "path": "client/src/components/Dungeon/DungeonEngine.jsx",
+      "action": "MODIFIED",
+      "sizeBytes": 7212,
+      "sha256": "0d8232a2b5a71130714bd52a067c717fb61c55c0cb1d0540a9d380a6f12c60ef"
+    },
+    {
+      "path": "client/src/components/Dungeon/DungeonScene.js",
+      "action": "MODIFIED",
+      "sizeBytes": 53271,
+      "sha256": "e13fe0756207e88c6bf4ffd4bc83d595675ba2a3e751f6374aa136582524f677"
+    },
+    {
+      "path": "client/src/components/DungeonResult/index.jsx",
+      "action": "MODIFIED",
+      "sizeBytes": 18103,
+      "sha256": "6b93b21b28f1097531bec98b6fa4de937a8fb2477c325221ce71233c13d72578"
+    },
+    {
+      "path": "client/src/components/DungeonSelect/index.jsx",
+      "action": "MODIFIED",
+      "sizeBytes": 8619,
+      "sha256": "2e0d9f0449cea90832f95dabe3799ec21e46ffb009d1d281379ecf08f214a74f"
+    },
+    {
+      "path": "client/src/components/HQ/index.jsx",
+      "action": "MODIFIED",
+      "sizeBytes": 23827,
+      "sha256": "6d0ada0cf3c2a118cbdd3e6614382529d3afbef74394d0bcb745ac27fbb7206c"
+    },
+    {
+      "path": "client/src/components/Missions/index.jsx",
+      "action": "MODIFIED",
+      "sizeBytes": 14933,
+      "sha256": "6178f97f97e955ee35d9a50d1b0f59df44f3243e9331d253c9ce0b7dd4b032cc"
+    },
+    {
+      "path": "client/src/components/ShopCampaign/index.jsx",
+      "action": "MODIFIED",
+      "sizeBytes": 19436,
+      "sha256": "e486fbb835c779242cac2d6203c388a66458c8e6afc001febe630a79c50808e7"
+    },
+    {
+      "path": "client/src/utils/combatStats.js",
+      "action": "ADDED",
+      "sizeBytes": 5322,
+      "sha256": "e1bce9c8215a96562e94c922e963f12528c6976d06f97b5be548e1c1bcfdeccd"
+    },
+    {
+      "path": "client/src/utils/dungeonSchedule.js",
+      "action": "ADDED",
+      "sizeBytes": 499,
+      "sha256": "77b11eb510563abf74e0820bf809d15689380f9c119867d0a72f8185889cfb9a"
+    },
+    {
+      "path": "client/src/utils/frameTime.js",
+      "action": "ADDED",
+      "sizeBytes": 610,
+      "sha256": "70d8e2b6dd2effde64bf64a8d643f13b14131326bab96b82b28f8bc1d340cf14"
+    },
+    {
+      "path": "client/src/utils/guestProgress.js",
+      "action": "ADDED",
+      "sizeBytes": 3547,
+      "sha256": "3603e781716d8289bb011a385a81935f9df1d7da5576e350ba504267eb14a2a7"
+    },
+    {
+      "path": "client/tests/gameplayPhase2.test.mjs",
+      "action": "ADDED",
+      "sizeBytes": 7139,
+      "sha256": "dd9eccc9113a854f0ce3520102718b890fa1a764b7a1fdd0784729543cd7f24a"
+    },
+    {
+      "path": "docs/PHASE2_TEST_REPORT_VI.md",
+      "action": "ADDED",
+      "sizeBytes": 1945,
+      "sha256": "5e38926f0397d9e7a2d2ce090cf8c9dcc9a7cf6f8c675458f6b093bd7be4d71d"
+    },
+    {
+      "path": "docs/PHASE2_UAT_VI.md",
+      "action": "ADDED",
+      "sizeBytes": 3334,
+      "sha256": "5373d0d9963f81af8b4f26583157ae7520a5801c67d97fabe221a1899b9f335f"
+    },
+    {
+      "path": "server/package-lock.json",
+      "action": "MODIFIED",
+      "sizeBytes": 125745,
+      "sha256": "0864d48f10c81cdc65f6b83330d9380c3386bc9da95949ca826d24be44cfbc6c"
+    },
+    {
+      "path": "server/package.json",
+      "action": "MODIFIED",
+      "sizeBytes": 704,
+      "sha256": "364a6bd17819988ae12cda0a560f79eb16b6a58d3ded80155532b05524250742"
+    }
+  ],
+  "checks": {
+    "clientUnit": "24/24 PASS",
+    "clientPhase1Safety": "14/14 PASS",
+    "clientPhase2Gameplay": "14/14 PASS",
+    "serverUnit": "20 PASS, 0 FAIL, 3 SKIP (Express missing locally)",
+    "relativeImports": 89,
+    "parseFiles": 49,
+    "viteBuild": "UNTESTED (node_modules not installed)",
+    "knownMissingAssetRefs": 61
+  },
+  "noMigration": true,
+  "noFirestoreRulesChange": true,
+  "iapEnabled": false
+}

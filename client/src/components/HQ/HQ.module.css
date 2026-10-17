@@ -158,3 +158,9 @@
   z-index: 5; 
   box-shadow: 0 2px 6px rgba(0,0,0,0.4); /* Thêm đổ bóng nhẹ cho nổi bật */
 }
+/* Graphics 2.1: HQ shows the actual top-down identity used in both battles. */
+.battlePreview { display: flex; align-items: center; justify-content: center; gap: 10px;
+  margin: -2px 0 10px; padding: 5px 12px; border: 1px solid rgba(56,189,248,.25);
+  border-radius: 8px; background: rgba(4,12,28,.65); color: #b9e8fc;
+  font: 13px 'Share Tech Mono', monospace; letter-spacing: .3px; }
+.battlePreviewImg { width: 48px; height: 48px; object-fit: contain; }

@@ -1,0 +1,216 @@
+{
+  "reviewDate": "2026-10-16",
+  "archive": "spaceFighter.zip",
+  "zipSha256": "1bdc8f2751f87d34475ae1ee939a7a3780be0ab2d6689a66f7460f78de3fb2a3",
+  "archiveEntries": 43267,
+  "totalUncompressedBytes": 908796401,
+  "nestedClientArchive": "client/client.7z",
+  "nestedSrcCodeIdentical": true,
+  "files": [
+    {
+      "file": "client/src/App.jsx",
+      "lines": 237,
+      "bytes": 9119
+    },
+    {
+      "file": "client/src/components/Campaign/CampaignEngine.jsx",
+      "lines": 97,
+      "bytes": 3494
+    },
+    {
+      "file": "client/src/components/Campaign/CampaignScene.js",
+      "lines": 1606,
+      "bytes": 76205
+    },
+    {
+      "file": "client/src/components/CampaignPortal/AttendanceModal.jsx",
+      "lines": 398,
+      "bytes": 17250
+    },
+    {
+      "file": "client/src/components/CampaignPortal/AttendanceModal.module.css",
+      "lines": 125,
+      "bytes": 9507
+    },
+    {
+      "file": "client/src/components/CampaignPortal/CampaignPortal.module.css",
+      "lines": 358,
+      "bytes": 21040
+    },
+    {
+      "file": "client/src/components/CampaignPortal/FirstTopupModal.jsx",
+      "lines": 130,
+      "bytes": 7634
+    },
+    {
+      "file": "client/src/components/CampaignPortal/index.jsx",
+      "lines": 330,
+      "bytes": 22874
+    },
+    {
+      "file": "client/src/components/Dungeon/DungeonEngine.jsx",
+      "lines": 158,
+      "bytes": 5710
+    },
+    {
+      "file": "client/src/components/Dungeon/DungeonScene.js",
+      "lines": 1162,
+      "bytes": 57678
+    },
+    {
+      "file": "client/src/components/DungeonResult/index.jsx",
+      "lines": 438,
+      "bytes": 17399
+    },
+    {
+      "file": "client/src/components/DungeonSelect/DungeonSelect.module.css",
+      "lines": 558,
+      "bytes": 18048
+    },
+    {
+      "file": "client/src/components/DungeonSelect/index.jsx",
+      "lines": 141,
+      "bytes": 8495
+    },
+    {
+      "file": "client/src/components/Events/Events.module.css",
+      "lines": 230,
+      "bytes": 9900
+    },
+    {
+      "file": "client/src/components/Events/index.jsx",
+      "lines": 437,
+      "bytes": 22138
+    },
+    {
+      "file": "client/src/components/GalaxyMap/GalaxyMapScene.js",
+      "lines": 942,
+      "bytes": 46918
+    },
+    {
+      "file": "client/src/components/GalaxyMap/index.jsx",
+      "lines": 615,
+      "bytes": 27276
+    },
+    {
+      "file": "client/src/components/HQ/HQ.module.css",
+      "lines": 160,
+      "bytes": 11153
+    },
+    {
+      "file": "client/src/components/HQ/index.jsx",
+      "lines": 351,
+      "bytes": 23455
+    },
+    {
+      "file": "client/src/components/Inventory/Inventory.module.css",
+      "lines": 701,
+      "bytes": 27321
+    },
+    {
+      "file": "client/src/components/Inventory/index.jsx",
+      "lines": 651,
+      "bytes": 38125
+    },
+    {
+      "file": "client/src/components/ItemModal/ItemModal.jsx",
+      "lines": 564,
+      "bytes": 28268
+    },
+    {
+      "file": "client/src/components/ItemModal/ItemModal.module.css",
+      "lines": 497,
+      "bytes": 19868
+    },
+    {
+      "file": "client/src/components/Missions/Missions.module.css",
+      "lines": 120,
+      "bytes": 7539
+    },
+    {
+      "file": "client/src/components/Missions/index.jsx",
+      "lines": 300,
+      "bytes": 14733
+    },
+    {
+      "file": "client/src/components/Pilots/Pilots.module.css",
+      "lines": 178,
+      "bytes": 9990
+    },
+    {
+      "file": "client/src/components/Pilots/index.jsx",
+      "lines": 232,
+      "bytes": 10927
+    },
+    {
+      "file": "client/src/components/Portal/Portal.module.css",
+      "lines": 107,
+      "bytes": 5021
+    },
+    {
+      "file": "client/src/components/Portal/index.jsx",
+      "lines": 226,
+      "bytes": 9615
+    },
+    {
+      "file": "client/src/components/ShopCampaign/ShopCampaign.module.css",
+      "lines": 281,
+      "bytes": 18473
+    },
+    {
+      "file": "client/src/components/ShopCampaign/index.jsx",
+      "lines": 402,
+      "bytes": 21782
+    },
+    {
+      "file": "client/src/components/StageSelect/StageSelect.module.css",
+      "lines": 400,
+      "bytes": 11483
+    },
+    {
+      "file": "client/src/components/StageSelect/index.jsx",
+      "lines": 266,
+      "bytes": 11560
+    },
+    {
+      "file": "client/src/constants.js",
+      "lines": 1211,
+      "bytes": 49287
+    },
+    {
+      "file": "client/src/firebase.js",
+      "lines": 25,
+      "bytes": 975
+    },
+    {
+      "file": "client/src/hooks/useAdMob.jsx",
+      "lines": 197,
+      "bytes": 8041
+    },
+    {
+      "file": "client/src/hooks/useAuth.jsx",
+      "lines": 367,
+      "bytes": 18043
+    },
+    {
+      "file": "client/src/index.css",
+      "lines": 210,
+      "bytes": 10270
+    },
+    {
+      "file": "client/src/main.jsx",
+      "lines": 11,
+      "bytes": 247
+    },
+    {
+      "file": "client/src/utils/storageHelper.js",
+      "lines": 37,
+      "bytes": 1212
+    },
+    {
+      "file": "client/src/utils/translations.js",
+      "lines": 260,
+      "bytes": 11817
+    }
+  ]
+}

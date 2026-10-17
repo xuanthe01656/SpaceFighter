@@ -21,6 +21,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
+import { auth } from '../../firebase';
+import { recordGuestBattle } from '../../utils/guestProgress';
 
 // ── Icon helpers ──────────────────────────────────────────────────────────────
 const RewardIcon = ({ type, size = 28 }) => {
@@ -62,7 +64,7 @@ const formatAmount = (type, amount) => {
 };
 
 // ── Main component ────────────────────────────────────────────────────────────
-export default function DungeonResult({ gsRef, setScreen, lang, saveUserProfile }) {
+export default function DungeonResult({ gsRef, setScreen, lang, saveUserProfile, gameAction, getRealTime }) {
   const result = gsRef.current?.dungeonResult;
   const claimed = useRef(false);
   const [saving, setSaving] = useState(false);
@@ -95,6 +97,13 @@ export default function DungeonResult({ gsRef, setScreen, lang, saveUserProfile 
     setSaving(true);
 
     try {
+      if (auth.currentUser) {
+        const reply=await gameAction('battle.finish',{ticketId:gsRef.current.activeBattleId,victory:isVictory});
+        gsRef.current.dungeonResult=null;
+        toast.success(lang==='vi'?'Đã nhận thưởng từ máy chủ!':'Server rewards settled!');
+        setScreen('dungeon_select');
+        return;
+      }
       earnedRewards.forEach(({ type, amount }) => {
         switch (type) {
           case 'coins':
@@ -124,6 +133,7 @@ export default function DungeonResult({ gsRef, setScreen, lang, saveUserProfile 
         }
       });
 
+      recordGuestBattle(gsRef.current.campaignData,{mode:'dungeon',victory:isVictory,kills:totalKills}, getRealTime());
       // Ghi lịch sử dungeon (tuỳ chọn — lưu lần chơi cuối)
       if (!gsRef.current.campaignData.dungeonHistory) {
         gsRef.current.campaignData.dungeonHistory = {};
@@ -133,7 +143,7 @@ export default function DungeonResult({ gsRef, setScreen, lang, saveUserProfile 
         lastKills      : totalKills,
         lastWaves      : wavesCleared,
         lastResult     : isVictory ? 'victory' : 'defeat',
-        lastPlayedAt   : Date.now(),
+        lastPlayedAt   : getRealTime(),
       };
 
       // Lưu lên Firestore
@@ -148,13 +158,23 @@ export default function DungeonResult({ gsRef, setScreen, lang, saveUserProfile 
       claimed.current = false;
     } finally {
       setSaving(false);
-      gsRef.current.dungeonResult = null; // Clear after claim
-      setScreen('dungeon_select');
+      if (claimed.current) {
+        gsRef.current.dungeonResult = null; // Clear only after successful claim
+        setScreen('dungeon_select');
+      }
     }
   };
 
   // ── "Back without claim" (defeat or skip) ────────────────────────────────
-  const handleSkip = () => {
+  const handleSkip = async () => {
+    if (auth.currentUser && gsRef.current.activeBattleId) {
+      try { await gameAction('battle.finish',{ticketId:gsRef.current.activeBattleId,victory:false}); }
+      catch(error) {toast.error(error.message);return;}
+    }
+    if (!auth.currentUser && !isVictory) {
+      recordGuestBattle(gsRef.current.campaignData,{mode:'dungeon',victory:false,kills:totalKills}, getRealTime());
+      if (saveUserProfile) await saveUserProfile();
+    }
     gsRef.current.dungeonResult = null;
     setScreen('dungeon_select');
   };
@@ -271,7 +291,7 @@ export default function DungeonResult({ gsRef, setScreen, lang, saveUserProfile 
           <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
         </div>
 
-        {isVictory && earnedRewards.length > 0 ? (
+        {isVictory && (earnedRewards.length > 0 || auth.currentUser) ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <AnimatePresence>
               {showRewards && earnedRewards.map((rw, i) => (
@@ -348,8 +368,8 @@ export default function DungeonResult({ gsRef, setScreen, lang, saveUserProfile 
         transition={{ delay: 0.55 }}
         style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: 480 }}
       >
-        {isVictory && earnedRewards.length > 0 ? (
-          // Victory: primary CLAIM button
+        {isVictory && (earnedRewards.length > 0 || auth.currentUser) ? (
+          // Victory: cloud accounts receive server-rolled rewards when claiming.
           <motion.button
             whileTap={{ scale: 0.97 }}
             onClick={handleClaim}
@@ -429,7 +449,7 @@ export default function DungeonResult({ gsRef, setScreen, lang, saveUserProfile 
           }}
         >
           {isVictory
-            ? (lang === 'vi' ? '✕ BỎ QUA (KHÔNG LƯU)' : '✕ SKIP (DON\'T SAVE)')
+            ? (lang === 'vi' ? '✕ BỎ QUA PHẦN THƯỞNG' : '✕ FORFEIT REWARDS')
             : (lang === 'vi' ? '◀ VỀ DANH SÁCH PHÓ BẢN' : '◀ BACK TO DUNGEONS')}
         </motion.button>
       </motion.div>

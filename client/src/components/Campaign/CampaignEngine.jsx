@@ -1,18 +1,28 @@
 import React, { useEffect, useRef } from 'react';
 import { Engine, Scene } from '@babylonjs/core';
+import { choosePerformancePreset, attachAdaptiveRenderQuality } from '../../game/config/PerformanceProfiles';
 import { createCampaignScene } from './CampaignScene';
+import { auth } from '../../firebase';
+import toast from 'react-hot-toast';
 
-export default function CampaignEngine({ gsRef, setScreen, lang, saveUserProfile, getRealTime }) {
+export default function CampaignEngine({ gsRef, setScreen, lang, saveUserProfile, getRealTime, gameAction }) {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const sceneRef  = useRef(null);
+  const retreatLockRef = useRef(false);
+  const [retreating, setRetreating] = React.useState(false);
 
   useEffect(() => {
     if (!canvasRef.current) return;
 
+    const qualityProfile = choosePerformancePreset({
+      userAgent: navigator.userAgent,
+      deviceMemory: navigator.deviceMemory,
+      hardwareConcurrency: navigator.hardwareConcurrency,
+    });
     // ── Babylon engine ────────────────────────────────────────────────────
     const engine = new Engine(canvasRef.current, true, {
-      preserveDrawingBuffer: true,
+      preserveDrawingBuffer: false,
       stencil: true,
       adaptToDeviceRatio: true,
     });
@@ -20,6 +30,8 @@ export default function CampaignEngine({ gsRef, setScreen, lang, saveUserProfile
 
     const scene = new Scene(engine);
     sceneRef.current = scene;
+    const performance = attachAdaptiveRenderQuality(engine, scene, qualityProfile, window.devicePixelRatio || 1);
+
 
     // ── Callbacks cho CampaignScene ───────────────────────────────────────
     const data = {
@@ -27,6 +39,8 @@ export default function CampaignEngine({ gsRef, setScreen, lang, saveUserProfile
       lang,
       saveUserProfile,
       getRealTime,
+      gameAction,
+      isCloud: Boolean(auth.currentUser),
 
       /** Chiến thắng → quay về màn chọn ải */
       onVictory: () => {
@@ -39,7 +53,7 @@ export default function CampaignEngine({ gsRef, setScreen, lang, saveUserProfile
       },
     };
 
-    createCampaignScene(scene, canvasRef.current, engine, data);
+    createCampaignScene(scene, canvasRef.current, engine, {...data, qualityProfile});
 
     // ── Render loop ───────────────────────────────────────────────────────
     engine.runRenderLoop(() => {
@@ -53,6 +67,7 @@ export default function CampaignEngine({ gsRef, setScreen, lang, saveUserProfile
     // ── Cleanup ───────────────────────────────────────────────────────────
     return () => {
       window.removeEventListener('resize', onResize);
+      performance.dispose();
       scene.dispose();
       engine.dispose();
     };
@@ -74,7 +89,24 @@ export default function CampaignEngine({ gsRef, setScreen, lang, saveUserProfile
 
       {/* Nút Rút Lui */}
       <button
-        onClick={() => setScreen('stage_select')}
+        disabled={retreating}
+        onClick={async () => {
+          if (retreatLockRef.current) return;
+          retreatLockRef.current = true;
+          setRetreating(true);
+          try {
+            if (auth.currentUser && gsRef.current.activeBattleId) {
+              // Never leave gameplay while the authoritative ticket is still open.
+              await gameAction('battle.abandon',{ticketId:gsRef.current.activeBattleId});
+            }
+            setScreen('stage_select');
+          } catch (error) {
+            toast.error(error?.message || (lang === 'vi' ? 'Không thể rút lui, thử lại.' : 'Retreat failed; retry.'));
+          } finally {
+            retreatLockRef.current = false;
+            setRetreating(false);
+          }
+        }}
         style={{
           position: 'absolute',
           top: 'calc(env(safe-area-inset-top) + 40px)',
@@ -90,7 +122,7 @@ export default function CampaignEngine({ gsRef, setScreen, lang, saveUserProfile
           textTransform: 'uppercase',
         }}
       >
-        ◀ {lang === 'vi' ? 'RÚT LUI' : 'RETREAT'}
+        ◀ {retreating ? (lang === 'vi' ? 'ĐANG ĐÓNG TRẬN…' : 'CLOSING…') : (lang === 'vi' ? 'RÚT LUI' : 'RETREAT')}
       </button>
     </div>
   );
