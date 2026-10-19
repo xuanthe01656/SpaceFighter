@@ -48,7 +48,7 @@ function mock({renderHeight=980,renderWidth=430,cssHeight=980,cssWidth=430}={}) 
 const small=(a,b)=>Math.abs(a-b)<1e-8;
 
 test('BG.2 catalog declares forward-ground scroll, reviewed repeat edges and remains immutable',()=>{
-  assert.equal(BACKGROUND_CATALOG_VERSION,'1.1.0');
+  assert.equal(BACKGROUND_CATALOG_VERSION,'1.3.0');
   for(const [id,config] of Object.entries(BATTLE_BACKGROUND_CATALOG)) {
     assert.equal(config.scrollDirection,BACKGROUND_SCROLL_DIRECTIONS.TOWARD_PLAYER);
     assert.ok(config.layers.every(l=>l.seamlessY===true&&l.scrollCssPixelsPerSecond>0));

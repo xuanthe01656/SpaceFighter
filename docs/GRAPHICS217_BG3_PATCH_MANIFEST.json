@@ -1,0 +1,137 @@
+{
+  "baseline": "Graphics 2.1.7-BG.2 FULL SOURCE",
+  "release": "Graphics 2.1.7-BG.3 / Art Production Pipeline",
+  "baselineFileCount": 365,
+  "removedFiles": [],
+  "changedFiles": [
+    {
+      "path": "client/docs/BG3_BACKGROUND_ASSET_MANIFEST.json",
+      "action": "ADDED",
+      "beforeSha256": null,
+      "afterSha256": "de45b8a0b66347ff680ac3d10e15a97c999f3f8158a9b352d7a85800b3407800",
+      "bytes": 1970
+    },
+    {
+      "path": "client/package-lock.json",
+      "action": "MODIFIED",
+      "beforeSha256": "638c010f3f7a8197608041e460cb55fe26ea06e25fe948c0ccbde28c415c5713",
+      "afterSha256": "206526ffa2ffb5420514e92a1014a903095d3445b03303f85e2fff45479435b8",
+      "bytes": 343460
+    },
+    {
+      "path": "client/package.json",
+      "action": "MODIFIED",
+      "beforeSha256": "c8707bd879890cc73f6048d3f90bca412c8f9e6395cb2a53abe77046ed698993",
+      "afterSha256": "281b2ba1e88418d41507bd1878c49f248b84011ff077761617550a7f47af42d6",
+      "bytes": 3059
+    },
+    {
+      "path": "client/public/images/backgrounds/demo/alpha_coast_low.webp",
+      "action": "ADDED",
+      "beforeSha256": null,
+      "afterSha256": "f6ab52853de83eb3da87a1ba046bc71fe0df27843435458f31ecf10e24fbf42a",
+      "bytes": 100300
+    },
+    {
+      "path": "client/public/images/backgrounds/demo/nereus_ocean_low.webp",
+      "action": "ADDED",
+      "beforeSha256": null,
+      "afterSha256": "0e14013f0a163f4a853afdae55742c205bbb86e1448c626ebd617953752dd2f0",
+      "bytes": 14396
+    },
+    {
+      "path": "client/scripts/background-art-qa.py",
+      "action": "ADDED",
+      "beforeSha256": null,
+      "afterSha256": "5bd79cb6f21e8e7f47c79167f08ddbee95a4b2c0f41aea94696f56c7775a71dd",
+      "bytes": 6626
+    },
+    {
+      "path": "client/scripts/background-asset-manifest.mjs",
+      "action": "ADDED",
+      "beforeSha256": null,
+      "afterSha256": "4e7dfe9b085a4c15172a50b994efe1dd0a182c3901549edc2f56f9857602e484",
+      "bytes": 1551
+    },
+    {
+      "path": "client/scripts/check-background-catalog.mjs",
+      "action": "MODIFIED",
+      "beforeSha256": "71eb9e40eb955eb7603c4cb344cbd05af5e248531124b9b9c5eb0c20d585f3f4",
+      "afterSha256": "41d15a2ae776fc58907eeaebd10767e6406a57f17329ed9b1c63bb2ed71ca425",
+      "bytes": 9433
+    },
+    {
+      "path": "client/scripts/lib/background-asset-utils.mjs",
+      "action": "ADDED",
+      "beforeSha256": null,
+      "afterSha256": "064de96971cc606eb18a95316128685fd847e92dec36165f70f6877d12e69973",
+      "bytes": 3604
+    },
+    {
+      "path": "client/scripts/prepare-background-assets.py",
+      "action": "ADDED",
+      "beforeSha256": null,
+      "afterSha256": "c25b2774b753dad8d8d32b3665b20b03a39ca055d483f8700222864360335ff5",
+      "bytes": 3660
+    },
+    {
+      "path": "client/src/game/catalog/BackgroundArtDirection.js",
+      "action": "ADDED",
+      "beforeSha256": null,
+      "afterSha256": "08f74b979fbb5e374e7bf31ef45627ccf2c82b2c3ca7649f5b3ce7a059f2864c",
+      "bytes": 5049
+    },
+    {
+      "path": "client/src/game/catalog/BackgroundCatalog.js",
+      "action": "MODIFIED",
+      "beforeSha256": "a7080056658c3e9c59fe3df107e4151fac6da42c3953f06dd21146c51000fae0",
+      "afterSha256": "44b7203abe43edc0aa36c10e4c35e93a2a7991105f977ba4553d928c3db59344",
+      "bytes": 6813
+    },
+    {
+      "path": "client/tests/battleBackground217.test.mjs",
+      "action": "MODIFIED",
+      "beforeSha256": "7cf9dafdbd2c2d9f42989b9b2785e0e9be26a773d9ba3637e7da811078a8993c",
+      "afterSha256": "0ee0bc1f276534e2d6d6fa69656d69234a888c211c5e7dbd4beabac519c4248f",
+      "bytes": 9231
+    },
+    {
+      "path": "client/tests/battleBackgroundBG2.test.mjs",
+      "action": "MODIFIED",
+      "beforeSha256": "f862feea66bbfe9dd5e7cf517c75328a8b46aaf2a8c6cc7f823f781bb827f075",
+      "afterSha256": "ca35095607ac973b9c8b9e5304bbffb6c4e2b8d11422e631001ccbca271ceb67",
+      "bytes": 9166
+    },
+    {
+      "path": "client/tests/battleBackgroundBG3.test.mjs",
+      "action": "ADDED",
+      "beforeSha256": null,
+      "afterSha256": "30897ba1cb7f1acbe2bbeb53a82c3018a519ffd8973654890107577eeeccad35",
+      "bytes": 3797
+    },
+    {
+      "path": "docs/GRAPHICS217_BG3_ART_PRODUCTION_VI.md",
+      "action": "ADDED",
+      "beforeSha256": null,
+      "afterSha256": "cf338ee379e06f1c334ff6509d9453bf1efee4efd7afa0e284f028255e2324d2",
+      "bytes": 9517
+    },
+    {
+      "path": "docs/GRAPHICS217_BG3_ART_RIGHTS_TEMPLATE_VI.md",
+      "action": "ADDED",
+      "beforeSha256": null,
+      "afterSha256": "5ebb3410e0db9a903da1dac71f52cec665d84e29822f99dc57c82f4715383c50",
+      "bytes": 1069
+    },
+    {
+      "path": "docs/GRAPHICS217_BG3_HANDOFF_VI.md",
+      "action": "ADDED",
+      "beforeSha256": null,
+      "afterSha256": "ada27af3f55d8f71de2cdf335cc78d1968f98ee28d40fa58213bf2b2614c34ac",
+      "bytes": 2310
+    }
+  ],
+  "sourceCodeScope": "catalog, QA tools, package scripts, documentation, test updates, mobileLow art only",
+  "serverChanged": false,
+  "firebaseChanged": false
+}

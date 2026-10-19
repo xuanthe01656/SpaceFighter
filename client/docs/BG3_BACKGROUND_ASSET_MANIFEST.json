@@ -1,0 +1,113 @@
+{
+  "manifestSchema": "space-fighter-background-assets/v1",
+  "catalogVersion": "1.3.0",
+  "artDirectionVersion": "1.0.0",
+  "generatedDeterministically": true,
+  "licensingNote": "Automated checks cannot establish ownership; production approval requires independent human evidence.",
+  "assets": [
+    {
+      "backgroundId": "alpha_coast_demo",
+      "layerId": "coast_base",
+      "role": "base",
+      "quality": "base",
+      "src": "/images/backgrounds/demo/alpha_coast.webp",
+      "width": 1024,
+      "height": 2048,
+      "licenseStatus": "prototype_only",
+      "catalogStatus": "demo",
+      "bytes": 263470,
+      "sha256": "61bf9dacebf552aaf81e654a62bc476ffcc41ad2c57c367175027ccfca98f411"
+    },
+    {
+      "backgroundId": "alpha_coast_demo",
+      "layerId": "coast_base",
+      "role": "base",
+      "quality": "mobileLow",
+      "src": "/images/backgrounds/demo/alpha_coast_low.webp",
+      "width": 512,
+      "height": 1024,
+      "licenseStatus": "prototype_only",
+      "catalogStatus": "demo",
+      "bytes": 100300,
+      "sha256": "f6ab52853de83eb3da87a1ba046bc71fe0df27843435458f31ecf10e24fbf42a"
+    },
+    {
+      "backgroundId": "alpha_coast_v1_candidate",
+      "layerId": "alpha_candidate_base",
+      "role": "base",
+      "quality": "base",
+      "src": "/images/backgrounds/candidates/alpha_coast_v1_candidate.webp",
+      "width": 1024,
+      "height": 2048,
+      "licenseStatus": "prototype_only",
+      "catalogStatus": "candidate",
+      "bytes": 285388,
+      "sha256": "fb6401ee8829eac3f57606a254e1737702b4b27e5b4de7ea62947037eb1d9e21"
+    },
+    {
+      "backgroundId": "alpha_coast_v1_candidate",
+      "layerId": "alpha_candidate_base",
+      "role": "base",
+      "quality": "mobileLow",
+      "src": "/images/backgrounds/candidates/alpha_coast_v1_candidate_low.webp",
+      "width": 512,
+      "height": 1024,
+      "licenseStatus": "prototype_only",
+      "catalogStatus": "candidate",
+      "bytes": 98736,
+      "sha256": "aa40f62c5ea170e25b428b6933e47e525b5a63b857018f592dc0e2f0a6cb5e64"
+    },
+    {
+      "backgroundId": "nereus_ocean_demo",
+      "layerId": "ocean_base",
+      "role": "base",
+      "quality": "base",
+      "src": "/images/backgrounds/demo/nereus_ocean.webp",
+      "width": 1024,
+      "height": 2048,
+      "licenseStatus": "prototype_only",
+      "catalogStatus": "demo",
+      "bytes": 51068,
+      "sha256": "d7db2808276a32cacce537eaa4da7eb71a33d9f728cbc9adb44ab6baf58a0258"
+    },
+    {
+      "backgroundId": "nereus_ocean_demo",
+      "layerId": "ocean_base",
+      "role": "base",
+      "quality": "mobileLow",
+      "src": "/images/backgrounds/demo/nereus_ocean_low.webp",
+      "width": 512,
+      "height": 1024,
+      "licenseStatus": "prototype_only",
+      "catalogStatus": "demo",
+      "bytes": 14396,
+      "sha256": "0e14013f0a163f4a853afdae55742c205bbb86e1448c626ebd617953752dd2f0"
+    },
+    {
+      "backgroundId": "nereus_ocean_v1_candidate",
+      "layerId": "nereus_candidate_base",
+      "role": "base",
+      "quality": "base",
+      "src": "/images/backgrounds/candidates/nereus_ocean_v1_candidate.webp",
+      "width": 1024,
+      "height": 2048,
+      "licenseStatus": "prototype_only",
+      "catalogStatus": "candidate",
+      "bytes": 223866,
+      "sha256": "e44dc61a26a02216e74597a08a8ce1f5d09700bfcdadc073f50f0669ae5219ca"
+    },
+    {
+      "backgroundId": "nereus_ocean_v1_candidate",
+      "layerId": "nereus_candidate_base",
+      "role": "base",
+      "quality": "mobileLow",
+      "src": "/images/backgrounds/candidates/nereus_ocean_v1_candidate_low.webp",
+      "width": 512,
+      "height": 1024,
+      "licenseStatus": "prototype_only",
+      "catalogStatus": "candidate",
+      "bytes": 76046,
+      "sha256": "14d533c3038a639b4d1cdc5f46c61f0dc99cc3b5b5395161a2be264cf933266c"
+    }
+  ]
+}

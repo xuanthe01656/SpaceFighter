@@ -4,6 +4,7 @@
  * This module never substitutes X-Wing for missing/unknown aircraft assets.
  */
 import { SHIP_ASSET_MANIFEST } from './shipAssets.generated.js';
+import { resolveAssetVisual } from '../assets/AssetRegistry.js';
 
 const shipHash = id => {
   let h = 2166136261;
@@ -48,27 +49,32 @@ export function resolveShipVisual(aircraftId, aircraftCatalog = []) {
   const id = typeof aircraftId === 'string' ? aircraftId : '';
   const aircraft = aircraftCatalog.find(a => a.id === id) || null;
   const asset = aircraft ? SHIP_ASSET_MANIFEST[id] : null;
+  const newArt = aircraft ? resolveAssetVisual('ship', id) : null;
+  const officialTop = newArt && newArt.topSrc && newArt.topSrc === newArt.paths.top ? newArt.topSrc : null;
+  const officialHQ = newArt && newArt.iconSrc && newArt.iconSrc === newArt.paths.icon ? newArt.iconSrc : null;
+  const officialModel = newArt?.modelSrc || null;
   const color = hex(aircraft?.engineFlameTint, shipHash(id) & 0xffffff);
   const role = aircraft?.role || 'fighter';
   const placeholder = svgPlaceholder(id, color, role);
-  const hasModel = Boolean(aircraft?.modelSrc && asset?.model);
-  const hasTop = Boolean(aircraft?.imgTop && asset?.top);
-  const hasHQ = Boolean(aircraft?.imgHq && asset?.hq);
+  const hasModel = Boolean(officialModel || (aircraft?.modelSrc && asset?.model));
+  const hasTop = Boolean(officialTop || (aircraft?.imgTop && asset?.top));
+  const hasHQ = Boolean(officialHQ || (aircraft?.imgHq && asset?.hq));
   const missing = [];
   if (!hasHQ) missing.push('hq');
   if (!hasTop) missing.push('top');
   if (!hasModel) missing.push('model');
   return Object.freeze({
     id, aircraft, known: Boolean(aircraft), color, role,
-    modelSrc: hasModel ? aircraft.modelSrc : null,
-    modelBytes: hasModel ? asset.modelBytes : 0,
-    modelTriangles: hasModel ? asset.modelTriangles : 0,
-    topSrc: hasTop ? aircraft.imgTop : null,
+    modelSrc: hasModel ? (officialModel || aircraft.modelSrc) : null,
+    // New GLB is opt-in for QA until the geometry budget is measured.
+    modelBytes: officialModel ? 16 * 1024 * 1024 : hasModel ? asset.modelBytes : 0,
+    modelTriangles: officialModel ? 150001 : hasModel ? asset.modelTriangles : 0,
+    topSrc: hasTop ? (officialTop || aircraft.imgTop) : null,
     // X-Wing-specific UV correction. Other aircraft keep their 2.1.1 orientation.
     spriteInvertY: aircraft?.spriteInvertY === true,
-    hqSrc: hasHQ ? aircraft.imgHq : null,
-    previewTopSrc: hasTop ? aircraft.imgTop : placeholder,
-    previewHQSrc: hasHQ ? aircraft.imgHq : hasTop ? aircraft.imgTop : placeholder,
+    hqSrc: hasHQ ? (officialHQ || aircraft.imgHq) : null,
+    previewTopSrc: hasTop ? (officialTop || aircraft.imgTop) : placeholder,
+    previewHQSrc: hasHQ ? (officialHQ || aircraft.imgHq) : hasTop ? (officialTop || aircraft.imgTop) : placeholder,
     placeholderSrc: placeholder,
     runtimeMode: hasModel ? 'model' : hasTop ? 'sprite' : 'procedural',
     missing,
@@ -89,5 +95,7 @@ export function chooseShipRenderQuality(visual, userAgent = globalThis.navigator
   // explicitly request quality='auto' in createPlayerShipVisual to QA GLB.
   // IMPORTANT: do not rotate GLB to repair an art-style/model mismatch.
   const heavyweight = visual.modelTriangles > 150000 || visual.modelBytes > 8 * 1024 * 1024;
-  return heavyweight && visual.topSrc ? 'sprite' : 'auto';
+  // Do not auto-import an unreviewed 3D-only model on mobile.
+  if (heavyweight) return visual.topSrc ? 'sprite' : 'procedural';
+  return 'auto';
 }

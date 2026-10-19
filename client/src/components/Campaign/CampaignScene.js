@@ -12,12 +12,15 @@ import { battleSpeedMultiplier, BATTLE_WORLD_HALF_HEIGHT } from '../../game/conf
 import { createBattlePassiveState, receiveBattleHit, shouldEchoShot } from '../../game/combat/BattlePassives';
 import { createActiveEffects } from '../../game/combat/ActiveEffects';
 import { createPlayerShipVisual } from '../../game/rendering/ShipVisualFactory';
+import { attachBattleEntityVisual } from '../../game/rendering/BattleEntityVisual';
+import { createBattleDeathVisualQueue } from '../../game/rendering/BattleDeathVisualQueue';
+import { resolveAssetVisual } from '../../game/assets/AssetRegistry.js';
 import { createShipEngineFx } from '../../game/rendering/ShipEngineFx';
 import { createShipInputController } from '../../game/combat/ShipInputController';
 import { describeMainSalvo, describeWingSalvo, describeDroneSalvo, pickWeaponTarget, enemySpeedFactor, shieldDamageFactor, repairAmount, projectileHitsPoint } from '../../game/combat/PlayerWeapons';
 import { createProjectileEmitter } from '../../game/combat/ProjectileEmitter';
 import { canAutoLoadModel } from '../../game/config/PerformanceProfiles';
-import { resolveBattleBackground, legacyBattleBackgroundRequested } from '../../game/catalog/BackgroundCatalog';
+import { resolveBattleBackground, legacyBattleBackgroundRequested, previewBg4Variant } from '../../game/catalog/BackgroundCatalog';
 import { createScrollingBattleBackground } from '../../game/rendering/ScrollingBackgroundRenderer';
 import { attachBattleBackgroundProfiler } from '../../game/rendering/BattleBackgroundProfiler.js';
 import { recordGuestBattle, recordGuestEventKill, activeCoinMultiplier } from '../../utils/guestProgress';
@@ -88,6 +91,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     pendingTimers.forEach(clearTimeout);
     pendingTimers.clear();
   });
+  // Visual afterimages are independent of the gameOver/CLEAR battle loop.
+  const deathVisuals = createBattleDeathVisualQueue(scene);
 
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -111,6 +116,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   const { stats, pilotBase, aircraftBase } = combat;
   const wingmanBase = combat.gear.wingman.base;
   const droneBase = combat.gear.drone.base;
+  const wingmanArt = wingmanBase ? resolveAssetVisual('equipment', wingmanBase.id)?.topSrc : null;
+  const droneArt = droneBase ? resolveAssetVisual('equipment', droneBase.id)?.topSrc : null;
 
   // ══════════════════════════════════════════════════════════════════════════
   // 2. CAMERA ORTHOGRAPHIC TOP-DOWN
@@ -191,6 +198,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   };
   const selectedBackground = legacyBattleBackgroundRequested(globalThis.location?.search) ? null : resolveBattleBackground({
     mode: 'campaign', planetId: currentPlanetId, stage: currentStage,
+    variantId: previewBg4Variant({ mode: 'campaign', planetId: currentPlanetId, queryString: globalThis.location?.search }),
   });
   if (selectedBackground) {
     createScrollingBattleBackground({
@@ -427,11 +435,11 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       fb.material = makeMat(scene, BABYLON.Color3.FromHexString(dColor));
       fb.parent   = node;
 
-      if (droneBase.imgSrc) {
+      if (droneArt) {
         const dp = BABYLON.MeshBuilder.CreatePlane('dPlane', { size: 0.9 }, scene);
         dp.rotation.x = Math.PI/2; dp.rotation.z = 0;
         dp.parent     = node;
-        dp.material   = makeSpriteMat(scene, droneBase.imgSrc,
+        dp.material   = makeSpriteMat(scene, droneArt,
           () => { fb.isVisible = false; }, () => { safeDispose(dp); });
       }
       drones.push(node);
@@ -472,21 +480,21 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
           })
           .catch(() => {
             // GLB lỗi → thử load sprite
-            if (wingmanBase.imgSrc) {
+            if (wingmanArt) {
               const wp = BABYLON.MeshBuilder.CreatePlane('wPlane', { size: 1.0 }, scene);
               wp.rotation.x = Math.PI / 2;
               wp.parent     = wNode;
-              wp.material   = makeSpriteMat(scene, wingmanBase.imgSrc,
+              wp.material   = makeSpriteMat(scene, wingmanArt,
                 () => { wFb.isVisible = false; },
                 () => { safeDispose(wp); });
             }
           });
-      } else if (wingmanBase.imgSrc) {
+      } else if (wingmanArt) {
         // ── Sprite fallback nếu không có GLB ──
         const wp = BABYLON.MeshBuilder.CreatePlane('wPlane', { size: 1.0 }, scene);
         wp.rotation.x = Math.PI / 2;
         wp.parent     = wNode;
-        wp.material   = makeSpriteMat(scene, wingmanBase.imgSrc,
+        wp.material   = makeSpriteMat(scene, wingmanArt,
           () => { wFb.isVisible = false; },
           () => { safeDispose(wp); });
       }
@@ -633,19 +641,11 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     const spawnX = playerRoot.position.x + (Math.random() - .5) * boundX() * 1.6;
     const spawnZ = -ZOOM - 3;
 
-    let mesh;
-    if (cfg.imgSrc) {
-      mesh = BABYLON.MeshBuilder.CreatePlane(`ep_${Date.now()}`, { width: 2.2, height: 2.2 }, scene);
-      mesh.rotation.x = Math.PI/2;
-      mesh.rotation.z = Math.PI; 
-      mesh.material   = makeSpriteMat(scene, cfg.imgSrc,
-        null,
-        () => { safeDispose(mesh); mesh = buildFallbackEnemy(tier); mesh.position.set(spawnX, .2, spawnZ); }
-      );
-    } else {
-      mesh = buildFallbackEnemy(tier);
-    }
+    // Gameplay/collision root is always stable. Artwork may arrive later via
+    // asset manifest; no asset load may replace this root mid-battle.
+    const mesh = buildFallbackEnemy(tier);
     mesh.position.set(spawnX, .2, spawnZ);
+    const visual = attachBattleEntityVisual(scene, BABYLON, mesh, 'enemy', cfg.id);
 
     const rawSpeed = cfg.speedMin + Math.random() * (cfg.speedMax - cfg.speedMin);
     const speed    = rawSpeed / 1200;   // pixels/s → Babylon units/frame@60fps
@@ -670,7 +670,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     miniHpBg.addControl(miniHp);
 
     enemies.push({
-      mesh, hp: baseHp, maxHp: baseHp, tier, speed,
+      mesh, visual, hp: baseHp, maxHp: baseHp, tier, speed,
       velX: tier===4 ? 0 : (Math.random()-.5)*.05,
       sineOff: Math.random() * Math.PI * 2,
       isBoss: false, isEnraged: false,
@@ -680,15 +680,20 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     });
   };
 
-  const cleanEnemy = e => {
-    safeDisposeGui(e.miniHp); safeDisposeGui(e.miniHpBg); safeDispose(e.mesh); e._dead = true;
+  const cleanEnemy = (e, killedByDamage = false) => {
+    if (e._dead) return;
+    e._dead = true; // prevent repeated kills/rewards before any rendering work
+    if (killedByDamage) deathVisuals.capture(e.visual);
+    else e.visual?.dispose();
+    safeDisposeGui(e.miniHp); safeDisposeGui(e.miniHpBg);
+    safeDispose(e.mesh); // authoritative hitbox is gone THIS frame
   };
 
   // ══════════════════════════════════════════════════════════════════════════
   // 10. BOSS SYSTEM
   // ══════════════════════════════════════════════════════════════════════════
 
-  let bossMesh    = null, bossHp = 0, bossMaxHp = 0;
+  let bossMesh    = null, bossVisual = null, bossHp = 0, bossMaxHp = 0;
   let bossEnraged = false, bossPts = 0;
   let bossVelX    = 0.028, bossFloatT = 0, nextBossFire = 0;
 
@@ -709,15 +714,9 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     bossMaxHp = bossHp; bossEnraged = false;
     bossPts   = isReplay ? Math.max(10, Math.floor((bossCfg.score||100)/3)) : (bossCfg.score||100);
 
-    if (bossCfg.imgSrc) {
-      bossMesh = BABYLON.MeshBuilder.CreatePlane('bossPlane', { width: 5.2, height: 5.2 }, scene);
-      bossMesh.rotation.x = Math.PI/2; bossMesh.rotation.z = Math.PI;
-      bossMesh.material   = makeSpriteMat(scene, bossCfg.imgSrc,
-        null, () => { safeDispose(bossMesh); bossMesh = buildFallbackBoss(bType); bossMesh.position.set(0, .5, -ZOOM-6); });
-    } else {
-      bossMesh = buildFallbackBoss(bType);
-    }
+    bossMesh = buildFallbackBoss(bType);
     bossMesh.position.set(0, .5, -ZOOM - 6);
+    bossVisual = attachBattleEntityVisual(scene, BABYLON, bossMesh, 'boss', bossCfg.id);
 
     bossNameText.text = `⚠ ${lang==='vi' ? `TRÙM ẢI ${currentStage}` : `STAGE ${currentStage} BOSS`}`;
     bossHpFill.width  = '100%'; bossPanel.isVisible = true;
@@ -1190,6 +1189,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   const applyPlayerDamageToEnemy = (enemy, damage) => {
     if (!enemy || enemy._dead || enemy.mesh.isDisposed?.()) return false;
     enemy.hp -= damage;
+    enemy.visual?.setState('hit');
     showTextEffect(enemy.mesh.position.x, enemy.mesh.position.z, `-${Math.round(damage)}`, '#ff4757');
     enemy.miniHp.width = `${Math.max(0, Math.round(enemy.hp / enemy.maxHp * 100))}%`;
     if (enemy.mesh.material?.emissiveColor) {
@@ -1205,7 +1205,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     if (roll < 4) spawnDrop(enemy.mesh.position.x, enemy.mesh.position.z, 'power');
     else if (roll < 9) spawnDrop(enemy.mesh.position.x, enemy.mesh.position.z, 'heal');
     else if (roll < 20) spawnDrop(enemy.mesh.position.x, enemy.mesh.position.z, 'coin');
-    cleanEnemy(enemy);
+    cleanEnemy(enemy, true);
     const index = enemies.indexOf(enemy);
     if (index >= 0) enemies.splice(index, 1);
     return true;
@@ -1289,6 +1289,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       const e = enemies[i];
       if (e._dead) { enemies.splice(i,1); continue; }
 
+      e.visual?.tick(frameFactor * (1000 / 60));
+      e.visual?.setState('move');
       const enemyFrame = frameFactor * enemySpeedFactor(e, now);
       if (!e.canShoot) {
         // Kamikaze / melee – chase player
@@ -1312,6 +1314,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
           const dz = playerRoot.position.z - e.mesh.position.z;
           const dn = Math.sqrt(dx*dx + dz*dz) || 1;
           fireEnemyBullet(e.mesh.position, (dx/dn)*.24, (dz/dn)*.24);
+          e.visual?.setState('attack');
           e.lastShoot = now;
         }
       }
@@ -1353,6 +1356,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
 
     // ── Boss ──
     if (gameState==='BOSS_FIGHT' && bossMesh && !bossMesh.isDisposed?.()) {
+      bossVisual?.tick(frameFactor * (1000 / 60));
+      bossVisual?.setState('move');
       // Entry slide
       if (bossMesh.position.z < -ZOOM + 7)
         bossMesh.position.z = BABYLON.Scalar.Lerp(bossMesh.position.z, -ZOOM+7, scaledLerpFactor(.018,frameFactor));
@@ -1368,6 +1373,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
 
       // Boss fire
       if (now > nextBossFire) {
+        bossVisual?.setState('attack');
         const isAlien    = stageConfig.bossType==='alien';
         const attackType = 1 + Math.floor(Math.random()*3);
         if (attackType===1) {
@@ -1398,6 +1404,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
 
         const dmg = calculateProjectileDamage(b.atk, stats.critDamageBoost);
         bossHp -= dmg;
+        bossVisual?.setState('hit');
         showTextEffect(bossMesh.position.x, bossMesh.position.z, `-${Math.round(dmg)}`, '#ff4757');
         bossHpFill.width = `${Math.max(0, Math.round(bossHp/bossMaxHp*100))}%`;
 
@@ -1412,6 +1419,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         // Enrage at 30%
         if (!bossEnraged && bossHp <= bossMaxHp*.3) {
           bossEnraged = true;
+          bossVisual?.setState('enrage');
           showAnnouncement(lang==='vi'?'CẢNH BÁO: TRÙM NỔI ĐIÊN!':'WARNING: BOSS ENRAGED!', '#ff0000', 3000);
           bossVelX *= 1.6;
           // Change boss color to red
@@ -1425,7 +1433,9 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
           updateScore(bossPts);
           trackEventKill();
           bossPanel.isVisible = false;
-          safeDispose(bossMesh); bossMesh = null;
+          deathVisuals.capture(bossVisual);
+          bossVisual = null;
+          safeDispose(bossMesh); bossMesh = null; // stop all collisions immediately
           stageCleared(); break;
         }
       }

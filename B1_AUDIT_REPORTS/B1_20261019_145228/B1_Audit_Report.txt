@@ -1,0 +1,28 @@
+SpaceFighter B1 audit: PASS_WITH_WARNINGS (17 PASS, 3 WARN, 0 FAIL)
+Project: C:\Users\TVH01374\Desktop\SpaceFighter
+Version: 1.2.1-graphics21.8-assetsB1.0
+---
+[PASS] B1 source version: 1.2.1-graphics21.8-assetsB1.0
+[PASS] Node.js version: v22.17.1
+[PASS] Client dependencies: Babylon.js found in client/node_modules.
+[PASS] B1 SHA-256 baseline: 43 critical source files unchanged (incl. Firebase, server, combat and scene adapters).
+[PASS] Temporary atlas folders: enemy=12, boss=6, dungeon_enemy=9, dungeon_boss=3 (30 sheets).
+[PASS] Temporary asset release gate: 0 commercially approved assets; correct for B1 development placeholders.
+[PASS] Enemy/Boss atlas validator: 30 profiles; 30 valid delivered WebP atlases; 7 states per profile.
+[PASS] Visual contract + manifest: 101 visual IDs, current generated manifest, 30 enemy/boss atlas profiles.
+[PASS] product_and_background_catalog: Command exit=0; expected output found.
+[PASS] gameplay: Command exit=0; expected output found.
+[PASS] ship_graphics: Command exit=0; expected output found.
+[PASS] security: Command exit=0; expected output found.
+[PASS] relative_imports: Command exit=0; expected output found.
+[PASS] Full client tests: 136/136 PASS, 0 FAIL, 0 SKIP (min expected 136).
+[PASS] Vite production build: Exit=0; Vite completion marker and dist/index.html both verified.
+[PASS] built_bundle_validation: Command exit=0; expected output found.
+[WARN] Large production chunks: Large lazy Babylon chunks remain; mobile/network performance needs separate QA.
+[WARN] Server test coverage: Not run (optional -IncludeServerTests). SHA baseline and client security checks still run.
+[PASS] Human B1 gameplay QA: User-confirmed 7/7 earlier; this script did not autonomously verify WebGL or FPS.
+[WARN] B2 scope gate: Enemy/Boss GLB, skeletal animation, persistent death animation and runtime GPU LOD are NOT B1 features.
+---
+Manual QA is not automatable here; the 7 gameplay checks must be confirmed by a human.
+B1 does not claim enemy/Boss GLB, skeletal animation, persistent death animation, or production asset approval.
+Logs: C:\Users\TVH01374\Desktop\SpaceFighter\B1_AUDIT_REPORTS\B1_20261019_145228

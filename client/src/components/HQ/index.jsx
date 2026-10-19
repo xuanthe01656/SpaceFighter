@@ -7,6 +7,7 @@ import styles from './HQ.module.css';
 import { auth } from '../../firebase';
 import { preloadBattleScreen } from '../../game/routing/BattleScreenLoaders';
 import ShipImage from '../ShipImage/ShipImage';
+import AssetImage from '../AssetImage/AssetImage';
 import { resolveShipVisual } from '../../game/rendering/ShipVisualCatalog';
 
 // Hàm tiện ích: Định dạng số liệu ngắn gọn (1K, 1.5M, 2B) đồng bộ toàn App
@@ -257,7 +258,7 @@ export default function HQ({ gsRef, setScreen, lang, saveUserProfile, gameAction
              <p className={styles.loadoutLabel}>{lang === 'vi' ? 'SÚNG CHÍNH' : 'PRIMARY GUN'}</p>
              {currentMainGun ? (
                <>
-                 {currentMainGun.imgSrc ? <img src={currentMainGun.imgSrc} alt="Gun" className={styles.slotImage} /> : <div className={styles.slotEmoji} style={{width:'40px', height:'40px'}}><Icons.Gun /></div>}
+                 <AssetImage kind="equipment" assetId={currentMainGun.id} alt="Gun" className={styles.slotImage} />
                  <div className={styles.slotName}>{currentMainGun.name[lang]}</div>
                  <div className={`${styles.slotLevel} ${styles.colorGun}`}>Lv.{mainGunItem?.level || 1} (ATK: {getDynamicStat(currentMainGun.baseAtk, mainGunItem?.level, mainGunItem?.rarity)})</div>
                </>
@@ -268,7 +269,7 @@ export default function HQ({ gsRef, setScreen, lang, saveUserProfile, gameAction
              <p className={styles.loadoutLabel}>{lang === 'vi' ? 'SÚNG PHỤ' : 'WINGMAN'}</p>
              {currentWingman ? (
                <>
-                 {currentWingman.imgSrc ? <img src={currentWingman.imgSrc} alt="Wingman" className={styles.slotImage} /> : <div className={styles.slotEmoji} style={{width:'40px', height:'40px'}}><Icons.Wingman /></div>}
+                 <AssetImage kind="equipment" assetId={currentWingman.id} alt="Wingman" className={styles.slotImage} />
                  <div className={styles.slotName}>{currentWingman.name[lang]}</div>
                  <div className={`${styles.slotLevel} ${styles.colorWing}`}>Lv.{wingmanItem?.level || 1} (ATK: {getDynamicStat(currentWingman.baseAtk, wingmanItem?.level, wingmanItem?.rarity)})</div>
                </>
@@ -279,7 +280,7 @@ export default function HQ({ gsRef, setScreen, lang, saveUserProfile, gameAction
              <p className={styles.loadoutLabel}>{lang === 'vi' ? 'GIÁP BẢO VỆ' : 'ARMOR'}</p>
              {currentArmor ? (
                <>
-                 {currentArmor.imgSrc ? <img src={currentArmor.imgSrc} alt="Armor" className={styles.slotImage} /> : <div className={styles.slotEmoji} style={{width:'40px', height:'40px'}}><Icons.Shield /></div>}
+                 <AssetImage kind="equipment" assetId={currentArmor.id} alt="Armor" className={styles.slotImage} />
                  <div className={styles.slotName}>{currentArmor.name[lang]}</div>
                  <div className={`${styles.slotLevel} ${styles.colorArmor}`}>Lv.{armorItem?.level || 1} (HP: {getDynamicStat(currentArmor.baseHp, armorItem?.level, armorItem?.rarity, true)})</div>
                </>
@@ -290,7 +291,7 @@ export default function HQ({ gsRef, setScreen, lang, saveUserProfile, gameAction
              <p className={styles.loadoutLabel}>{lang === 'vi' ? 'VỆ TINH' : 'DRONE'}</p>
              {currentDrone ? (
                <>
-                 {currentDrone.imgSrc ? <img src={currentDrone.imgSrc} alt="Drone" className={styles.slotImage} /> : <div className={styles.slotEmoji} style={{width:'40px', height:'40px'}}><Icons.Drone /></div>}
+                 <AssetImage kind="equipment" assetId={currentDrone.id} alt="Drone" className={styles.slotImage} />
                  <div className={styles.slotName}>{currentDrone.name[lang]}</div>
                  <div className={`${styles.slotLevel} ${styles.colorDrone}`}>Lv.{droneItem?.level || 1} (ATK: {getDynamicStat(currentDrone.baseAtk, droneItem?.level, droneItem?.rarity)})</div>
                </>
@@ -356,7 +357,7 @@ export default function HQ({ gsRef, setScreen, lang, saveUserProfile, gameAction
                           <div className={styles.popupItemImgWrap} style={{ border: `1px solid ${rColor}`, boxShadow: `inset 0 0 15px ${rColor}40` }}>
                              {itm.type === 'aircraft'
                                ? <ShipImage aircraftId={itm.uuid} alt={itm.name[lang]} className={styles.popupItemImg} />
-                               : itm.imgSrc ? <img src={itm.imgSrc} alt="item" className={styles.popupItemImg}/> : <div className={styles.popupItemEmoji} style={{width:'30px', height:'30px', color: rColor}}><FallbackIcon /></div>}
+                               : <AssetImage kind="equipment" assetId={itm.baseId || itm.id} alt="item" className={styles.popupItemImg} />}
                              <span className={styles.popupItemLvl} style={{ color: rColor }}>Lv.{itm.level}</span>
                           </div>
                           

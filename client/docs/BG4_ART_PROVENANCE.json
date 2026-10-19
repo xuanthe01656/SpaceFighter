@@ -1,0 +1,127 @@
+{
+  "schema": "spacefighter-bg4-candidate-art/v1",
+  "basedOnCatalogVersion": "1.2.0",
+  "newCatalogVersion": "1.3.0",
+  "sourceCategory": "user-provided Meshy edited image",
+  "releasePolicy": "CANDIDATE_ONLY_NOT_COMMERCIAL",
+  "assets": [
+    {
+      "id": "alpha_coast_v1_candidate",
+      "label": "Alpha",
+      "sourceDimensions": [
+        640,
+        1147
+      ],
+      "croppedDimensions": [
+        573,
+        1146
+      ],
+      "seamBefore": {
+        "mean": 49.877,
+        "peak": 213
+      },
+      "seamAfterProvisionalMaster": {
+        "mean": 0.0,
+        "peak": 0
+      },
+      "sourceSha256": "060447b3716668d510972dfeb5de985f2a4559acd1cd197586766dd3273f2eab",
+      "crop": {
+        "x0": 33,
+        "y0": 0,
+        "width": 573,
+        "height": 1146
+      },
+      "technique": {
+        "blend": "low-high-frequency symmetric wrap",
+        "lowBandPx": 160,
+        "highBandPx": 48,
+        "sigma": 13
+      },
+      "outputIsUpscaled": true,
+      "commercialStatus": "UNAPPROVED_CANDIDATE",
+      "rightsStatus": "NOT_VERIFIED",
+      "variants": [
+        {
+          "file": "alpha_coast_v1_candidate.webp",
+          "width": 1024,
+          "height": 2048,
+          "seamMean": 1.81,
+          "seamMax": 12,
+          "kiB": 278.7
+        },
+        {
+          "file": "alpha_coast_v1_candidate_low.webp",
+          "width": 512,
+          "height": 1024,
+          "seamMean": 2.73,
+          "seamMax": 16,
+          "kiB": 96.4
+        }
+      ],
+      "humanQARequired": [
+        "Visual seam, architecture continuity",
+        "No visual repetition",
+        "Readability & ownership"
+      ]
+    },
+    {
+      "id": "nereus_ocean_v1_candidate",
+      "label": "Nereus",
+      "sourceDimensions": [
+        640,
+        1147
+      ],
+      "croppedDimensions": [
+        573,
+        1146
+      ],
+      "seamBefore": {
+        "mean": 17.126,
+        "peak": 171
+      },
+      "seamAfterProvisionalMaster": {
+        "mean": 0.0,
+        "peak": 0
+      },
+      "sourceSha256": "b7748454acb9417e7ca9ed3dc582dd848a71029b7278ad440795367cdbe646e4",
+      "crop": {
+        "x0": 33,
+        "y0": 0,
+        "width": 573,
+        "height": 1146
+      },
+      "technique": {
+        "blend": "low-high-frequency symmetric wrap",
+        "lowBandPx": 125,
+        "highBandPx": 34,
+        "sigma": 13
+      },
+      "outputIsUpscaled": true,
+      "commercialStatus": "UNAPPROVED_CANDIDATE",
+      "rightsStatus": "NOT_VERIFIED",
+      "variants": [
+        {
+          "file": "nereus_ocean_v1_candidate.webp",
+          "width": 1024,
+          "height": 2048,
+          "seamMean": 1.76,
+          "seamMax": 12,
+          "kiB": 218.6
+        },
+        {
+          "file": "nereus_ocean_v1_candidate_low.webp",
+          "width": 512,
+          "height": 1024,
+          "seamMean": 2.48,
+          "seamMax": 17,
+          "kiB": 74.3
+        }
+      ],
+      "humanQARequired": [
+        "Visual seam, architecture continuity",
+        "No visual repetition",
+        "Readability & ownership"
+      ]
+    }
+  ]
+}

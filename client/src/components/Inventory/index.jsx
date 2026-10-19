@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { auth } from '../../firebase';
 import ItemModal from '../ItemModal/ItemModal';
 import ShipImage from '../ShipImage/ShipImage';
+import AssetImage from '../AssetImage/AssetImage';
 
  // --- ĐỒNG BỘ HỆ THỐNG SVG ICONS CHUẨN SCI-FI ---
  const Icons = {
@@ -471,25 +472,14 @@ export default function Inventory({ gsRef, setScreen, lang, saveUserProfile, gam
     saveUserProfile(); setRefreshTick(p => p + 1); return isSuccess; 
   };
 
-  // --- RENDER ICON / IMAGE ---
-  const renderIcon = (item, size) => {
-    const baseInfo = item.type === 'pilot' ? PILOTS.find(p => p.id === item.id) : GEAR_CATALOG[item.type]?.find(g => g.id === item.baseId);
-    
-    // Nếu có ảnh, render và xử lý fallback bằng onerror
-    if (baseInfo?.imgSrc) {
-      return (
-        <img 
-          src={baseInfo.imgSrc} 
-          alt="icon" 
-          style={{ maxWidth: size, maxHeight: size, objectFit: 'contain' }} 
-          onError={(e) => { e.target.onerror = null; e.target.src = '/images/no_image.png'; }}
-        />
-      );
-    }
-    
-    // Nếu không có ảnh, dùng fallback mặc định
-    return <img src="/images/no_image.png" alt="icon" style={{ maxWidth: size, maxHeight: size, objectFit: 'contain', opacity: 0.5 }} />;
-  };
+  // Shared visual contract: missing artwork uses a stable per-ID preview.
+  const renderIcon = (item, size) => (
+    item.type === 'aircraft'
+      ? <ShipImage aircraftId={item.id} style={{maxWidth:size,maxHeight:size,objectFit:'contain'}} />
+      : <AssetImage kind={item.type === 'pilot' ? 'pilot' : 'equipment'}
+          assetId={item.type === 'pilot' ? item.id : (item.baseId || item.id)}
+          style={{maxWidth:size,maxHeight:size}} alt="icon" />
+  );
 
   const toggleEquip = async () => {
     if (!selectedItem) return;

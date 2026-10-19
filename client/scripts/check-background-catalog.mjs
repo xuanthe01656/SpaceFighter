@@ -2,7 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BATTLE_BACKGROUND_CATALOG, BATTLE_BACKGROUND_BINDINGS,
-  BACKGROUND_CATALOG_VERSION, resolveBattleBackground, BACKGROUND_SCROLL_DIRECTIONS } from '../src/game/catalog/BackgroundCatalog.js';
+  BACKGROUND_CATALOG_VERSION, resolveBattleBackground, BACKGROUND_SCROLL_DIRECTIONS,
+  BACKGROUND_ART_BIOMES, BACKGROUND_ART_ROADMAP, BACKGROUND_COMBAT_READABILITY } from '../src/game/catalog/BackgroundCatalog.js';
+import { imageDimensions as assetImageDimensions } from './lib/background-asset-utils.mjs';
 
 const check = (v, msg) => { if (!v) throw new Error(`BACKGROUND_CATALOG_INVALID: ${msg}`); };
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -37,11 +39,18 @@ for(const [id,entry] of Object.entries(BATTLE_BACKGROUND_CATALOG)) {
   check(id===entry.id,`id mismatch ${id}`);
   check(!ids.has(id),`duplicate ${id}`);ids.add(id);
   check(Number.isInteger(entry.revision)&&entry.revision>=1,`revision invalid ${id}`);
-  check(entry.status==='demo'||entry.status==='production',`status invalid ${id}`);
+  check(entry.status==='demo'||entry.status==='candidate'||entry.status==='production',`status invalid ${id}`);
+  check(BACKGROUND_ART_BIOMES[entry.artDirectionId] && entry.artDirectionId===entry.biome,`art direction not registered ${id}`);
+  check(['prototype_qa','review','released'].includes(entry.artPipelineStatus),`art pipeline status ${id}`);
+  if(entry.status==='candidate') check(entry.licenseStatus==='prototype_only' && entry.artPipelineStatus==='review',`unapproved BG4 candidate ${id}`);
   check(typeof entry.biome==='string' && entry.biome.length>=3,`biome invalid ${id}`);
   check(typeof entry.name?.vi==='string'&&typeof entry.name?.en==='string',`translations missing ${id}`);
   check(/^#[0-9a-f]{6}$/i.test(entry.fallbackColor),`fallback color invalid ${id}`);
-  if(entry.status==='production') check(entry.licenseStatus==='approved',`production background needs approval ${id}`);
+  if(entry.status==='production') {
+    check(entry.licenseStatus==='approved',`production background needs license approval ${id}`);
+    check(entry.artPipelineStatus==='released',`production background needs released art ${id}`);
+    check(typeof entry.releaseEvidenceId==='string' && /^BGREL-[A-Z0-9-]{6,}$/.test(entry.releaseEvidenceId),`production asset missing release evidence ID ${id}`);
+  }
   check(Object.values(BACKGROUND_SCROLL_DIRECTIONS).includes(entry.scrollDirection),`invalid scroll direction ${id}`);
   check(Number.isFinite(entry.loadTimeoutMs)&&entry.loadTimeoutMs>=3000&&entry.loadTimeoutMs<=60000,`load timeout ${id}`);
   check(Array.isArray(entry.layers) && entry.layers.length>=1 && entry.layers.length<=3,`layers 1-3 ${id}`);
@@ -70,6 +79,19 @@ for(const [id,entry] of Object.entries(BATTLE_BACKGROUND_CATALOG)) {
     check(dimensions!==null,`use decodable WebP or PNG for verified assets ${id}/${l.id}`);
     check(dimensions.width===l.imageWidth && dimensions.height===l.imageHeight,`dimension mismatch ${id}/${l.id}`);
     check(dimensions.width<=2048&&dimensions.height<=4096,`texture resolution budget ${id}/${l.id}`);
+    for(const [quality,variant] of Object.entries(l.qualityVariants||{})) {
+      check(['desktop','mobile','mobileLow'].includes(quality),`invalid quality variant ${id}/${l.id}/${quality}`);
+      check(variant.src!==l.src && /^\/images\/backgrounds\/[a-z0-9/_\-.]+\.(webp|png)$/i.test(variant.src) && !variant.src.includes('..'),`variant path unsafe ${id}/${l.id}/${quality}`);
+      check(Number.isInteger(variant.imageWidth)&&Number.isInteger(variant.imageHeight),`variant dimensions missing ${id}/${l.id}/${quality}`);
+      const f=path.join(root,'public',variant.src.slice(1));
+      check(fs.existsSync(f),`variant missing ${id}/${l.id}/${quality}`);
+      const bytes=fs.readFileSync(f);
+      check(bytes.length>=1024 && bytes.length<=1500000,`variant file budget ${id}/${l.id}/${quality}`);
+      const size=assetImageDimensions(bytes, path.extname(f).slice(1).toLowerCase());
+      check(size.width===variant.imageWidth&&size.height===variant.imageHeight,`variant dimensions mismatch ${id}/${l.id}/${quality}`);
+      if(quality==='mobileLow') check(size.width<=512&&size.height<=1024,`mobileLow variant dimensions too large ${id}/${l.id}`);
+      totalBytes+=bytes.length;
+    }
   }
 }
 for(const [planetId,loc] of Object.entries(BATTLE_BACKGROUND_BINDINGS.campaign)) {
@@ -91,7 +113,17 @@ for(const [planetId,loc] of Object.entries(BATTLE_BACKGROUND_BINDINGS.campaign))
 for(const [dungeonId,id] of Object.entries(BATTLE_BACKGROUND_BINDINGS.dungeon)) {
   check(/^dung_[a-z]+$/.test(dungeonId) && ids.has(id),`invalid dungeon binding ${dungeonId}`);
 }
+check(BACKGROUND_COMBAT_READABILITY.centerLane.xMin>=0&&BACKGROUND_COMBAT_READABILITY.centerLane.xMax<=1,'safe center lane coordinates');
+for (const [id,profile] of Object.entries(BACKGROUND_ART_BIOMES)) {
+  check(id===profile.id && profile.palette.length>=3 && profile.keepCenterOpen,`biome art brief ${id}`);
+}
+for(const item of BACKGROUND_ART_ROADMAP) {
+  check(BACKGROUND_ART_BIOMES[item.biomeId] && item.status==='planned',`invalid future art brief ${item.artBriefId}`);
+  check(item.stageFrom<=item.stageTo,`invalid stage range ${item.artBriefId}`);
+  // Planned art must not be bound to runtime until image+rights approval.
+  check(!ids.has(item.artBriefId),`planned art inadvertently registered ${item.artBriefId}`);
+}
 check(resolveBattleBackground({mode:'campaign',planetId:1,stage:1})?.id==='alpha_coast_demo','Alpha binding');
 check(resolveBattleBackground({mode:'dungeon',dungeonId:'dung_nereus'})?.id==='nereus_ocean_demo','Nereus binding');
-console.log(`PASS BackgroundCatalog ${BACKGROUND_CATALOG_VERSION}: ${ids.size} biomes, ${layerCount} layers, ${(totalBytes/1024).toFixed(1)} KiB of compressed textures.`);
+console.log(`PASS BackgroundCatalog ${BACKGROUND_CATALOG_VERSION}: ${ids.size} registered backgrounds, ${Object.keys(BACKGROUND_ART_BIOMES).length} future biome briefs, ${layerCount} active layers, ${(totalBytes/1024).toFixed(1)} KiB compressed (incl. mobileLow).`);
 console.log('PASS stage/range bindings, CSS scroll direction/speed, seam declarations, asset signatures, license gates and fallback eligibility.');

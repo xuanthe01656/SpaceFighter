@@ -33,3 +33,4 @@ Thumbs.db
 *.apk
 .env.*
 !.env.example
+*.zip

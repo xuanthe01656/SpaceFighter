@@ -51,10 +51,10 @@ test('catalog selects Alpha and Nereus separately; unsupported worlds retain exa
 });
 
 test('catalog is immutable, ID stable, demo assets declare no license approval and have bounded mobile budgets',()=>{
-  assert.equal(Object.keys(CATALOG).length,2);
+  assert.ok(Object.keys(CATALOG).length>=2);
   for(const item of Object.values(CATALOG)) {
     assert.ok(Object.isFrozen(item));
-    assert.equal(item.status,'demo');
+    assert.ok(['demo','candidate'].includes(item.status));
     assert.equal(item.licenseStatus,'prototype_only');
     assert.ok(item.layers.every(l=>Object.isFrozen(l)));
     assert.equal(selectBackgroundLayers(item,'mobileLow').length,1);
@@ -106,7 +106,7 @@ test('1 image layer uses 1 noninteractive ground; no star mesh is spawned; quali
   assert.equal(m.meshes[0].enabled, false, 'asset quad must stay hidden until WebP finishes decoding');
   assert.equal(m.textures[0].wrapV,m.BABYLON.Texture.WRAP_ADDRESSMODE);
   assert.equal(m.textures[0].wrapU,m.BABYLON.Texture.CLAMP_ADDRESSMODE);
-  assert.equal(m.textures[0].url,'/images/backgrounds/demo/alpha_coast.webp');
+  assert.equal(m.textures[0].url,'/images/backgrounds/demo/alpha_coast_low.webp');
   const before=m.textures[0].vOffset;
   m.before.fire();assert.equal(m.textures[0].vOffset,before,'do not scroll an unready texture');
   m.resize.fire();assert.ok(m.meshes[0].scaling.x>0);

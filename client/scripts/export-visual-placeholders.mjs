@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { ALL_VISUAL_PROFILES } from '../src/game/assets/AssetRegistry.js';
+import { makeAssetPlaceholder } from '../src/game/assets/AssetPlaceholder.js';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const target=path.join(root,'assets/visual-placeholder-gallery.html');
+const esc = s => String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+const cards=ALL_VISUAL_PROFILES.map(p => `<div class="card"><img src="${makeAssetPlaceholder(p.kind,p.id,p.tint)}" alt="${esc(p.assetId)}"><div>${esc(p.assetId)}</div><small>${esc(p.paths.icon)}</small></div>`).join('\n');
+fs.writeFileSync(target,`<!doctype html><html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Space Fighter / Temporary Visual Catalog</title><style>body{font:14px system-ui;background:#07111c;color:#d5f1ff;padding:24px}h1{color:#66fcf1}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:16px}.card{background:#101f32;padding:12px;border-radius:12px;overflow-wrap:anywhere}.card img{width:128px;height:128px;display:block;margin:auto}.card small{font-size:10px;color:#87a4b8}</style><h1>Space Fighter — TEMP Visual Catalog</h1><p>${ALL_VISUAL_PROFILES.length} visual IDs. These are placeholders, NOT approved production art. Drop approved WebP into canonical paths, regenerate the manifest, and rebuild the game.</p><div class="grid">${cards}</div></html>`);
+console.log(`Wrote ${target} (${ALL_VISUAL_PROFILES.length} visual placeholders)`);

@@ -1,0 +1,5 @@
+{
+  "schemaVersion": 1,
+  "note": "Release review: enter {assetId, sha256, license, approver} ONLY after QA. No approved artwork yet.",
+  "approved": {}
+}

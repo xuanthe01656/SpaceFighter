@@ -4,6 +4,7 @@ import { PILOTS } from '../../constants';
 import styles from './Pilots.module.css';
 import toast from 'react-hot-toast';
 import { auth } from '../../firebase';
+import AssetImage from '../AssetImage/AssetImage';
 
 // --- ICONS ---
 const Icons = {
@@ -160,7 +161,7 @@ export default function Pilots({ gsRef, setScreen, lang, saveUserProfile, gameAc
                     {isEq && <div className={styles.equippedBadge}><span>✓</span></div>}
                     {!pilot.owned && <div className={styles.lockIconBadge}>🔒</div>}
 
-                    <div className={styles.itemIconWrap}>👨‍🚀</div>
+                    <div className={styles.itemIconWrap} style={{width:54,height:54}}><AssetImage kind="pilot" assetId={pilot.id} style={{width:"100%", height:"100%"}} /></div>
                     <div className={styles.pilotNameSlot}>{pilot.name[lang]}</div>
 
                     <div className={styles.itemFooter}>
@@ -178,7 +179,7 @@ export default function Pilots({ gsRef, setScreen, lang, saveUserProfile, gameAc
               <motion.div key={selectedId} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} style={{display: 'flex', flexDirection: 'column', height: '100%'}}>
                 
                 <div className={styles.detailHeader}>
-                  <div className={styles.detailAvatar}>👨‍🚀</div>
+                  <div className={styles.detailAvatar} style={{width:76,height:76,flexShrink:0}}><AssetImage kind="pilot" assetId={selectedPilot.id} style={{width:"100%", height:"100%"}} /></div>
                   <div>
                     <h3 className={styles.detailName}>{selectedPilot.name[lang]}</h3>
                     <div className={styles.detailStars}>

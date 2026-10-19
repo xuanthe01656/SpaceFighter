@@ -9,11 +9,14 @@ import { battleSpeedMultiplier, BATTLE_WORLD_HALF_HEIGHT } from '../../game/conf
 import { resolveDungeonDifficulty } from '../../game/config/DungeonDifficulty';
 import { createBattlePassiveState, receiveBattleHit, shouldEchoShot } from '../../game/combat/BattlePassives';
 import { createPlayerShipVisual } from '../../game/rendering/ShipVisualFactory';
+import { attachBattleEntityVisual } from '../../game/rendering/BattleEntityVisual';
+import { createBattleDeathVisualQueue } from '../../game/rendering/BattleDeathVisualQueue';
+import { resolveAssetVisual } from '../../game/assets/AssetRegistry.js';
 import { createShipEngineFx } from '../../game/rendering/ShipEngineFx';
 import { createShipInputController } from '../../game/combat/ShipInputController';
 import { describeMainSalvo, describeWingSalvo, describeDroneSalvo, pickWeaponTarget, enemySpeedFactor, shieldDamageFactor, repairAmount, projectileHitsPoint } from '../../game/combat/PlayerWeapons';
 import { createProjectileEmitter } from '../../game/combat/ProjectileEmitter';
-import { resolveBattleBackground, legacyBattleBackgroundRequested } from '../../game/catalog/BackgroundCatalog';
+import { resolveBattleBackground, legacyBattleBackgroundRequested, previewBg4Variant } from '../../game/catalog/BackgroundCatalog';
 import { createScrollingBattleBackground } from '../../game/rendering/ScrollingBackgroundRenderer';
 import { attachBattleBackgroundProfiler } from '../../game/rendering/BattleBackgroundProfiler.js';
 
@@ -73,6 +76,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     pendingTimers.forEach(clearTimeout);
     pendingTimers.clear();
   });
+  // Updates death sprites even after gameOver freezes the combat loop.
+  const deathVisuals = createBattleDeathVisualQueue(scene);
 
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -89,6 +94,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     const mainGunBase = combat.gear.mainGun.base;
     const wingmanBase = combat.gear.wingman.base;
     const droneBase = combat.gear.drone.base;
+    const wingmanArt = wingmanBase ? resolveAssetVisual('equipment', wingmanBase.id)?.topSrc : null;
+    const droneArt = droneBase ? resolveAssetVisual('equipment', droneBase.id)?.topSrc : null;
 
     // ══════════════════════════════════════════════════════════════════════════
     // 2. CAMERA
@@ -166,7 +173,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             });
         });
     };
-    const selectedBackground = legacyBattleBackgroundRequested(globalThis.location?.search) ? null : resolveBattleBackground({ mode: 'dungeon', dungeonId });
+    const selectedBackground = legacyBattleBackgroundRequested(globalThis.location?.search) ? null : resolveBattleBackground({ mode: 'dungeon', dungeonId,
+        variantId: previewBg4Variant({mode: 'dungeon', dungeonId, queryString: globalThis.location?.search}) });
     // Keep the load frame dark for readable shots; avoid a bright-cyan flash before the texture is ready.
     if (selectedBackground) scene.clearColor = hexToColor4(selectedBackground.fallbackColor);
     if (selectedBackground) {
@@ -375,7 +383,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             wFallback.material = makeMat(scene, BABYLON.Color3.FromHexString('#ffa502'), true);
             wFallback.parent = wNode;
 
-            if (wingmanBase.imgSrc) {
+            if (wingmanArt) {
                 // 2. Dựng mặt Plane 2D
                 const wPlane = BABYLON.MeshBuilder.CreatePlane('wingman', { size: 1 }, scene);
                 wPlane.rotation.x = Math.PI / 2;
@@ -384,13 +392,14 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
                 const wMat = new BABYLON.StandardMaterial('wMat', scene);
                 // 3. Load Texture với cơ chế bắt lỗi 404
-                const wTex = new BABYLON.Texture(wingmanBase.imgSrc, scene, false, false, undefined, 
+                const wTex = new BABYLON.Texture(wingmanArt, scene, false, false, undefined, 
                     () => { wFallback.isVisible = false; }, // Thành công: Ẩn cục fallback
                     () => { wPlane.dispose(); }             // Lỗi 404: Xóa mặt phẳng caro lỗi, giữ cục fallback
                 );
                 wTex.hasAlpha = true;
                 wMat.diffuseTexture = wTex;
                 wMat.emissiveTexture = wTex;
+                wMat.emissiveColor = new BABYLON.Color3(0,0,0);
                 wMat.disableLighting = true;
                 wMat.useAlphaFromDiffuseTexture = true;
                 wPlane.material = wMat;
@@ -417,7 +426,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             dFallback.material = makeMat(scene, BABYLON.Color3.FromHexString(colorHex), true);
             dFallback.parent = dNode;
 
-            if (droneBase.imgSrc) {
+            if (droneArt) {
                 // 2. Dựng mặt Plane 2D
                 const dPlane = BABYLON.MeshBuilder.CreatePlane('drone', { size: 0.5 }, scene);
                 dPlane.rotation.x = Math.PI / 2;
@@ -426,13 +435,14 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
                 const dMat = new BABYLON.StandardMaterial('dMat', scene);
                 // 3. Load Texture với cơ chế bắt lỗi 404
-                const dTex = new BABYLON.Texture(droneBase.imgSrc, scene, false, false, undefined, 
+                const dTex = new BABYLON.Texture(droneArt, scene, false, false, undefined, 
                     () => { dFallback.isVisible = false; }, // Thành công: Ẩn quả cầu fallback
                     () => { dPlane.dispose(); }             // Lỗi 404: Xóa mặt phẳng caro lỗi
                 );
                 dTex.hasAlpha = true;
                 dMat.diffuseTexture = dTex;
                 dMat.emissiveTexture = dTex;
+                dMat.emissiveColor = new BABYLON.Color3(0,0,0);
                 dMat.disableLighting = true;
                 dMat.useAlphaFromDiffuseTexture = true;
                 dPlane.material = dMat;
@@ -515,6 +525,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     let bossSpawned    = false;
     let bossActive     = false;
     let bossMesh       = null;
+    let bossVisual     = null;
     let bossHp         = 0;
     let bossMaxHp      = 0;
     let waitingForNext = false;
@@ -578,6 +589,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         const bossCore = BABYLON.MeshBuilder.CreateSphere('bossInner', { diameter: 1.1, segments: 16 }, scene);
         bossCore.parent   = bossMesh;
         bossCore.material = makeMat(scene, new BABYLON.Color3(1, 0.85, 0.2), false);
+        bossVisual = attachBattleEntityVisual(scene, BABYLON, bossMesh, 'dungeon_boss', `${dungeonId}_boss`);
 
         const bossName = lang === 'vi' ? `CHÚA TỂ LƯỢT ${currentWave}` : `WAVE ${currentWave} OVERLORD`;
         bossNameText.text = `⚠ ${bossName}`;
@@ -626,6 +638,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         mesh.position.set((Math.random() - 0.5) * boundX() * 1.6, 0.2, -ZOOM - 2);
         mesh.material   = MAT[type];
         mesh.rotation.y += Math.random() * Math.PI * 2;
+        const visual = attachBattleEntityVisual(scene, BABYLON, mesh, 'dungeon_enemy', `${dungeonId}_${type}`);
 
         const hpMult  = type === 'heavy' ? 3.0 : type === 'elite' ? 2.0 : 1.0;
         const hp      = Math.floor(enemyBaseHp * hpMult);
@@ -653,7 +666,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         miniHpBg.addControl(miniHp);
 
         enemies.push({
-            mesh, hp, maxHp: hp, type,
+            mesh, visual, hp, maxHp: hp, type,
             speed, shootMs,
             lastShoot: 0,
             sineOff: Math.random() * Math.PI * 2,
@@ -662,10 +675,14 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         });
     };
 
-    const cleanEnemy = (e) => {
+    const cleanEnemy = (e, killedByDamage = false) => {
+        if (e._dead) return;
+        e._dead = true;
+        if (killedByDamage) deathVisuals.capture(e.visual);
+        else e.visual?.dispose();
         safeDisGui(e.miniHp);
         safeDisGui(e.miniHpBg);
-        safeDis(e.mesh);
+        safeDis(e.mesh); // collider removed synchronously; only noninteractive art remains
     };
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -781,6 +798,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     const applyPlayerDamageToEnemy = (enemy, damage) => {
         if (!enemy || enemy.mesh.isDisposed() || enemy.hp <= 0) return false;
         enemy.hp -= damage;
+        enemy.visual?.setState('hit');
         const ratio = clamp(enemy.hp / enemy.maxHp, 0, 1);
         enemy.miniHp.width = `${(ratio * 100).toFixed(0)}%`;
         enemy.miniHp.background = ratio < .4 ? '#ff8800'
@@ -790,7 +808,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         updateScore(gain);
         if (!isCloud) recordGuestEventKill(gsRef.current.campaignData, EVENT_CONFIG, getRealTime?.() ?? Date.now());
         explode(enemy.mesh.position, enemy.type === 'heavy' ? 2 : 1);
-        cleanEnemy(enemy);
+        cleanEnemy(enemy, true);
         const index = enemies.indexOf(enemy);
         if (index >= 0) enemies.splice(index, 1);
         waveKilled++;
@@ -910,11 +928,14 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
         // J. Logic boss 
         if (bossActive && bossMesh && !bossMesh.isDisposed()) {
+            bossVisual?.tick(frameFactor * (1000 / 60));
+            bossVisual?.setState('move');
             bossMesh.position.z = BABYLON.Scalar.Lerp(bossMesh.position.z, -ZOOM * 0.45, scaledLerpFactor(0.004,frameFactor));
             bossMesh.position.x = Math.sin(tick * 0.012) * boundX() * 0.65;
             bossMesh.rotation.y += 0.025 * frameFactor;
 
             if (now - (bossMesh._lastShoot || 0) > 2000) {
+                bossVisual?.setState('attack');
                 for (let k = -2; k <= 2; k++) {
                     fireEnemyBullet(bossMesh.position, k * 0.08, enemyBulletVelZ * 0.85);
                 }
@@ -929,6 +950,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 if (!hit.accepted) continue;
 
                 bossHp -= calculateProjectileDamage(b.atk, stats.critDamageBoost);
+                bossVisual?.setState('hit');
                 bossHpFill.width = `${clamp(bossHp / bossMaxHp, 0, 1) * 100}%`;
 
                 if (hit.consumed || b._splashRadius) { safeDis(b); playerBullets.splice(j, 1); }
@@ -936,7 +958,9 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 if (bossHp <= 0) {
                     explode(bossMesh.position, 3.5);
                     triggerShake(0.9, 22);
-                    safeDis(bossMesh);
+                    deathVisuals.capture(bossVisual);
+                    bossVisual = null;
+                    safeDis(bossMesh); // boss hitbox removed without waiting for the clip
                     bossMesh   = null;
                     bossActive = false;
                     bossPanel.isVisible = false;
@@ -974,6 +998,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             const e = enemies[i];
             if (e.mesh.isDisposed()) { enemies.splice(i, 1); continue; }
 
+            e.visual?.tick(frameFactor * (1000 / 60));
+            e.visual?.setState('move');
             const enemyFrame = frameFactor * enemySpeedFactor(e, now);
             e.mesh.position.z += e.speed * enemyFrame;
             e.mesh.position.x += Math.sin(tick * 0.025 + e.sineOff) * 0.05 * enemyFrame;
@@ -981,6 +1007,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
             if (e.type !== 'scout' && now - e.lastShoot > e.shootMs) {
                 fireEnemyBullet(e.mesh.position, 0, enemyBulletVelZ);
+                e.visual?.setState('attack');
                 e.lastShoot = now;
             }
 
