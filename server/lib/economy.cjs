@@ -189,12 +189,19 @@ const rollGacha = (state, crate, amount, config, rng, uuid) => {
   }
   return pulls;
 };
+// Ownership checks MUST NOT resolve values inherited from Object.prototype.
+// Firestore inventory maps are ordinary objects; keys such as '__proto__' and
+// 'constructor' are valid-looking strings but are not owned inventory entries.
+const ownedItem = (map, key) => {
+  const entries = obj(map);
+  return Object.hasOwn(entries, key) && own(entries[key]) ? entries[key] : null;
+};
 const getItem = (c, kind, uuid) => {
   id(uuid,'itemId');
   let item;
-  if (kind === 'pilot') item = obj(c.ownedPilots)[uuid];
-  else if (kind === 'aircraft') item = obj(c.ownedAircrafts)[uuid];
-  else if (kind === 'gear') item = obj(c.items)[uuid];
+  if (kind === 'pilot') item = ownedItem(c.ownedPilots, uuid);
+  else if (kind === 'aircraft') item = ownedItem(c.ownedAircrafts, uuid);
+  else if (kind === 'gear') item = ownedItem(c.items, uuid);
   else fail('INVALID_INPUT','Unknown item type');
   if (!item) fail('ITEM_NOT_OWNED', 'Item not owned',409);
   return item;
@@ -203,9 +210,12 @@ const setLoadout = (state, slot, value) => {
   if (!['pilot','aircraft',...gearTypes].includes(slot)) fail('INVALID_INPUT','Invalid loadout slot');
   if (value !== '') id(value,'loadout');
   const c = state.campaignData;
-  if (slot === 'pilot' && (!value || !c.ownedPilots?.[value])) fail('ITEM_NOT_OWNED','Pilot not owned',409);
-  if (slot === 'aircraft' && (!value || !c.ownedAircrafts?.[value])) fail('ITEM_NOT_OWNED','Aircraft not owned',409);
-  if (gearTypes.includes(slot) && value && c.items?.[value]?.type !== slot) fail('ITEM_NOT_OWNED','Gear not owned',409);
+  if (slot === 'pilot' && (!value || !ownedItem(c.ownedPilots, value))) fail('ITEM_NOT_OWNED','Pilot not owned',409);
+  if (slot === 'aircraft' && (!value || !ownedItem(c.ownedAircrafts, value))) fail('ITEM_NOT_OWNED','Aircraft not owned',409);
+  if (gearTypes.includes(slot) && value) {
+    const item = ownedItem(c.items, value);
+    if (!item || item.type !== slot) fail('ITEM_NOT_OWNED','Gear not owned',409);
+  }
   c.loadout ||= {}; c.loadout[slot] = value;
 };
 const earnCoinMetric = (state, cost, currency) => { if (currency === 'coins') countMission(state,'w_spend_coins',cost); };

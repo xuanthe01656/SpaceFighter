@@ -5,6 +5,7 @@ const fs = require('fs');
 require('dotenv').config();
 const { createGameService } = require('./lib/gameService.cjs');
 const { GameError } = require('./lib/economy.cjs');
+const { classifyGameApiError } = require('./lib/httpError.cjs');
 
 function createApp(clientPath=path.join(__dirname,'..','client','dist'), options={}) {
   const app=express();
@@ -71,10 +72,9 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
     res.sendFile(indexPath,error=>error&&next(error));
   });
   app.use((err,_req,res,_next)=>{
-    const status=err instanceof GameError?err.status:err.code==='auth/id-token-revoked'?401:500;
-    const code=err instanceof GameError?err.code:status===401?'UNAUTHORIZED':'INTERNAL_ERROR';
-    if(status===500) console.error('Game API failure:',err);
-    res.status(status).json({ok:false,code,message:status===500?'Server error':err.message});
+    const {status, code, message} = classifyGameApiError(err);
+    if(status>=500) console.error('Game API failure:',err);
+    res.status(status).json({ok:false,code,message});
   });
   return app;
 }
