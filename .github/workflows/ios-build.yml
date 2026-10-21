@@ -1,168 +1,312 @@
-name: Build iOS App
+name: SpaceFighter iOS - Signed IPA / TestFlight
 
+# Signed iOS builds are manual to avoid accidental macOS minutes and uploads.
 on:
-  push:
-    branches: [ main ] 
-  workflow_dispatch: 
+  workflow_dispatch:
+    inputs:
+      app_version:
+        description: 'iOS version in App Store Connect, for example 1.0.0'
+        required: true
+        type: string
+        default: '1.0.0'
+      upload_to_testflight:
+        description: 'Upload signed IPA to TestFlight after successful build'
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spacefighter-ios-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  build_ios:
-    runs-on: macos-latest 
-
+  build-ios:
+    name: Validate, sign and export iOS IPA
+    runs-on: macos-26
+    timeout-minutes: 90
     defaults:
       run:
-        working-directory: ./client
+        shell: bash
+        working-directory: client
+
+    env:
+      APP_VERSION: ${{ inputs.app_version }}
+      APP_BUNDLE_ID: com.theIT.spacefighter4
+      APPLE_TEAM_ID: ZQ3P9M5HL6
+      # Firebase web SDK settings are public client configuration, not Admin credentials.
+      # SF_FIREBASE_API_KEY must be taken from the current Firebase *web* app.
+      VITE_FIREBASE_API_KEY: ${{ vars.SF_FIREBASE_API_KEY }}
+      VITE_FIREBASE_AUTH_DOMAIN: distributed-inn-482605-c6.firebaseapp.com
+      VITE_FIREBASE_PROJECT_ID: distributed-inn-482605-c6
+      VITE_FIREBASE_STORAGE_BUCKET: distributed-inn-482605-c6.firebasestorage.app
+      VITE_FIREBASE_MESSAGING_SENDER_ID: '528039759292'
+      VITE_FIREBASE_APP_ID: '1:528039759292:web:4aab5ad9ac2bddd9362fb9'
+      VITE_FIREBASE_MEASUREMENT_ID: G-Y5CS812JKF
+      # Staging only. GAME_API_ENABLED must remain false until backend QA is complete.
+      VITE_GAME_API_URL: https://spacefighter-api-staging-528039759292.asia-southeast1.run.app/api/v1
 
     steps:
-      - name: 1. Lấy mã nguồn
+      - name: Checkout source
         uses: actions/checkout@v4
-      - name: 1.5. Nâng cấp Xcode (Xóa cảnh báo iOS SDK)
-        uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: 'latest-stable'
-      - name: 2. Cài đặt Node.js
+          persist-credentials: false
+
+      - name: Select Xcode 26 on macOS runner
+        run: |
+          set -euo pipefail
+          if [[ -d /Applications/Xcode_26.6.app/Contents/Developer ]]; then
+            sudo xcode-select --switch /Applications/Xcode_26.6.app/Contents/Developer
+          fi
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          XCODE_VERSION="$(xcodebuild -version | awk '/^Xcode / {print $2}')"
+          if [[ "${XCODE_VERSION%%.*}" != '26' ]]; then
+            echo 'Expected Xcode 26 on macos-26 runner.' >&2
+            exit 1
+          fi
+
+      - name: Set up Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: '20' # Hạ xuống bản 20 để ổn định nhất với Capacitor 7
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: client/package-lock.json
 
-      - name: 3. Cài đặt thư viện và Build Game (Frontend)
+      - name: Validate build configuration and repository baseline
         run: |
-          npm install
-          echo "VITE_SOCKET_URL=https://astro-cat.onrender.com" > .env
-          echo "VITE_FIREBASE_API_KEY=AIzaSyBs6iVyirKOErvyiNGFRq-lbKfWB_Q1yvQ" >> .env
-          echo "VITE_FIREBASE_AUTH_DOMAIN=astro-cat-5.firebaseapp.com" >> .env
-          echo "VITE_FIREBASE_PROJECT_ID=astro-cat-5" >> .env
-          echo "VITE_FIREBASE_STORAGE_BUCKET=astro-cat-5.firebasestorage.app" >> .env
-          echo "VITE_FIREBASE_MESSAGING_SENDER_ID=271365354200" >> .env
-          echo "VITE_FIREBASE_APP_ID=1:271365354200:web:af4e26e6386c39af971dad" >> .env
+          set -euo pipefail
+          [[ -f package-lock.json ]] || { echo 'client/package-lock.json must be committed for npm ci.' >&2; exit 1; }
+          [[ -f ios/App/App.xcodeproj/project.pbxproj ]] || { echo 'Missing existing iOS Xcode project.' >&2; exit 1; }
+          [[ -f ios/App/App/App.entitlements ]] || { echo 'Missing committed Apple Sign-In entitlement.' >&2; exit 1; }
+          [[ -f ios/App/App/GoogleService-Info.plist ]] || { echo 'Missing iOS Firebase plist.' >&2; exit 1; }
+          [[ -n "${VITE_FIREBASE_API_KEY:-}" ]] || { echo 'Set GitHub Actions variable SF_FIREBASE_API_KEY.' >&2; exit 1; }
+          [[ "$APP_VERSION" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || { echo 'Invalid app_version; use digits.digits[.digits].' >&2; exit 1; }
+          [[ "$VITE_FIREBASE_PROJECT_ID" == 'distributed-inn-482605-c6' ]] || exit 1
+          [[ "$VITE_GAME_API_URL" == 'https://spacefighter-api-staging-528039759292.asia-southeast1.run.app/api/v1' ]] || exit 1
+          python3 - <<'PY'
+          import os, pathlib, plistlib, re
+          root = pathlib.Path.cwd()
+          capacitor = (root / 'capacitor.config.ts').read_text(encoding='utf-8')
+          project = (root / 'ios/App/App.xcodeproj/project.pbxproj').read_text(encoding='utf-8')
+          firebase = plistlib.loads((root / 'ios/App/App/GoogleService-Info.plist').read_bytes())
+          entitlement = plistlib.loads((root / 'ios/App/App/App.entitlements').read_bytes())
+          bundle_id = os.environ['APP_BUNDLE_ID']
+          assert re.search(r"appId:\s*'" + re.escape(bundle_id) + r"'", capacitor), 'Wrong Capacitor appId'
+          assert len(re.findall(r'PRODUCT_BUNDLE_IDENTIFIER\s*=\s*' + re.escape(bundle_id) + r'\s*;', project)) == 2, 'Wrong iOS bundle IDs'
+          assert project.count('CODE_SIGN_ENTITLEMENTS = App/App.entitlements;') == 2, 'Missing entitlements in Debug or Release'
+          assert firebase.get('PROJECT_ID') == os.environ['VITE_FIREBASE_PROJECT_ID'], 'Wrong Firebase plist project'
+          assert firebase.get('BUNDLE_ID') == bundle_id, 'Wrong Firebase plist bundle'
+          assert entitlement.get('com.apple.developer.applesignin') == ['Default'], 'Wrong Apple Sign-In entitlement'
+          print('iOS App ID, Firebase plist and Apple Sign-In entitlement: PASS')
+          PY
+          printf 'BUILD_NUMBER=%s\n' "$(( GITHUB_RUN_NUMBER * 100 + GITHUB_RUN_ATTEMPT ))" >> "$GITHUB_ENV"
+
+      - name: Install locked dependencies
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+
+      - name: Client regression, gameplay and security gates
+        run: |
+          set -euo pipefail
+          npm test
+          npm run check:gameplay
+          npm run check:safety
+
+      - name: Build web assets with SpaceFighter Firebase configuration
+        run: |
+          set -euo pipefail
           npm run build
+          test -s dist/index.html
 
-      - name: 4. Khởi tạo và Đồng bộ code vào iOS
-        working-directory: ./client
+      - name: Synchronize existing Capacitor iOS SPM project
         run: |
-          # BƠM THÊM 2 DÒNG NÀY ĐỂ ÉP PLUGIN NÂNG CẤP LÊN CHUẨN SPM MỚI NHẤT
-          npm install @codetrix-studio/capacitor-google-auth@latest
-          npm install @capacitor-community/apple-sign-in@latest
-          
-          # Các dòng dưới giữ nguyên
-          npm install @capacitor/ios@7 
+          set -euo pipefail
           npx cap sync ios
-          npm install -g @capacitor/assets
-          npx @capacitor/assets generate --ios
-      - name: 4.5. Tự động tăng số Build (Fix lỗi trùng Version)
-        run: |
-          # Dùng số lần chạy của GitHub Actions làm số thứ tự Build (Ví dụ chạy lần 15 sẽ ra Build 15)
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" ios/App/App/Info.plist
-      - name: 5. Mở két sắt lấy Chứng chỉ & Giấy phép Apple
+          test -f ios/App/CapApp-SPM/Package.swift || { echo 'Expected existing Capacitor SPM integration.' >&2; exit 1; }
+          grep -q 'CODE_SIGN_ENTITLEMENTS = App/App.entitlements;' ios/App/App.xcodeproj/project.pbxproj
+          xcodebuild -list -project ios/App/App.xcodeproj
+
+      - name: Import Apple distribution certificate and provisioning profile
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
           P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
           BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
-          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
-          PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          set -euo pipefail
+          for key in BUILD_CERTIFICATE_BASE64 P12_PASSWORD BUILD_PROVISION_PROFILE_BASE64 KEYCHAIN_PASSWORD; do
+            [[ -n "${!key:-}" ]] || { echo "Missing GitHub Secret: $key" >&2; exit 1; }
+          done
 
-          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
-          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode -o $PP_PATH
+          CERT_PATH="$RUNNER_TEMP/spacefighter_distribution.p12"
+          PROFILE_PATH="$RUNNER_TEMP/spacefighter_appstore.mobileprovision"
+          PROFILE_PLIST="$RUNNER_TEMP/spacefighter_appstore.plist"
+          KEYCHAIN_PATH="$RUNNER_TEMP/spacefighter-signing.keychain-db"
+          export CERT_PATH PROFILE_PATH PROFILE_PLIST
+          python3 - <<'PY'
+          import base64, os, pathlib
+          for name, destination in [
+              ('BUILD_CERTIFICATE_BASE64', 'CERT_PATH'),
+              ('BUILD_PROVISION_PROFILE_BASE64', 'PROFILE_PATH'),
+          ]:
+              data = base64.b64decode(os.environ[name], validate=True)
+              if len(data) < 128:
+                  raise SystemExit(f'{name} does not contain valid file content')
+              pathlib.Path(os.environ[destination]).write_bytes(data)
+          PY
+          chmod 600 "$CERT_PATH" "$PROFILE_PATH"
+          security cms -D -i "$PROFILE_PATH" -o "$PROFILE_PLIST" >/dev/null
+          python3 - <<'PY'
+          import datetime, os, plistlib, pathlib
+          profile = plistlib.loads(pathlib.Path(os.environ['PROFILE_PLIST']).read_bytes())
+          team = os.environ['APPLE_TEAM_ID']
+          bundle = os.environ['APP_BUNDLE_ID']
+          entitlements = profile.get('Entitlements', {})
+          assert team in profile.get('TeamIdentifier', []), 'Profile belongs to another Apple Team'
+          assert entitlements.get('application-identifier') == team + '.' + bundle, 'Profile Bundle ID mismatch'
+          assert entitlements.get('com.apple.developer.applesignin') == ['Default'], 'Recreate profile after enabling Apple Sign-In'
+          assert entitlements.get('get-task-allow') is False, 'Expected distribution profile, not development'
+          assert not profile.get('ProvisionedDevices') and not profile.get('ProvisionsAllDevices'), 'Expected App Store Connect distribution profile'
+          assert profile['ExpirationDate'] > datetime.datetime.utcnow(), 'Provisioning profile expired'
+          name = profile.get('Name', '')
+          uuid = profile.get('UUID', '')
+          assert name and uuid and '\n' not in name and '\r' not in name, 'Invalid provisioning profile metadata'
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as out:
+              out.write('APPLE_PROFILE_NAME=' + name + '\n')
+              out.write('APPLE_PROFILE_UUID=' + uuid + '\n')
+          print('Provisioning profile: Team, Bundle ID, Sign in with Apple, type and expiry PASS')
+          PY
 
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 7200 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$P12_PASSWORD" -f pkcs12 -k "$KEYCHAIN_PATH" -A
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+          security default-keychain -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security find-identity -p codesigning -v "$KEYCHAIN_PATH" | grep -F 'Apple Distribution:' || {
+            echo 'No usable Apple Distribution identity was found in the p12.' >&2; exit 1;
+          }
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          # UUID is read from the verified Apple provisioning profile, not hardcoded.
+          PROFILE_UUID="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$PROFILE_PLIST")"
+          cp "$PROFILE_PATH" "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+          rm -f "$CERT_PATH"
 
-          security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
-          security list-keychain -d user -s $KEYCHAIN_PATH
-          
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
-      
-      - name: 5.5. Bơm quyền Apple Sign-In vào App (Fix Error 1000)
+      - name: Resolve SPM dependencies
         run: |
-          cd ios/App/App
-          # Tự động tạo file Entitlements chứa quyền Apple Sign In
-          cat <<EOF > App.entitlements
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>com.apple.developer.applesignin</key>
-              <array>
-                  <string>Default</string>
-              </array>
-          </dict>
-          </plist>
-          EOF
-          cd ..
-          # Dùng Perl chèn quyền này vào lõi cấu hình Xcode
-          perl -pi -e 's/(INFOPLIST_FILE = App\/Info.plist;)/$1\n\t\t\t\tCODE_SIGN_ENTITLEMENTS = App\/App.entitlements;/g' App.xcodeproj/project.pbxproj
-      - name: 6. Build dự án ra file nén Archive (.xcarchive)
-        run: |
-          cd ios/App
-          
-          # Build thẳng bằng SPM, không dùng CocoaPods nữa
-          xcodebuild -project App.xcodeproj \
-          -scheme App \
-          -sdk iphoneos \
-          -configuration Release \
-          clean archive \
-          -archivePath $RUNNER_TEMP/AstroCat.xcarchive \
-          CODE_SIGN_STYLE=Manual \
-          PROVISIONING_PROFILE_SPECIFIER="AstroCat_AppStore_Profile" \
-          DEVELOPMENT_TEAM="ZQ3P9M5HL6" \
-          CODE_SIGN_IDENTITY="Apple Distribution"
+          set -euo pipefail
+          xcodebuild -resolvePackageDependencies \
+            -project ios/App/App.xcodeproj \
+            -scheme App
 
-      - name: 7. Tạo cấu hình xuất file IPA
+      - name: Archive signed iPhone and iPad app
         run: |
-          cat <<EOF > $RUNNER_TEMP/ExportOptions.plist
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>method</key>
-              <string>app-store</string>
-              <key>signingStyle</key>
-              <string>manual</string>
-              <key>signingCertificate</key>
-              <string>Apple Distribution</string>
-              <key>provisioningProfiles</key>
-              <dict>
-                  <key>com.ban.astrocat</key>
-                  <string>AstroCat_AppStore_Profile</string>
-              </dict>
-          </dict>
-          </plist>
-          EOF
+          set -euo pipefail
+          xcodebuild \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/SpaceFighter.xcarchive" \
+            -derivedDataPath "$RUNNER_TEMP/SpaceFighterDerivedData" \
+            CODE_SIGN_STYLE=Manual \
+            "DEVELOPMENT_TEAM=$APPLE_TEAM_ID" \
+            "PROVISIONING_PROFILE_SPECIFIER=$APPLE_PROFILE_NAME" \
+            'CODE_SIGN_IDENTITY=Apple Distribution' \
+            "MARKETING_VERSION=$APP_VERSION" \
+            "CURRENT_PROJECT_VERSION=$BUILD_NUMBER" \
+            archive
 
-      - name: 8. Đóng gói ra file ứng dụng (.ipa)
+      - name: Verify signed archive and Apple Sign-In entitlement
         run: |
-          cd ios/App
+          set -euo pipefail
+          APP_PATH="$RUNNER_TEMP/SpaceFighter.xcarchive/Products/Applications/App.app"
+          test -d "$APP_PATH"
+          codesign --verify --deep --strict "$APP_PATH"
+          codesign --display --entitlements - --xml "$APP_PATH" > "$RUNNER_TEMP/SpaceFighterSignedEntitlements.plist" 2>/dev/null
+          export APP_PATH
+          python3 - <<'PY'
+          import os, pathlib, plistlib
+          app = pathlib.Path(os.environ['APP_PATH'])
+          info = plistlib.loads((app / 'Info.plist').read_bytes())
+          signed = plistlib.loads((pathlib.Path(os.environ['RUNNER_TEMP']) / 'SpaceFighterSignedEntitlements.plist').read_bytes())
+          assert info['CFBundleIdentifier'] == os.environ['APP_BUNDLE_ID'], 'Archive Bundle ID mismatch'
+          assert signed.get('com.apple.developer.applesignin') == ['Default'], 'Apple Sign-In missing from actual code signature'
+          assert signed.get('application-identifier') == os.environ['APPLE_TEAM_ID'] + '.' + os.environ['APP_BUNDLE_ID'], 'Signed application identifier mismatch'
+          print('Signed archive App ID and Sign in with Apple: PASS')
+          PY
+
+      - name: Generate App Store Connect export options
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, pathlib, plistlib
+          data = {
+              'method': 'app-store-connect',
+              'destination': 'export',
+              'signingStyle': 'manual',
+              'signingCertificate': 'Apple Distribution',
+              'teamID': os.environ['APPLE_TEAM_ID'],
+              'provisioningProfiles': {os.environ['APP_BUNDLE_ID']: os.environ['APPLE_PROFILE_NAME']},
+          }
+          path = pathlib.Path(os.environ['RUNNER_TEMP']) / 'SpaceFighterExportOptions.plist'
+          path.write_bytes(plistlib.dumps(data))
+          print('ExportOptions.plist generated for', os.environ['APP_BUNDLE_ID'])
+          PY
+
+      - name: Export signed IPA
+        run: |
+          set -euo pipefail
           xcodebuild -exportArchive \
-          -archivePath $RUNNER_TEMP/AstroCat.xcarchive \
-          -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
-          -exportPath $RUNNER_TEMP/export \
-          DEVELOPMENT_TEAM="ZQ3P9M5HL6" \
-          CODE_SIGN_IDENTITY="Apple Distribution"
+            -archivePath "$RUNNER_TEMP/SpaceFighter.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/SpaceFighterExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/SpaceFighterIPA"
+          shopt -s nullglob
+          ipa_files=("$RUNNER_TEMP/SpaceFighterIPA/"*.ipa)
+          [[ ${#ipa_files[@]} -eq 1 ]] || { echo 'Expected exactly one exported IPA.' >&2; exit 1; }
+          printf 'IOS_IPA_PATH=%s\n' "${ipa_files[0]}" >> "$GITHUB_ENV"
+          echo 'Signed iOS IPA exported successfully.'
 
-      - name: 9. Tải file IPA lên kho thành quả
+      - name: Upload signed IPA as a GitHub Actions artifact
         uses: actions/upload-artifact@v4
         with:
-          name: AstroCat-iOS-Release
-          path: ${{ runner.temp }}/export/*.ipa
-      - name: 10. Tự động đẩy App lên App Store Connect (TestFlight)
+          name: SpaceFighter-iOS-${{ github.run_number }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/SpaceFighterIPA/*.ipa
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Validate TestFlight API credentials when requested
+        if: ${{ inputs.upload_to_testflight == true }}
         env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPSTORE_ISSUER_ID: ${{ vars.APPSTORE_ISSUER_ID }}
+          APPSTORE_API_KEY_ID: ${{ vars.APPSTORE_API_KEY_ID }}
+          APPSTORE_API_PRIVATE_KEY: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
         run: |
-          # Tìm file .ipa vừa tạo
-          IPA_PATH=$(find ${{ runner.temp }}/export -name "*.ipa" | head -n 1)
-          echo "Đang tải lên file: $IPA_PATH"
-          
-          # Dùng công cụ altool của Apple để upload
-          xcrun altool --upload-app \
-            -f "$IPA_PATH" \
-            -t ios \
-            -u "$APPLE_ID" \
-            -p "$APPLE_APP_SPECIFIC_PASSWORD"
+          set -euo pipefail
+          for key in APPSTORE_ISSUER_ID APPSTORE_API_KEY_ID APPSTORE_API_PRIVATE_KEY; do
+            [[ -n "${!key:-}" ]] || { echo "Missing GitHub App Store Connect setting: $key" >&2; exit 1; }
+          done
+
+      - name: Upload to TestFlight (explicit opt-in only)
+        if: ${{ inputs.upload_to_testflight == true }}
+        uses: Apple-Actions/upload-testflight-build@v5
+        with:
+          app-path: ${{ env.IOS_IPA_PATH }}
+          issuer-id: ${{ vars.APPSTORE_ISSUER_ID }}
+          api-key-id: ${{ vars.APPSTORE_API_KEY_ID }}
+          api-private-key: ${{ secrets.APPSTORE_API_PRIVATE_KEY }}
+          wait-for-processing: 'false'
+
+      - name: Clean temporary signing materials
+        if: always()
+        run: |
+          set +e
+          security delete-keychain "$RUNNER_TEMP/spacefighter-signing.keychain-db" >/dev/null 2>&1 || true
+          rm -f "$RUNNER_TEMP/spacefighter_distribution.p12" \
+                "$RUNNER_TEMP/spacefighter_appstore.mobileprovision" \
+                "$RUNNER_TEMP/spacefighter_appstore.plist"
