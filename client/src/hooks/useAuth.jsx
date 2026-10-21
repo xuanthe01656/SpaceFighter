@@ -10,12 +10,14 @@ import { secureStorage } from '../utils/storageHelper';
 import { t } from '../utils/translations';
 import { DEFAULT_CAMPAIGN_DATA } from '../constants';
 import { createDefaultCampaignData, parseGuestCampaign } from '../utils/profileSchema';
+import { isCurrentAuthAttempt, canProcessSessionSnapshot, guestEnergyFromStorage } from '../utils/authSessionGuards.mjs';
 import { openGameSession, executeGameCommand, changePlayerName, deleteCloudAccount } from '../services/gameApi';
 
 export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
   const [currentUser, setCurrentUser] = useState(null);
   const sessionListenerRef = useRef(null);
   const saveQueueRef = useRef(Promise.resolve());
+  const authAttemptRef = useRef(0);
 
   // Reconcile only the server-signed canonical economic/profile state.
   const applyServerState = useCallback((data) => {
@@ -65,10 +67,13 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
     });
   }, [gsRef,gameAction]);
 
-  const loadUserProfile = async (user) => {
+  const loadUserProfile = async (user, attempt) => {
     if (!user) return false;
     try {
       const reply=await openGameSession();
+      // Auth state can change while the HTTPS session request is in flight.
+      // Never apply a response belonging to a signed-out or superseded user.
+      if (!isCurrentAuthAttempt(attempt, authAttemptRef.current, user.uid, auth.currentUser?.uid)) return false;
       secureStorage.setItem('astro_session_id',reply.sessionId);
       applyServerState(reply.state);
       gsRef.current.myName=user.displayName||'Player';
@@ -76,6 +81,7 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
       setScreen(prev=>prev==='portal'?'campaign_portal':prev);
       return true;
     }catch(error){
+      if (!isCurrentAuthAttempt(attempt, authAttemptRef.current, user.uid, auth.currentUser?.uid)) return false;
       console.error('Cloud profile API unavailable:',error);
       toast.error('Máy chủ game không khả dụng. Không thể ghi tài nguyên hoặc tiến trình.');
       return false;
@@ -141,6 +147,8 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
 
  const logout = async () => {
     try {
+      // Invalidate pending /session responses immediately, before signOut resolves.
+      authAttemptRef.current += 1;
       // 1. Đánh dấu Offline trên DB
       // Presence is server-maintained. Client is forbidden to write users/{uid}.
 
@@ -208,16 +216,22 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
     let isMounted = true;
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!isMounted) return;
+      const attempt = ++authAttemptRef.current;
+      // Stop listening to the previous user's document before opening a new session.
+      if (sessionListenerRef.current) {
+        sessionListenerRef.current();
+        sessionListenerRef.current = null;
+      }
       setCurrentUser(user);      
       if (user) {
         gsRef.current.myName = user.displayName || 'Player';
-        const loaded = await loadUserProfile(user);
-        if (!loaded || !isMounted || auth.currentUser?.uid !== user.uid) return;
+        const loaded = await loadUserProfile(user, attempt);
+        if (!loaded || !isMounted || !isCurrentAuthAttempt(attempt, authAttemptRef.current, user.uid, auth.currentUser?.uid)) return;
         // --- CHỐNG ĐA THIẾT BỊ: Lắng nghe sessionId, đăng xuất nếu bị chiếm ---
-        if (sessionListenerRef.current) sessionListenerRef.current(); // hủy listener cũ nếu có
         const userDocRef = doc(db, 'users', user.uid);
         sessionListenerRef.current = onSnapshot(userDocRef, (snap) => {
-          if (!snap.exists() || !isMounted) return;
+          // Firestore may emit a stale cached document first; wait for server data.
+          if (!isMounted || !canProcessSessionSnapshot(snap, attempt, authAttemptRef.current, user.uid, auth.currentUser?.uid)) return;
           const remoteSession = snap.data().sessionId;
           const localSession = secureStorage.getItem('astro_session_id');
           if (remoteSession && localSession && remoteSession !== localSession) {
@@ -235,7 +249,7 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
         }
         let guestCoins = parseInt(secureStorage.getItem('astro_guest_coins')) || 0;
         let guestDiamonds = parseInt(secureStorage.getItem('astro_guest_diamonds')) || 0;
-        let guestEnergy = parseInt(secureStorage.getItem('astro_guest_energy')) || 50;
+        let guestEnergy = guestEnergyFromStorage(secureStorage.getItem('astro_guest_energy'));
         
         gsRef.current.coins = guestCoins; 
         gsRef.current.diamonds = guestDiamonds; 
@@ -248,7 +262,7 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
       }
     });
 
-    return () => { isMounted = false; unsubscribe(); if (sessionListenerRef.current) sessionListenerRef.current(); };
+    return () => { isMounted = false; authAttemptRef.current += 1; unsubscribe(); if (sessionListenerRef.current) sessionListenerRef.current(); };
   }, []);
 
 
