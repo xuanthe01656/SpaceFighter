@@ -49,7 +49,7 @@ async function callApi(path, body=null, {session=true,expectedUid=null}={}) {
 export const openGameSession=()=>callApi('/session',{}, {session:false});
 export const fetchGameProfile=()=>callApi('/profile');
 export const changePlayerName=name=>callApi('/profile/name',{name});
-export const deleteCloudAccount=()=>callApi('/account/delete',{});
+export const deleteCloudAccount=expectedUid=>callApi('/account/delete',{}, {expectedUid});
 // Retrying the same logical transaction must reuse the SAME requestId. The
 // server operation ledger guarantees that a timed-out committed command is not
 // executed twice. Never generate a new ID for an automatic retry.

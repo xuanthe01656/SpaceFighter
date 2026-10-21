@@ -6,6 +6,7 @@ require('dotenv').config();
 const { createGameService } = require('./lib/gameService.cjs');
 const { GameError } = require('./lib/economy.cjs');
 const { classifyGameApiError } = require('./lib/httpError.cjs');
+const { createAccountDeletionService } = require('./lib/accountDeletion.cjs');
 
 function createApp(clientPath=path.join(__dirname,'..','client','dist'), options={}) {
   const app=express();
@@ -38,7 +39,7 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
     next();
   });
   const apiReady=Boolean(options.auth && options.service);
-  const withAuth = fn => async(req,res,next)=>{
+  const withAuth = (fn, successStatus=200) => async(req,res,next)=>{
     if(!apiReady) return res.status(503).json({ok:false,code:'GAME_API_UNAVAILABLE',message:'Protected game API not configured'});
     try {
       const header=req.get('authorization')||'';
@@ -46,24 +47,28 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
       const decoded=await options.auth.verifyIdToken(header.slice(7),true);
       if (!decoded.uid) throw new GameError('UNAUTHORIZED','Invalid ID token',401);
       const result=await fn(req,decoded);
-      return res.status(200).json({ok:true,...result});
+      return res.status(successStatus).json({ok:true,...result});
     }catch(e){next(e);}
   };
   app.post('/api/v1/session',withAuth((_req,user)=>options.service.openSession(user)));
   app.get('/api/v1/profile',withAuth((req,user)=>options.service.getProfile(user.uid,req.get('x-game-session'))));
   app.post('/api/v1/command',withAuth((req,user)=>options.service.apply(user.uid,req.get('x-game-session'),req.body||{})));
   app.post('/api/v1/profile/name',withAuth((req,user)=>options.service.changeName(user.uid,req.get('x-game-session'),req.body?.name)));
-  app.post('/api/v1/account/delete',withAuth(async (req,user)=>{
-    // Destructive operation: require reauthentication within the last 5 minutes.
-    if (!Number.isFinite(user.auth_time) || Math.floor(Date.now()/1000)-user.auth_time > 300) {
-      throw new GameError('REAUTH_REQUIRED','Sign in again before deleting the account',403);
+  // Never run destructive deletion inline with an HTTP request. This remains
+  // disabled until a retryable worker has been provisioned and verified.
+  app.post('/api/v1/account/delete',(req,res,next)=>{
+    if (options.accountDeletionEnabled !== true || !options.accountDeletionService) {
+      return res.status(503).json({ok:false,code:'ACCOUNT_DELETION_UNAVAILABLE',
+        message:'Account deletion is temporarily unavailable'});
     }
-    await options.service.getProfile(user.uid,req.get('x-game-session'));
-    if (!options.admin) throw new GameError('NOT_AVAILABLE','Account deletion not configured',503);
-    await options.admin.firestore().recursiveDelete(options.admin.firestore().collection('users').doc(user.uid));
-    await options.admin.auth().deleteUser(user.uid);
-    return {deleted:true};
-  }));
+    return withAuth(async (_req,user)=>{
+      const age = Math.floor(Date.now()/1000) - user.auth_time;
+      if (!Number.isSafeInteger(user.auth_time) || age < 0 || age > 300) {
+        throw new GameError('REAUTH_REQUIRED','Sign in again before deleting the account',403);
+      }
+      return options.accountDeletionService.request(user.uid,req.get('x-game-session'));
+    },202)(req,res,next);
+  });
   app.use('/api',(req,res)=>res.status(404).json({ok:false,code:'NOT_FOUND'}));
   app.use(express.static(clientPath,{index:'index.html',fallthrough:true}));
   app.get('*',(_req,res,next)=>{
@@ -81,7 +86,7 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
 async function start() {
   const port=Number(process.env.PORT||3000);
   if(!Number.isInteger(port)||port<1||port>65535) throw new Error('Invalid PORT');
-  let service=null,auth=null,admin=null;
+  let service=null,auth=null,admin=null,accountDeletionService=null;
   if(process.env.GAME_API_ENABLED==='true') {
     admin=require('firebase-admin');
     if(!admin.apps.length) {
@@ -95,8 +100,14 @@ async function start() {
     }
     auth=admin.auth();
     service=await createGameService({db:admin.firestore()});
+    if (process.env.GAME_ACCOUNT_DELETION_ENABLED==='true' &&
+        process.env.GAME_ACCOUNT_DELETION_WORKER_READY==='true') {
+      accountDeletionService=createAccountDeletionService({db:admin.firestore(),auth});
+    }
   }
-  const app=createApp(undefined,{service,auth,admin,allowLocalOrigin:process.env.NODE_ENV!=='production'});
+  const app=createApp(undefined,{service,auth,admin,
+    accountDeletionService, accountDeletionEnabled:Boolean(accountDeletionService),
+    allowLocalOrigin:process.env.NODE_ENV!=='production'});
   app.listen(port,'0.0.0.0',()=>console.log(`Space Fighter Phase 1 listening on ${port}; API ${service?'enabled':'disabled'}`));
 }
 if(require.main===module) start().catch(e=>{console.error('Server startup failed:',e);process.exitCode=1;});

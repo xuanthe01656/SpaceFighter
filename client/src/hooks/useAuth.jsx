@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { signInWithPopup, signInWithCredential, GoogleAuthProvider, OAuthProvider, updateProfile, deleteUser, signOut, onAuthStateChanged, browserPopupRedirectResolver } from 'firebase/auth';
+import { signInWithPopup, signInWithCredential, GoogleAuthProvider, OAuthProvider, updateProfile, signOut, onAuthStateChanged, browserPopupRedirectResolver } from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
 import { SignInWithApple } from '@capacitor-community/apple-sign-in';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
@@ -89,6 +89,12 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
       return true;
     }catch(error){
       if (!isCurrentAuthAttempt(attempt, authAttemptRef.current, user.uid, auth.currentUser?.uid)) return false;
+      if (error?.code === 'ACCOUNT_DELETION_PENDING') {
+        toast.error('Tài khoản đang được xử lý xóa. Không thể tiếp tục chơi.');
+        secureStorage.removeItem('astro_session_id');
+        await signOut(auth).catch(() => {});
+        return false;
+      }
       console.error('Cloud profile API unavailable:',error);
       toast.error('Máy chủ game không khả dụng. Không thể ghi tài nguyên hoặc tiến trình.');
       return false;
@@ -212,21 +218,34 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
   };
 
   const deleteAccount = async () => {
-    if (!currentUser) return;
-    const isVipUser = gsRef.current.isVIP;
-    let warningMsg = t[langRef.current]?.confirmDelete || "BẠN CÓ CHẮC CHẮN XÓA TÀI KHOẢN?";
+    const expectedUid = auth.currentUser?.uid;
+    if (!expectedUid || currentUser?.uid !== expectedUid) return;
+    const warningMsg = t[langRef.current]?.confirmDelete || 'BẠN CÓ CHẮC CHẮN XÓA TÀI KHOẢN?';
     if (!window.confirm(warningMsg)) return;
 
-    const loadingToast = toast.loading(t[langRef.current]?.deletingAccount || "Đang xóa dữ liệu...");
+    const loadingToast = toast.loading(t[langRef.current]?.deletingAccount || 'Đang gửi yêu cầu xóa tài khoản...');
     try {
-      await deleteCloudAccount();
-      await signOut(auth).catch(() => {});
+      const reply = await deleteCloudAccount(expectedUid);
+      if (reply?.deletionPending !== true) throw new GameApiError('INVALID_DELETE_ACK','Server did not accept account deletion');
+      // A late response for A must never sign out a newly signed-in user B.
+      if (auth.currentUser?.uid !== expectedUid) return;
+      authAttemptRef.current += 1;
       secureStorage.removeItem('astro_session_id');
-      if (Capacitor.isNativePlatform()) GoogleAuth.signOut().catch(() => {});
-      setCurrentUser(null); setScreen('portal'); toast.dismiss(loadingToast); toast.success(t[langRef.current]?.deleteSuccess || "Đã xóa!");
+      await signOut(auth).catch(() => {});
+      if (Capacitor.isNativePlatform()) await GoogleAuth.signOut().catch(() => {});
+      setCurrentUser(null);
+      setScreen('portal');
+      toast.success('Yêu cầu xóa tài khoản đã được tiếp nhận và đang được xử lý.');
     } catch (error) {
+      if (error?.code === 'ACCOUNT_DELETION_UNAVAILABLE') {
+        toast.error('Chức năng xóa tài khoản chưa sẵn sàng. Vui lòng liên hệ bộ phận hỗ trợ.');
+      } else if (error?.code === 'REAUTH_REQUIRED') {
+        toast.error('Vui lòng đăng nhập lại trước khi yêu cầu xóa tài khoản.');
+      } else {
+        toast.error('Không thể xác nhận yêu cầu xóa tài khoản. Vui lòng thử lại hoặc liên hệ hỗ trợ.');
+      }
+    } finally {
       toast.dismiss(loadingToast);
-      toast.error("Lỗi xóa tài khoản, vui lòng đăng nhập lại rồi thử lại.");
     }
   };
 

@@ -3,6 +3,7 @@ const crypto = require('node:crypto');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { executeCommand, updateMissions, GameError } = require('./economy.cjs');
+const { assertAccountActive } = require('./accountDeletion.cjs');
 const uuid = () => crypto.randomUUID();
 const normalizeSession = s => typeof s==='string' && /^[a-f0-9-]{36}$/.test(s);
 const normalizeRequestId = s => typeof s==='string' && /^[a-zA-Z0-9_-]{12,80}$/.test(s);
@@ -41,8 +42,11 @@ async function createGameService({ db, now=Date.now, rng, uuidFactory=uuid, conf
   async function openSession(user) {
     const sid=uuidFactory(), uid=user.uid;
     const doc=await db.runTransaction(async t=>{
-      const ref=userRef(uid), snap=await t.get(ref);
+      const ref=userRef(uid), jobRef=db.collection('accountDeletionJobs').doc(uid);
+      const [snap, deletionSnap]=await Promise.all([t.get(ref), t.get(jobRef)]);
+      if (deletionSnap.exists) throw new GameError('ACCOUNT_DELETION_PENDING','Account deletion prevents new sessions',423);
       const saved=snap.exists ? snap.data() : newDocument(user,now());
+      assertAccountActive(saved);
       if (!snap.exists) saved.createdAt=now();
       saved.sessionId=sid;
       saved.lastSessionAt=now();
@@ -57,6 +61,7 @@ async function createGameService({ db, now=Date.now, rng, uuidFactory=uuid, conf
   async function getProfile(uid,sid) {
     const snap=await userRef(uid).get();
     if (!snap.exists) throw new GameError('PROFILE_NOT_FOUND','Profile not initialized',404);
+    assertAccountActive(snap.data());
     requireSession(snap.data(),sid);
     return {state:present(snap.data())};
   }
@@ -70,7 +75,7 @@ async function createGameService({ db, now=Date.now, rng, uuidFactory=uuid, conf
       // All reads before writes, required by Firestore transactions.
       const [userSnap,opSnap]=await Promise.all([t.get(ref),t.get(opRef)]);
       if (!userSnap.exists) throw new GameError('PROFILE_NOT_FOUND','Profile not initialized',404);
-      const base=userSnap.data();requireSession(base,sid);
+      const base=userSnap.data();assertAccountActive(base);requireSession(base,sid);
       if (opSnap.exists) {
         const op=opSnap.data();
         if (op.payloadHash!==payloadHash) throw new GameError('REQUEST_REUSED','Request ID used for a different command',409);
@@ -93,7 +98,7 @@ async function createGameService({ db, now=Date.now, rng, uuidFactory=uuid, conf
     const updated = await db.runTransaction(async t=>{
       const ref=userRef(uid),snap=await t.get(ref);
       if (!snap.exists) throw new GameError('PROFILE_NOT_FOUND','Profile not initialized',404);
-      const data=snap.data();requireSession(data,sid);
+      const data=snap.data();assertAccountActive(data);requireSession(data,sid);
       data.profile ||= {};data.profile.displayName=name;
       t.set(ref,data);return data;
     });
