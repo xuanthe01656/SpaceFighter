@@ -5,7 +5,8 @@ const config: CapacitorConfig = {
   appName: 'Astro Cat PvP 4.0',
   webDir: 'dist',
   server: {
-    iosScheme: 'https',
+    // WKWebView cannot register http/https as custom iOS asset schemes.
+    iosScheme: 'capacitor',
     androidScheme: 'http'
   },
   plugins: {

@@ -11,7 +11,8 @@ import { t } from '../utils/translations';
 import { DEFAULT_CAMPAIGN_DATA } from '../constants';
 import { createDefaultCampaignData, parseGuestCampaign } from '../utils/profileSchema';
 import { isCurrentAuthAttempt, canProcessSessionSnapshot, guestEnergyFromStorage } from '../utils/authSessionGuards.mjs';
-import { openGameSession, executeGameCommand, changePlayerName, deleteCloudAccount } from '../services/gameApi';
+import { runAuthBoundOperation } from '../utils/authRequestGuards.mjs';
+import { GameApiError, openGameSession, executeGameCommand, changePlayerName, deleteCloudAccount } from '../services/gameApi';
 
 export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
   const [currentUser, setCurrentUser] = useState(null);
@@ -36,12 +37,18 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
     return running;
   }, []);
 
-  const gameAction = useCallback((command, payload = {}, requestId = null) => runQueued(async () => {
-    // The API rejects unauthenticated and stale sessions. No local fallback.
-    const reply = await executeGameCommand(command, payload, requestId);
-    applyServerState(reply.state);
-    return reply;
-  }), [runQueued,applyServerState]);
+  const gameAction = useCallback((command, payload = {}, requestId = null) => {
+    const expectedUid=auth.currentUser?.uid;
+    const expectedAttempt=authAttemptRef.current;
+    if (!expectedUid) return Promise.reject(new GameApiError('LOGIN_REQUIRED','Please sign in to use cloud game features'));
+    return runQueued(() => runAuthBoundOperation({
+      expectedUid, expectedAttempt,
+      getCurrentUid:()=>auth.currentUser?.uid,
+      getCurrentAttempt:()=>authAttemptRef.current,
+      request:()=>executeGameCommand(command,payload,requestId),
+      apply:reply=>{applyServerState(reply.state);return reply;}
+    }));
+  }, [runQueued,applyServerState]);
 
   // Phase1: saveUserProfile may update ONLY validated, non-economic preferences.
   // Legacy components calling save after local rewards cannot mint currency.
@@ -89,12 +96,23 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
   };
 
   const renamePlayer = async (name) => {
-    const reply=await changePlayerName(name);
-    applyServerState(reply.state);
-    gsRef.current.myName=name;
-    if(auth.currentUser) updateProfile(auth.currentUser,{displayName:name}).catch(()=>{});
-    setUIUpdates(prev=>({...prev,displayName:name}));
-    return true;
+    const expectedUid=auth.currentUser?.uid;
+    const expectedAttempt=authAttemptRef.current;
+    if (!expectedUid) throw new GameApiError('LOGIN_REQUIRED','Please sign in to use cloud game features');
+    return runAuthBoundOperation({
+      expectedUid, expectedAttempt,
+      getCurrentUid:()=>auth.currentUser?.uid,
+      getCurrentAttempt:()=>authAttemptRef.current,
+      request:()=>changePlayerName(name),
+      apply:reply=>{
+        applyServerState(reply.state);
+        gsRef.current.myName=name;
+        const user=auth.currentUser;
+        if(user?.uid===expectedUid) updateProfile(user,{displayName:name}).catch(()=>{});
+        setUIUpdates(prev=>({...prev,displayName:name}));
+        return true;
+      }
+    });
   };
 
   const loginWithGoogle = async () => { 

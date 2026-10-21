@@ -1,5 +1,6 @@
 import { auth } from '../firebase';
 import { secureStorage } from '../utils/storageHelper';
+import { assertSameAuthUser, retrySameAuthUser } from '../utils/authRequestGuards.mjs';
 
 // The only network path allowed to change an authenticated player's economy.
 // Never submit client wallet balances, earned items or reward amounts here.
@@ -8,13 +9,18 @@ const BASE_URL = customUrl || '/api/v1';
 export class GameApiError extends Error {
   constructor(code, message, status = 0) { super(message); this.code = code; this.status = status; }
 }
-async function callApi(path, body=null, {session=true}={}) {
+async function callApi(path, body=null, {session=true,expectedUid=null}={}) {
   const user = auth.currentUser;
   if (!user) throw new GameApiError('LOGIN_REQUIRED','Please sign in to use cloud game features');
+  if (expectedUid !== null) assertSameAuthUser(expectedUid,user.uid);
   if (BASE_URL.startsWith('http:') && import.meta.env.PROD) {
     throw new GameApiError('HTTPS_REQUIRED','Game API must use HTTPS in production');
   }
   const token=await user.getIdToken();
+  // ID token retrieval is asynchronous: prevent sending user A's request
+  // after the UI has switched to user B.
+  assertSameAuthUser(user.uid,auth.currentUser?.uid);
+  if (expectedUid !== null) assertSameAuthUser(expectedUid,auth.currentUser?.uid);
   const headers={Authorization:`Bearer ${token}`,Accept:'application/json'};
   if (body!==null) headers['Content-Type']='application/json';
   if (session) {
@@ -48,10 +54,15 @@ export const deleteCloudAccount=()=>callApi('/account/delete',{});
 // server operation ledger guarantees that a timed-out committed command is not
 // executed twice. Never generate a new ID for an automatic retry.
 export async function executeGameCommand(command,payload={},requestId=null) {
+  const expectedUid=auth.currentUser?.uid;
+  if (!expectedUid) throw new GameApiError('LOGIN_REQUIRED','Please sign in to use cloud game features');
   const operation={command,payload,requestId:requestId||crypto.randomUUID()};
-  try {return await callApi('/command',operation);}
-  catch(error) {
-    if (error?.code !== 'TIMEOUT' && !(error instanceof TypeError)) throw error;
-    return callApi('/command',operation);
-  }
+  // A timeout may happen after Firebase sign-out/account switch. A retry must
+  // stay bound to the original uid and reuse the same idempotency requestId.
+  return retrySameAuthUser({
+    expectedUid,
+    getCurrentUid:()=>auth.currentUser?.uid,
+    request:()=>callApi('/command',operation,{expectedUid}),
+    shouldRetry:error=>error?.code==='TIMEOUT'||error instanceof TypeError
+  });
 }
