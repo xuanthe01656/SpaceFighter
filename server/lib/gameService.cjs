@@ -69,6 +69,16 @@ async function createGameService({ db, now=Date.now, rng, uuidFactory=uuid, conf
     if (typeof command !== 'string' || command.length>64 || !normalizeRequestId(requestId) || !payload || typeof payload !== 'object' || Array.isArray(payload)) {
       throw new GameError('INVALID_INPUT','Invalid command request');
     }
+    // V8A/P0 safety barrier. Existing battle tickets, elapsed time and client
+    // victory reports are NOT proof of combat. Until an independent server-side
+    // verifier exists, never issue new Cloud battle tickets (including charged
+    // Dungeon entries), or settle a client-declared victory for an old ticket.
+    // Keep battle.abandon and battle.finish(victory:false) for cleanup of a
+    // previously issued ticket. Guest/offline combat does not use this service.
+    if (command === 'battle.start' || (command === 'battle.finish' && payload.victory === true)) {
+      throw new GameError('BATTLE_VERIFICATION_UNAVAILABLE',
+        'Cloud battles are temporarily unavailable pending server-side combat verification',423);
+    }
     const payloadHash=hash({command,payload});
     const response=await db.runTransaction(async t=>{
       const ref=userRef(uid),opRef=ref.collection('operations').doc(requestId);
