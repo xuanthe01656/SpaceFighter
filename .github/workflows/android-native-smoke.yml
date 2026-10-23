@@ -45,6 +45,14 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Reject accidental Claude worktree gitlinks
+        run: |
+          set -euo pipefail
+          if git -C .. ls-files --stage | grep -E '^160000 [[:xdigit:]]{40} 0[[:space:]]+\.claude/worktrees/'; then
+            echo "::error::Generated Claude worktrees must not be Git submodules." >&2
+            exit 1
+          fi
+
       - name: Set up Java 21
         uses: actions/setup-java@v4
         with:

@@ -31,3 +31,4 @@ Thumbs.db
 *.aab
 *.apk/client/client.7z
 *.zip
+/.claude/worktrees/
