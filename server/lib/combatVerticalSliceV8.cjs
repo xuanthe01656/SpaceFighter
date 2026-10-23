@@ -11,7 +11,7 @@
  */
 const {createHash} = require('node:crypto');
 const {MAX_BATTLE_TICKS, validateChunk} = require('./combatInputJournalV8.cjs');
-const {advancePreviewMovement} = require('./combatMovementWeaponV8.cjs');
+const {advancePreviewMovement,FOUNDATION_VERSION} = require('./combatMovementWeaponV8.cjs');
 const {openFoundationPreview, replayFoundationChunk} = require('./combatPreviewReplayV8.cjs');
 
 const SLICE_VERSION = 'pve-lab-vertical-slice-v1';
@@ -24,6 +24,12 @@ const ENCOUNTER_V2_VERSION = 'pve-server-encounter-qa-v2';
 // The v1/v2 checkpoints and execution order must remain byte-for-byte compatible.
 const SLICE_V3_VERSION = 'pve-lab-vertical-slice-v3';
 const ENCOUNTER_V3_VERSION = 'pve-server-encounter-qa-v3';
+// C6-A opt-in static ballistic salvos. This extension is still QA-only and
+// continues C5's defensive/swept behavior. No live mode, ticket or settlement.
+const SLICE_V4_VERSION = 'pve-lab-vertical-slice-v4';
+const ENCOUNTER_V4_VERSION = 'pve-server-encounter-qa-v4';
+const BALLISTIC_POLICY_VERSION = 'v8c6a-ballistic-preview-v2';
+const BALLISTIC_PAIRS = Object.freeze({spread3:'laser',spread5:'photon',shotgun:'plasma'});
 const HP_MICRO = 1000000;
 const MAX_WAVES = 12;
 const MAX_TOTAL_ENEMIES = 128;
@@ -46,8 +52,10 @@ const ACTIVE_ENEMY_V2_KEYS = [...ENEMY_V2_KEYS,'maxHp','spawnTick','enraged','di
 const STATE_V2_KEYS = [...STATE_KEYS,'nextEnemyProjectileId','enemyProjectileHits',
   'bossKills','invulnerableUntilTick','enemyProjectiles'];
 const STATE_V3_KEYS = [...STATE_V2_KEYS,'regenPerTickMicro','regenRemainderMicro','damageReductionBps'];
+const STATE_V4_KEYS = [...STATE_V3_KEYS];
 const ENEMY_PROJECTILE_KEYS = ['id','xUnits','zUnits','vxUnits','vzUnits','damage','sourceId'];
 const PROJECTILE_KEYS = ['id','xUnits','zUnits','velocityZUnitsPerTick','atk'];
+const PROJECTILE_V4_KEYS = ['id','xUnits','zUnits','velocityXUnitsPerTick','velocityZUnitsPerTick','damageMilli'];
 class CombatVerticalSliceError extends Error {
   constructor(code, message) { super(message); this.name = 'CombatVerticalSliceError'; this.code = code; }
 }
@@ -67,12 +75,57 @@ function sweptFraction(x0,z0,x1,z1,ex,ez,reach) {
   const t=sq === 0 ? 0 : clamp(((ex-x0)*dx+(ez-z0)*dz)/sq,0,1);
   return distanceSquared(x0+t*dx,z0+t*dz,ex,ez) <= reach*reach ? t : null;
 }
+// v4 calculates earliest circle entry, not the closest-approach timestamp.
+// v1/v2/v3 intentionally retain their original collision implementation.
+function sweptEntryFraction(x0,z0,x1,z1,ex,ez,reach) {
+  const dx=x1-x0,dz=z1-z0,fx=x0-ex,fz=z0-ez;
+  const c=fx*fx+fz*fz-reach*reach;
+  if(c<=0) return 0;
+  const a=dx*dx+dz*dz;
+  if(a===0) return null;
+  const b=2*(fx*dx+fz*dz),discriminant=b*b-4*a*c;
+  if(discriminant<0) return null;
+  const t=(-b-Math.sqrt(discriminant))/(2*a);
+  return t>=0 && t<=1 ? t : null;
+}
+/** C6-A: one 30Hz ballistic salvo for the three static multi-pellet patterns.
+ * Source oracle: client/src/game/combat/PlayerWeapons.js#describeMainSalvo.
+ * 1 Babylon 60Hz frame = 1,000 units * 2 per journal tick; damage milli
+ * units preserve the client's .88/.68/.43 factors without rounding to HP.
+ * This intentionally does not model mode-specific enemies or live touch.
+ */
+function ballisticSalvoFromPreview(preview,position) {
+  if (!record(preview) || preview.version !== FOUNDATION_VERSION
+    || preview.ballisticPolicyVersion !== BALLISTIC_POLICY_VERSION
+    || preview.previewOnly !== true || preview.safeForCloudBattle !== false
+    || !exact(position,['xUnits','zUnits'])
+    || !int(position.xUnits,-preview.arena.halfWidthUnits,preview.arena.halfWidthUnits)
+    || !int(position.zUnits,-preview.arena.halfHeightUnits,preview.arena.halfHeightUnits)
+    || !Object.hasOwn(BALLISTIC_PAIRS,preview.mainGun.pattern)
+    || BALLISTIC_PAIRS[preview.mainGun.pattern] !== preview.mainGun.projectileType
+    || !int(preview.mainGun.projectileAtk,0,1000000)) {
+    deny('FOUNDATION_BALLISTIC_INVALID','Expected pinned C6-A ballistic QA loadout and position');
+  }
+  const pattern=preview.mainGun.pattern, attack=preview.mainGun.projectileAtk;
+  const shot=(dx,dz,vx,vz,hundredths)=>({
+    xUnits:position.xUnits+dx,zUnits:position.zUnits-1200+dz,
+    velocityXUnitsPerTick:vx,velocityZUnitsPerTick:vz,
+    damageMilli:attack*hundredths*10,
+  });
+  const pellets=pattern==='spread3'
+    ? [shot(0,0,0,-1700,100),shot(-350,150,-440,-1640,88),shot(350,150,440,-1640,88)]
+    : pattern==='spread5'
+      ? [-2,-1,0,1,2].map(i=>shot(i*180,120,i*320,-1700,68))
+      : [-3,-2,-1,0,1,2,3].map(i=>shot(i*120,80,i*360,-1720,43));
+  return freeze(pellets);
+}
+
 function seal(s) {
   const {stateDigest: ignored,...rest}=s;
   return freeze({...rest, stateDigest:digest(['sf-v8b-slice-state',rest])});
 }
 function validateEncounter(snapshot, encounter) {
-  const advanced = record(encounter) && [ENCOUNTER_V2_VERSION,ENCOUNTER_V3_VERSION].includes(encounter.version);
+  const advanced = record(encounter) && [ENCOUNTER_V2_VERSION,ENCOUNTER_V3_VERSION,ENCOUNTER_V4_VERSION].includes(encounter.version);
   if (!(advanced ? exact(encounter,ENCOUNTER_V2_KEYS) : exact(encounter,ENCOUNTER_KEYS))
     || (!advanced && encounter.version !== ENCOUNTER_VERSION) || encounter.qaOnly !== true
     || (advanced && (!int(encounter.damageCooldownTicks,1,120)
@@ -129,20 +182,20 @@ function validateEncounter(snapshot, encounter) {
     ...(advanced ? {damageCooldownTicks:encounter.damageCooldownTicks,
       enemyProjectileRadiusUnits:encounter.enemyProjectileRadiusUnits} : {})});
 }
-function checkSupportedLoadout(snapshot, foundation, v3=false) {
+function checkSupportedLoadout(snapshot, foundation, defensive=false, ballistic=false) {
   const items=snapshot.equipment;
   // Fail closed when the lab has not modeled a real aircraft/gear/passive.
-  const allowedPilots = v3
+  const allowedPilots = defensive
     ? ['main_damage_boost','movement_speed','hp_regen','damage_reduction']
     : ['main_damage_boost','movement_speed'];
   if (items.aircraft.passive !== null || items.wingman !== null || items.drone !== null
     || items.armor !== null || !allowedPilots.includes(items.pilot.passive)
-    || !['beam','single'].includes(foundation.preview.mainGun.pattern)) {
+    || !(ballistic ? ['spread3','spread5','shotgun'] : ['beam','single']).includes(foundation.preview.mainGun.pattern)) {
     deny('SLICE_LOADOUT_UNMODELED','The current vertical slice does not model all equipped effects');
   }
   // Do not treat unknown pilot effects as no-op. Values originate from
   // the server-approved catalog captured in the immutable battle snapshot.
-  if (v3 && (items.pilot.passive === 'hp_regen' || items.pilot.passive === 'damage_reduction')
+  if (defensive && (items.pilot.passive === 'hp_regen' || items.pilot.passive === 'damage_reduction')
     && (typeof items.pilot.value !== 'number' || !Number.isFinite(items.pilot.value)
       || items.pilot.value < 0 || items.pilot.value > (items.pilot.passive==='hp_regen'?0.15:0.9))) {
     deny('SLICE_PASSIVE_INVALID','QA v3 defensive passive value unsupported');
@@ -156,24 +209,29 @@ function openCombatVerticalSlice(args) {
   if (!exact(args,OPEN_KEYS)) deny('SLICE_OPEN_INVALID','Unexpected slice open arguments');
   const foundation=openFoundationPreview({snapshot:args.snapshot, policy:args.policy,journal:args.journal});
   const encounter=validateEncounter(args.snapshot,args.encounter);
+  const v4=encounter.version===ENCOUNTER_V4_VERSION;
   const v3=encounter.version===ENCOUNTER_V3_VERSION;
-  const hp=checkSupportedLoadout(args.snapshot,foundation,v3);
+  const defensive=v3||v4;
+  // v4 accepts ONLY C6-A's opt-in policy; old encounters refuse that policy.
+  if (v4 !== (foundation.preview.ballisticPolicyVersion===BALLISTIC_POLICY_VERSION))
+    deny('SLICE_POLICY_VERSION_MISMATCH','Ballistic QA policy cannot cross encounter versions');
+  const hp=checkSupportedLoadout(args.snapshot,foundation,defensive,v4);
   const pilot=args.snapshot.equipment.pilot;
   // Deterministic micro-HP carries across journal chunks; never grants any Cloud reward.
-  const regenPerTickMicro=v3 && pilot.passive==='hp_regen'
+  const regenPerTickMicro=defensive && pilot.passive==='hp_regen'
     ? Math.round(hp*pilot.value*HP_MICRO/30) : 0;
-  const damageReductionBps=v3 && pilot.passive==='damage_reduction'
+  const damageReductionBps=defensive && pilot.passive==='damage_reduction'
     ? Math.round(pilot.value*10000) : 0;
   const encounterDigest=digest(['sf-v8b-qa-encounter',encounter]);
-  const state=seal({version:v3 ? SLICE_V3_VERSION
+  const state=seal({version:v4 ? SLICE_V4_VERSION : v3 ? SLICE_V3_VERSION
       : encounter.version===ENCOUNTER_V2_VERSION ? SLICE_V2_VERSION : SLICE_VERSION,
     qaOnly:true,safeForCloudBattle:false,
     battleId:foundation.journal.battleId,tick:0,phase:'active',hp,maxHp:hp,
     spawnedWaves:0,kills:0,contacts:0,nextProjectileId:0,enemies:[],projectiles:[],
     traceDigest:digest(['sf-v8b-slice-trace',args.snapshot.snapshotHash,encounterDigest]),
-    ...([ENCOUNTER_V2_VERSION,ENCOUNTER_V3_VERSION].includes(encounter.version)
+    ...([ENCOUNTER_V2_VERSION,ENCOUNTER_V3_VERSION,ENCOUNTER_V4_VERSION].includes(encounter.version)
       ? {nextEnemyProjectileId:0,enemyProjectileHits:0,bossKills:0,invulnerableUntilTick:0,enemyProjectiles:[]} : {}),
-    ...(v3 ? {regenPerTickMicro,regenRemainderMicro:0,damageReductionBps}:{}),
+    ...(defensive ? {regenPerTickMicro,regenRemainderMicro:0,damageReductionBps}:{}),
   });
   return freeze({foundation,encounter,encounterDigest,state});
 }
@@ -183,7 +241,8 @@ function validateRun(run) {
     || !record(run.encounter) || !Object.isFrozen(run.encounter)
     || !HEX64.test(run.encounterDigest||'')
     || digest(['sf-v8b-qa-encounter',run.encounter]) !== run.encounterDigest
-    || !(run.encounter.version===ENCOUNTER_V3_VERSION ? exact(run.state,STATE_V3_KEYS)
+    || !(run.encounter.version===ENCOUNTER_V4_VERSION ? exact(run.state,STATE_V4_KEYS)
+      : run.encounter.version===ENCOUNTER_V3_VERSION ? exact(run.state,STATE_V3_KEYS)
       : run.encounter.version===ENCOUNTER_V2_VERSION ? exact(run.state,STATE_V2_KEYS)
       : exact(run.state,STATE_KEYS))
     || !Object.isFrozen(run.state)) {
@@ -191,9 +250,11 @@ function validateRun(run) {
   }
   const s=run.state;
   const {stateDigest,...rest}=s;
+  const v4=run.encounter.version===ENCOUNTER_V4_VERSION;
   const v3=run.encounter.version===ENCOUNTER_V3_VERSION;
-  const advanced=v3 || run.encounter.version===ENCOUNTER_V2_VERSION;
-  if (s.version!==(v3?SLICE_V3_VERSION:advanced?SLICE_V2_VERSION:SLICE_VERSION)
+  const defensive=v3||v4;
+  const advanced=defensive || run.encounter.version===ENCOUNTER_V2_VERSION;
+  if (s.version!==(v4?SLICE_V4_VERSION:v3?SLICE_V3_VERSION:advanced?SLICE_V2_VERSION:SLICE_VERSION)
     || s.qaOnly!==true || s.safeForCloudBattle!==false
     || !HEX64.test(s.traceDigest||'') || !HEX64.test(stateDigest||'')
     || digest(['sf-v8b-slice-state',rest])!==stateDigest
@@ -205,19 +266,24 @@ function validateRun(run) {
     || !int(s.spawnedWaves,0,run.encounter.waves.length)
     || !int(s.kills,0,MAX_TOTAL_ENEMIES)
     || !int(s.contacts,0,advanced?MAX_BATTLE_TICKS:MAX_TOTAL_ENEMIES)
-    || !int(s.nextProjectileId,0,MAX_BATTLE_TICKS)
+    || !int(s.nextProjectileId,0,MAX_BATTLE_TICKS*(v4?7:1))
     || !Array.isArray(s.enemies) || s.enemies.length>MAX_ACTIVE_ENEMIES
     || !Array.isArray(s.projectiles) || s.projectiles.length>MAX_PROJECTILES
     || s.enemies.some(e=> !(advanced ? exact(e,ACTIVE_ENEMY_V2_KEYS) : exact(e,ACTIVE_ENEMY_KEYS))
-      || !int(e.hp,1,10000000) || (advanced && (!int(e.maxHp,e.hp,10000000)
+      || !(v4 ? (typeof e.hp==='number' && Number.isFinite(e.hp) && e.hp>0 && e.hp<=10000000
+        && Math.abs(e.hp*1000-Math.round(e.hp*1000))<0.00001) : int(e.hp,1,10000000))
+      || (advanced && (!int(e.maxHp,Math.ceil(e.hp),10000000)
         || !int(e.spawnTick,1,s.tick) || typeof e.enraged!=='boolean'
         || ![-1,1].includes(e.direction) || (e.kind!=='boss' && e.enraged))))
-    || s.projectiles.some(b=>!exact(b,PROJECTILE_KEYS) || !int(b.id,1,s.nextProjectileId)
+    || s.projectiles.some(b=>!(v4?exact(b,PROJECTILE_V4_KEYS):exact(b,PROJECTILE_KEYS))
+      || !int(b.id,1,s.nextProjectileId)
       || !int(b.xUnits,-100000,100000) || !int(b.zUnits,-100000,100000)
-      || !int(b.atk,0,1000000))) {
+      || (v4 ? (!int(b.velocityXUnitsPerTick,-4000,4000)
+        || !int(b.velocityZUnitsPerTick,-4000,0) || !int(b.damageMilli,0,1000000000))
+        : !int(b.atk,0,1000000)))) {
     deny('SLICE_STATE_INVALID','QA world state or journal diverged');
   }
-  if (v3 && (!int(s.regenPerTickMicro,0,500000000000)
+  if (defensive && (!int(s.regenPerTickMicro,0,500000000000)
     || !int(s.regenRemainderMicro,0,HP_MICRO-1)
     || !int(s.damageReductionBps,0,9000))) {
     deny('SLICE_STATE_INVALID','Invalid QA v3 defensive state');
@@ -248,15 +314,17 @@ function replayCombatSliceChunk(args) {
   if (simulated.duplicate) return Object.freeze({run,duplicate:true,events:Object.freeze([])});
   if (run.state.phase!=='active') deny('SLICE_TERMINAL','Closed QA simulation cannot accept further inputs');
   const validated=validateChunk(chunk), p=run.foundation.preview, arena=p.arena;
-  const s=run.state, v3=run.encounter.version===ENCOUNTER_V3_VERSION;
-  const advanced=v3 || run.encounter.version===ENCOUNTER_V2_VERSION;
+  const s=run.state, v4=run.encounter.version===ENCOUNTER_V4_VERSION;
+  const v3=run.encounter.version===ENCOUNTER_V3_VERSION;
+  const defensive=v3||v4;
+  const advanced=defensive || run.encounter.version===ENCOUNTER_V2_VERSION;
   const enemies=s.enemies.map(e=>({...e})), bullets=s.projectiles.map(b=>({...b}));
   const hostiles=advanced?s.enemyProjectiles.map(b=>({...b})):[];
   let hp=s.hp, waves=s.spawnedWaves, kills=s.kills, contacts=s.contacts;
   let nextEnemyProjectileId=advanced?s.nextEnemyProjectileId:0;
   let enemyProjectileHits=advanced?s.enemyProjectileHits:0;
   let bossKills=advanced?s.bossKills:0;
-  let regenRemainderMicro=v3?s.regenRemainderMicro:0;
+  let regenRemainderMicro=defensive?s.regenRemainderMicro:0;
   let invulnerableUntilTick=advanced?s.invulnerableUntilTick:0;
   let nextProjectileId=s.nextProjectileId, position=run.foundation.checkpoint.position;
   let phase='active', traceDigest=s.traceDigest, emittedCursor=0;
@@ -269,7 +337,7 @@ function replayCombatSliceChunk(args) {
     if (phase==='active') {
       // Client heals by maxHp*regenRate/second. Quantise to one micro-HP,
       // carry remainder through split chunks and discard surplus at full HP.
-      if (v3 && s.regenPerTickMicro>0) {
+      if (defensive && s.regenPerTickMicro>0) {
         if (hp>=s.maxHp) regenRemainderMicro=0;
         else {
           const sum=regenRemainderMicro+s.regenPerTickMicro;
@@ -279,14 +347,14 @@ function replayCombatSliceChunk(args) {
       }
       // Record start-of-tick enemy positions for relative swept collisions.
       // v1/v2 retain their existing endpoint-only enemy contact semantics.
-      const enemyPrior=v3?new Map(enemies.map(e=>[e.id,{xUnits:e.xUnits,zUnits:e.zUnits}])):null;
+      const enemyPrior=defensive?new Map(enemies.map(e=>[e.id,{xUnits:e.xUnits,zUnits:e.zUnits}])):null;
       if (waves<run.encounter.waves.length && run.encounter.waves[waves].atTick===tick) {
         const group=run.encounter.waves[waves];
         if(enemies.length+group.enemies.length>MAX_ACTIVE_ENEMIES)
           deny('SLICE_ACTIVE_CAP','Enemy population exceeded configured active budget');
         enemies.push(...group.enemies.map(e=>advanced?
           {...e,maxHp:e.hp,spawnTick:tick,enraged:false,direction:1}:{...e}));
-        if (v3) for(const e of group.enemies)
+        if (defensive) for(const e of group.enemies)
           enemyPrior.set(e.id,{xUnits:e.xUnits,zUnits:e.zUnits});
         waves++;
         events.push(freeze({type:'wave',tick,wave:waves}));
@@ -308,15 +376,15 @@ function replayCombatSliceChunk(args) {
           }
         }
         const reach=e.hitRadiusUnits+p.pilotHitRadiusUnits;
-        const oldEnemy=v3?enemyPrior.get(e.id):null;
-        const contacted=v3
+        const oldEnemy=defensive?enemyPrior.get(e.id):null;
+        const contacted=defensive
           ? sweptFraction(oldEnemy.xUnits-priorPosition.xUnits,oldEnemy.zUnits-priorPosition.zUnits,
             e.xUnits-position.xUnits,e.zUnits-position.zUnits,0,0,reach)!==null
           : distanceSquared(position.xUnits,position.zUnits,e.xUnits,e.zUnits)<=reach*reach;
         if (contacted) {
           const raw=e.contactDamage;
           const damage=raw>0?Math.max(1,Math.floor(raw*(1-p.armor/100)
-            *(v3?1-s.damageReductionBps/10000:1))):0;
+            *(defensive?1-s.damageReductionBps/10000:1))):0;
           const acceptedDamage=advanced && tick<invulnerableUntilTick ? 0 : damage;
           hp=Math.max(0,hp-acceptedDamage);
           if (advanced && acceptedDamage>0) invulnerableUntilTick=tick+run.encounter.damageCooldownTicks;
@@ -331,10 +399,18 @@ function replayCombatSliceChunk(args) {
       }
       while (emittedCursor<simulated.emitted.length && simulated.emitted[emittedCursor].tick===tick) {
         const shot=simulated.emitted[emittedCursor++];
-        if (bullets.length>=MAX_PROJECTILES) deny('SLICE_PROJECTILE_CAP','Projectile budget exhausted');
-        nextProjectileId++;
-        bullets.push({id:nextProjectileId,xUnits:shot.xUnits,zUnits:shot.zUnits,
-          velocityZUnitsPerTick:shot.velocityZUnitsPerTick,atk:shot.atk});
+        if (v4) {
+          if (shot.xUnits!==position.xUnits || shot.zUnits!==position.zUnits-p.mainGun.shotSpawnOffsetZUnits
+            || shot.atk!==p.mainGun.projectileAtk) deny('SLICE_MOVEMENT_DRIFT','Fire origin diverged');
+          const salvo=ballisticSalvoFromPreview(p,position);
+          if (bullets.length+salvo.length>MAX_PROJECTILES) deny('SLICE_PROJECTILE_CAP','Salvo exceeds projectile budget');
+          for(const pellet of salvo) bullets.push({id:++nextProjectileId,...pellet});
+        } else {
+          if (bullets.length>=MAX_PROJECTILES) deny('SLICE_PROJECTILE_CAP','Projectile budget exhausted');
+          nextProjectileId++;
+          bullets.push({id:nextProjectileId,xUnits:shot.xUnits,zUnits:shot.zUnits,
+            velocityZUnitsPerTick:shot.velocityZUnitsPerTick,atk:shot.atk});
+        }
       }
       if (advanced) {
         // Deterministic hostile fire; fixed 30Hz. Enemy schedules and patterns are
@@ -370,7 +446,7 @@ function replayCombatSliceChunk(args) {
           if(hit!==null) {
             const raw=shot.damage;
             const damage=raw>0?Math.max(1,Math.floor(raw*(1-p.armor/100)
-              *(v3?1-s.damageReductionBps/10000:1))):0;
+              *(defensive?1-s.damageReductionBps/10000:1))):0;
             const accepted=tick<invulnerableUntilTick?0:damage;
             if(accepted>0) {hp=Math.max(0,hp-accepted);invulnerableUntilTick=tick+run.encounter.damageCooldownTicks;}
             enemyProjectileHits++;
@@ -382,12 +458,18 @@ function replayCombatSliceChunk(args) {
       }
       for (let b=bullets.length-1;b>=0;b--) {
         const bullet=bullets[b];
-        const oldZ=bullet.zUnits;
+        const oldX=bullet.xUnits,oldZ=bullet.zUnits;
+        if(v4) bullet.xUnits+=bullet.velocityXUnitsPerTick;
         bullet.zUnits+=bullet.velocityZUnitsPerTick;
         let best=-1, fraction=Infinity;
         for (let j=0;j<enemies.length;j++) {
           const e=enemies[j];
-          const t=v3
+          const t=v4
+            ? sweptEntryFraction(oldX-enemyPrior.get(e.id).xUnits,
+              oldZ-enemyPrior.get(e.id).zUnits,
+              bullet.xUnits-e.xUnits,bullet.zUnits-e.zUnits,0,0,
+              e.hitRadiusUnits+p.mainGun.projectileHitRadiusUnits)
+            : v3
             ? sweptFraction(bullet.xUnits-enemyPrior.get(e.id).xUnits,
               oldZ-enemyPrior.get(e.id).zUnits,
               bullet.xUnits-e.xUnits,bullet.zUnits-e.zUnits,0,0,
@@ -400,8 +482,9 @@ function replayCombatSliceChunk(args) {
         }
         if (best>=0) {
           const target=enemies[best];
-          target.hp-=bullet.atk;
-          events.push(freeze({type:'hit',tick,id:target.id,damage:bullet.atk}));
+          const damage=v4?bullet.damageMilli/1000:bullet.atk;
+          target.hp=v4?Math.round(target.hp*1000-bullet.damageMilli)/1000:target.hp-damage;
+          events.push(freeze({type:'hit',tick,id:target.id,damage}));
           bullets.splice(b,1);
           if (advanced && target.kind==='boss' && !target.enraged
             && target.hp>0 && target.hp*10<=target.maxHp*3) {
@@ -412,7 +495,9 @@ function replayCombatSliceChunk(args) {
             if (advanced && target.kind==='boss') bossKills++;
             events.push(freeze({type:target.kind==='boss'?'boss-kill':'kill',tick,id:target.id}));
           }
-        } else if (bullet.zUnits < -arena.halfHeightUnits-3000) {
+        } else if (bullet.zUnits < -arena.halfHeightUnits-3000
+          || (v4 && (Math.abs(bullet.xUnits)>arena.halfWidthUnits+3000
+            || bullet.zUnits>arena.halfHeightUnits+3000))) {
           bullets.splice(b,1);
         }
       }
@@ -423,20 +508,20 @@ function replayCombatSliceChunk(args) {
     traceDigest=advanced
       ? digest([traceDigest,tick,position,hp,waves,kills,contacts,enemies,bullets,
         hostiles,enemyProjectileHits,bossKills,invulnerableUntilTick,
-        ...(v3?[regenRemainderMicro,s.regenPerTickMicro,s.damageReductionBps]:[]),phase])
+        ...(defensive?[regenRemainderMicro,s.regenPerTickMicro,s.damageReductionBps]:[]),phase])
       : digest([traceDigest,tick,position,hp,waves,kills,contacts,enemies,bullets,phase]);
   }
   if (position.xUnits!==simulated.run.checkpoint.position.xUnits
     || position.zUnits!==simulated.run.checkpoint.position.zUnits) {
     deny('SLICE_MOVEMENT_DRIFT','C2B movement parity diverged');
   }
-  const state=seal({version:v3?SLICE_V3_VERSION:advanced?SLICE_V2_VERSION:SLICE_VERSION,
+  const state=seal({version:v4?SLICE_V4_VERSION:v3?SLICE_V3_VERSION:advanced?SLICE_V2_VERSION:SLICE_VERSION,
     qaOnly:true,safeForCloudBattle:false,
     battleId:s.battleId,tick:validated.endTick,phase,hp,maxHp:s.maxHp,
     spawnedWaves:waves,kills,contacts,nextProjectileId,enemies,projectiles:bullets,traceDigest,
     ...(advanced?{nextEnemyProjectileId,enemyProjectileHits,bossKills,
       invulnerableUntilTick,enemyProjectiles:hostiles}:{}),
-    ...(v3?{regenPerTickMicro:s.regenPerTickMicro,regenRemainderMicro,
+    ...(defensive?{regenPerTickMicro:s.regenPerTickMicro,regenRemainderMicro,
       damageReductionBps:s.damageReductionBps}:{}),
   });
   const next=freeze({foundation:simulated.run,encounter:run.encounter,encounterDigest:run.encounterDigest,state});

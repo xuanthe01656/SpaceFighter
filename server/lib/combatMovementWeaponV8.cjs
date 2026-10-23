@@ -9,7 +9,9 @@
  * a client supplied 'snapshot'. V8A/P0 remains locked.
  *
  * This contract represents legacy keyboard movement, not instantaneous touch
- * drag; it only previews beam/single main-gun projectiles. It intentionally
+ * drag; its legacy policy previews beam/single, while C6-A adds an
+ * explicitly gated QA-only ballistic policy for three static spread salvos.
+ * It intentionally
  * does NOT model HP losses, buffs, wingman/drone, boss, victory or rewards.
  */
 const { SNAPSHOT_VERSION } = require('./battleSnapshotV8.cjs');
@@ -18,6 +20,11 @@ const { PROTOCOL_VERSION, MAX_BATTLE_TICKS } = require('./combatInputJournalV8.c
 
 const FOUNDATION_VERSION = 'pve-movement-weapon-preview-v1';
 const POLICY_VERSION = 'v8b2c2-keyboard-preview-v1';
+const BALLISTIC_POLICY_VERSION = 'v8c6a-ballistic-preview-v2';
+// An explicit QA allowlist, pinned to the current client catalog descriptors.
+// Homing, pierce, burst, splash, wave, charge, ion and all auxiliaries remain
+// UNSUPPORTED. This is NOT a production loadout catalog resolver.
+const BALLISTIC_PAIRS = Object.freeze({spread3:'laser',spread5:'photon',shotgun:'plasma'});
 const TIMER_VERSION = 'v8b2c2-main-fire-clock-v1';
 const MICROSECONDS_PER_SECOND = 1000000;
 const MAX_CHUNK_TICKS = 60;
@@ -46,7 +53,7 @@ const freeze = obj => {
 /** Server-pinned keyboard policy. No default pilot radius is invented. */
 function previewFromTrustedSnapshot(snapshot, policy) {
   if (!exact(policy, ['version', 'keyboardUnitsPer60HzFrame', 'pilotHitRadiusUnits', 'projectileHitRadiusUnits'])
-    || policy.version !== POLICY_VERSION
+    || ![POLICY_VERSION,BALLISTIC_POLICY_VERSION].includes(policy.version)
     || !finite(policy.keyboardUnitsPer60HzFrame, 0.01, 0.5)
     || !safeInt(policy.pilotHitRadiusUnits, 100, 2500)
     || !safeInt(policy.projectileHitRadiusUnits, 10, 1500)) {
@@ -104,14 +111,18 @@ function previewFromTrustedSnapshot(snapshot, policy) {
   if (!safeInt(periodUs, 50000, 60000000)) {
     deny('FOUNDATION_FIRE_RATE_UNSUPPORTED', 'Fire interval is outside preview bounds');
   }
-  // Deliberately refuse advanced patterns/effects; a single core pellet is
-  // not proof of a valid spread, homing, piercing or area-of-effect salvo.
+  // The original policy still refuses advanced guns. C6-A permits three
+  // static spreads only; C2B events become fire-clock markers for C6-A's
+  // multi-projectile QA slice, NOT a one-pellet battle verifier.
   const pattern = gun.firePattern;
   const projectileType = gun.projectileType;
   const supported = (pattern === 'beam' && projectileType === 'laser')
-    || (pattern === 'single' && projectileType === 'plasma');
+    || (pattern === 'single' && projectileType === 'plasma')
+    || (policy.version === BALLISTIC_POLICY_VERSION && Object.hasOwn(BALLISTIC_PAIRS,pattern)
+      && BALLISTIC_PAIRS[pattern] === projectileType);
   if (!supported) deny('FOUNDATION_WEAPON_PATTERN_UNMODELED', 'Weapon needs a separate verified projectile rule');
-  const bulletSpeedUnitsPerTick = pattern === 'beam' ? 2300 : 1260;
+  const bulletSpeedUnitsPerTick = pattern === 'beam' ? 2300 : pattern === 'single' ? 1260
+    : pattern === 'shotgun' ? 1720 : 1700;
   const perLevel = Math.max(1, Math.round(gun.baseAtk * 0.1 + gun.rarity * 2));
   const gunAtk = gun.baseAtk + perLevel * (gun.level - 1);
   const aircraftAtk = Math.floor(air.baseAtk * (1 + (air.level - 1) * 0.05));
@@ -121,6 +132,7 @@ function previewFromTrustedSnapshot(snapshot, policy) {
   if (!safeInt(projectileAtk, 0, 1000000)) deny('FOUNDATION_DAMAGE_UNSUPPORTED', 'Main gun damage exceeds core bounds');
   return freeze({
     version: FOUNDATION_VERSION, previewOnly: true, safeForCloudBattle: false,
+    ...(policy.version === BALLISTIC_POLICY_VERSION ? {ballisticPolicyVersion:BALLISTIC_POLICY_VERSION} : {}),
     rulesVersion: snapshot.context.rulesVersion, loadoutHash: snapshot.loadoutHash,
     arena: {halfWidthUnits:arena.halfWidthUnits, halfHeightUnits:arena.halfHeightUnits},
     startPosition: {xUnits:arena.spawnXUnits, zUnits:arena.spawnZUnits},
