@@ -13,6 +13,7 @@ const {createHash} = require('node:crypto');
 const {MAX_BATTLE_TICKS, validateChunk} = require('./combatInputJournalV8.cjs');
 const {advancePreviewMovement,FOUNDATION_VERSION} = require('./combatMovementWeaponV8.cjs');
 const {openFoundationPreview, replayFoundationChunk} = require('./combatPreviewReplayV8.cjs');
+const {ENCOUNTER_C6C_VERSION,ALPHA_POLICY_VERSION,resolveCampaignAlphaStage1C6C} = require('./combatCampaignAlphaC6CV8.cjs');
 
 const SLICE_VERSION = 'pve-lab-vertical-slice-v1';
 const ENCOUNTER_VERSION = 'pve-server-encounter-qa-v1';
@@ -35,6 +36,8 @@ const SLICE_V5_VERSION = 'pve-lab-vertical-slice-v5';
 const ENCOUNTER_V5_VERSION = 'pve-server-encounter-qa-v5';
 const PIERCE_BURST_POLICY_VERSION = 'v8c6b-pierce-burst-preview-v3';
 const PIERCE_BURST_PAIRS = Object.freeze({pierce:'rail',burst:'pulse'});
+// C6-C is a stage-specific, server-pinned offline QA contract. No Cloud authority.
+const SLICE_V6_VERSION = 'pve-lab-vertical-slice-v6';
 const MAX_PENDING_BURSTS = 64;
 const BURST_DELAY_MS = Object.freeze([90,180]);
 const HP_MICRO = 1000000;
@@ -47,7 +50,9 @@ const HEX64 = /^[a-f0-9]{64}$/;
 const OPEN_KEYS = ['snapshot','policy','journal','encounter'];
 const ENCOUNTER_KEYS = ['version','qaOnly','snapshotHash','mode','locationId','waves'];
 const ENCOUNTER_V2_KEYS = [...ENCOUNTER_KEYS,'damageCooldownTicks','enemyProjectileRadiusUnits'];
+const ENCOUNTER_V6_KEYS = [...ENCOUNTER_V2_KEYS,'campaignPolicyVersion','stageId','interWaveDelayTicks'];
 const WAVE_KEYS = ['atTick','enemies'];
+const WAVE_V6_KEYS = [...WAVE_KEYS,'firstSpawnDelayTicks','spawnIntervalTicks'];
 const ENEMY_KEYS = ['id','kind','behavior','xUnits','zUnits','hp','hitRadiusUnits','moveUnitsPerTick','contactDamage'];
 const ENEMY_V2_KEYS = [...ENEMY_KEYS,'shootEveryTicks','shotSpeedUnitsPerTick','shotDamage','shotPattern'];
 const RUN_KEYS = ['foundation','encounter','encounterDigest','state'];
@@ -61,6 +66,7 @@ const STATE_V2_KEYS = [...STATE_KEYS,'nextEnemyProjectileId','enemyProjectileHit
 const STATE_V3_KEYS = [...STATE_V2_KEYS,'regenPerTickMicro','regenRemainderMicro','damageReductionBps'];
 const STATE_V4_KEYS = [...STATE_V3_KEYS];
 const STATE_V5_KEYS = [...STATE_V4_KEYS,'pendingBursts'];
+const STATE_V6_KEYS = [...STATE_V5_KEYS,'spawnedInWave','waveStartedTick','nextSpawnTick','nextWaveTick'];
 const ENEMY_PROJECTILE_KEYS = ['id','xUnits','zUnits','vxUnits','vzUnits','damage','sourceId'];
 const PROJECTILE_KEYS = ['id','xUnits','zUnits','velocityZUnitsPerTick','atk'];
 const PROJECTILE_V4_KEYS = ['id','xUnits','zUnits','velocityXUnitsPerTick','velocityZUnitsPerTick','damageMilli'];
@@ -162,8 +168,9 @@ function seal(s) {
   return freeze({...rest, stateDigest:digest(['sf-v8b-slice-state',rest])});
 }
 function validateEncounter(snapshot, encounter) {
-  const advanced = record(encounter) && [ENCOUNTER_V2_VERSION,ENCOUNTER_V3_VERSION,ENCOUNTER_V4_VERSION,ENCOUNTER_V5_VERSION].includes(encounter.version);
-  if (!(advanced ? exact(encounter,ENCOUNTER_V2_KEYS) : exact(encounter,ENCOUNTER_KEYS))
+  const stage6=record(encounter) && encounter.version===ENCOUNTER_C6C_VERSION;
+  const advanced=record(encounter) && [ENCOUNTER_V2_VERSION,ENCOUNTER_V3_VERSION,ENCOUNTER_V4_VERSION,ENCOUNTER_V5_VERSION,ENCOUNTER_C6C_VERSION].includes(encounter.version);
+  if (!(stage6 ? exact(encounter,ENCOUNTER_V6_KEYS) : advanced ? exact(encounter,ENCOUNTER_V2_KEYS) : exact(encounter,ENCOUNTER_KEYS))
     || (!advanced && encounter.version !== ENCOUNTER_VERSION) || encounter.qaOnly !== true
     || (advanced && (!int(encounter.damageCooldownTicks,1,120)
       || !int(encounter.enemyProjectileRadiusUnits,10,1500)))
@@ -172,18 +179,32 @@ function validateEncounter(snapshot, encounter) {
     || !Array.isArray(encounter.waves) || encounter.waves.length < 1 || encounter.waves.length > MAX_WAVES) {
     deny('SLICE_ENCOUNTER_INVALID', 'Expected a trusted QA-only encounter bound to the snapshot');
   }
+  // Do NOT accept even a well-formed client-crafted stage manifest: recompute
+  // every enemy, timing, seed roll and wave from the pinned resolver.
+  if(stage6){
+    let authoritative;
+    try{authoritative=resolveCampaignAlphaStage1C6C({snapshot});}
+    catch(_){deny('SLICE_STAGE_UNSUPPORTED','C6-C stage policy is unavailable for this snapshot');}
+    if(encounter.campaignPolicyVersion!==ALPHA_POLICY_VERSION
+      || encounter.stageId!==1 || encounter.interWaveDelayTicks!==60
+      || digest(encounter)!==digest(authoritative))
+      deny('SLICE_STAGE_FORGED','QA stage manifest differs from pinned server policy');
+  }
   let lastTick=0, total=0, bossCount=0;
   const ids=new Set();
   const arena=snapshot.arena;
   const waves=encounter.waves.map(w => {
-    if (!exact(w,WAVE_KEYS) || !int(w.atTick,lastTick+1,MAX_BATTLE_TICKS)
+    if (!(stage6 ? exact(w,WAVE_V6_KEYS):exact(w,WAVE_KEYS))
+      || !int(w.atTick,lastTick+1,MAX_BATTLE_TICKS)
+      || (stage6 && (!int(w.firstSpawnDelayTicks,1,120)||!int(w.spawnIntervalTicks,1,120)))
       || !Array.isArray(w.enemies) || w.enemies.length < 1 || w.enemies.length > MAX_ACTIVE_ENEMIES) {
       deny('SLICE_WAVE_INVALID','Invalid server-authored wave schedule');
     }
     lastTick=w.atTick;
     total+=w.enemies.length;
     if(total>MAX_TOTAL_ENEMIES) deny('SLICE_ENCOUNTER_CAP','Encounter exceeds enemy budget');
-    return {atTick:w.atTick,enemies:w.enemies.map(e=> {
+    return {atTick:w.atTick,...(stage6?{firstSpawnDelayTicks:w.firstSpawnDelayTicks,
+      spawnIntervalTicks:w.spawnIntervalTicks}:{}),enemies:w.enemies.map(e=> {
       if (!(advanced ? exact(e, ENEMY_V2_KEYS) : exact(e,ENEMY_KEYS))
         || typeof e.id !== 'string' || !/^[a-z0-9_-]{1,40}$/.test(e.id)
         || ids.has(e.id) || !['grunt', ...(advanced ? ['boss'] : [])].includes(e.kind)
@@ -198,7 +219,8 @@ function validateEncounter(snapshot, encounter) {
            || (e.kind === 'boss' && (e.behavior !== 'patrol' || e.moveUnitsPerTick === 0))
           ))
         || !int(e.xUnits,-arena.halfWidthUnits,arena.halfWidthUnits)
-        || !int(e.zUnits,-arena.halfHeightUnits,arena.halfHeightUnits)
+        || !(stage6 ? e.zUnits===-arena.halfHeightUnits-3000
+          : int(e.zUnits,-arena.halfHeightUnits,arena.halfHeightUnits))
         || !int(e.hp,1,10000000) || !int(e.hitRadiusUnits,100,2500)
         || !int(e.moveUnitsPerTick,0,1000)
         || (e.behavior === 'static' && e.moveUnitsPerTick !== 0)
@@ -217,7 +239,9 @@ function validateEncounter(snapshot, encounter) {
   return freeze({version:encounter.version,qaOnly:true,snapshotHash:encounter.snapshotHash,
     mode:encounter.mode,locationId:encounter.locationId,waves,
     ...(advanced ? {damageCooldownTicks:encounter.damageCooldownTicks,
-      enemyProjectileRadiusUnits:encounter.enemyProjectileRadiusUnits} : {})});
+      enemyProjectileRadiusUnits:encounter.enemyProjectileRadiusUnits} : {}),
+    ...(stage6?{campaignPolicyVersion:encounter.campaignPolicyVersion,stageId:1,
+      interWaveDelayTicks:encounter.interWaveDelayTicks}:{})});
 }
 function checkSupportedLoadout(snapshot, foundation, defensive=false, ballistic=false, piercingBurst=false) {
   const items=snapshot.equipment;
@@ -247,7 +271,8 @@ function openCombatVerticalSlice(args) {
   if (!exact(args,OPEN_KEYS)) deny('SLICE_OPEN_INVALID','Unexpected slice open arguments');
   const foundation=openFoundationPreview({snapshot:args.snapshot, policy:args.policy,journal:args.journal});
   const encounter=validateEncounter(args.snapshot,args.encounter);
-  const v5=encounter.version===ENCOUNTER_V5_VERSION;
+  const v6=encounter.version===ENCOUNTER_C6C_VERSION;
+  const v5=v6||encounter.version===ENCOUNTER_V5_VERSION;
   const v4=encounter.version===ENCOUNTER_V4_VERSION;
   const v3=encounter.version===ENCOUNTER_V3_VERSION;
   const defensive=v3||v4||v5;
@@ -262,16 +287,18 @@ function openCombatVerticalSlice(args) {
   const damageReductionBps=defensive && pilot.passive==='damage_reduction'
     ? Math.round(pilot.value*10000) : 0;
   const encounterDigest=digest(['sf-v8b-qa-encounter',encounter]);
-  const state=seal({version:v5 ? SLICE_V5_VERSION : v4 ? SLICE_V4_VERSION : v3 ? SLICE_V3_VERSION
+  const state=seal({version:v6 ? SLICE_V6_VERSION : v5 ? SLICE_V5_VERSION : v4 ? SLICE_V4_VERSION : v3 ? SLICE_V3_VERSION
       : encounter.version===ENCOUNTER_V2_VERSION ? SLICE_V2_VERSION : SLICE_VERSION,
     qaOnly:true,safeForCloudBattle:false,
     battleId:foundation.journal.battleId,tick:0,phase:'active',hp,maxHp:hp,
     spawnedWaves:0,kills:0,contacts:0,nextProjectileId:0,enemies:[],projectiles:[],
     traceDigest:digest(['sf-v8b-slice-trace',args.snapshot.snapshotHash,encounterDigest]),
-    ...([ENCOUNTER_V2_VERSION,ENCOUNTER_V3_VERSION,ENCOUNTER_V4_VERSION,ENCOUNTER_V5_VERSION].includes(encounter.version)
+    ...([ENCOUNTER_V2_VERSION,ENCOUNTER_V3_VERSION,ENCOUNTER_V4_VERSION,ENCOUNTER_V5_VERSION,ENCOUNTER_C6C_VERSION].includes(encounter.version)
       ? {nextEnemyProjectileId:0,enemyProjectileHits:0,bossKills:0,invulnerableUntilTick:0,enemyProjectiles:[]} : {}),
     ...(defensive ? {regenPerTickMicro,regenRemainderMicro:0,damageReductionBps}:{}),
     ...(v5 ? {pendingBursts:[]} : {}),
+    ...(v6 ? {spawnedInWave:0,waveStartedTick:0,nextSpawnTick:0,
+      nextWaveTick:encounter.waves[0].atTick} : {}),
   });
   return freeze({foundation,encounter,encounterDigest,state});
 }
@@ -281,7 +308,8 @@ function validateRun(run) {
     || !record(run.encounter) || !Object.isFrozen(run.encounter)
     || !HEX64.test(run.encounterDigest||'')
     || digest(['sf-v8b-qa-encounter',run.encounter]) !== run.encounterDigest
-    || !(run.encounter.version===ENCOUNTER_V5_VERSION ? exact(run.state,STATE_V5_KEYS)
+    || !(run.encounter.version===ENCOUNTER_C6C_VERSION ? exact(run.state,STATE_V6_KEYS)
+      : run.encounter.version===ENCOUNTER_V5_VERSION ? exact(run.state,STATE_V5_KEYS)
       : run.encounter.version===ENCOUNTER_V4_VERSION ? exact(run.state,STATE_V4_KEYS)
       : run.encounter.version===ENCOUNTER_V3_VERSION ? exact(run.state,STATE_V3_KEYS)
       : run.encounter.version===ENCOUNTER_V2_VERSION ? exact(run.state,STATE_V2_KEYS)
@@ -291,13 +319,14 @@ function validateRun(run) {
   }
   const s=run.state;
   const {stateDigest,...rest}=s;
-  const v5=run.encounter.version===ENCOUNTER_V5_VERSION;
+  const v6=run.encounter.version===ENCOUNTER_C6C_VERSION;
+  const v5=v6||run.encounter.version===ENCOUNTER_V5_VERSION;
   const v4=run.encounter.version===ENCOUNTER_V4_VERSION;
   const ballistic=v4||v5;
   const v3=run.encounter.version===ENCOUNTER_V3_VERSION;
   const defensive=v3||ballistic;
   const advanced=defensive || run.encounter.version===ENCOUNTER_V2_VERSION;
-  if (s.version!==(v5?SLICE_V5_VERSION:v4?SLICE_V4_VERSION:v3?SLICE_V3_VERSION:advanced?SLICE_V2_VERSION:SLICE_VERSION)
+  if (s.version!==(v6?SLICE_V6_VERSION:v5?SLICE_V5_VERSION:v4?SLICE_V4_VERSION:v3?SLICE_V3_VERSION:advanced?SLICE_V2_VERSION:SLICE_VERSION)
     || s.qaOnly!==true || s.safeForCloudBattle!==false
     || !HEX64.test(s.traceDigest||'') || !HEX64.test(stateDigest||'')
     || digest(['sf-v8b-slice-state',rest])!==stateDigest
@@ -330,6 +359,20 @@ function validateRun(run) {
             !==(run.foundation.preview.mainGun.pattern==='pierce'?3:1))))
         : !int(b.atk,0,1000000)))) {
     deny('SLICE_STATE_INVALID','QA world state or journal diverged');
+  }
+  if (v6 && (!int(s.spawnedInWave,0,20) || !int(s.waveStartedTick,0,s.tick)
+    || !int(s.nextSpawnTick,0,MAX_BATTLE_TICKS+120)
+    || !int(s.nextWaveTick,0,MAX_BATTLE_TICKS+120)
+    || (s.spawnedWaves===0 && (s.spawnedInWave!==0 || s.waveStartedTick!==0
+      || s.nextSpawnTick!==0 || s.nextWaveTick!==run.encounter.waves[0].atTick))
+    || (s.spawnedWaves>0 && s.spawnedInWave>run.encounter.waves[s.spawnedWaves-1].enemies.length)
+    || (s.nextSpawnTick!==0 && (s.spawnedWaves===0
+      || s.spawnedInWave===run.encounter.waves[s.spawnedWaves-1].enemies.length
+      || s.nextSpawnTick<=s.tick))
+    || (s.nextWaveTick!==0 && (s.spawnedWaves===run.encounter.waves.length
+      || s.nextWaveTick<=s.tick))
+    || (s.nextSpawnTick!==0 && s.nextWaveTick!==0))) {
+    deny('SLICE_STAGE_STATE_INVALID','Invalid C6-C wave progression state');
   }
   if (v5 && (!Array.isArray(s.pendingBursts) || s.pendingBursts.length>MAX_PENDING_BURSTS
     || (run.foundation.preview.mainGun.pattern==='pierce' && s.pendingBursts.length!==0)
@@ -371,7 +414,8 @@ function replayCombatSliceChunk(args) {
   if (simulated.duplicate) return Object.freeze({run,duplicate:true,events:Object.freeze([])});
   if (run.state.phase!=='active') deny('SLICE_TERMINAL','Closed QA simulation cannot accept further inputs');
   const validated=validateChunk(chunk), p=run.foundation.preview, arena=p.arena;
-  const s=run.state, v5=run.encounter.version===ENCOUNTER_V5_VERSION;
+  const s=run.state, v6=run.encounter.version===ENCOUNTER_C6C_VERSION;
+  const v5=v6||run.encounter.version===ENCOUNTER_V5_VERSION;
   const v4=run.encounter.version===ENCOUNTER_V4_VERSION, ballistic=v4||v5;
   const v3=run.encounter.version===ENCOUNTER_V3_VERSION;
   const defensive=v3||ballistic;
@@ -387,6 +431,8 @@ function replayCombatSliceChunk(args) {
   let regenRemainderMicro=defensive?s.regenRemainderMicro:0;
   let invulnerableUntilTick=advanced?s.invulnerableUntilTick:0;
   let nextProjectileId=s.nextProjectileId, position=run.foundation.checkpoint.position;
+  let spawnedInWave=v6?s.spawnedInWave:0,waveStartedTick=v6?s.waveStartedTick:0;
+  let nextSpawnTick=v6?s.nextSpawnTick:0,nextWaveTick=v6?s.nextWaveTick:0;
   let phase='active', traceDigest=s.traceDigest, emittedCursor=0;
   const events=[];
   for (let i=0;i<validated.frames.length;i++) {
@@ -408,16 +454,41 @@ function replayCombatSliceChunk(args) {
       // Record start-of-tick enemy positions for relative swept collisions.
       // v1/v2 retain their existing endpoint-only enemy contact semantics.
       const enemyPrior=defensive?new Map(enemies.map(e=>[e.id,{xUnits:e.xUnits,zUnits:e.zUnits}])):null;
-      if (waves<run.encounter.waves.length && run.encounter.waves[waves].atTick===tick) {
+      if (waves<run.encounter.waves.length
+        && (v6 ? nextWaveTick!==0 && tick>=nextWaveTick
+          : run.encounter.waves[waves].atTick===tick)) {
         const group=run.encounter.waves[waves];
-        if(enemies.length+group.enemies.length>MAX_ACTIVE_ENEMIES)
-          deny('SLICE_ACTIVE_CAP','Enemy population exceeded configured active budget');
-        enemies.push(...group.enemies.map(e=>advanced?
-          {...e,maxHp:e.hp,spawnTick:tick,enraged:false,direction:1}:{...e}));
-        if (defensive) for(const e of group.enemies)
-          enemyPrior.set(e.id,{xUnits:e.xUnits,zUnits:e.zUnits});
+        if(v6){
+          waveStartedTick=tick;nextWaveTick=0;spawnedInWave=0;
+          nextSpawnTick=tick+group.firstSpawnDelayTicks;
+        }else{
+          if(enemies.length+group.enemies.length>MAX_ACTIVE_ENEMIES)
+            deny('SLICE_ACTIVE_CAP','Enemy population exceeded configured active budget');
+          enemies.push(...group.enemies.map(e=>advanced?
+            {...e,maxHp:e.hp,spawnTick:tick,enraged:false,direction:1}:{...e}));
+          if (defensive) for(const e of group.enemies)
+            enemyPrior.set(e.id,{xUnits:e.xUnits,zUnits:e.zUnits});
+        }
         waves++;
         events.push(freeze({type:'wave',tick,wave:waves}));
+      }
+      // C6-C: one enemy at each pinned 30Hz spawn slot, relative to the
+      // player's then-current X. No client-provided wave manifest is consulted.
+      if(v6 && waves>0 && nextSpawnTick!==0 && tick>=nextSpawnTick){
+        const group=run.encounter.waves[waves-1];
+        if(enemies.length>=MAX_ACTIVE_ENEMIES)
+          deny('SLICE_ACTIVE_CAP','Enemy population exceeded configured active budget');
+        const selected=group.enemies[spawnedInWave];
+        if(!selected) deny('SLICE_STAGE_STATE_INVALID','Spawn cursor outside pinned wave');
+        const bound=arena.halfWidthUnits-selected.hitRadiusUnits;
+        const actualX=clamp(position.xUnits+selected.xUnits,-bound,bound);
+        const active={...selected,xUnits:actualX,maxHp:selected.hp,spawnTick:tick,
+          enraged:false,direction:1};
+        enemies.push(active);enemyPrior.set(active.id,{xUnits:actualX,zUnits:active.zUnits});
+        spawnedInWave++;
+        nextSpawnTick=spawnedInWave<group.enemies.length
+          ?tick+group.spawnIntervalTicks:0;
+        events.push(freeze({type:'spawn',tick,wave:waves,id:active.id}));
       }
       for (let j=enemies.length-1;j>=0;j--) {
         const e=enemies[j];
@@ -621,21 +692,35 @@ function replayCombatSliceChunk(args) {
         }
       }
       if(hp===0) phase='lab-defeat';
-      else if(waves===run.encounter.waves.length && enemies.length===0
+      else if(v6){
+        const total=run.encounter.waves.reduce((sum,w)=>sum+w.enemies.length,0);
+        const last=waves>0?run.encounter.waves[waves-1]:null;
+        if(last && spawnedInWave===last.enemies.length && enemies.length===0
+          && nextSpawnTick===0 && nextWaveTick===0){
+          if(waves===run.encounter.waves.length){
+            // Never count contact/cull as a kill. QA-only clear, not receipt.
+            if(kills===total)phase='lab-clear';
+          }else{
+            nextWaveTick=tick+run.encounter.interWaveDelayTicks;
+            events.push(freeze({type:'wave-cleared',tick,wave:waves}));
+          }
+        }
+      }else if(waves===run.encounter.waves.length && enemies.length===0
         && kills===run.encounter.waves.reduce((sum,w)=>sum+w.enemies.length,0)) phase='lab-clear';
     }
     traceDigest=advanced
       ? digest([traceDigest,tick,position,hp,waves,kills,contacts,enemies,bullets,
         hostiles,enemyProjectileHits,bossKills,invulnerableUntilTick,
         ...(defensive?[regenRemainderMicro,s.regenPerTickMicro,s.damageReductionBps]:[]),
-        ...(v5?[pendingBursts]:[]),phase])
+        ...(v5?[pendingBursts]:[]),
+        ...(v6?[spawnedInWave,waveStartedTick,nextSpawnTick,nextWaveTick]:[]),phase])
       : digest([traceDigest,tick,position,hp,waves,kills,contacts,enemies,bullets,phase]);
   }
   if (position.xUnits!==simulated.run.checkpoint.position.xUnits
     || position.zUnits!==simulated.run.checkpoint.position.zUnits) {
     deny('SLICE_MOVEMENT_DRIFT','C2B movement parity diverged');
   }
-  const state=seal({version:v5?SLICE_V5_VERSION:v4?SLICE_V4_VERSION:v3?SLICE_V3_VERSION:advanced?SLICE_V2_VERSION:SLICE_VERSION,
+  const state=seal({version:v6?SLICE_V6_VERSION:v5?SLICE_V5_VERSION:v4?SLICE_V4_VERSION:v3?SLICE_V3_VERSION:advanced?SLICE_V2_VERSION:SLICE_VERSION,
     qaOnly:true,safeForCloudBattle:false,
     battleId:s.battleId,tick:validated.endTick,phase,hp,maxHp:s.maxHp,
     spawnedWaves:waves,kills,contacts,nextProjectileId,enemies,projectiles:bullets,traceDigest,
@@ -644,6 +729,7 @@ function replayCombatSliceChunk(args) {
     ...(defensive?{regenPerTickMicro:s.regenPerTickMicro,regenRemainderMicro,
       damageReductionBps:s.damageReductionBps}:{}),
     ...(v5?{pendingBursts}:{}),
+    ...(v6?{spawnedInWave,waveStartedTick,nextSpawnTick,nextWaveTick}:{}),
   });
   const next=freeze({foundation:simulated.run,encounter:run.encounter,encounterDigest:run.encounterDigest,state});
   return Object.freeze({run:next,duplicate:false,events:freeze(events)});
