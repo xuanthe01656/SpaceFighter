@@ -38,16 +38,15 @@
     "@babylonjs/core": "^9.5.1",
     "@babylonjs/gui": "^9.5.1",
     "@babylonjs/loaders": "^9.5.1",
-    "@capacitor-community/admob": "^7.0.0",
-    "@capacitor-community/apple-sign-in": "^7.1.0",
-    "@capacitor/android": "^7.0.0",
-    "@capacitor/core": "^7.0.0",
-    "@capacitor/device": "^7.0.0",
-    "@capacitor/ios": "^7.0.0",
-    "@capawesome/capacitor-app-update": "^7.0.0",
-    "@codetrix-studio/capacitor-google-auth": "^3.4.0-rc.4",
+    "@capacitor-community/admob": "8.2.1",
+    "@capacitor/android": "8.5.3",
+    "@capacitor/core": "8.5.3",
+    "@capacitor/device": "8.0.3",
+    "@capacitor/ios": "8.5.3",
+    "@capawesome/capacitor-app-update": "8.1.1",
+    "@capgo/capacitor-social-login": "8.7.0",
     "@emotion/is-prop-valid": "^1.4.0",
-    "@revenuecat/purchases-capacitor": "^10.3.1",
+    "@revenuecat/purchases-capacitor": "13.7.5",
     "crypto-js": "^4.2.0",
     "firebase": "^12.9.0",
     "framer-motion": "^12.38.0",
@@ -58,7 +57,7 @@
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
-    "@capacitor/cli": "^7.0.0",
+    "@capacitor/cli": "8.5.3",
     "@vitejs/plugin-react": "^3.0.0",
     "javascript-obfuscator": "^5.3.0",
     "terser": "^5.46.0",
@@ -66,9 +65,9 @@
     "vite-plugin-javascript-obfuscator": "^3.1.0"
   },
   "overrides": {
-    "capacitor-swift-pm": "7.1.0"
+    "@grpc/grpc-js": "1.13.6"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   }
 }

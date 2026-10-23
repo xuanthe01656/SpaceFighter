@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { signInWithPopup, signInWithCredential, GoogleAuthProvider, OAuthProvider, updateProfile, signOut, onAuthStateChanged, browserPopupRedirectResolver } from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
-import { SignInWithApple } from '@capacitor-community/apple-sign-in';
-import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
+import { SocialLogin } from '@capgo/capacitor-social-login';
+import { createNativeSocialLoginBridge } from '../utils/nativeSocialLoginV8.mjs';
 import toast from 'react-hot-toast';
 import { auth, db } from '../firebase';
 import { secureStorage } from '../utils/storageHelper';
@@ -13,6 +13,12 @@ import { createDefaultCampaignData, parseGuestCampaign } from '../utils/profileS
 import { isCurrentAuthAttempt, canProcessSessionSnapshot, guestEnergyFromStorage } from '../utils/authSessionGuards.mjs';
 import { runAuthBoundOperation } from '../utils/authRequestGuards.mjs';
 import { GameApiError, openGameSession, executeGameCommand, changePlayerName, deleteCloudAccount } from '../services/gameApi';
+
+// One bridge per module: initialize native providers once, not on every button press.
+const nativeSocial = createNativeSocialLoginBridge({
+  plugin: SocialLogin,
+  getPlatform: () => Capacitor.getPlatform(),
+});
 
 export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
   const [currentUser, setCurrentUser] = useState(null);
@@ -121,52 +127,48 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
     });
   };
 
-  const loginWithGoogle = async () => { 
+  const loginWithGoogle = async () => {
+    const native = Capacitor.isNativePlatform();
     try {
-      if (Capacitor.isNativePlatform()) {
-        toast.loading(t[langRef.current]?.loginOpening, { id: 'nativeLogin' });
-        GoogleAuth.initialize({ clientId: '528039759292-052m13c4bffv1t5vskvdvmjdl9n23gb8.apps.googleusercontent.com', scopes: ['profile', 'email'], grantOfflineAccess: true });
-        const googleUser = await GoogleAuth.signIn();
-        const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
-        await signInWithCredential(auth, credential);
+      if (native) {
+        toast.loading(t[langRef.current]?.loginOpening || 'Đang kết nối Google...', { id: 'nativeLogin' });
+        const idToken = await nativeSocial.googleIdToken();
+        await signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
         toast.success(t[langRef.current]?.loginAppSuccess);
       } else {
-        const provider = new GoogleAuthProvider(); 
-        await signInWithPopup(auth, provider, browserPopupRedirectResolver); 
+        const provider = new GoogleAuthProvider();
+        await signInWithPopup(auth, provider, browserPopupRedirectResolver);
         toast.success(t[langRef.current]?.loginWebSuccess);
       }
-    } catch (error) { toast.error(t[langRef.current]?.loginFail); }
+    } catch (error) {
+      toast.error(t[langRef.current]?.loginFail || 'Đăng nhập thất bại');
+    } finally {
+      if (native) toast.dismiss('nativeLogin');
+    }
   };
 
-  const loginWithApple = async () => { 
+  const loginWithApple = async () => {
     try {
-      toast.loading(t[langRef.current]?.loginOpening || "Đang kết nối Apple...", { id: 'appleLogin' });
-      const generateNonce = () => {
-        const array = new Uint8Array(32); window.crypto.getRandomValues(array);
-        return Array.from(array, c => c.toString(16).padStart(2, '0')).join('');
-      };
-      const rawNonce = generateNonce();
-      const sha256 = async (raw) => {
-        const encoder = new TextEncoder(); const data = encoder.encode(raw);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-      };
-      const hashedNonce = await sha256(rawNonce);
-      const { response } = await SignInWithApple.authorize({ clientId: 'com.theIT.spacefighter4', scopes: 'email name', nonce: hashedNonce });
-      const provider = new OAuthProvider('apple.com');
-      const credential = provider.credential({ idToken: response.identityToken, rawNonce: rawNonce });
-
-      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("LỖI MẠNG iOS")), 8000));
-      const userCredential = await Promise.race([ signInWithCredential(auth, credential), timeout ]);
-      const user = userCredential.user;
-
-      if (response.givenName || response.familyName) {
-        const appleName = `${response.familyName || ''} ${response.givenName || ''}`.trim();
-        await updateProfile(user, { displayName: appleName });
+      // Apple OAuth on Android/web requires a separate Service ID and HTTPS
+      // callback. Do not accidentally run an unconfigured redirect flow.
+      if (Capacitor.getPlatform() !== 'ios') {
+        toast.error('Apple Sign-In hiện chỉ được cấu hình cho ứng dụng iOS.');
+        return;
       }
-      toast.dismiss('appleLogin'); toast.success(t[langRef.current]?.loginAppSuccess || "Đăng nhập thành công!");
-    } catch (error) { toast.dismiss('appleLogin'); toast.error(t[langRef.current]?.loginFail || "Đăng nhập thất bại"); }
+      toast.loading(t[langRef.current]?.loginOpening || 'Đang kết nối Apple...', { id: 'appleLogin' });
+      const { idToken, rawNonce, givenName, familyName } = await nativeSocial.appleCredentialData();
+      const credential = new OAuthProvider('apple.com').credential({ idToken, rawNonce });
+      const userCredential = await signInWithCredential(auth, credential);
+      const appleName = `${familyName} ${givenName}`.trim();
+      if (appleName && !userCredential.user.displayName) {
+        await updateProfile(userCredential.user, { displayName: appleName }).catch(() => {});
+      }
+      toast.success(t[langRef.current]?.loginAppSuccess || 'Đăng nhập thành công!');
+    } catch (error) {
+      toast.error(t[langRef.current]?.loginFail || 'Đăng nhập thất bại');
+    } finally {
+      toast.dismiss('appleLogin');
+    }
   };
 
  const logout = async () => {
@@ -207,7 +209,7 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
 
       // 4. Ngắt kết nối Firebase & Plugin Auth
       await signOut(auth);
-      if (Capacitor.isNativePlatform()) { await GoogleAuth.signOut(); }
+      if (Capacitor.isNativePlatform()) await nativeSocial.logoutAll();
       
       setCurrentUser(null); 
       setScreen('portal'); 
@@ -232,7 +234,7 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
       authAttemptRef.current += 1;
       secureStorage.removeItem('astro_session_id');
       await signOut(auth).catch(() => {});
-      if (Capacitor.isNativePlatform()) await GoogleAuth.signOut().catch(() => {});
+      if (Capacitor.isNativePlatform()) await nativeSocial.logoutAll();
       setCurrentUser(null);
       setScreen('portal');
       toast.success('Yêu cầu xóa tài khoản đã được tiếp nhận và đang được xử lý.');

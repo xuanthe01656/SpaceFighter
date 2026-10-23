@@ -10,11 +10,8 @@ const config: CapacitorConfig = {
     androidScheme: 'http'
   },
   plugins: {
-    GoogleAuth: {
-      scopes: ['profile', 'email'],
-      serverClientId: '528039759292-052m13c4bffv1t5vskvdvmjdl9n23gb8.apps.googleusercontent.com',
-      iosClientId: '528039759292-pag6tj2v0h9omdlkdh3lfne82ahpvpep.apps.googleusercontent.com',
-      forceCodeForRefreshToken: true,
+    SocialLogin: {
+      providers: { google: true, apple: true, facebook: false, twitter: false },
     },
     CapacitorHttp: {
       enabled: false,

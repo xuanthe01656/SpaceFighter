@@ -25,6 +25,7 @@ const iosXcode = read('ios/App/App.xcodeproj/project.pbxproj');
 const iosInfo = read('ios/App/App/Info.plist');
 const iosFirebase = read('ios/App/App/GoogleService-Info.plist');
 const auth = read('src/hooks/useAuth.jsx');
+const nativeBridge = read('src/utils/nativeSocialLoginV8.mjs');
 const appId = matchOne(config, /\bappId:\s*'([^']+)'/, 'Capacitor appId');
 
 test('Capacitor appId equals Android applicationId', () => {
@@ -46,17 +47,21 @@ test('Firebase iOS plist bundle ID equals native appId', () => {
   assert.equal(plistString(iosFirebase, 'BUNDLE_ID'), appId);
 });
 
-test('Google Sign-In callback scheme corresponds to configured iOS OAuth client ID', () => {
-  const clientId = matchOne(config, /\biosClientId:\s*'([^']+)'/, 'GoogleAuth iosClientId');
+test('Google iOS callback scheme matches SocialLogin initialization client ID', () => {
+  const clientId = matchOne(nativeBridge, /GOOGLE_IOS_CLIENT_ID\s*=\s*'([^']+)'/, 'Google iOS client ID');
   assert.match(clientId, /\.apps\.googleusercontent\.com$/);
   const expected = 'com.googleusercontent.apps.' + clientId.replace(/\.apps\.googleusercontent\.com$/, '');
   const actual = matchOne(iosInfo, /<key>CFBundleURLSchemes<\/key>\s*<array>\s*<string>([^<]+)<\/string>/, 'iOS Google URL scheme');
   assert.equal(actual, expected);
+  assert.match(config, /SocialLogin:\s*\{[\s\S]*?google:\s*true/);
 });
 
-test('Apple native authorization requests the native Bundle ID', () => {
-  assert.match(auth, /SignInWithApple\.authorize\(\{\s*clientId:\s*'([^']+)'/);
-  assert.equal(matchOne(auth, /SignInWithApple\.authorize\(\{\s*clientId:\s*'([^']+)'/, 'Apple clientId'), appId);
+test('Apple SocialLogin only uses native iOS with hashed nonce and Firebase rawNonce', () => {
+  assert.match(auth, /Capacitor\.getPlatform\(\) !== 'ios'/);
+  assert.match(nativeBridge, /nonce:\s*hashedNonce/);
+  assert.match(auth, /\.credential\(\{\s*idToken,\s*rawNonce\s*\}\)/);
+  assert.match(config, /SocialLogin:\s*\{[\s\S]*?apple:\s*true/);
+  assert.doesNotMatch(auth, /SignInWithApple|GoogleAuth\.signIn|GoogleAuth\.signOut/);
 });
 
 test('Android package_name and custom_url_scheme are plain string resources', () => {

@@ -119,7 +119,7 @@ jobs:
       - name: Build web assets with SpaceFighter Firebase configuration
         run: |
           set -euo pipefail
-          npm run build
+          npm run build:mobile
           test -s dist/index.html
 
       - name: Synchronize existing Capacitor iOS SPM project
@@ -127,6 +127,12 @@ jobs:
           set -euo pipefail
           npx cap sync ios
           test -f ios/App/CapApp-SPM/Package.swift || { echo 'Expected existing Capacitor SPM integration.' >&2; exit 1; }
+          if grep -Eq 'CapacitorCommunityAppleSignIn|capacitor-swift-pm.*7\.|@capacitor-community/apple-sign-in|@codetrix-studio/capacitor-google-auth' ios/App/CapApp-SPM/Package.swift; then
+            echo 'Stale Capacitor 7 / legacy sign-in SPM dependency detected.' >&2; exit 1
+          fi
+          if grep -Fq '\node_modules' ios/App/CapApp-SPM/Package.swift; then
+            echo 'Windows SPM plugin paths must be regenerated on macOS.' >&2; exit 1
+          fi
           grep -q 'CODE_SIGN_ENTITLEMENTS = App/App.entitlements;' ios/App/App.xcodeproj/project.pbxproj
           xcodebuild -list -project ios/App/App.xcodeproj
 

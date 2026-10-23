@@ -66,7 +66,7 @@ test('workflow checks entitlements in actual signed application', () => {
 test('iOS workflow builds current client, syncs existing SPM, and never regenerates native project', () => {
   assert.match(workflow, /npm run check:safety/);
   assert.match(workflow, /npm run check:gameplay/);
-  assert.match(workflow, /npm run build/);
+  assert.match(workflow, /npm run build:mobile/);
   assert.match(workflow, /npx cap sync ios/);
   assert.match(workflow, /ios\/App\/CapApp-SPM\/Package\.swift/);
   assert.doesNotMatch(workflow, /npx cap add ios|npm install @capacitor\/ios@/);
