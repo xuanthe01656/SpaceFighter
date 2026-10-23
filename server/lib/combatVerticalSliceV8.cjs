@@ -16,20 +16,31 @@ const {openFoundationPreview, replayFoundationChunk} = require('./combatPreviewR
 
 const SLICE_VERSION = 'pve-lab-vertical-slice-v1';
 const ENCOUNTER_VERSION = 'pve-server-encounter-qa-v1';
+// C4 extends the SAME C3 engine with an opt-in QA-only threat/boss contract.
+// Existing v1 encounters, checkpoints and golden tests remain unchanged.
+const SLICE_V2_VERSION = 'pve-lab-vertical-slice-v2';
+const ENCOUNTER_V2_VERSION = 'pve-server-encounter-qa-v2';
 const MAX_WAVES = 12;
 const MAX_TOTAL_ENEMIES = 128;
 const MAX_ACTIVE_ENEMIES = 32;
 const MAX_PROJECTILES = 128;
+const MAX_ENEMY_PROJECTILES = 128;
 const HEX64 = /^[a-f0-9]{64}$/;
 const OPEN_KEYS = ['snapshot','policy','journal','encounter'];
 const ENCOUNTER_KEYS = ['version','qaOnly','snapshotHash','mode','locationId','waves'];
+const ENCOUNTER_V2_KEYS = [...ENCOUNTER_KEYS,'damageCooldownTicks','enemyProjectileRadiusUnits'];
 const WAVE_KEYS = ['atTick','enemies'];
 const ENEMY_KEYS = ['id','kind','behavior','xUnits','zUnits','hp','hitRadiusUnits','moveUnitsPerTick','contactDamage'];
+const ENEMY_V2_KEYS = [...ENEMY_KEYS,'shootEveryTicks','shotSpeedUnitsPerTick','shotDamage','shotPattern'];
 const RUN_KEYS = ['foundation','encounter','encounterDigest','state'];
 const ADVANCE_KEYS = ['run','chunk','receivedAtMs'];
 const STATE_KEYS = ['version','qaOnly','safeForCloudBattle','battleId','tick','phase','hp','maxHp',
   'spawnedWaves','kills','contacts','nextProjectileId','enemies','projectiles','traceDigest','stateDigest'];
-const ACTIVE_ENEMY_KEYS = ['id','kind','behavior','xUnits','zUnits','hp','hitRadiusUnits','moveUnitsPerTick','contactDamage'];
+const ACTIVE_ENEMY_KEYS = [...ENEMY_KEYS];
+const ACTIVE_ENEMY_V2_KEYS = [...ENEMY_V2_KEYS,'maxHp','spawnTick','enraged','direction'];
+const STATE_V2_KEYS = [...STATE_KEYS,'nextEnemyProjectileId','enemyProjectileHits',
+  'bossKills','invulnerableUntilTick','enemyProjectiles'];
+const ENEMY_PROJECTILE_KEYS = ['id','xUnits','zUnits','vxUnits','vzUnits','damage','sourceId'];
 const PROJECTILE_KEYS = ['id','xUnits','zUnits','velocityZUnitsPerTick','atk'];
 class CombatVerticalSliceError extends Error {
   constructor(code, message) { super(message); this.name = 'CombatVerticalSliceError'; this.code = code; }
@@ -55,14 +66,17 @@ function seal(s) {
   return freeze({...rest, stateDigest:digest(['sf-v8b-slice-state',rest])});
 }
 function validateEncounter(snapshot, encounter) {
-  if (!exact(encounter, ENCOUNTER_KEYS)
-    || encounter.version !== ENCOUNTER_VERSION || encounter.qaOnly !== true
+  const advanced = record(encounter) && encounter.version === ENCOUNTER_V2_VERSION;
+  if (!(advanced ? exact(encounter,ENCOUNTER_V2_KEYS) : exact(encounter,ENCOUNTER_KEYS))
+    || (!advanced && encounter.version !== ENCOUNTER_VERSION) || encounter.qaOnly !== true
+    || (advanced && (!int(encounter.damageCooldownTicks,1,120)
+      || !int(encounter.enemyProjectileRadiusUnits,10,1500)))
     || encounter.snapshotHash !== snapshot.snapshotHash || !HEX64.test(encounter.snapshotHash || '')
     || encounter.mode !== snapshot.context.mode || encounter.locationId !== snapshot.context.locationId
     || !Array.isArray(encounter.waves) || encounter.waves.length < 1 || encounter.waves.length > MAX_WAVES) {
     deny('SLICE_ENCOUNTER_INVALID', 'Expected a trusted QA-only encounter bound to the snapshot');
   }
-  let lastTick=0, total=0;
+  let lastTick=0, total=0, bossCount=0;
   const ids=new Set();
   const arena=snapshot.arena;
   const waves=encounter.waves.map(w => {
@@ -74,9 +88,19 @@ function validateEncounter(snapshot, encounter) {
     total+=w.enemies.length;
     if(total>MAX_TOTAL_ENEMIES) deny('SLICE_ENCOUNTER_CAP','Encounter exceeds enemy budget');
     return {atTick:w.atTick,enemies:w.enemies.map(e=> {
-      if (!exact(e, ENEMY_KEYS) || typeof e.id !== 'string' || !/^[a-z0-9_-]{1,40}$/.test(e.id)
-        || ids.has(e.id) || e.kind !== 'grunt'
-        || !['static','chase'].includes(e.behavior)
+      if (!(advanced ? exact(e, ENEMY_V2_KEYS) : exact(e,ENEMY_KEYS))
+        || typeof e.id !== 'string' || !/^[a-z0-9_-]{1,40}$/.test(e.id)
+        || ids.has(e.id) || !['grunt', ...(advanced ? ['boss'] : [])].includes(e.kind)
+        || !(e.kind === 'boss' ? e.behavior === 'patrol' : ['static','chase'].includes(e.behavior))
+        || (advanced && (
+           !int(e.shootEveryTicks,0,1800) || !int(e.shotSpeedUnitsPerTick,0,3000)
+           || !int(e.shotDamage,0,1000000) || !['none','aimed','fan5'].includes(e.shotPattern)
+           || (e.shotPattern === 'none' ?
+                (e.shootEveryTicks !== 0 || e.shotSpeedUnitsPerTick !== 0 || e.shotDamage !== 0)
+                : (e.shootEveryTicks === 0 || e.shotSpeedUnitsPerTick === 0 || e.shotDamage === 0))
+           || (e.kind === 'boss' ? e.shotPattern !== 'fan5' : e.shotPattern === 'fan5')
+           || (e.kind === 'boss' && (e.behavior !== 'patrol' || e.moveUnitsPerTick === 0))
+          ))
         || !int(e.xUnits,-arena.halfWidthUnits,arena.halfWidthUnits)
         || !int(e.zUnits,-arena.halfHeightUnits,arena.halfHeightUnits)
         || !int(e.hp,1,10000000) || !int(e.hitRadiusUnits,100,2500)
@@ -85,12 +109,19 @@ function validateEncounter(snapshot, encounter) {
         || !int(e.contactDamage,0,1000000)) {
         deny('SLICE_ENEMY_INVALID','Unsupported enemy (bosses, shooting and advanced AI fail closed)');
       }
+      if(e.kind === 'boss') {
+        bossCount++;
+        if (!advanced || bossCount > 1 || w !== encounter.waves[encounter.waves.length-1]
+          || w.enemies.length !== 1) deny('SLICE_BOSS_SCHEDULE_INVALID','Boss must be alone in final wave');
+      }
       ids.add(e.id);
       return {...e};
     })};
   });
-  return freeze({version:ENCOUNTER_VERSION,qaOnly:true,snapshotHash:encounter.snapshotHash,
-    mode:encounter.mode,locationId:encounter.locationId,waves});
+  return freeze({version:encounter.version,qaOnly:true,snapshotHash:encounter.snapshotHash,
+    mode:encounter.mode,locationId:encounter.locationId,waves,
+    ...(advanced ? {damageCooldownTicks:encounter.damageCooldownTicks,
+      enemyProjectileRadiusUnits:encounter.enemyProjectileRadiusUnits} : {})});
 }
 function checkSupportedLoadout(snapshot, foundation) {
   const items=snapshot.equipment;
@@ -111,10 +142,13 @@ function openCombatVerticalSlice(args) {
   const encounter=validateEncounter(args.snapshot,args.encounter);
   const hp=checkSupportedLoadout(args.snapshot,foundation);
   const encounterDigest=digest(['sf-v8b-qa-encounter',encounter]);
-  const state=seal({version:SLICE_VERSION,qaOnly:true,safeForCloudBattle:false,
+  const state=seal({version:encounter.version===ENCOUNTER_V2_VERSION ? SLICE_V2_VERSION : SLICE_VERSION,
+    qaOnly:true,safeForCloudBattle:false,
     battleId:foundation.journal.battleId,tick:0,phase:'active',hp,maxHp:hp,
     spawnedWaves:0,kills:0,contacts:0,nextProjectileId:0,enemies:[],projectiles:[],
     traceDigest:digest(['sf-v8b-slice-trace',args.snapshot.snapshotHash,encounterDigest]),
+    ...(encounter.version===ENCOUNTER_V2_VERSION ? {nextEnemyProjectileId:0,
+      enemyProjectileHits:0,bossKills:0,invulnerableUntilTick:0,enemyProjectiles:[]} : {}),
   });
   return freeze({foundation,encounter,encounterDigest,state});
 }
@@ -124,12 +158,16 @@ function validateRun(run) {
     || !record(run.encounter) || !Object.isFrozen(run.encounter)
     || !HEX64.test(run.encounterDigest||'')
     || digest(['sf-v8b-qa-encounter',run.encounter]) !== run.encounterDigest
-    || !exact(run.state,STATE_KEYS) || !Object.isFrozen(run.state)) {
+    || !(run.encounter.version===ENCOUNTER_V2_VERSION
+      ? exact(run.state,STATE_V2_KEYS) : exact(run.state,STATE_KEYS))
+    || !Object.isFrozen(run.state)) {
     deny('SLICE_STATE_INVALID','Malformed QA run');
   }
   const s=run.state;
   const {stateDigest,...rest}=s;
-  if (s.version!==SLICE_VERSION || s.qaOnly!==true || s.safeForCloudBattle!==false
+  const advanced=run.encounter.version===ENCOUNTER_V2_VERSION;
+  if (s.version!==(advanced?SLICE_V2_VERSION:SLICE_VERSION)
+    || s.qaOnly!==true || s.safeForCloudBattle!==false
     || !HEX64.test(s.traceDigest||'') || !HEX64.test(stateDigest||'')
     || digest(['sf-v8b-slice-state',rest])!==stateDigest
     || s.battleId!==run.foundation.journal.battleId
@@ -138,15 +176,31 @@ function validateRun(run) {
     || !['active','lab-clear','lab-defeat'].includes(s.phase)
     || !int(s.hp,0,s.maxHp) || !int(s.maxHp,1,10000000)
     || !int(s.spawnedWaves,0,run.encounter.waves.length)
-    || !int(s.kills,0,MAX_TOTAL_ENEMIES) || !int(s.contacts,0,MAX_TOTAL_ENEMIES)
+    || !int(s.kills,0,MAX_TOTAL_ENEMIES)
+    || !int(s.contacts,0,advanced?MAX_BATTLE_TICKS:MAX_TOTAL_ENEMIES)
     || !int(s.nextProjectileId,0,MAX_BATTLE_TICKS)
     || !Array.isArray(s.enemies) || s.enemies.length>MAX_ACTIVE_ENEMIES
     || !Array.isArray(s.projectiles) || s.projectiles.length>MAX_PROJECTILES
-    || s.enemies.some(e=>!exact(e,ACTIVE_ENEMY_KEYS) || !int(e.hp,1,10000000))
+    || s.enemies.some(e=> !(advanced ? exact(e,ACTIVE_ENEMY_V2_KEYS) : exact(e,ACTIVE_ENEMY_KEYS))
+      || !int(e.hp,1,10000000) || (advanced && (!int(e.maxHp,e.hp,10000000)
+        || !int(e.spawnTick,1,s.tick) || typeof e.enraged!=='boolean'
+        || ![-1,1].includes(e.direction) || (e.kind!=='boss' && e.enraged))))
     || s.projectiles.some(b=>!exact(b,PROJECTILE_KEYS) || !int(b.id,1,s.nextProjectileId)
       || !int(b.xUnits,-100000,100000) || !int(b.zUnits,-100000,100000)
       || !int(b.atk,0,1000000))) {
     deny('SLICE_STATE_INVALID','QA world state or journal diverged');
+  }
+  if (advanced && (!int(s.nextEnemyProjectileId,0,MAX_BATTLE_TICKS*5)
+    || !int(s.enemyProjectileHits,0,MAX_BATTLE_TICKS*5)
+    || !int(s.bossKills,0,1) || !int(s.invulnerableUntilTick,0,MAX_BATTLE_TICKS+120)
+    || !Array.isArray(s.enemyProjectiles) || s.enemyProjectiles.length>MAX_ENEMY_PROJECTILES
+    || s.enemyProjectiles.some(b=>!exact(b,ENEMY_PROJECTILE_KEYS)
+      || !int(b.id,1,s.nextEnemyProjectileId)
+      || !int(b.xUnits,-100000,100000) || !int(b.zUnits,-100000,100000)
+      || !int(b.vxUnits,-3000,3000) || !int(b.vzUnits,-3000,3000)
+      || !int(b.damage,1,1000000) || typeof b.sourceId!=='string'
+      || !/^[a-z0-9_-]{1,40}$/.test(b.sourceId)))) {
+    deny('SLICE_STATE_INVALID','QA hostile state diverged');
   }
 }
 /**
@@ -162,27 +216,40 @@ function replayCombatSliceChunk(args) {
   if (simulated.duplicate) return Object.freeze({run,duplicate:true,events:Object.freeze([])});
   if (run.state.phase!=='active') deny('SLICE_TERMINAL','Closed QA simulation cannot accept further inputs');
   const validated=validateChunk(chunk), p=run.foundation.preview, arena=p.arena;
-  const s=run.state;
+  const s=run.state, advanced=run.encounter.version===ENCOUNTER_V2_VERSION;
   const enemies=s.enemies.map(e=>({...e})), bullets=s.projectiles.map(b=>({...b}));
+  const hostiles=advanced?s.enemyProjectiles.map(b=>({...b})):[];
   let hp=s.hp, waves=s.spawnedWaves, kills=s.kills, contacts=s.contacts;
+  let nextEnemyProjectileId=advanced?s.nextEnemyProjectileId:0;
+  let enemyProjectileHits=advanced?s.enemyProjectileHits:0;
+  let bossKills=advanced?s.bossKills:0;
+  let invulnerableUntilTick=advanced?s.invulnerableUntilTick:0;
   let nextProjectileId=s.nextProjectileId, position=run.foundation.checkpoint.position;
   let phase='active', traceDigest=s.traceDigest, emittedCursor=0;
   const events=[];
   for (let i=0;i<validated.frames.length;i++) {
     const tick=s.tick+i+1;
     const [x,z]=validated.frames[i];
+    const priorPosition=position;
     position=advancePreviewMovement(p,position,{x,z});
     if (phase==='active') {
       if (waves<run.encounter.waves.length && run.encounter.waves[waves].atTick===tick) {
         const group=run.encounter.waves[waves];
         if(enemies.length+group.enemies.length>MAX_ACTIVE_ENEMIES)
           deny('SLICE_ACTIVE_CAP','Enemy population exceeded configured active budget');
-        enemies.push(...group.enemies.map(e=>({...e})));
+        enemies.push(...group.enemies.map(e=>advanced?
+          {...e,maxHp:e.hp,spawnTick:tick,enraged:false,direction:1}:{...e}));
         waves++;
         events.push(freeze({type:'wave',tick,wave:waves}));
       }
       for (let j=enemies.length-1;j>=0;j--) {
         const e=enemies[j];
+        if (advanced && e.behavior==='patrol') {
+          const newX=e.xUnits+e.moveUnitsPerTick*e.direction*(e.enraged?2:1);
+          const bound=arena.halfWidthUnits-e.hitRadiusUnits;
+          e.xUnits=clamp(newX,-bound,bound);
+          if (newX>=bound || newX<=-bound) e.direction*=-1;
+        }
         if (e.behavior==='chase' && e.moveUnitsPerTick>0) {
           const dx=position.xUnits-e.xUnits, dz=position.zUnits-e.zUnits;
           const d=Math.hypot(dx,dz);
@@ -195,10 +262,16 @@ function replayCombatSliceChunk(args) {
         if (distanceSquared(position.xUnits,position.zUnits,e.xUnits,e.zUnits)<=reach*reach) {
           const raw=e.contactDamage;
           const damage=raw>0?Math.max(1,Math.floor(raw*(1-p.armor/100))):0;
-          hp=Math.max(0,hp-damage);
-          contacts++;
-          events.push(freeze({type:'contact',tick,id:e.id,damage}));
-          enemies.splice(j,1); // collision is NOT an enemy-kill reward
+          const acceptedDamage=advanced && tick<invulnerableUntilTick ? 0 : damage;
+          hp=Math.max(0,hp-acceptedDamage);
+          if (advanced && acceptedDamage>0) invulnerableUntilTick=tick+run.encounter.damageCooldownTicks;
+          // A persistent boss overlap must not flood the contact ledger during
+          // temporary invulnerability. Ordinary enemies still despawn on contact.
+          if(!advanced || e.kind!=='boss' || acceptedDamage>0) {
+            contacts++;
+            events.push(freeze({type:'contact',tick,id:e.id,damage:acceptedDamage}));
+          }
+          if(!(e.kind==='boss' && advanced)) enemies.splice(j,1); // no kill reward
         }
       }
       while (emittedCursor<simulated.emitted.length && simulated.emitted[emittedCursor].tick===tick) {
@@ -207,6 +280,49 @@ function replayCombatSliceChunk(args) {
         nextProjectileId++;
         bullets.push({id:nextProjectileId,xUnits:shot.xUnits,zUnits:shot.zUnits,
           velocityZUnitsPerTick:shot.velocityZUnitsPerTick,atk:shot.atk});
+      }
+      if (advanced) {
+        // Deterministic hostile fire; fixed 30Hz. Enemy schedules and patterns are
+        // pinned in the QA encounter, NEVER taken from client combat results.
+        for (const e of enemies) {
+          if (e.shotPattern==='none') continue;
+          const basePeriod=e.shootEveryTicks;
+          const effectivePeriod=e.kind==='boss' && e.enraged
+            ? Math.max(1,Math.floor(basePeriod/2)) : basePeriod;
+          if (tick<=e.spawnTick || (tick-e.spawnTick)%effectivePeriod!==0) continue;
+          const dx=position.xUnits-e.xUnits, dz=position.zUnits-e.zUnits;
+          const aim=Math.atan2(dz,dx);
+          const fan=e.shotPattern==='fan5' ? [-0.32,-0.16,0,0.16,0.32] : [0];
+          if(hostiles.length+fan.length>MAX_ENEMY_PROJECTILES)
+            deny('SLICE_ENEMY_PROJECTILE_CAP','Hostile projectile budget exhausted');
+          for(const offset of fan) {
+            const vx=Math.round(Math.cos(aim+offset)*e.shotSpeedUnitsPerTick);
+            const vz=Math.round(Math.sin(aim+offset)*e.shotSpeedUnitsPerTick);
+            nextEnemyProjectileId++;
+            hostiles.push({id:nextEnemyProjectileId,xUnits:e.xUnits,zUnits:e.zUnits,
+              vxUnits:vx,vzUnits:vz,damage:e.shotDamage,sourceId:e.id});
+          }
+          events.push(freeze({type:'enemy-fire',tick,id:e.id,bullets:fan.length}));
+        }
+        // Swept relative collision: both the hostile shot and the player's
+        // movement happen during a tick. Applies a pinned invulnerability window.
+        for(let b=hostiles.length-1;b>=0;b--) {
+          const shot=hostiles[b],oldX=shot.xUnits,oldZ=shot.zUnits;
+          shot.xUnits+=shot.vxUnits;shot.zUnits+=shot.vzUnits;
+          const reach=p.pilotHitRadiusUnits+run.encounter.enemyProjectileRadiusUnits;
+          const hit=sweptFraction(oldX-priorPosition.xUnits,oldZ-priorPosition.zUnits,
+            shot.xUnits-position.xUnits,shot.zUnits-position.zUnits,0,0,reach);
+          if(hit!==null) {
+            const raw=shot.damage;
+            const damage=raw>0?Math.max(1,Math.floor(raw*(1-p.armor/100))):0;
+            const accepted=tick<invulnerableUntilTick?0:damage;
+            if(accepted>0) {hp=Math.max(0,hp-accepted);invulnerableUntilTick=tick+run.encounter.damageCooldownTicks;}
+            enemyProjectileHits++;
+            events.push(freeze({type:'enemy-hit',tick,id:shot.sourceId,damage:accepted}));
+            hostiles.splice(b,1);
+          } else if(Math.abs(shot.xUnits)>arena.halfWidthUnits+3000 ||
+            Math.abs(shot.zUnits)>arena.halfHeightUnits+3000) hostiles.splice(b,1);
+        }
       }
       for (let b=bullets.length-1;b>=0;b--) {
         const bullet=bullets[b];
@@ -226,9 +342,14 @@ function replayCombatSliceChunk(args) {
           target.hp-=bullet.atk;
           events.push(freeze({type:'hit',tick,id:target.id,damage:bullet.atk}));
           bullets.splice(b,1);
+          if (advanced && target.kind==='boss' && !target.enraged
+            && target.hp>0 && target.hp*10<=target.maxHp*3) {
+            target.enraged=true;events.push(freeze({type:'boss-enrage',tick,id:target.id}));
+          }
           if (target.hp<=0) {
             enemies.splice(best,1);kills++;
-            events.push(freeze({type:'kill',tick,id:target.id}));
+            if (advanced && target.kind==='boss') bossKills++;
+            events.push(freeze({type:target.kind==='boss'?'boss-kill':'kill',tick,id:target.id}));
           }
         } else if (bullet.zUnits < -arena.halfHeightUnits-3000) {
           bullets.splice(b,1);
@@ -238,15 +359,21 @@ function replayCombatSliceChunk(args) {
       else if(waves===run.encounter.waves.length && enemies.length===0
         && kills===run.encounter.waves.reduce((sum,w)=>sum+w.enemies.length,0)) phase='lab-clear';
     }
-    traceDigest=digest([traceDigest,tick,position,hp,waves,kills,contacts,enemies,bullets,phase]);
+    traceDigest=advanced
+      ? digest([traceDigest,tick,position,hp,waves,kills,contacts,enemies,bullets,
+        hostiles,enemyProjectileHits,bossKills,invulnerableUntilTick,phase])
+      : digest([traceDigest,tick,position,hp,waves,kills,contacts,enemies,bullets,phase]);
   }
   if (position.xUnits!==simulated.run.checkpoint.position.xUnits
     || position.zUnits!==simulated.run.checkpoint.position.zUnits) {
     deny('SLICE_MOVEMENT_DRIFT','C2B movement parity diverged');
   }
-  const state=seal({version:SLICE_VERSION,qaOnly:true,safeForCloudBattle:false,
+  const state=seal({version:advanced?SLICE_V2_VERSION:SLICE_VERSION,qaOnly:true,safeForCloudBattle:false,
     battleId:s.battleId,tick:validated.endTick,phase,hp,maxHp:s.maxHp,
-    spawnedWaves:waves,kills,contacts,nextProjectileId,enemies,projectiles:bullets,traceDigest});
+    spawnedWaves:waves,kills,contacts,nextProjectileId,enemies,projectiles:bullets,traceDigest,
+    ...(advanced?{nextEnemyProjectileId,enemyProjectileHits,bossKills,
+      invulnerableUntilTick,enemyProjectiles:hostiles}:{}),
+  });
   const next=freeze({foundation:simulated.run,encounter:run.encounter,encounterDigest:run.encounterDigest,state});
   return Object.freeze({run:next,duplicate:false,events:freeze(events)});
 }
