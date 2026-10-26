@@ -53,6 +53,19 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
   app.post('/api/v1/session',withAuth((_req,user)=>options.service.openSession(user)));
   app.get('/api/v1/profile',withAuth((req,user)=>options.service.getProfile(user.uid,req.get('x-game-session'))));
   app.post('/api/v1/command',withAuth((req,user)=>options.service.apply(user.uid,req.get('x-game-session'),req.body||{})));
+  // C7-A: isolated, default-OFF, allowlisted QA replay. NEVER legacy battle.start/finish.
+  // No energy, rewards, missions, progress or economy mutation in these routes.
+  const qaReady=options.qaBattleEnabled===true && Boolean(options.qaBattleService);
+  const withQa=(fn)=>async(req,res,next)=>{
+    if(!qaReady)return res.status(503).json({ok:false,code:'QA_BATTLE_DISABLED'});
+    return withAuth(fn)(req,res,next);
+  };
+  app.post('/api/v1/qa/battle/open',withQa((req,user)=>options.qaBattleService.open(
+    user.uid,req.get('x-game-session'),req.body)));
+  app.post('/api/v1/qa/battle/input',withQa((req,user)=>options.qaBattleService.ingest(
+    user.uid,req.get('x-game-session'),req.body)));
+  app.get('/api/v1/qa/battle/status',withQa((req,user)=>options.qaBattleService.status(
+    user.uid,req.get('x-game-session'))));
   app.post('/api/v1/profile/name',withAuth((req,user)=>options.service.changeName(user.uid,req.get('x-game-session'),req.body?.name)));
   // Never run destructive deletion inline with an HTTP request. This remains
   // disabled until a retryable worker has been provisioned and verified.
@@ -86,7 +99,7 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
 async function start() {
   const port=Number(process.env.PORT||3000);
   if(!Number.isInteger(port)||port<1||port>65535) throw new Error('Invalid PORT');
-  let service=null,auth=null,admin=null,accountDeletionService=null;
+  let service=null,auth=null,admin=null,accountDeletionService=null,qaBattleService=null;
   if(process.env.GAME_API_ENABLED==='true') {
     admin=require('firebase-admin');
     if(!admin.apps.length) {
@@ -100,6 +113,16 @@ async function start() {
     }
     auth=admin.auth();
     service=await createGameService({db:admin.firestore()});
+    // Explicitly OFF unless BOTH flag and nonempty UID allowlist are configured.
+    // Deploying this code must not enable QA admission automatically.
+    if(process.env.GAME_BATTLE_QA_ENABLED==='true'){
+      const allowedUids=(process.env.GAME_BATTLE_QA_ALLOW_UIDS||'').split(',')
+        .map(uid=>uid.trim()).filter(Boolean);
+      if(allowedUids.length){
+        const {createQaBattleAdmissionC7A}=require('./lib/qaBattleAdmissionC7AV8.cjs');
+        qaBattleService=await createQaBattleAdmissionC7A({db:admin.firestore(),allowedUids});
+      }
+    }
     if (process.env.GAME_ACCOUNT_DELETION_ENABLED==='true' &&
         process.env.GAME_ACCOUNT_DELETION_WORKER_READY==='true') {
       accountDeletionService=createAccountDeletionService({db:admin.firestore(),auth});
@@ -107,6 +130,7 @@ async function start() {
   }
   const app=createApp(undefined,{service,auth,admin,
     accountDeletionService, accountDeletionEnabled:Boolean(accountDeletionService),
+    qaBattleService,qaBattleEnabled:Boolean(qaBattleService),
     allowLocalOrigin:process.env.NODE_ENV!=='production'});
   app.listen(port,'0.0.0.0',()=>console.log(`Space Fighter Phase 1 listening on ${port}; API ${service?'enabled':'disabled'}`));
 }
