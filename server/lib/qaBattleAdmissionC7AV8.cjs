@@ -14,16 +14,24 @@ const {GameError}=require('./economy.cjs');
 const {assertAccountActive}=require('./accountDeletion.cjs');
 const {createServerBattleSnapshot}=require('./battleSnapshotV8.cjs');
 const {openInputJournal,validateChunk}=require('./combatInputJournalV8.cjs');
+const {ENCOUNTER_C6E_VERSION,ALPHA_POLICY_C6E_VERSION}=require('./combatCampaignAlphaC6CV8.cjs');
 const {openCombatVerticalSlice,replayCombatSliceChunk}=require('./combatVerticalSliceV8.cjs');
 const {resolveCampaignAlphaStage1C6E,LOCATION_ID,RULES_VERSION,CATALOG_VERSION,
   ARENA_HALF_WIDTH_UNITS,ARENA_HALF_HEIGHT_UNITS}=require('./combatCampaignAlphaC6CV8.cjs');
 
 const QA_VERSION='v8-c7a-qa-admission-v1';
+const QA_RECEIPT_VERSION='v8-c7b1-terminal-qa-receipt-v1';
 const QA_TTL_MS=10*60*1000;
 const QA_MAX_CHUNKS=512;
 const QA_MAX_DOC_BYTES=240000;
 const UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const REQUEST_ID_RE=/^[a-zA-Z0-9_-]{12,80}$/;
+const HEX64_RE=/^[a-f0-9]{64}$/;
+const digestReceipt=(data)=>{
+  const sorted=v=>Array.isArray(v)?v.map(sorted):plain(v)
+    ?Object.fromEntries(Object.keys(v).sort().map(k=>[k,sorted(v[k])])):v;
+  return crypto.createHash('sha256').update(JSON.stringify(['sf-c7b1-qa-receipt',sorted(data)])).digest('hex');
+};
 const POLICY=Object.freeze({version:'v8c6b-pierce-burst-preview-v3',
   keyboardUnitsPer60HzFrame:.3,pilotHitRadiusUnits:700,projectileHitRadiusUnits:200});
 const ARENA=Object.freeze({halfWidthUnits:ARENA_HALF_WIDTH_UNITS,
@@ -102,6 +110,7 @@ async function createQaBattleAdmissionC7A({db,allowedUids,now=Date.now,
   const userRef=uid=>db.collection('users').doc(uid);
   const activeRef=uid=>userRef(uid).collection('qaBattleSessions').doc('current');
   const jobRef=uid=>db.collection('accountDeletionJobs').doc(uid);
+  const receiptRef=(uid,battleId)=>userRef(uid).collection('qaBattleReceipts').doc(battleId);
   const inputRef=(uid,battleId,startTick)=>userRef(uid).collection('qaBattleTrace')
     .doc(battleId).collection('chunks').doc(String(startTick).padStart(6,'0'));
 
@@ -192,6 +201,90 @@ async function createQaBattleAdmissionC7A({db,allowedUids,now=Date.now,
     }catch(err){return wrapQaError(err);}
   }
 
+  /**
+   * C7-B1 QA-only terminal attestation. This is a durable NON-ECONOMIC
+   * record, NOT battle verification for money, progress, energy or stars.
+   * It validates the last server-authored trace/checkpoint inside a single
+   * Firestore transaction; SHA-256 is consistency checking, not an HMAC.
+   * Full input re-simulation, mobile touch parity, and a separately approved
+   * verified-outcome trust root remain prerequisites for C7-B2 settlement.
+   */
+  async function finalize(uid,sid,body){
+    requireActor(uid,sid,allowlist);
+    if(!exact(body,['battleId'])||typeof body.battleId!=='string'
+      ||!UUID_RE.test(body.battleId))
+      deny('QA_RECEIPT_INPUT_INVALID','Provide only the QA battle ID');
+    const at=safeClock(now),battleId=body.battleId;
+    try{
+      return await db.runTransaction(async t=>{
+        const [userSnap,jobSnap,receiptSnap]=await Promise.all([
+          t.get(userRef(uid)),t.get(jobRef(uid)),t.get(receiptRef(uid,battleId))]);
+        requireProfile(userSnap,jobSnap,sid);
+        if(receiptSnap.exists){
+          const old=receiptSnap.data();
+          if(old.version!==QA_RECEIPT_VERSION||old.uid!==uid
+            ||old.sessionId!==sid||old.battleId!==battleId
+            ||old.qaOnly!==true||old.safeForCloudBattle!==false
+            ||old.settlementEnabled!==false||old.nonEconomic!==true
+            ||!HEX64_RE.test(old.receiptDigest||''))
+            deny('QA_RECEIPT_CONTEXT_INVALID','Stored QA receipt context invalid',409);
+          const {receiptDigest,...fields}=old;
+          if(digestReceipt(fields)!==receiptDigest)
+            deny('QA_RECEIPT_CONTEXT_INVALID','Stored QA receipt checksum differs',409);
+          return Object.freeze({...old,duplicate:true});
+        }
+        const activeSnap=await t.get(activeRef(uid));
+        const current=checkCurrent(activeSnap,uid,sid,battleId,at);
+        const run=current.run,s=run?.state,j=run?.foundation?.journal;
+        if(!s||!j||!run.foundation?.checkpoint
+          ||run.encounter?.version!==ENCOUNTER_C6E_VERSION
+          ||run.encounter?.campaignPolicyVersion!==ALPHA_POLICY_C6E_VERSION
+          ||s.version!=='pve-lab-vertical-slice-v8'
+          ||!['lab-clear','lab-defeat'].includes(s.phase)
+          ||j.uid!==uid||j.sessionId!==sid||j.battleId!==battleId
+          ||j.nextTick!==s.tick||run.foundation.checkpoint.tick!==s.tick
+          ||!Number.isSafeInteger(current.chunkCount)||current.chunkCount<1
+          ||current.chunkCount>QA_MAX_CHUNKS
+          ||!Number.isSafeInteger(j.lastChunkStart)||j.lastChunkStart<0
+          ||!HEX64_RE.test(j.digest||'')||!HEX64_RE.test(s.traceDigest||'')
+          ||!HEX64_RE.test(s.stateDigest||''))
+          deny('QA_RECEIPT_UNVERIFIED','Terminal QA replay/checkpoint not eligible',409);
+        const traceSnap=await t.get(inputRef(uid,battleId,j.lastChunkStart));
+        if(!traceSnap.exists)deny('QA_RECEIPT_TRACE_MISSING','Last accepted trace missing',409);
+        const tr=traceSnap.data();
+        const chunk={protocol:'pve-input-v1',battleId,startTick:j.lastChunkStart,frames:tr.frames};
+        const checked=validateChunk(chunk);
+        if(tr.version!==QA_VERSION||tr.battleId!==battleId
+          ||tr.startTick!==checked.startTick||tr.endTick!==checked.endTick
+          ||tr.nextTick!==s.tick||tr.nextTick!==j.nextTick
+          ||tr.receivedAtMs!==j.lastReceivedAtMs
+          ||tr.chunkDigest!==checked.chunkDigest||tr.chunkDigest!==j.lastChunkDigest
+          ||tr.journalDigest!==j.digest||tr.traceDigest!==s.traceDigest
+          ||tr.terminalPhase!==s.phase)
+          deny('QA_RECEIPT_TRACE_INVALID','Final trace/checkpoint do not match',409);
+        // Deep validation of both sealed journal and world state. This must
+        // return DUPLICATE: never advance or simulate an extra frame here.
+        const verified=replayCombatSliceChunk({run:freeze(clone(run)),chunk,
+          receivedAtMs:tr.receivedAtMs});
+        if(!verified.duplicate||verified.run.state.stateDigest!==s.stateDigest)
+          deny('QA_RECEIPT_CHECKPOINT_INVALID','Final checkpoint validation failed',409);
+        const fields={version:QA_RECEIPT_VERSION,uid,sessionId:sid,battleId,
+          sourceVersion:QA_VERSION,encounterVersion:run.encounter.version,
+          policyVersion:run.encounter.campaignPolicyVersion,
+          phase:s.phase,tick:s.tick,kills:s.kills,contacts:s.contacts,
+          escaped:s.escaped,hp:s.hp,chunkCount:current.chunkCount,
+          journalDigest:j.digest,stateDigest:s.stateDigest,traceDigest:s.traceDigest,
+          createdAtMs:at,qaOnly:true,safeForCloudBattle:false,
+          settlementEnabled:false,nonEconomic:true};
+        const receipt=safeDoc({...fields,receiptDigest:digestReceipt(fields)});
+        // A create-only, immutable QA namespace. NEVER write users/{uid}
+        // or operations, wallet, energy, missions, stars or progression.
+        t.create(receiptRef(uid,battleId),receipt);
+        return Object.freeze({...receipt,duplicate:false});
+      });
+    }catch(err){return wrapQaError(err);}
+  }
+
   async function status(uid,sid){
     requireActor(uid,sid,allowlist);
     const at=safeClock(now);
@@ -203,7 +296,7 @@ async function createQaBattleAdmissionC7A({db,allowedUids,now=Date.now,
       return response(checkCurrent(activeSnap,uid,sid,activeSnap.data().battleId,at));
     });
   }
-  return Object.freeze({open,ingest,status});
+  return Object.freeze({open,ingest,status,finalize});
 }
-module.exports=Object.freeze({QA_VERSION,QA_TTL_MS,QA_MAX_CHUNKS,
+module.exports=Object.freeze({QA_VERSION,QA_RECEIPT_VERSION,QA_TTL_MS,QA_MAX_CHUNKS,
   createQaBattleAdmissionC7A});

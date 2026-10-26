@@ -66,6 +66,9 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
     user.uid,req.get('x-game-session'),req.body)));
   app.get('/api/v1/qa/battle/status',withQa((req,user)=>options.qaBattleService.status(
     user.uid,req.get('x-game-session'))));
+  // C7-B1: server-authored, immutable QA-only terminal receipt. No economy writes.
+  app.post('/api/v1/qa/battle/receipt',withQa((req,user)=>options.qaBattleService.finalize(
+    user.uid,req.get('x-game-session'),req.body)));
   app.post('/api/v1/profile/name',withAuth((req,user)=>options.service.changeName(user.uid,req.get('x-game-session'),req.body?.name)));
   // Never run destructive deletion inline with an HTTP request. This remains
   // disabled until a retryable worker has been provisioned and verified.
