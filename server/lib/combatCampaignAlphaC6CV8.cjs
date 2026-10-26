@@ -13,6 +13,10 @@
  */
 const {SNAPSHOT_VERSION}=require('./battleSnapshotV8.cjs');
 const ENCOUNTER_C6C_VERSION='pve-server-encounter-qa-v6';
+// C6-D uses the SAME Campaign Alpha resolver and same combat engine. Opt-in
+// QA-v7 only: distinguish shooter patrol from melee chase and pin sine/drift.
+const ENCOUNTER_C6D_VERSION='pve-server-encounter-qa-v7';
+const ALPHA_POLICY_C6D_VERSION='v8c6d-alpha-stage1-ai30hz-qa-v1';
 const ALPHA_POLICY_VERSION='v8c6c-alpha-stage1-pinned-qa-v1';
 const LOCATION_ID='alpha_stage_1';
 const RULES_VERSION='combat-v1.0.0';
@@ -117,8 +121,43 @@ function resolveCampaignAlphaStage1C6C(args){
     interWaveDelayTicks:INTER_WAVE_DELAY_TICKS,
   });
 }
+/**
+ * Pinned QA-v7 AI policy, derived from exactly the SAME six seed draws per
+ * enemy as C6-C. Keep QA-v6 byte-for-byte compatible: do not change its
+ * output, RNG call order, or checkpoint schema. In live CampaignScene the
+ * six draws are Math.random; the seed here is server-owned instead.
+ *
+ * Client oracle for stage 1:
+ *   velX=(roll-.5)*.05 per 60Hz render frame;
+ *   sineOff=roll*2*pi;
+ *   canShoot=roll>.5;
+ *   shooter X += velX + sin(renderTick*.03+sineOff)*.04;
+ *   shooter Z += speed, reversing at 0.65*ZOOM / -ZOOM+1;
+ *   melee chases player at speed*1.2.
+ * QA-v7 approximates 2x 60Hz frames per 30Hz journal tick; mobile/native
+ * parity and dynamic viewport still require tests, NOT Cloud settlement.
+ */
+function resolveCampaignAlphaStage1C6D(args){
+  const base=resolveCampaignAlphaStage1C6C(args);
+  let randomState=args.snapshot.seed>>>0;
+  const roll=()=>{randomState=nextRandom(randomState);return fraction(randomState);};
+  const waves=base.waves.map(w=>({...w,enemies:w.enemies.map(e=>{
+    roll();roll();roll(); // tier, X offset, speed already fixed by C6-C
+    const lateral=roll(),sine=roll(),shoot=roll()>.5;
+    if ((e.shootEveryTicks>0)!==shoot || e.kind!=='grunt')
+      deny('ALPHA_C6D_SEED_DRIFT','Pinned AI seed is inconsistent with the stage encounter');
+    return {...e,
+      behavior:shoot?'shooter-sine':'chase',
+      lateralVelocityUnitsPerTick:shoot?Math.round((lateral-.5)*100):0,
+      sinePhaseMicroRad:shoot?Math.round(sine*2*Math.PI*1000000):0,
+    };
+  })}));
+  return deepFreeze({...base,version:ENCOUNTER_C6D_VERSION,
+    campaignPolicyVersion:ALPHA_POLICY_C6D_VERSION,waves});
+}
 module.exports=Object.freeze({
-  ENCOUNTER_C6C_VERSION,ALPHA_POLICY_VERSION,LOCATION_ID,RULES_VERSION,CATALOG_VERSION,
+  ENCOUNTER_C6C_VERSION,ENCOUNTER_C6D_VERSION,ALPHA_POLICY_C6D_VERSION,
+  resolveCampaignAlphaStage1C6D,ALPHA_POLICY_VERSION,LOCATION_ID,RULES_VERSION,CATALOG_VERSION,
   WAVE_COUNT,BASE_ENEMIES,TIME_LIMIT_SECONDS,FIRST_WAVE_AT_TICK,INTER_WAVE_DELAY_TICKS,
   ARENA_HALF_WIDTH_UNITS,ARENA_HALF_HEIGHT_UNITS,CampaignAlphaC6CError,
   resolveCampaignAlphaStage1C6C,
