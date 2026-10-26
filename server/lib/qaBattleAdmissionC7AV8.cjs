@@ -17,6 +17,7 @@ const {openInputJournal,validateChunk}=require('./combatInputJournalV8.cjs');
 const {ENCOUNTER_C6E_VERSION,ALPHA_POLICY_C6E_VERSION}=require('./combatCampaignAlphaC6CV8.cjs');
 const {openCombatVerticalSlice,replayCombatSliceChunk}=require('./combatVerticalSliceV8.cjs');
 const {createQaGenesis,verifyQaFullReplay,createAuditProof,checkStoredProof}=require('./qaBattleAuditC7B2V8.cjs');
+const {issueQaOriginSealC7C1,validateSealKey,validateKeyId}=require('./battleOriginSealC7CV8.cjs');
 const {resolveCampaignAlphaStage1C6E,LOCATION_ID,RULES_VERSION,CATALOG_VERSION,
   ARENA_HALF_WIDTH_UNITS,ARENA_HALF_HEIGHT_UNITS}=require('./combatCampaignAlphaC6CV8.cjs');
 
@@ -100,8 +101,15 @@ const response=(data,duplicate=false)=>Object.freeze({
 
 async function createQaBattleAdmissionC7A({db,allowedUids,now=Date.now,
   uuidFactory=crypto.randomUUID,randomSeed=()=>crypto.randomInt(1,0x100000000),
-  catalogModule,schemaModule}){
+  catalogModule,schemaModule,originSealConfig=null}){
   if(!db||typeof db.runTransaction!=='function')throw new TypeError('Firestore db required');
+  // Optional, explicitly injected C7-C1 signing secret. Default remains OFF.
+  // Nothing in server.js currently enables this; legacy QA tests retain their path.
+  if(originSealConfig!==null){
+    if(!plain(originSealConfig)||!exact(originSealConfig,['keyId','key']))
+      throw new TypeError('C7-C1 originSealConfig must contain only keyId and key');
+    validateKeyId(originSealConfig.keyId);validateSealKey(originSealConfig.key);
+  }
   const allowlist=new Set(allowedUids||[]);
   if(!allowlist.size||[...allowlist].some(uid=>typeof uid!=='string'||!uid
     ||uid.length>128||/[\x00-\x1f\x7f/]/.test(uid)))
@@ -113,6 +121,7 @@ async function createQaBattleAdmissionC7A({db,allowedUids,now=Date.now,
   const jobRef=uid=>db.collection('accountDeletionJobs').doc(uid);
   const receiptRef=(uid,battleId)=>userRef(uid).collection('qaBattleReceipts').doc(battleId);
   const genesisRef=(uid,battleId)=>userRef(uid).collection('qaBattleGenesis').doc(battleId);
+  const originSealRef=(uid,battleId)=>userRef(uid).collection('qaBattleOriginSeals').doc(battleId);
   const auditRef=(uid,battleId)=>userRef(uid).collection('qaBattleAuditProofs').doc(battleId);
   const traceCollection=(uid,battleId)=>userRef(uid).collection('qaBattleTrace')
     .doc(battleId).collection('chunks');
@@ -160,9 +169,15 @@ async function createQaBattleAdmissionC7A({db,allowedUids,now=Date.now,
           chunkCount:0,run,updatedAtMs:issuedAtMs});
         // C7-B2: a separate create-only, server-issued replay origin.
         // Old tickets have no genesis and cannot obtain an audit proof.
-        t.create(genesisRef(uid,battleId),safeDoc(createQaGenesis({uid,sessionId:sid,
+        const genesis=safeDoc(createQaGenesis({uid,sessionId:sid,
           battleId,issuedAtMs,expiresAtMs:issuedAtMs+QA_TTL_MS,
-          snapshot,policy:POLICY,encounter,journal})));
+          snapshot,policy:POLICY,encounter,journal}));
+        t.create(genesisRef(uid,battleId),genesis);
+        // Opt-in only: emit the seal in the SAME Firestore transaction as
+        // the server-originated genesis. Never retroactively seal old tickets.
+        if(originSealConfig!==null)
+          t.create(originSealRef(uid,battleId),safeDoc(issueQaOriginSealC7C1({
+            genesis,keyId:originSealConfig.keyId,key:originSealConfig.key})));
         t.set(activeRef(uid),doc);
         return response(doc);
       });
@@ -364,4 +379,4 @@ async function createQaBattleAdmissionC7A({db,allowedUids,now=Date.now,
   return Object.freeze({open,ingest,status,finalize,audit});
 }
 module.exports=Object.freeze({QA_VERSION,QA_RECEIPT_VERSION,QA_TTL_MS,QA_MAX_CHUNKS,
-  createQaBattleAdmissionC7A});
+  QA_POLICY:POLICY,createQaBattleAdmissionC7A});
