@@ -322,7 +322,7 @@ test('C7-A: expired retry never resurrects stale ticket',async()=>{
   const f=fixture(),svc=await f.create();await svc.open(UID,SID,openBody());
   f.clock(T0+QA_TTL_MS);
   await assert.rejects(svc.open(UID,SID,openBody()),isCode('QA_BATTLE_EXPIRED'));
-  assert.equal(f.db.operations.length,1);
+  assert.equal(f.db.operations.length,2); // ticket + immutable C7-B2 server genesis
 });
 test('C7-A: tampered persisted QA checkpoint fails before new trace/write',async()=>{
   const f=fixture(),svc=await f.create();await svc.open(UID,SID,openBody());

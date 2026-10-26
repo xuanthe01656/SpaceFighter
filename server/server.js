@@ -69,6 +69,9 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
   // C7-B1: server-authored, immutable QA-only terminal receipt. No economy writes.
   app.post('/api/v1/qa/battle/receipt',withQa((req,user)=>options.qaBattleService.finalize(
     user.uid,req.get('x-game-session'),req.body)));
+  // C7-B2: full genesis-to-terminal QA audit; NEVER a settlement endpoint.
+  app.post('/api/v1/qa/battle/audit',withQa((req,user)=>options.qaBattleService.audit(
+    user.uid,req.get('x-game-session'),req.body)));
   app.post('/api/v1/profile/name',withAuth((req,user)=>options.service.changeName(user.uid,req.get('x-game-session'),req.body?.name)));
   // Never run destructive deletion inline with an HTTP request. This remains
   // disabled until a retryable worker has been provisioned and verified.

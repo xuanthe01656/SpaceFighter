@@ -16,6 +16,7 @@ const {createServerBattleSnapshot}=require('./battleSnapshotV8.cjs');
 const {openInputJournal,validateChunk}=require('./combatInputJournalV8.cjs');
 const {ENCOUNTER_C6E_VERSION,ALPHA_POLICY_C6E_VERSION}=require('./combatCampaignAlphaC6CV8.cjs');
 const {openCombatVerticalSlice,replayCombatSliceChunk}=require('./combatVerticalSliceV8.cjs');
+const {createQaGenesis,verifyQaFullReplay,createAuditProof,checkStoredProof}=require('./qaBattleAuditC7B2V8.cjs');
 const {resolveCampaignAlphaStage1C6E,LOCATION_ID,RULES_VERSION,CATALOG_VERSION,
   ARENA_HALF_WIDTH_UNITS,ARENA_HALF_HEIGHT_UNITS}=require('./combatCampaignAlphaC6CV8.cjs');
 
@@ -111,8 +112,12 @@ async function createQaBattleAdmissionC7A({db,allowedUids,now=Date.now,
   const activeRef=uid=>userRef(uid).collection('qaBattleSessions').doc('current');
   const jobRef=uid=>db.collection('accountDeletionJobs').doc(uid);
   const receiptRef=(uid,battleId)=>userRef(uid).collection('qaBattleReceipts').doc(battleId);
-  const inputRef=(uid,battleId,startTick)=>userRef(uid).collection('qaBattleTrace')
-    .doc(battleId).collection('chunks').doc(String(startTick).padStart(6,'0'));
+  const genesisRef=(uid,battleId)=>userRef(uid).collection('qaBattleGenesis').doc(battleId);
+  const auditRef=(uid,battleId)=>userRef(uid).collection('qaBattleAuditProofs').doc(battleId);
+  const traceCollection=(uid,battleId)=>userRef(uid).collection('qaBattleTrace')
+    .doc(battleId).collection('chunks');
+  const inputRef=(uid,battleId,startTick)=>traceCollection(uid,battleId)
+    .doc(String(startTick).padStart(6,'0'));
 
   async function open(uid,sid,body){
     requireActor(uid,sid,allowlist);
@@ -153,6 +158,11 @@ async function createQaBattleAdmissionC7A({db,allowedUids,now=Date.now,
         const doc=safeDoc({version:QA_VERSION,uid,sessionId:sid,battleId,
           issuedAtMs,expiresAtMs:issuedAtMs+QA_TTL_MS,openRequestId:body.requestId,
           chunkCount:0,run,updatedAtMs:issuedAtMs});
+        // C7-B2: a separate create-only, server-issued replay origin.
+        // Old tickets have no genesis and cannot obtain an audit proof.
+        t.create(genesisRef(uid,battleId),safeDoc(createQaGenesis({uid,sessionId:sid,
+          battleId,issuedAtMs,expiresAtMs:issuedAtMs+QA_TTL_MS,
+          snapshot,policy:POLICY,encounter,journal})));
         t.set(activeRef(uid),doc);
         return response(doc);
       });
@@ -285,6 +295,61 @@ async function createQaBattleAdmissionC7A({db,allowedUids,now=Date.now,
     }catch(err){return wrapQaError(err);}
   }
 
+  /** C7-B2: full QA replay audit, with NO wallet or progression writes.
+   * The receipt and server-pinned genesis must already exist. The complete
+   * trace is re-simulated in a bounded Firestore transaction.
+   */
+  async function audit(uid,sid,body){
+    requireActor(uid,sid,allowlist);
+    if(!exact(body,['battleId'])||typeof body.battleId!=='string'
+      ||!UUID_RE.test(body.battleId))
+      deny('QA_AUDIT_INPUT_INVALID','Provide only the QA battle ID');
+    const at=safeClock(now),battleId=body.battleId;
+    try{
+      return await db.runTransaction(async t=>{
+        const [userSnap,jobSnap,activeSnap,receiptSnap,genesisSnap,proofSnap]=await Promise.all([
+          t.get(userRef(uid)),t.get(jobRef(uid)),t.get(activeRef(uid)),
+          t.get(receiptRef(uid,battleId)),t.get(genesisRef(uid,battleId)),
+          t.get(auditRef(uid,battleId))]);
+        requireProfile(userSnap,jobSnap,sid);
+        const active=checkCurrent(activeSnap,uid,sid,battleId,at);
+        if(!receiptSnap.exists)
+          deny('QA_AUDIT_RECEIPT_MISSING','Finalize the non-economic QA receipt first',409);
+        const receipt=receiptSnap.data();
+        if(!genesisSnap.exists)
+          deny('QA_AUDIT_GENESIS_MISSING','Only tickets opened with server genesis can be audited',409);
+        if(proofSnap.exists){
+          const old=proofSnap.data();
+          checkStoredProof(old,uid,sid,battleId,receipt,genesisSnap.data(),active,
+            POLICY,QA_VERSION,QA_RECEIPT_VERSION);
+          return Object.freeze({...old,duplicate:true});
+        }
+        // One bounded ordered Firestore query, rather than 76+ sequential
+        // network roundtrips on a typical full Alpha replay. A +1 sentinel
+        // detects extra/stray trace docs. Still fully inside one transaction.
+        if(!Number.isSafeInteger(active.chunkCount)||active.chunkCount<1
+          ||active.chunkCount>128)
+          deny('QA_AUDIT_BUDGET','QA replay exceeds its bounded chunk budget',409);
+        const traceSnap=await t.get(traceCollection(uid,battleId)
+          .orderBy('startTick').limit(129));
+        if(!Array.isArray(traceSnap?.docs)
+          ||traceSnap.docs.length!==active.chunkCount)
+          deny('QA_AUDIT_TRACE_COUNT_INVALID','Persisted trace count differs from accepted QA journal',409);
+        const traceDocs=new Map(traceSnap.docs.map(s=>[s.id,s.data()]));
+        if(traceDocs.size!==active.chunkCount)
+          deny('QA_AUDIT_TRACE_COUNT_INVALID','Duplicate/invalid trace IDs',409);
+        const origin=await verifyQaFullReplay({genesis:genesisSnap.data(),
+          active,receipt,uid,sid,battleId,expectedPolicy:POLICY,
+          sourceVersion:QA_VERSION,receiptVersion:QA_RECEIPT_VERSION,
+          readTrace:async startTick=>traceDocs.get(String(startTick).padStart(6,'0'))||null});
+        const proof=safeDoc(createAuditProof({uid,sid,battleId,origin},at));
+        // QA-only namespace, no profile/operations/economy updates.
+        t.create(auditRef(uid,battleId),proof);
+        return Object.freeze({...proof,duplicate:false});
+      });
+    }catch(err){return wrapQaError(err);}
+  }
+
   async function status(uid,sid){
     requireActor(uid,sid,allowlist);
     const at=safeClock(now);
@@ -296,7 +361,7 @@ async function createQaBattleAdmissionC7A({db,allowedUids,now=Date.now,
       return response(checkCurrent(activeSnap,uid,sid,activeSnap.data().battleId,at));
     });
   }
-  return Object.freeze({open,ingest,status,finalize});
+  return Object.freeze({open,ingest,status,finalize,audit});
 }
 module.exports=Object.freeze({QA_VERSION,QA_RECEIPT_VERSION,QA_TTL_MS,QA_MAX_CHUNKS,
   createQaBattleAdmissionC7A});
