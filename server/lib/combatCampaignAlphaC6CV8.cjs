@@ -16,6 +16,10 @@ const ENCOUNTER_C6C_VERSION='pve-server-encounter-qa-v6';
 // C6-D uses the SAME Campaign Alpha resolver and same combat engine. Opt-in
 // QA-v7 only: distinguish shooter patrol from melee chase and pin sine/drift.
 const ENCOUNTER_C6D_VERSION='pve-server-encounter-qa-v7';
+// C6-E opt-in QA-v8: client-matched resolution on zero active enemies,
+// with separate kill/contact/offscreen-cull ledgers. Still no Cloud receipt.
+const ENCOUNTER_C6E_VERSION='pve-server-encounter-qa-v8';
+const ALPHA_POLICY_C6E_VERSION='v8c6e-alpha-stage1-lifecycle30hz-qa-v1';
 const ALPHA_POLICY_C6D_VERSION='v8c6d-alpha-stage1-ai30hz-qa-v1';
 const ALPHA_POLICY_VERSION='v8c6c-alpha-stage1-pinned-qa-v1';
 const LOCATION_ID='alpha_stage_1';
@@ -155,8 +159,23 @@ function resolveCampaignAlphaStage1C6D(args){
   return deepFreeze({...base,version:ENCOUNTER_C6D_VERSION,
     campaignPolicyVersion:ALPHA_POLICY_C6D_VERSION,waves});
 }
+/** CampaignScene culls only when z > ZOOM+5, before player contact. */
+function shouldCullCampaignEnemy(zUnits, halfHeightUnits){
+  if(!Number.isSafeInteger(zUnits)||!Number.isSafeInteger(halfHeightUnits)
+    ||halfHeightUnits<2000||halfHeightUnits>50000)
+    deny('ALPHA_C6E_CULL_INPUT','Invalid fixed-unit Campaign culling input');
+  return zUnits>halfHeightUnits+5000;
+}
+/** Pin identical seeded AI and waves to v7, change ONLY lifecycle semantics. */
+function resolveCampaignAlphaStage1C6E(args){
+  const stage7=resolveCampaignAlphaStage1C6D(args);
+  return deepFreeze({...stage7,version:ENCOUNTER_C6E_VERSION,
+    campaignPolicyVersion:ALPHA_POLICY_C6E_VERSION});
+}
 module.exports=Object.freeze({
-  ENCOUNTER_C6C_VERSION,ENCOUNTER_C6D_VERSION,ALPHA_POLICY_C6D_VERSION,
+  ENCOUNTER_C6C_VERSION,ENCOUNTER_C6D_VERSION,ENCOUNTER_C6E_VERSION,
+  ALPHA_POLICY_C6D_VERSION,ALPHA_POLICY_C6E_VERSION,
+  shouldCullCampaignEnemy,resolveCampaignAlphaStage1C6E,
   resolveCampaignAlphaStage1C6D,ALPHA_POLICY_VERSION,LOCATION_ID,RULES_VERSION,CATALOG_VERSION,
   WAVE_COUNT,BASE_ENEMIES,TIME_LIMIT_SECONDS,FIRST_WAVE_AT_TICK,INTER_WAVE_DELAY_TICKS,
   ARENA_HALF_WIDTH_UNITS,ARENA_HALF_HEIGHT_UNITS,CampaignAlphaC6CError,

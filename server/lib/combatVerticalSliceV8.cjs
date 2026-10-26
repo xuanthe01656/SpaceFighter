@@ -14,7 +14,9 @@ const {MAX_BATTLE_TICKS, validateChunk} = require('./combatInputJournalV8.cjs');
 const {advancePreviewMovement,FOUNDATION_VERSION} = require('./combatMovementWeaponV8.cjs');
 const {openFoundationPreview, replayFoundationChunk} = require('./combatPreviewReplayV8.cjs');
 const {ENCOUNTER_C6C_VERSION,ALPHA_POLICY_VERSION,resolveCampaignAlphaStage1C6C,
-  ENCOUNTER_C6D_VERSION,ALPHA_POLICY_C6D_VERSION,resolveCampaignAlphaStage1C6D} = require('./combatCampaignAlphaC6CV8.cjs');
+  ENCOUNTER_C6D_VERSION,ALPHA_POLICY_C6D_VERSION,resolveCampaignAlphaStage1C6D,
+  ENCOUNTER_C6E_VERSION,ALPHA_POLICY_C6E_VERSION,resolveCampaignAlphaStage1C6E,
+  shouldCullCampaignEnemy} = require('./combatCampaignAlphaC6CV8.cjs');
 
 const SLICE_VERSION = 'pve-lab-vertical-slice-v1';
 const ENCOUNTER_VERSION = 'pve-server-encounter-qa-v1';
@@ -42,6 +44,8 @@ const SLICE_V6_VERSION = 'pve-lab-vertical-slice-v6';
 // C6-D opt-in QA-v7 AI: shooter patrol/sine, melee chase and first-shot timing.
 // No changes to C3-C6-C encounter/checkpoint contracts or Cloud API.
 const SLICE_V7_VERSION = 'pve-lab-vertical-slice-v7';
+// C6-E is QA-only; v1-v7 state formats, hashes and spawn/AI stay unchanged.
+const SLICE_V8_VERSION = 'pve-lab-vertical-slice-v8';
 const MAX_PENDING_BURSTS = 64;
 const BURST_DELAY_MS = Object.freeze([90,180]);
 const HP_MICRO = 1000000;
@@ -73,6 +77,7 @@ const STATE_V3_KEYS = [...STATE_V2_KEYS,'regenPerTickMicro','regenRemainderMicro
 const STATE_V4_KEYS = [...STATE_V3_KEYS];
 const STATE_V5_KEYS = [...STATE_V4_KEYS,'pendingBursts'];
 const STATE_V6_KEYS = [...STATE_V5_KEYS,'spawnedInWave','waveStartedTick','nextSpawnTick','nextWaveTick'];
+const STATE_V8_KEYS = [...STATE_V6_KEYS,'escaped'];
 const ENEMY_PROJECTILE_KEYS = ['id','xUnits','zUnits','vxUnits','vzUnits','damage','sourceId'];
 const PROJECTILE_KEYS = ['id','xUnits','zUnits','velocityZUnitsPerTick','atk'];
 const PROJECTILE_V4_KEYS = ['id','xUnits','zUnits','velocityXUnitsPerTick','velocityZUnitsPerTick','damageMilli'];
@@ -174,10 +179,10 @@ function seal(s) {
   return freeze({...rest, stateDigest:digest(['sf-v8b-slice-state',rest])});
 }
 function validateEncounter(snapshot, encounter) {
-  const stage7=record(encounter) && encounter.version===ENCOUNTER_C6D_VERSION;
-  const stage6=record(encounter) && [ENCOUNTER_C6C_VERSION,ENCOUNTER_C6D_VERSION].includes(encounter.version);
+  const stage7=record(encounter) && [ENCOUNTER_C6D_VERSION,ENCOUNTER_C6E_VERSION].includes(encounter.version);
+  const stage6=record(encounter) && [ENCOUNTER_C6C_VERSION,ENCOUNTER_C6D_VERSION,ENCOUNTER_C6E_VERSION].includes(encounter.version);
   const advanced=record(encounter) && [ENCOUNTER_V2_VERSION,ENCOUNTER_V3_VERSION,ENCOUNTER_V4_VERSION,ENCOUNTER_V5_VERSION,
-    ENCOUNTER_C6C_VERSION,ENCOUNTER_C6D_VERSION].includes(encounter.version);
+    ENCOUNTER_C6C_VERSION,ENCOUNTER_C6D_VERSION,ENCOUNTER_C6E_VERSION].includes(encounter.version);
   if (!(stage6 ? exact(encounter,ENCOUNTER_V6_KEYS) : advanced ? exact(encounter,ENCOUNTER_V2_KEYS) : exact(encounter,ENCOUNTER_KEYS))
     || (!advanced && encounter.version !== ENCOUNTER_VERSION) || encounter.qaOnly !== true
     || (advanced && (!int(encounter.damageCooldownTicks,1,120)
@@ -191,9 +196,12 @@ function validateEncounter(snapshot, encounter) {
   // every enemy, timing, seed roll and wave from the pinned resolver.
   if(stage6){
     let authoritative;
-    try{authoritative=stage7?resolveCampaignAlphaStage1C6D({snapshot}):resolveCampaignAlphaStage1C6C({snapshot});}
+    try{authoritative=encounter.version===ENCOUNTER_C6E_VERSION
+      ?resolveCampaignAlphaStage1C6E({snapshot})
+      :stage7?resolveCampaignAlphaStage1C6D({snapshot}):resolveCampaignAlphaStage1C6C({snapshot});}
     catch(_){deny('SLICE_STAGE_UNSUPPORTED','Pinned stage policy is unavailable for this snapshot');}
-    if(encounter.campaignPolicyVersion!==(stage7?ALPHA_POLICY_C6D_VERSION:ALPHA_POLICY_VERSION)
+    if(encounter.campaignPolicyVersion!==(encounter.version===ENCOUNTER_C6E_VERSION
+      ?ALPHA_POLICY_C6E_VERSION:stage7?ALPHA_POLICY_C6D_VERSION:ALPHA_POLICY_VERSION)
       || encounter.stageId!==1 || encounter.interWaveDelayTicks!==60
       || digest(encounter)!==digest(authoritative))
       deny('SLICE_STAGE_FORGED','QA stage manifest differs from pinned server policy');
@@ -285,7 +293,8 @@ function openCombatVerticalSlice(args) {
   if (!exact(args,OPEN_KEYS)) deny('SLICE_OPEN_INVALID','Unexpected slice open arguments');
   const foundation=openFoundationPreview({snapshot:args.snapshot, policy:args.policy,journal:args.journal});
   const encounter=validateEncounter(args.snapshot,args.encounter);
-  const v7=encounter.version===ENCOUNTER_C6D_VERSION;
+  const v8=encounter.version===ENCOUNTER_C6E_VERSION;
+  const v7=v8||encounter.version===ENCOUNTER_C6D_VERSION;
   const v6=v7||encounter.version===ENCOUNTER_C6C_VERSION;
   const v5=v6||encounter.version===ENCOUNTER_V5_VERSION;
   const v4=encounter.version===ENCOUNTER_V4_VERSION;
@@ -302,18 +311,19 @@ function openCombatVerticalSlice(args) {
   const damageReductionBps=defensive && pilot.passive==='damage_reduction'
     ? Math.round(pilot.value*10000) : 0;
   const encounterDigest=digest(['sf-v8b-qa-encounter',encounter]);
-  const state=seal({version:v7?SLICE_V7_VERSION:v6 ? SLICE_V6_VERSION : v5 ? SLICE_V5_VERSION : v4 ? SLICE_V4_VERSION : v3 ? SLICE_V3_VERSION
+  const state=seal({version:v8?SLICE_V8_VERSION:v7?SLICE_V7_VERSION:v6 ? SLICE_V6_VERSION : v5 ? SLICE_V5_VERSION : v4 ? SLICE_V4_VERSION : v3 ? SLICE_V3_VERSION
       : encounter.version===ENCOUNTER_V2_VERSION ? SLICE_V2_VERSION : SLICE_VERSION,
     qaOnly:true,safeForCloudBattle:false,
     battleId:foundation.journal.battleId,tick:0,phase:'active',hp,maxHp:hp,
     spawnedWaves:0,kills:0,contacts:0,nextProjectileId:0,enemies:[],projectiles:[],
     traceDigest:digest(['sf-v8b-slice-trace',args.snapshot.snapshotHash,encounterDigest]),
-    ...([ENCOUNTER_V2_VERSION,ENCOUNTER_V3_VERSION,ENCOUNTER_V4_VERSION,ENCOUNTER_V5_VERSION,ENCOUNTER_C6C_VERSION,ENCOUNTER_C6D_VERSION].includes(encounter.version)
+    ...([ENCOUNTER_V2_VERSION,ENCOUNTER_V3_VERSION,ENCOUNTER_V4_VERSION,ENCOUNTER_V5_VERSION,ENCOUNTER_C6C_VERSION,ENCOUNTER_C6D_VERSION,ENCOUNTER_C6E_VERSION].includes(encounter.version)
       ? {nextEnemyProjectileId:0,enemyProjectileHits:0,bossKills:0,invulnerableUntilTick:0,enemyProjectiles:[]} : {}),
     ...(defensive ? {regenPerTickMicro,regenRemainderMicro:0,damageReductionBps}:{}),
     ...(v5 ? {pendingBursts:[]} : {}),
     ...(v6 ? {spawnedInWave:0,waveStartedTick:0,nextSpawnTick:0,
       nextWaveTick:encounter.waves[0].atTick} : {}),
+    ...(v8 ? {escaped:0}:{}),
   });
   return freeze({foundation,encounter,encounterDigest,state});
 }
@@ -323,7 +333,8 @@ function validateRun(run) {
     || !record(run.encounter) || !Object.isFrozen(run.encounter)
     || !HEX64.test(run.encounterDigest||'')
     || digest(['sf-v8b-qa-encounter',run.encounter]) !== run.encounterDigest
-    || !([ENCOUNTER_C6C_VERSION,ENCOUNTER_C6D_VERSION].includes(run.encounter.version) ? exact(run.state,STATE_V6_KEYS)
+    || !(run.encounter.version===ENCOUNTER_C6E_VERSION ? exact(run.state,STATE_V8_KEYS)
+      : [ENCOUNTER_C6C_VERSION,ENCOUNTER_C6D_VERSION].includes(run.encounter.version) ? exact(run.state,STATE_V6_KEYS)
       : run.encounter.version===ENCOUNTER_V5_VERSION ? exact(run.state,STATE_V5_KEYS)
       : run.encounter.version===ENCOUNTER_V4_VERSION ? exact(run.state,STATE_V4_KEYS)
       : run.encounter.version===ENCOUNTER_V3_VERSION ? exact(run.state,STATE_V3_KEYS)
@@ -334,7 +345,8 @@ function validateRun(run) {
   }
   const s=run.state;
   const {stateDigest,...rest}=s;
-  const v7=run.encounter.version===ENCOUNTER_C6D_VERSION;
+  const v8=run.encounter.version===ENCOUNTER_C6E_VERSION;
+  const v7=v8||run.encounter.version===ENCOUNTER_C6D_VERSION;
   const v6=v7||run.encounter.version===ENCOUNTER_C6C_VERSION;
   const v5=v6||run.encounter.version===ENCOUNTER_V5_VERSION;
   const v4=run.encounter.version===ENCOUNTER_V4_VERSION;
@@ -342,7 +354,7 @@ function validateRun(run) {
   const v3=run.encounter.version===ENCOUNTER_V3_VERSION;
   const defensive=v3||ballistic;
   const advanced=defensive || run.encounter.version===ENCOUNTER_V2_VERSION;
-  if (s.version!==(v7?SLICE_V7_VERSION:v6?SLICE_V6_VERSION:v5?SLICE_V5_VERSION:v4?SLICE_V4_VERSION:v3?SLICE_V3_VERSION:advanced?SLICE_V2_VERSION:SLICE_VERSION)
+  if (s.version!==(v8?SLICE_V8_VERSION:v7?SLICE_V7_VERSION:v6?SLICE_V6_VERSION:v5?SLICE_V5_VERSION:v4?SLICE_V4_VERSION:v3?SLICE_V3_VERSION:advanced?SLICE_V2_VERSION:SLICE_VERSION)
     || s.qaOnly!==true || s.safeForCloudBattle!==false
     || !HEX64.test(s.traceDigest||'') || !HEX64.test(stateDigest||'')
     || digest(['sf-v8b-slice-state',rest])!==stateDigest
@@ -395,6 +407,17 @@ function validateRun(run) {
     || (s.nextSpawnTick!==0 && s.nextWaveTick!==0))) {
     deny('SLICE_STAGE_STATE_INVALID','Invalid C6-C wave progression state');
   }
+  if(v8){
+    const spawned=run.encounter.waves.slice(0,Math.max(0,s.spawnedWaves-1))
+      .reduce((n,w)=>n+w.enemies.length,0)+(s.spawnedWaves>0?s.spawnedInWave:0);
+    const total=run.encounter.waves.reduce((n,w)=>n+w.enemies.length,0);
+    if(!int(s.escaped,0,total)
+      || s.kills+s.contacts+s.escaped+s.enemies.length!==spawned
+      || (s.phase==='lab-clear' && (spawned!==total || s.enemies.length!==0
+        || s.nextSpawnTick!==0 || s.nextWaveTick!==0))){
+      deny('SLICE_LIFECYCLE_STATE_INVALID','Pinned spawn/kill/contact/escape ledger diverged');
+    }
+  }
   if (v5 && (!Array.isArray(s.pendingBursts) || s.pendingBursts.length>MAX_PENDING_BURSTS
     || (run.foundation.preview.mainGun.pattern==='pierce' && s.pendingBursts.length!==0)
     || s.pendingBursts.some(q=>!exact(q,PENDING_BURST_KEYS)
@@ -435,7 +458,8 @@ function replayCombatSliceChunk(args) {
   if (simulated.duplicate) return Object.freeze({run,duplicate:true,events:Object.freeze([])});
   if (run.state.phase!=='active') deny('SLICE_TERMINAL','Closed QA simulation cannot accept further inputs');
   const validated=validateChunk(chunk), p=run.foundation.preview, arena=p.arena;
-  const s=run.state, v7=run.encounter.version===ENCOUNTER_C6D_VERSION;
+  const s=run.state, v8=run.encounter.version===ENCOUNTER_C6E_VERSION;
+  const v7=v8||run.encounter.version===ENCOUNTER_C6D_VERSION;
   const v6=v7||run.encounter.version===ENCOUNTER_C6C_VERSION;
   const v5=v6||run.encounter.version===ENCOUNTER_V5_VERSION;
   const v4=run.encounter.version===ENCOUNTER_V4_VERSION, ballistic=v4||v5;
@@ -454,6 +478,7 @@ function replayCombatSliceChunk(args) {
   let invulnerableUntilTick=advanced?s.invulnerableUntilTick:0;
   let nextProjectileId=s.nextProjectileId, position=run.foundation.checkpoint.position;
   let spawnedInWave=v6?s.spawnedInWave:0,waveStartedTick=v6?s.waveStartedTick:0;
+  let escaped=v8?s.escaped:0;
   let nextSpawnTick=v6?s.nextSpawnTick:0,nextWaveTick=v6?s.nextWaveTick:0;
   let phase='active', traceDigest=s.traceDigest, emittedCursor=0;
   const events=[];
@@ -547,6 +572,13 @@ function replayCombatSliceChunk(args) {
             e.xUnits=clamp(e.xUnits+Math.round(dx/d*chaseSpeed),-arena.halfWidthUnits,arena.halfWidthUnits);
             e.zUnits=clamp(e.zUnits+Math.round(dz/d*chaseSpeed),-arena.halfHeightUnits,arena.halfHeightUnits);
           }
+        }
+        // C6-E: CampaignScene removes out-of-screen enemies before contact
+        // and bullet checks. This is not a kill and cannot award anything.
+        if(v8 && shouldCullCampaignEnemy(e.zUnits,arena.halfHeightUnits)){
+          enemies.splice(j,1);escaped++;
+          events.push(freeze({type:'escape',tick,id:e.id}));
+          continue;
         }
         const reach=e.hitRadiusUnits+p.pilotHitRadiusUnits;
         const oldEnemy=defensive?enemyPrior.get(e.id):null;
@@ -747,7 +779,10 @@ function replayCombatSliceChunk(args) {
           && nextSpawnTick===0 && nextWaveTick===0){
           if(waves===run.encounter.waves.length){
             // Never count contact/cull as a kill. QA-only clear, not receipt.
-            if(kills===total)phase='lab-clear';
+            if(v8 ? kills+contacts+escaped===total : kills===total){
+              phase='lab-clear';
+              if(v8) events.push(freeze({type:'lab-stage-cleared',tick,kills,contacts,escaped}));
+            }
           }else{
             nextWaveTick=tick+run.encounter.interWaveDelayTicks;
             events.push(freeze({type:'wave-cleared',tick,wave:waves}));
@@ -756,19 +791,25 @@ function replayCombatSliceChunk(args) {
       }else if(waves===run.encounter.waves.length && enemies.length===0
         && kills===run.encounter.waves.reduce((sum,w)=>sum+w.enemies.length,0)) phase='lab-clear';
     }
+    // QA-v8 is atomic: a client cannot hide extra movement frames after
+    // the server-simulated terminal tick inside one accepted journal chunk.
+    if(v8 && phase!=='active' && i<validated.frames.length-1){
+      deny('SLICE_TERMINAL_FRAME_TAIL','Inputs continue after the QA battle ended');
+    }
     traceDigest=advanced
       ? digest([traceDigest,tick,position,hp,waves,kills,contacts,enemies,bullets,
         hostiles,enemyProjectileHits,bossKills,invulnerableUntilTick,
         ...(defensive?[regenRemainderMicro,s.regenPerTickMicro,s.damageReductionBps]:[]),
         ...(v5?[pendingBursts]:[]),
-        ...(v6?[spawnedInWave,waveStartedTick,nextSpawnTick,nextWaveTick]:[]),phase])
+        ...(v6?[spawnedInWave,waveStartedTick,nextSpawnTick,nextWaveTick]:[]),
+        ...(v8?[escaped]:[]),phase])
       : digest([traceDigest,tick,position,hp,waves,kills,contacts,enemies,bullets,phase]);
   }
   if (position.xUnits!==simulated.run.checkpoint.position.xUnits
     || position.zUnits!==simulated.run.checkpoint.position.zUnits) {
     deny('SLICE_MOVEMENT_DRIFT','C2B movement parity diverged');
   }
-  const state=seal({version:v7?SLICE_V7_VERSION:v6?SLICE_V6_VERSION:v5?SLICE_V5_VERSION:v4?SLICE_V4_VERSION:v3?SLICE_V3_VERSION:advanced?SLICE_V2_VERSION:SLICE_VERSION,
+  const state=seal({version:v8?SLICE_V8_VERSION:v7?SLICE_V7_VERSION:v6?SLICE_V6_VERSION:v5?SLICE_V5_VERSION:v4?SLICE_V4_VERSION:v3?SLICE_V3_VERSION:advanced?SLICE_V2_VERSION:SLICE_VERSION,
     qaOnly:true,safeForCloudBattle:false,
     battleId:s.battleId,tick:validated.endTick,phase,hp,maxHp:s.maxHp,
     spawnedWaves:waves,kills,contacts,nextProjectileId,enemies,projectiles:bullets,traceDigest,
@@ -778,6 +819,7 @@ function replayCombatSliceChunk(args) {
       damageReductionBps:s.damageReductionBps}:{}),
     ...(v5?{pendingBursts}:{}),
     ...(v6?{spawnedInWave,waveStartedTick,nextSpawnTick,nextWaveTick}:{}),
+    ...(v8?{escaped}:{}),
   });
   const next=freeze({foundation:simulated.run,encounter:run.encounter,encounterDigest:run.encounterDigest,state});
   return Object.freeze({run:next,duplicate:false,events:freeze(events)});
