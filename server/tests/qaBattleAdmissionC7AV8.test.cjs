@@ -226,11 +226,14 @@ test('C7-A: local legacy battle.start/forged victory P0 remains locked',async()=
   await assert.rejects(game.apply(UID,SID,{command:'battle.finish',payload:{victory:true,stars:3},
     requestId:'c7a_p0_req_002'}),isCode('BATTLE_VERIFICATION_UNAVAILABLE'));
 });
-test('C7-A: HTTP registration exists but QA routes default disabled and do not modify P0',()=>{
+test('C7-A/C7-C2A: QA routes default disabled, sealed UID gate and P0 preserved',()=>{
   const http=fs.readFileSync(path.resolve(__dirname,'../server.js'),'utf8');
   const game=fs.readFileSync(path.resolve(__dirname,'../lib/gameService.cjs'),'utf8');
+  const gate=fs.readFileSync(path.resolve(__dirname,'../lib/qaSealedRuntimeC7C2V8.cjs'),'utf8');
   assert.match(http,/GAME_BATTLE_QA_ENABLED==='true'/);
-  assert.match(http,/GAME_BATTLE_QA_ALLOW_UIDS/);
+  assert.match(http,/createSealedQaRuntimeC7C2/);
+  assert.match(gate,/GAME_BATTLE_QA_ALLOW_UIDS/);
+  assert.match(gate,/GAME_BATTLE_QA_ORIGIN_KEY_B64/);
   assert.match(http,/qaBattleEnabled===true/);
   assert.match(http,/withAuth\(fn\)/);
   assert.match(http,/app\.post\('\/api\/v1\/qa\/battle\/open'/);

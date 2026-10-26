@@ -72,6 +72,15 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
   // C7-B2: full genesis-to-terminal QA audit; NEVER a settlement endpoint.
   app.post('/api/v1/qa/battle/audit',withQa((req,user)=>options.qaBattleService.audit(
     user.uid,req.get('x-game-session'),req.body)));
+  // C7-C2A: separate, default-OFF READ-ONLY verifier for sealed QA tickets.
+  // It never returns a production outcome or invokes economy/settlement.
+  const qaVerifierReady=qaReady && options.qaVerifierEnabled===true
+    && typeof options.qaVerifierService?.inspect==='function';
+  app.post('/api/v1/qa/battle/verify',(req,res,next)=>{
+    if(!qaVerifierReady)return res.status(503).json({ok:false,code:'QA_VERIFIER_DISABLED'});
+    return withAuth((r,user)=>options.qaVerifierService.inspect(
+      user.uid,r.get('x-game-session'),r.body))(req,res,next);
+  });
   app.post('/api/v1/profile/name',withAuth((req,user)=>options.service.changeName(user.uid,req.get('x-game-session'),req.body?.name)));
   // Never run destructive deletion inline with an HTTP request. This remains
   // disabled until a retryable worker has been provisioned and verified.
@@ -105,7 +114,7 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
 async function start() {
   const port=Number(process.env.PORT||3000);
   if(!Number.isInteger(port)||port<1||port>65535) throw new Error('Invalid PORT');
-  let service=null,auth=null,admin=null,accountDeletionService=null,qaBattleService=null;
+  let service=null,auth=null,admin=null,accountDeletionService=null,qaBattleService=null,qaVerifierService=null;
   if(process.env.GAME_API_ENABLED==='true') {
     admin=require('firebase-admin');
     if(!admin.apps.length) {
@@ -119,14 +128,19 @@ async function start() {
     }
     auth=admin.auth();
     service=await createGameService({db:admin.firestore()});
-    // Explicitly OFF unless BOTH flag and nonempty UID allowlist are configured.
-    // Deploying this code must not enable QA admission automatically.
+    // C7-C2A: no unsealed QA tickets from runtime. BOTH an explicit QA flag
+    // and closed UID allowlist + server-held HMAC key are required. Malformed
+    // QA configuration only disables QA; the protected Game API stays alive.
+    // The verifier has an INDEPENDENT OFF-by-default QA flag.
     if(process.env.GAME_BATTLE_QA_ENABLED==='true'){
-      const allowedUids=(process.env.GAME_BATTLE_QA_ALLOW_UIDS||'').split(',')
-        .map(uid=>uid.trim()).filter(Boolean);
-      if(allowedUids.length){
-        const {createQaBattleAdmissionC7A}=require('./lib/qaBattleAdmissionC7AV8.cjs');
-        qaBattleService=await createQaBattleAdmissionC7A({db:admin.firestore(),allowedUids});
+      try{
+        const {createSealedQaRuntimeC7C2}=require('./lib/qaSealedRuntimeC7C2V8.cjs');
+        const qa=await createSealedQaRuntimeC7C2({db:admin.firestore(),env:process.env});
+        qaBattleService=qa.qaBattleService;
+        qaVerifierService=qa.qaVerifierService;
+      }catch(_error){
+        // Never log secret/config values, and never downgrade to unsealed QA.
+        console.error('Non-economic QA routes disabled: invalid sealed QA configuration');
       }
     }
     if (process.env.GAME_ACCOUNT_DELETION_ENABLED==='true' &&
@@ -137,6 +151,7 @@ async function start() {
   const app=createApp(undefined,{service,auth,admin,
     accountDeletionService, accountDeletionEnabled:Boolean(accountDeletionService),
     qaBattleService,qaBattleEnabled:Boolean(qaBattleService),
+    qaVerifierService,qaVerifierEnabled:Boolean(qaVerifierService),
     allowLocalOrigin:process.env.NODE_ENV!=='production'});
   app.listen(port,'0.0.0.0',()=>console.log(`Space Fighter Phase 1 listening on ${port}; API ${service?'enabled':'disabled'}`));
 }
