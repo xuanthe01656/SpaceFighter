@@ -513,6 +513,22 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     enabled: () => !gameOver && gameState !== 'CLEAR' && gameState !== 'GAMEOVER',
   });
 
+  // C7-C2BC: explicit build flag + URL flag + Guest Alpha stage 1 ONLY.
+  // Observes real phone pointer events; never replaces Guest movement,
+  // sends network requests or authorizes a Cloud battle/reward.
+  if (import.meta.env.VITE_SF_NATIVE_TOUCH_QA === '1' && !isCloud &&
+      currentPlanetId === 1 && currentStage === 1 &&
+      (globalThis.Capacitor?.isNativePlatform?.() === true ||
+       new URLSearchParams(globalThis.location?.search || '').get('touchQa') === '1')) {
+    import('../../game/combat/CloudNativeTouchQaC7C2.js').then(({attachNativeTouchQaOverlay}) => {
+      if (battleSceneDisposed) return;
+      attachNativeTouchQaOverlay({canvas:engine.getRenderingCanvas(),scene,playerRoot,
+        halfHeight:ZOOM,aspect:getAspect,speedMultiplier:speedMod});
+    }).catch(() => {
+      // Diagnostic tool is optional. A failure never affects Guest gameplay.
+    });
+  }
+
   // ══════════════════════════════════════════════════════════════════════════
   // 7. EXPLOSION FX
   // ══════════════════════════════════════════════════════════════════════════
