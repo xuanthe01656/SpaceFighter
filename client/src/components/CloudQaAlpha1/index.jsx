@@ -62,6 +62,7 @@ export default function CloudQaAlpha1({setScreen,lang='vi',candidate=false}){
   const [hud,setHud]=useState(null),[fault,setFault]=useState(''),[proof,setProof]=useState(null);
   const [nowTick,setNowTick]=useState(0);
   const [renderMode,setRenderMode]=useState('2D FALLBACK');
+  const [diagnostics,setDiagnostics]=useState(null),[exportNotice,setExportNotice]=useState('');
   const vi=lang==='vi';
   useEffect(()=>{
     mounted.current=true;
@@ -91,6 +92,7 @@ export default function CloudQaAlpha1({setScreen,lang='vi',candidate=false}){
     const update=info=>{
       if(!mounted.current||closed)return;
       latestRef.current=info;
+      if(candidate&&info.diagnostics)setDiagnostics(info.diagnostics);
       if(info.reply){
         try{sceneModel.accept(info.reply.visual);setHud(info.reply.visual);}catch(_e){
           setFault('C9_SERVER_VISUAL_INVALID');setStatus('error');
@@ -197,6 +199,35 @@ export default function CloudQaAlpha1({setScreen,lang='vi',candidate=false}){
     if(sessionRef.current)void sessionRef.current.abandon();
     setScreen('hq');
   };
+  const exportCandidateEvidence=async()=>{
+    if(!candidate||!sessionRef.current)return;
+    const report=sessionRef.current.getDiagnostics();
+    const data=JSON.stringify(report,null,2)+'\n';
+    try{
+      // User gesture only; NEVER send evidence to the server automatically.
+      if(typeof File==='function'&&navigator.share&&navigator.canShare){
+        const file=new File([data],'spacefighter-c13-movement-evidence.json',
+          {type:'application/json'});
+        if(navigator.canShare({files:[file]})){
+          await navigator.share({files:[file],title:'SpaceFighter C13 local diagnostic'});
+          setExportNotice(vi?'Đã mở chia sẻ JSON':'JSON share opened');return;
+        }
+      }
+      if(navigator.clipboard?.writeText){
+        await navigator.clipboard.writeText(data);
+        setExportNotice(vi?'Đã sao chép JSON':'JSON copied');return;
+      }
+      // Last-resort download for WebView implementations without share/clipboard.
+      const url=URL.createObjectURL(new Blob([data],{type:'application/json'}));
+      const anchor=document.createElement('a');
+      anchor.href=url;anchor.download='spacefighter-c13-movement-evidence.json';
+      document.body.appendChild(anchor);anchor.click();anchor.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),30000);
+      setExportNotice(vi?'Đã yêu cầu lưu JSON':'JSON download requested');
+    }catch(e){
+      setExportNotice(e?.name==='AbortError'?'':(vi?'Không thể xuất JSON':'Export failed'));
+    }
+  };
   const buttonStyle={background:'#142c46',border:'1px solid #65f5ef',
     color:'#a9fbef',borderRadius:8,padding:'10px 16px',fontWeight:700};
   return <div style={{position:'absolute',inset:0,zIndex:80,background:'#020c1b',color:'#e8f5ff',overflow:'hidden'}}>
@@ -229,6 +260,15 @@ export default function CloudQaAlpha1({setScreen,lang='vi',candidate=false}){
         <b>{status.toUpperCase()}</b> · {nowTick} local ticks
         {fault&&<div role="alert" style={{color:'#ff93a0',overflowWrap:'anywhere'}}>{fault}</div>}
         {proof&&<div style={{color:'#86ffc7'}}>{proof.phase} · {proof.verifiedTicks} ticks · {proof.verifiedChunks} chunks · NON-ECONOMIC</div>}
+        {candidate&&diagnostics&&<div style={{marginTop:5,color:diagnostics.mismatchedCheckpoints||diagnostics.missingPredictions?'#ffb7a0':'#a4d8ff'}}>
+          C13 input/checkpoint · ACK {diagnostics.acknowledgedTick} · drift {diagnostics.maxDistanceUnits/1000}u · RTT max {diagnostics.maxRttMs}ms
+          {diagnostics.mismatchedCheckpoints>0&&<b> · REVIEW</b>}
+        </div>}
+        {candidate&&<button type="button" onClick={exportCandidateEvidence}
+          style={{...buttonStyle,marginTop:7,padding:'6px 9px',fontSize:12}}>
+          {vi?'Xuất báo cáo C13 JSON':'Export C13 JSON'}
+        </button>}
+        {candidate&&exportNotice&&<div role="status" style={{marginTop:3}}>{exportNotice}</div>}
         <div style={{opacity:.7}}>30Hz · {candidate?'C11 candidate model (NOT production approved)':'clear-release QA'} · no wallet/mission changes</div>
       </div>
     </div>

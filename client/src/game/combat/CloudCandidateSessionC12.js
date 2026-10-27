@@ -5,6 +5,7 @@
  */
 import {openCloudInputIntent,addCloudPointerDelta,sampleCloudInputTick,
   clearCloudPointerTarget} from './CloudInputIntentV8.js';
+import {createCandidateMovementEvidenceC13} from './CandidateMovementEvidenceC13.js';
 export const C12_CLIENT_VERSION='v8-c12-mobile-candidate-non-economic-v1';
 const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const PHASES=new Set(['active','lab-clear','lab-defeat']);
@@ -40,12 +41,15 @@ export function createCloudCandidateSessionC12({api,viewport,clock,randomId,
     ||typeof onUpdate!=='function')throw new TypeError('C12 dependencies required');
   let battleId=null,sampler=null,current=null,ackTick=0,pending=[],lastMs=null;
   let busy=null,closed=false,terminal=false,fault=null,proof=null;
+  const evidence=createCandidateMovementEvidenceC13();
+  const diagnostics=()=>evidence.report({terminal,auditComplete:Boolean(proof),error:fault});
   const update=()=>onUpdate({reply:current,ackTick,queued:pending.length,
-    terminal,error:fault,proof});
+    terminal,error:fault,proof,diagnostics:diagnostics()});
   const assertLive=()=>{if(closed)error('C12_CLOSED');if(fault)throw fault;};
-  function accept(reply,tick){
+  function accept(reply,tick,rttMs=null){
     requireCandidateReplyC12(reply,{battleId,expectedTick:tick});
     if(reply.nextTick<ackTick)error('C12_TICK_REWIND');
+    evidence.acknowledge({tick:reply.nextTick,pilot:reply.visual.pilot,rttMs});
     ackTick=reply.nextTick;current=reply;terminal=reply.phase!=='active';update();
     return reply;
   }
@@ -66,6 +70,7 @@ export function createCloudCandidateSessionC12({api,viewport,clock,randomId,
     requireCandidateReplyC12(opened,{expectedTick:0});
     battleId=opened.battleId;
     sampler=openCloudInputIntent({...opened.visual.config,...viewport});
+    evidence.open({x:sampler.positionX,z:sampler.positionZ});
     return accept(opened,0);
   }
   function drag(dx,dy){assertLive();if(!sampler||terminal)return false;
@@ -81,14 +86,17 @@ export function createCloudCandidateSessionC12({api,viewport,clock,randomId,
     if(pending.length>=60){fault=new Error('C12_NETWORK_BACKPRESSURE');update();throw fault;}
     lastMs=nowMs;
     const next=sampleCloudInputTick(sampler);sampler=next.state;
+    evidence.sample({tick:sampler.tick,x:sampler.positionX,z:sampler.positionZ,
+      queued:pending.length+1});
     pending.push(next.frame);if(pending.length>=15)void flush();
     return {x:sampler.positionX,z:sampler.positionZ,tick:sampler.tick};
   }
   async function sendFrames(frames,start){
+    const sentAt=clock();
     const reply=await api.input({chunk:{protocol:'pve-input-v1',battleId,
       startTick:start,frames}});
     if(closed)return false;
-    accept(reply,start+frames.length);return true;
+    accept(reply,start+frames.length,clock()-sentAt);return true;
   }
   async function pump(){
     while(!closed&&!terminal&&pending.length>=15){
@@ -130,7 +138,8 @@ export function createCloudCandidateSessionC12({api,viewport,clock,randomId,
   }
   function stopLocal(){closed=true;pending=[];}
   return Object.freeze({start,drag,release,sample,flush,finish,abandon,stopLocal,
+    getDiagnostics:diagnostics,
     get state(){return {battleId,current,terminal,ackTick,pending:pending.length,
-      busy:Boolean(busy),error:fault,proof,
+      busy:Boolean(busy),error:fault,proof,diagnostics:diagnostics(),
       player:sampler?{x:sampler.positionX,z:sampler.positionZ}:null};}});
 }
