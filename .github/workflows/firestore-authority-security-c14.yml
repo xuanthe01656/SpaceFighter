@@ -1,0 +1,77 @@
+name: SpaceFighter C14 - Firestore Authority Boundary (Emulator Only)
+
+# CI exercise of checked-in Security Rules, NOT deployed production IAM.
+# No Firebase credentials, project secrets, deployment, Cloud Run or reward writes.
+on:
+  push:
+    branches:
+      - cloudrun-staging
+    paths:
+      - 'security/firestore.rules'
+      - 'firebase.c7c2.qa.json'
+      - 'server/lib/**'
+      - 'server/tools/firestoreAuthorityBoundaryC14.cjs'
+      - 'server/tests/firestoreAuthorityBoundaryC14.test.cjs'
+      - '.github/workflows/firestore-authority-security-c14.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spacefighter-c14-rules-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  rule-boundaries:
+    name: Firestore client denial matrix / demo emulator only
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      GCLOUD_PROJECT: demo-spacefighter-c14
+      GOOGLE_CLOUD_PROJECT: demo-spacefighter-c14
+      C14_SECURITY_REPORT_PATH: c14-firestore-boundary-report.json
+      CI: 'true'
+    steps:
+      - name: Checkout without persistent credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Java 21 for Firestore Emulator
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Node 22 and server lockfile cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Install exact server dependencies (emulator Admin SDK only)
+        working-directory: server
+        run: npm ci --omit=dev --no-audit --no-fund
+      - name: Local-only boundary tests and configuration checks
+        run: node --test server/tests/firestoreAuthorityBoundaryC14.test.cjs
+      - name: Run Auth + Firestore Emulators with a demo-only project
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GCLOUD_PROJECT" == 'demo-spacefighter-c14' ]]
+          [[ ! -n "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]]
+          [[ ! -n "${FIREBASE_TOKEN:-}" ]]
+          [[ -f firebase.c7c2.qa.json && -f security/firestore.rules ]]
+          # Exact pinned CLI. No cloud deploy command, service account, or online project.
+          npx --yes firebase-tools@15.34.1 emulators:exec \
+            --config firebase.c7c2.qa.json \
+            --project demo-spacefighter-c14 \
+            --only auth,firestore \
+            'node server/tools/firestoreAuthorityBoundaryC14.cjs'
+      - name: Preserve non-sensitive test summary
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spacefighter-c14-firestore-rules-qa-only
+          path: c14-firestore-boundary-report.json
+          if-no-files-found: error
+          retention-days: 7
