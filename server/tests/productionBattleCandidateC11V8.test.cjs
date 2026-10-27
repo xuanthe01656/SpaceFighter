@@ -390,3 +390,54 @@ test('C11 final proof is never a C10 production issuer contract even with HMAC g
   await assert.rejects(authority.issue(UID,SID,BID),isCode('C10_PRODUCTION_REPLAY_REQUIRED'));
   assert.ok(!f.db.ops.some(op=>op.path.includes('productionBattleOutcomes')));
 });
+
+test('C12 adapter: C11 replies carry bounded render checkpoint but never secret or reward',async()=>{
+  const {f,svc}=await opened();
+  const reply=await svc.status(UID,SID);
+  assert.equal(reply.qaOnly,true);
+  assert.equal(reply.candidateOnly,true);
+  assert.equal(reply.settlementEnabled,false);
+  assert.equal(reply.eligibleForSettlement,false);
+  assert.equal(reply.protocol,'pve-input-v1');
+  assert.equal(reply.visual.version,'sf-c8-alpha1-server-render-qa-v1');
+  assert.equal(reply.visual.tick,reply.nextTick);
+  assert.equal(reply.phase,'active');
+  const str=JSON.stringify(reply);
+  assert.equal(str.includes('originMac'),false);
+  assert.equal(str.includes('sessionId'),false);
+  assert.equal(str.includes('mac'),false);
+  assert.equal(str.includes('grant'),false);
+  assert.deepEqual(f.db.data.get(f.userPath),f.user);
+});
+test('C12 exit: abandon is idempotent and cannot resume/audit a closed candidate',async()=>{
+  const {f,svc}=await opened(),before=structuredClone(f.user);
+  const a=await svc.abandon(UID,SID,{battleId:BID});
+  assert.equal(a.abandoned,true);assert.equal(a.duplicate,false);
+  const b=await svc.abandon(UID,SID,{battleId:BID});
+  assert.equal(b.abandoned,true);assert.equal(b.duplicate,true);
+  await assert.rejects(svc.status(UID,SID),isCode('C11_TICKET_ABANDONED'));
+  await assert.rejects(svc.ingest(UID,SID,chunk(0)),isCode('C11_TICKET_ABANDONED'));
+  await assert.rejects(svc.audit(UID,SID,{battleId:BID}),isCode('C11_TICKET_ABANDONED'));
+  assert.deepEqual(f.db.data.get(f.userPath),before);
+  assert.ok(!f.db.ops.some(x=>x.path.includes('/operations/')
+    ||x.path.includes('/verifiedBattleSettlements/')));
+});
+test('C12 exit: forged extra fields, wrong UID, session and battle ID are rejected',async()=>{
+  const {svc}=await opened();
+  await assert.rejects(svc.abandon(UID,SID,{battleId:BID,victory:true}),isCode('C11_ABANDON_INPUT'));
+  await assert.rejects(svc.abandon('another',SID,{battleId:BID}),isCode('C11_NOT_ALLOWED'));
+  await assert.rejects(svc.abandon(UID,SID2,{battleId:BID}),isCode('SESSION_EXPIRED'));
+  await assert.rejects(svc.abandon(UID,SID,{battleId:'12345678-1234-1234-1234-123456789abc'}),isCode('C11_TICKET_INVALID'));
+});
+test('C12 exit: new candidate ticket allowed after abandoned ticket in same session',async()=>{
+  const f=fixture();let count=0;
+  const svc=await f.create({uuidFactory:()=>++count===1?BID:
+    '12345678-1234-1234-1234-123456789abc'});
+  const first=await svc.open(UID,SID,openBody());
+  await svc.abandon(UID,SID,{battleId:first.battleId});
+  const next=await svc.open(UID,SID,{mode:'campaign',locationId:'alpha_stage_1',
+    requestId:'c12_second_req_0001'});
+  assert.equal(next.nextTick,0);
+  assert.notEqual(next.battleId,first.battleId);
+  assert.equal(next.eligibleForSettlement,false);
+});

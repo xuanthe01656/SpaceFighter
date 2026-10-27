@@ -89,3 +89,18 @@ export const getCloudQaStatusC8=uid=>callApi('/qa/battle/status',null,{expectedU
 export const finalizeCloudQaC8=(uid,body)=>qaBound('receipt',body,uid);
 export const auditCloudQaC8=(uid,body)=>qaBound('audit',body,uid);
 export const abandonCloudQaC8=(uid,body)=>qaBound('abandon',body,uid);
+
+// C12: staging-only non-economic production-namespace candidate. Completely
+// distinct from C8 QA and from the normal /command economy path. The client
+// can submit only input intent and must not fabricate a victory/reward.
+async function candidateBoundC12(path,body,expectedUid){
+  if(!expectedUid)throw new GameApiError('LOGIN_REQUIRED','Google session required for C12');
+  const request=()=>callApi(`/candidate/battle/${path}`,body,{expectedUid});
+  return retrySameAuthUser({expectedUid,getCurrentUid:()=>auth.currentUser?.uid,
+    request,shouldRetry:e=>e?.code==='TIMEOUT'||e instanceof TypeError});
+}
+export const openCandidateBattleC12=(uid,body)=>candidateBoundC12('open',body,uid);
+export const sendCandidateInputC12=(uid,body)=>candidateBoundC12('input',body,uid);
+export const getCandidateStatusC12=uid=>callApi('/candidate/battle/status',null,{expectedUid:uid});
+export const auditCandidateBattleC12=(uid,body)=>candidateBoundC12('audit',body,uid);
+export const abandonCandidateBattleC12=(uid,body)=>candidateBoundC12('abandon',body,uid);

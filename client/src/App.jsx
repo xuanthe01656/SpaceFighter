@@ -212,7 +212,8 @@ export default function Game() {
       )}
       
       {screen === 'cloud_qa_alpha1' && import.meta.env.VITE_C8_CLOUD_QA_UI === 'true' && (
-        <CloudQaAlpha1 setScreen={setScreen} lang={lang}/>
+        <CloudQaAlpha1 setScreen={setScreen} lang={lang}
+          candidate={import.meta.env.VITE_C12_CANDIDATE_QA_UI === 'true'}/>
       )}
       {screen === 'cloud_qa_alpha1' && import.meta.env.VITE_C8_CLOUD_QA_UI !== 'true' && (
         <div role="alert">Cloud QA disabled. <button onClick={()=>setScreen('hq')}>HQ</button></div>

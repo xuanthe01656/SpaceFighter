@@ -7,8 +7,11 @@ import React,{useEffect,useRef,useState} from 'react';
 import {onAuthStateChanged} from 'firebase/auth';
 import {auth} from '../../firebase';
 import {openCloudQaC8,sendCloudQaInputC8,getCloudQaStatusC8,
-  finalizeCloudQaC8,auditCloudQaC8,abandonCloudQaC8} from '../../services/gameApi';
+  finalizeCloudQaC8,auditCloudQaC8,abandonCloudQaC8,
+  openCandidateBattleC12,sendCandidateInputC12,getCandidateStatusC12,
+  auditCandidateBattleC12,abandonCandidateBattleC12} from '../../services/gameApi';
 import {createCloudQaSessionC8} from '../../game/combat/CloudQaSessionC8';
+import {createCloudCandidateSessionC12} from '../../game/combat/CloudCandidateSessionC12';
 import {createServerSceneModelC9} from '../../game/combat/ServerSceneModelC9';
 
 const COLORS=Object.freeze({bg:'#020c1b',grid:'#16385a',enemy:'#ff7687',
@@ -51,7 +54,7 @@ function drawCockpit(canvas,visual,predicted){
   ctx.lineTo(9*dpr,12*dpr);ctx.lineTo(0,6*dpr);ctx.lineTo(-9*dpr,12*dpr);
   ctx.closePath();ctx.fill();ctx.restore();
 }
-export default function CloudQaAlpha1({setScreen,lang='vi'}){
+export default function CloudQaAlpha1({setScreen,lang='vi',candidate=false}){
   const canvasRef=useRef(null),babylonCanvasRef=useRef(null);
   const sessionRef=useRef(null),pointerRef=useRef(null);
   const finishStarted=useRef(false),mounted=useRef(true),latestRef=useRef(null);
@@ -64,7 +67,13 @@ export default function CloudQaAlpha1({setScreen,lang='vi'}){
     mounted.current=true;
     const expectedUid=auth.currentUser?.uid;
     if(!expectedUid){setFault('Google session required');setStatus('error');return;}
-    const transport={
+    const transport=candidate?{
+      open:body=>openCandidateBattleC12(expectedUid,body),
+      input:body=>sendCandidateInputC12(expectedUid,body),
+      status:()=>getCandidateStatusC12(expectedUid),
+      audit:body=>auditCandidateBattleC12(expectedUid,body),
+      abandon:body=>abandonCandidateBattleC12(expectedUid,body),
+    }:{
       open:body=>openCloudQaC8(expectedUid,body),
       input:body=>sendCloudQaInputC8(expectedUid,body),
       status:()=>getCloudQaStatusC8(expectedUid),
@@ -98,7 +107,7 @@ export default function CloudQaAlpha1({setScreen,lang='vi'}){
         });
       }
     };
-    const session=createCloudQaSessionC8({api:transport,viewport,
+    const session=(candidate?createCloudCandidateSessionC12:createCloudQaSessionC8)({api:transport,viewport,
       clock:()=>performance.now(),randomId:()=>crypto.randomUUID(),onUpdate:update});
     sessionRef.current=session;
     const halt=()=>{
@@ -204,7 +213,7 @@ export default function CloudQaAlpha1({setScreen,lang='vi'}){
     <div style={{position:'absolute',top:'calc(env(safe-area-inset-top) + 10px)',
       left:12,right:12,zIndex:2,pointerEvents:'none',textShadow:'0 1px 4px black'}}>
       <div style={{fontSize:13,fontWeight:700,color:'#ffd075'}}>
-        C9 QA CLOUD ALPHA 1 · {renderMode} · NO REWARDS
+        {candidate?'C12 CANDIDATE ALPHA 1':'C9 QA CLOUD ALPHA 1'} · {renderMode} · NO REWARDS
       </div>
       <div style={{fontSize:12,opacity:.85}}>{vi?'Máy chủ quyết định HP / quái / kết quả; tàu hiển thị vị trí dự đoán':'Server owns HP / enemies / outcome; local ship is predicted'}</div>
       {hud&&<div style={{marginTop:8,fontSize:14,fontWeight:600}}>
@@ -219,8 +228,8 @@ export default function CloudQaAlpha1({setScreen,lang='vi'}){
         border:'1px solid #244b63',borderRadius:8,padding:8}}>
         <b>{status.toUpperCase()}</b> · {nowTick} local ticks
         {fault&&<div role="alert" style={{color:'#ff93a0',overflowWrap:'anywhere'}}>{fault}</div>}
-        {proof&&<div style={{color:'#86ffc7'}}>{proof.phase} · {proof.verifiedTicks} ticks · {proof.verifiedChunks} chunks · QA ONLY</div>}
-        <div style={{opacity:.7}}>30Hz · clear-release QA candidate · no wallet/mission changes</div>
+        {proof&&<div style={{color:'#86ffc7'}}>{proof.phase} · {proof.verifiedTicks} ticks · {proof.verifiedChunks} chunks · NON-ECONOMIC</div>}
+        <div style={{opacity:.7}}>30Hz · {candidate?'C11 candidate model (NOT production approved)':'clear-release QA'} · no wallet/mission changes</div>
       </div>
     </div>
   </div>;

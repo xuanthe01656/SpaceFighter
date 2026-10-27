@@ -17,6 +17,7 @@ const {openInputJournal,validateChunk}=require('./combatInputJournalV8.cjs');
 const {openCombatVerticalSlice,replayCombatSliceChunk}=require('./combatVerticalSliceV8.cjs');
 const {resolveCampaignAlphaStage1C6E,LOCATION_ID,RULES_VERSION,CATALOG_VERSION}
   =require('./combatCampaignAlphaC6CV8.cjs');
+const {projectQaBattleViewC8}=require('./qaBattleViewC8.cjs');
 const {replayCandidateC11,makeCandidateAuditC11,verifyCandidateAuditC11,
   MAX_AUDIT_CHUNKS}=require('./productionReplayAuditC11V8.cjs');
 
@@ -96,6 +97,9 @@ const answer=(active,duplicate=false)=>Object.freeze({
   safeForCloudBattle:false,eligibleForSettlement:false,
   battleId:active.battleId,expiresAtMs:active.expiresAtMs,
   nextTick:active.run.state.tick,duplicate,
+  qaOnly:true,qaSourceModel:true,settlementEnabled:false,
+  protocol:'pve-input-v1',phase:active.run.state.phase,
+  visual:projectQaBattleViewC8(active.run),
   terminal:active.run.state.phase!=='active',
   // No client/server `victory` or `verified-clear` field exists here.
   replayCandidate:'not-yet-independent-audited',
@@ -108,7 +112,7 @@ async function createProductionBattleCandidateC11({db,enabled=false,allowedUids=
   if(enabled!==true){
     const blocked=()=>deny('C11_DISABLED','C11 candidate is disabled',423);
     return Object.freeze({enabled:false,open:blocked,ingest:blocked,
-      status:blocked,audit:blocked});
+      status:blocked,audit:blocked,abandon:blocked});
   }
   if(!db||typeof db.runTransaction!=='function'||!Array.isArray(allowedUids)
     ||allowedUids.length<1||allowedUids.length>10||new Set(allowedUids).size!==allowedUids.length
@@ -161,6 +165,8 @@ async function createProductionBattleCandidateC11({db,enabled=false,allowedUids=
       ||cur.run?.foundation?.journal?.sessionId!==sid
       ||cur.run?.foundation?.journal?.battleId!==battleId)
       deny('C11_TICKET_INVALID','Candidate ticket state or identity invalid');
+    if(requireLive&&cur.abandonedAtMs!==undefined)
+      deny('C11_TICKET_ABANDONED','Candidate ticket was abandoned',410);
     if(requireLive&&at>=cur.expiresAtMs)
       deny('C11_TICKET_EXPIRED','Candidate ticket expired',410);
     return cur;
@@ -190,6 +196,7 @@ async function createProductionBattleCandidateC11({db,enabled=false,allowedUids=
           return answer(valid,true);
         }
         if(old.sessionId===sid&&old.expiresAtMs>at
+          &&old.abandonedAtMs===undefined
           &&old.run?.state?.phase==='active')
           deny('C11_TICKET_ACTIVE','Existing candidate battle still active');
       }
@@ -313,7 +320,33 @@ async function createProductionBattleCandidateC11({db,enabled=false,allowedUids=
       return Object.freeze({...proof,duplicate:false});
     });
   }
-  return Object.freeze({enabled:true,open,ingest,status,audit});
+  async function abandon(uid,sid,body){
+    actor(uid,sid);
+    if(!exact(body,['battleId'])||!ID.test(body.battleId||''))
+      deny('C11_ABANDON_INPUT','Only battleId accepted',400);
+    const at=clock();
+    return db.runTransaction(async t=>{
+      const [user,job,activeSnap,originSnap]=await Promise.all([
+        t.get(userRef(uid)),t.get(jobRef(uid)),t.get(activeRef(uid)),
+        t.get(originRef(uid,body.battleId))]);
+      profile(user,job,sid);
+      const active=checkActive(activeSnap,uid,sid,body.battleId,at,{requireLive:false});
+      if(!originSnap.exists)deny('C11_ORIGIN_MISSING','Signed genesis missing');
+      checkOrigin(originSnap.data(),{uid,sessionId:sid,battleId:body.battleId,
+        keys:verificationKeys});
+      if(active.originMac!==originSnap.data().mac)
+        deny('C11_ORIGIN_BINDING','Candidate origin changed');
+      if(active.abandonedAtMs!==undefined)
+        return Object.freeze({version:VERSION,battleId:body.battleId,
+          candidateOnly:true,nonEconomic:true,eligibleForSettlement:false,
+          settlementEnabled:false,abandoned:true,duplicate:true});
+      t.set(activeRef(uid),safeDoc({...active,abandonedAtMs:at,updatedAtMs:at}));
+      return Object.freeze({version:VERSION,battleId:body.battleId,
+        candidateOnly:true,nonEconomic:true,eligibleForSettlement:false,
+        settlementEnabled:false,abandoned:true,duplicate:false});
+    });
+  }
+  return Object.freeze({enabled:true,open,ingest,status,audit,abandon});
 }
 module.exports=Object.freeze({VERSION,ORIGIN_VERSION,TTL_MS,
   createProductionBattleCandidateC11});

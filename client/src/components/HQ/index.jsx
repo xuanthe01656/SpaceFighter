@@ -318,7 +318,8 @@ export default function HQ({ gsRef, setScreen, lang, saveUserProfile, gameAction
               style={{padding:'10px 14px',border:'1px solid #ffca73',borderRadius:8,
                 background:'#1c283a',color:'#ffca73',fontWeight:700}}
               onClick={()=>setScreen('cloud_qa_alpha1')}>
-              CLOUD ALPHA 1 · QA ONLY · NO REWARDS
+              {import.meta.env.VITE_C12_CANDIDATE_QA_UI === 'true'
+                ? 'C12 CANDIDATE · NON-ECONOMIC' : 'CLOUD ALPHA 1 · QA ONLY · NO REWARDS'}
             </button>
           </div>
         )}

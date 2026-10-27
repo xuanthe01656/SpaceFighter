@@ -83,6 +83,25 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
     return withAuth((r,user)=>options.qaVerifierService.inspect(
       user.uid,r.get('x-game-session'),r.body))(req,res,next);
   });
+  // C12: completely separate production-namespace CANDIDATE service.
+  // Every route is default OFF, Firebase-authenticated, allowlisted, and
+  // NON-ECONOMIC. No calls to C10, settlement or legacy battle.finish.
+  const candidateReady=options.candidateEnabled===true
+    && Boolean(options.candidateService?.enabled);
+  const withCandidate=fn=>async(req,res,next)=>{
+    if(!candidateReady)return res.status(503).json({ok:false,code:'C12_CANDIDATE_DISABLED'});
+    return withAuth(fn)(req,res,next);
+  };
+  app.post('/api/v1/candidate/battle/open',withCandidate((req,user)=>
+    options.candidateService.open(user.uid,req.get('x-game-session'),req.body)));
+  app.post('/api/v1/candidate/battle/input',withCandidate((req,user)=>
+    options.candidateService.ingest(user.uid,req.get('x-game-session'),req.body)));
+  app.get('/api/v1/candidate/battle/status',withCandidate((req,user)=>
+    options.candidateService.status(user.uid,req.get('x-game-session'))));
+  app.post('/api/v1/candidate/battle/audit',withCandidate((req,user)=>
+    options.candidateService.audit(user.uid,req.get('x-game-session'),req.body)));
+  app.post('/api/v1/candidate/battle/abandon',withCandidate((req,user)=>
+    options.candidateService.abandon(user.uid,req.get('x-game-session'),req.body)));
   app.post('/api/v1/profile/name',withAuth((req,user)=>options.service.changeName(user.uid,req.get('x-game-session'),req.body?.name)));
   // Never run destructive deletion inline with an HTTP request. This remains
   // disabled until a retryable worker has been provisioned and verified.
@@ -116,7 +135,7 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
 async function start() {
   const port=Number(process.env.PORT||3000);
   if(!Number.isInteger(port)||port<1||port>65535) throw new Error('Invalid PORT');
-  let service=null,auth=null,admin=null,accountDeletionService=null,qaBattleService=null,qaVerifierService=null;
+  let service=null,auth=null,admin=null,accountDeletionService=null,qaBattleService=null,qaVerifierService=null,candidateService=null;
   if(process.env.GAME_API_ENABLED==='true') {
     admin=require('firebase-admin');
     if(!admin.apps.length) {
@@ -145,6 +164,19 @@ async function start() {
         console.error('Non-economic QA routes disabled: invalid sealed QA configuration');
       }
     }
+    // C12: a second, independent operator approval is required even when the
+    // feature flag is set. Never fall back to QA credentials or an open UID list.
+    if(process.env.GAME_C12_CANDIDATE_ENABLED==='true'){
+      try{
+        const {createCandidateStagingRuntimeC12}=
+          require('./lib/productionCandidateRuntimeC12V8.cjs');
+        const candidate=await createCandidateStagingRuntimeC12({
+          db:admin.firestore(),env:process.env});
+        candidateService=candidate.service;
+      }catch(_error){
+        console.error('C12 non-economic candidate routes disabled: invalid staged runtime configuration');
+      }
+    }
     if (process.env.GAME_ACCOUNT_DELETION_ENABLED==='true' &&
         process.env.GAME_ACCOUNT_DELETION_WORKER_READY==='true') {
       accountDeletionService=createAccountDeletionService({db:admin.firestore(),auth});
@@ -154,6 +186,7 @@ async function start() {
     accountDeletionService, accountDeletionEnabled:Boolean(accountDeletionService),
     qaBattleService,qaBattleEnabled:Boolean(qaBattleService),
     qaVerifierService,qaVerifierEnabled:Boolean(qaVerifierService),
+    candidateService,candidateEnabled:Boolean(candidateService),
     allowLocalOrigin:process.env.NODE_ENV!=='production'});
   app.listen(port,'0.0.0.0',()=>console.log(`Space Fighter Phase 1 listening on ${port}; API ${service?'enabled':'disabled'}`));
 }
