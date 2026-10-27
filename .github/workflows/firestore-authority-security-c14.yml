@@ -5,7 +5,7 @@ name: SpaceFighter C14 - Firestore Authority Boundary (Emulator Only)
 on:
   push:
     branches:
-      - cloudrun-staging
+      - main
     paths:
       - 'security/firestore.rules'
       - 'firebase.c7c2.qa.json'

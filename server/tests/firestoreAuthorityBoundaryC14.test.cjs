@@ -71,7 +71,7 @@ test('C14 matrix denies owner+other reads, owner PATCH/DELETE on every sensitive
 });
 test('C14 GitHub CI never injects cloud credentials or performs deployment',()=>{
   assert.match(workflow,/workflow_dispatch:/);
-  assert.match(workflow,/cloudrun-staging/);
+  assert.match(workflow,/^\s+- main\s*$/m);
   assert.match(workflow,/permissions:\s*\n\s*contents: read/);
   assert.match(workflow,/demo-spacefighter-c14/);
   assert.match(workflow,/firebase-tools@15\.34\.1/);

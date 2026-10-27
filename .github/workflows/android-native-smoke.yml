@@ -1,10 +1,10 @@
 name: SpaceFighter Android - Capacitor 8 Native Smoke
 
-# Build-only validation after an approved staging push. No release signing or distribution.
+# Build-only validation after an approved main push. Cloud Run remains staging. No release signing or distribution.
 on:
   push:
     branches:
-      - cloudrun-staging
+      - main
     paths:
       - 'client/**'
       - '.github/workflows/android-native-smoke.yml'

@@ -48,8 +48,8 @@ test('Existing immersive mobile experience remains enabled', () => {
     assert.ok(java.includes(marker), 'Missing: ' + marker);
   }
 });
-test('Android native CI runs only after staging push or explicit manual dispatch', () => {
-  assert.match(workflow, /^on:\s*\n  push:\s*\n    branches:\s*\n      - cloudrun-staging/m);
+test('Android native CI runs only after main push or explicit manual dispatch', () => {
+  assert.match(workflow, /^on:\s*\n  push:\s*\n    branches:\s*\n      - main/m);
   assert.match(workflow, /^  workflow_dispatch:/m);
   assert.doesNotMatch(workflow, /^  (?:pull_request|schedule):/m);
   assert.match(workflow, /permissions:\s*\n\s*contents: read/);
