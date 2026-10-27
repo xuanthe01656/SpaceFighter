@@ -308,6 +308,20 @@ export default function HQ({ gsRef, setScreen, lang, saveUserProfile, gameAction
           </motion.button>
         </div>
         
+        {/* C8 is an isolated NON-ECONOMIC QA cockpit. Legacy launch stays locked
+            for authenticated users until an independently approved P0 change. */}
+        {import.meta.env.VITE_C8_CLOUD_QA_UI === 'true' && auth.currentUser
+          && gameMode === 'campaign' && Number(progress.currentPlanet) === 1
+          && Number(progress.selectedStage) === 1 && (
+          <div style={{display:'flex',justifyContent:'center',margin:'10px 0'}}>
+            <button type="button" disabled={isLaunching}
+              style={{padding:'10px 14px',border:'1px solid #ffca73',borderRadius:8,
+                background:'#1c283a',color:'#ffca73',fontWeight:700}}
+              onClick={()=>setScreen('cloud_qa_alpha1')}>
+              CLOUD ALPHA 1 · QA ONLY · NO REWARDS
+            </button>
+          </div>
+        )}
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           <motion.button whileTap={{ scale: 0.95 }} className={styles.launchBtn}
             disabled={isLaunching} onClick={handleLaunch}

@@ -15,6 +15,11 @@ on:
         required: false
         type: boolean
         default: false
+      cloud_qa_ui:
+        description: 'Build NON-ECONOMIC server-authoritative Cloud Alpha1 QA cockpit (manual only)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -45,6 +50,7 @@ jobs:
       VITE_GAME_API_URL: https://spacefighter-api-staging-528039759292.asia-southeast1.run.app/api/v1
       VITE_GAME_API_ENABLED: 'false'
       VITE_SF_NATIVE_TOUCH_QA: ${{ github.event_name == 'workflow_dispatch' && inputs.touch_qa == true && '1' || '0' }}
+      VITE_C8_CLOUD_QA_UI: ${{ github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && 'true' || 'false' }}
 
     steps:
       - name: Check out only current revision
@@ -118,6 +124,12 @@ jobs:
             [[ "$VITE_GAME_API_ENABLED" == 'false' ]] || { echo 'Touch QA must not enable Cloud Game API' >&2; exit 1; }
             echo 'Building LOCAL-ONLY debug touch QA payload; NOT FOR RELEASE'
           fi
+          if [[ "$VITE_C8_CLOUD_QA_UI" == 'true' ]]; then
+            [[ "$GITHUB_EVENT_NAME" == 'workflow_dispatch' ]] || { echo 'Cloud QA is manual-only' >&2; exit 1; }
+            [[ "$VITE_SF_NATIVE_TOUCH_QA" == '0' ]] || { echo 'Cloud QA and Guest Touch QA must not be combined' >&2; exit 1; }
+            [[ "$VITE_GAME_API_ENABLED" == 'false' ]] || { echo 'Cloud QA must not enable legacy battle API' >&2; exit 1; }
+            echo 'Building isolated NON-ECONOMIC Cloud QA cockpit; staging QA server separately gated'
+          fi
           npm run build:mobile
           test -s dist/index.html
 
@@ -147,7 +159,7 @@ jobs:
       - name: Preserve debug APK for manual device QA
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ github.event_name == 'workflow_dispatch' && inputs.touch_qa == true && 'spacefighter-android-touch-qa-debug-not-for-release' || 'spacefighter-android-debug-not-for-release' }}
+          name: ${{ github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && 'spacefighter-android-cloud-qa-c8-debug-not-for-release' || (github.event_name == 'workflow_dispatch' && inputs.touch_qa == true && 'spacefighter-android-touch-qa-debug-not-for-release' || 'spacefighter-android-debug-not-for-release') }}
           path: client/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 3

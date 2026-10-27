@@ -22,11 +22,13 @@ async function callApi(path, body=null, {session=true,expectedUid=null}={}) {
   assertSameAuthUser(user.uid,auth.currentUser?.uid);
   if (expectedUid !== null) assertSameAuthUser(expectedUid,auth.currentUser?.uid);
   const headers={Authorization:`Bearer ${token}`,Accept:'application/json'};
+  let boundSession=null;
   if (body!==null) headers['Content-Type']='application/json';
   if (session) {
     const sid=secureStorage.getItem('astro_session_id');
     if(!sid) throw new GameApiError('SESSION_REQUIRED','Please log in again');
     headers['X-Game-Session']=sid;
+    boundSession=sid;
   }
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),15000);
@@ -37,6 +39,10 @@ async function callApi(path, body=null, {session=true,expectedUid=null}={}) {
       signal:controller.signal,cache:'no-store'
     });
     const response=await result.json().catch(()=>({}));
+    // A sign-out/re-login during fetch cannot apply a stale QA checkpoint.
+    assertSameAuthUser(expectedUid??user.uid,auth.currentUser?.uid);
+    if(boundSession!==null && secureStorage.getItem('astro_session_id')!==boundSession)
+      throw new GameApiError('AUTH_STATE_CHANGED','The game session changed');
     if(!result.ok || response.ok!==true) {
       throw new GameApiError(response.code||'API_ERROR',response.message||`Request failed (${result.status})`,result.status);
     }
@@ -66,3 +72,20 @@ export async function executeGameCommand(command,payload={},requestId=null) {
     shouldRetry:error=>error?.code==='TIMEOUT'||error instanceof TypeError
   });
 }
+
+// C8: strictly isolated QA-only Cloud Alpha 1 transport. No economy requests.
+// These wrappers never send client-authored outcomes or rewards; retry keeps
+// exactly the same immutable request body/chunk and Firebase account.
+async function qaBound(path,body,expectedUid,{retry=true}={}) {
+  if(!expectedUid)throw new GameApiError('LOGIN_REQUIRED','Google session required for QA');
+  const request=()=>callApi(`/qa/battle/${path}`,body,{expectedUid});
+  return retry ? retrySameAuthUser({expectedUid,
+    getCurrentUid:()=>auth.currentUser?.uid,request,
+    shouldRetry:e=>e?.code==='TIMEOUT'||e instanceof TypeError}) : request();
+}
+export const openCloudQaC8=(uid,body)=>qaBound('open',body,uid);
+export const sendCloudQaInputC8=(uid,body)=>qaBound('input',body,uid);
+export const getCloudQaStatusC8=uid=>callApi('/qa/battle/status',null,{expectedUid:uid});
+export const finalizeCloudQaC8=(uid,body)=>qaBound('receipt',body,uid);
+export const auditCloudQaC8=(uid,body)=>qaBound('audit',body,uid);
+export const abandonCloudQaC8=(uid,body)=>qaBound('abandon',body,uid);

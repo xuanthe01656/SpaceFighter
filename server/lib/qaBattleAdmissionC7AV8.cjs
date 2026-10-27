@@ -18,6 +18,7 @@ const {ENCOUNTER_C6E_VERSION,ALPHA_POLICY_C6E_VERSION}=require('./combatCampaign
 const {openCombatVerticalSlice,replayCombatSliceChunk}=require('./combatVerticalSliceV8.cjs');
 const {createQaGenesis,verifyQaFullReplay,createAuditProof,checkStoredProof}=require('./qaBattleAuditC7B2V8.cjs');
 const {issueQaOriginSealC7C1,validateSealKey,validateKeyId}=require('./battleOriginSealC7CV8.cjs');
+const {projectQaBattleViewC8}=require('./qaBattleViewC8.cjs');
 const {resolveCampaignAlphaStage1C6E,LOCATION_ID,RULES_VERSION,CATALOG_VERSION,
   ARENA_HALF_WIDTH_UNITS,ARENA_HALF_HEIGHT_UNITS}=require('./combatCampaignAlphaC6CV8.cjs');
 
@@ -97,6 +98,7 @@ const response=(data,duplicate=false)=>Object.freeze({
   duplicate,protocol:'pve-input-v1',nextTick:data.run.state.tick,
   phase:data.run.state.phase,checkpointDigest:data.run.state.stateDigest,
   traceDigest:data.run.state.traceDigest,
+  visual:projectQaBattleViewC8(data.run),
 });
 
 async function createQaBattleAdmissionC7A({db,allowedUids,now=Date.now,
@@ -365,6 +367,31 @@ async function createQaBattleAdmissionC7A({db,allowedUids,now=Date.now,
     }catch(err){return wrapQaError(err);}
   }
 
+  // Explicitly abandon only this user's current QA match. Does not touch
+  // economy/progress and never finalizes or changes any existing proof.
+  async function abandon(uid,sid,body){
+    requireActor(uid,sid,allowlist);
+    if(!exact(body,['battleId'])||!UUID_RE.test(body.battleId||''))
+      deny('QA_ABANDON_INVALID','Only battleId is accepted');
+    const at=safeClock(now);
+    return db.runTransaction(async t=>{
+      const [userSnap,jobSnap,activeSnap]=await Promise.all([
+        t.get(userRef(uid)),t.get(jobRef(uid)),t.get(activeRef(uid))]);
+      requireProfile(userSnap,jobSnap,sid);
+      if(!activeSnap.exists)deny('QA_BATTLE_NOT_FOUND','QA ticket not found',404);
+      const active=activeSnap.data();
+      if(active.uid!==uid||active.sessionId!==sid||active.battleId!==body.battleId
+        ||active.version!==QA_VERSION||active.run?.state?.qaOnly!==true
+        ||active.run?.state?.safeForCloudBattle!==false)
+        deny('QA_BATTLE_CONTEXT','QA ticket identity mismatch',409);
+      if(active.expiresAtMs<=at)
+        return Object.freeze({qaOnly:true,settlementEnabled:false,abandoned:true,duplicate:true});
+      // Invalidate admission only. Never erase journal/genesis/receipt history.
+      t.set(activeRef(uid),safeDoc({...active,expiresAtMs:at,updatedAtMs:at}));
+      return Object.freeze({qaOnly:true,settlementEnabled:false,abandoned:true,duplicate:false});
+    });
+  }
+
   async function status(uid,sid){
     requireActor(uid,sid,allowlist);
     const at=safeClock(now);
@@ -376,7 +403,7 @@ async function createQaBattleAdmissionC7A({db,allowedUids,now=Date.now,
       return response(checkCurrent(activeSnap,uid,sid,activeSnap.data().battleId,at));
     });
   }
-  return Object.freeze({open,ingest,status,finalize,audit});
+  return Object.freeze({open,ingest,status,finalize,audit,abandon});
 }
 module.exports=Object.freeze({QA_VERSION,QA_RECEIPT_VERSION,QA_TTL_MS,QA_MAX_CHUNKS,
   QA_POLICY:POLICY,createQaBattleAdmissionC7A});

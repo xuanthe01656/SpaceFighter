@@ -64,6 +64,8 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
     user.uid,req.get('x-game-session'),req.body)));
   app.post('/api/v1/qa/battle/input',withQa((req,user)=>options.qaBattleService.ingest(
     user.uid,req.get('x-game-session'),req.body)));
+  app.post('/api/v1/qa/battle/abandon',withQa((req,user)=>options.qaBattleService.abandon(
+    user.uid,req.get('x-game-session'),req.body)));
   app.get('/api/v1/qa/battle/status',withQa((req,user)=>options.qaBattleService.status(
     user.uid,req.get('x-game-session'))));
   // C7-B1: server-authored, immutable QA-only terminal receipt. No economy writes.

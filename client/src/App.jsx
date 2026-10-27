@@ -14,6 +14,7 @@ const HQ = lazy(() => import('./components/HQ'));
 const Pilots = lazy(() => import('./components/Pilots'));
 const Inventory = lazy(() => import('./components/Inventory'));
 const CampaignEngine = lazy(loadCampaignEngine);
+const CloudQaAlpha1 = lazy(() => import('./components/CloudQaAlpha1'));
 const StageSelect = lazy(() => import('./components/StageSelect'));
 const CampaignPortal = lazy(() => import('./components/CampaignPortal'));
 const ShopCampaign = lazy(() => import('./components/ShopCampaign'));
@@ -210,6 +211,13 @@ export default function Game() {
         <Pilots gameAction={gameAction} gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} />
       )}
       
+      {screen === 'cloud_qa_alpha1' && import.meta.env.VITE_C8_CLOUD_QA_UI === 'true' && (
+        <CloudQaAlpha1 setScreen={setScreen} lang={lang}/>
+      )}
+      {screen === 'cloud_qa_alpha1' && import.meta.env.VITE_C8_CLOUD_QA_UI !== 'true' && (
+        <div role="alert">Cloud QA disabled. <button onClick={()=>setScreen('hq')}>HQ</button></div>
+      )}
+
       {screen === 'campaign' && (
         <CampaignEngine gameAction={gameAction} gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} getRealTime={getRealTime}/>
       )}
