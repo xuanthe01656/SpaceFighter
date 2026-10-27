@@ -20,6 +20,11 @@ on:
         required: false
         type: boolean
         default: false
+      c9_babylon_qa:
+        description: 'Add C9 Babylon server-checkpoint display to manual Cloud QA APK only'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -51,6 +56,7 @@ jobs:
       VITE_GAME_API_ENABLED: 'false'
       VITE_SF_NATIVE_TOUCH_QA: ${{ github.event_name == 'workflow_dispatch' && inputs.touch_qa == true && '1' || '0' }}
       VITE_C8_CLOUD_QA_UI: ${{ github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && 'true' || 'false' }}
+      VITE_C9_BABYLON_QA_UI: ${{ github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && inputs.c9_babylon_qa == true && 'true' || 'false' }}
 
     steps:
       - name: Check out only current revision
@@ -130,6 +136,12 @@ jobs:
             [[ "$VITE_GAME_API_ENABLED" == 'false' ]] || { echo 'Cloud QA must not enable legacy battle API' >&2; exit 1; }
             echo 'Building isolated NON-ECONOMIC Cloud QA cockpit; staging QA server separately gated'
           fi
+          if [[ "$VITE_C9_BABYLON_QA_UI" == 'true' ]]; then
+            [[ "$GITHUB_EVENT_NAME" == 'workflow_dispatch' ]] || { echo 'C9 Babylon QA is manual-only' >&2; exit 1; }
+            [[ "$VITE_C8_CLOUD_QA_UI" == 'true' ]] || { echo 'C9 Babylon QA requires Cloud QA cockpit' >&2; exit 1; }
+            [[ "$VITE_GAME_API_ENABLED" == 'false' ]] || { echo 'C9 QA may not enable legacy Cloud battles' >&2; exit 1; }
+            echo 'C9 checkpoint-driven Babylon diagnostics; no production Battle/settlement'
+          fi
           npm run build:mobile
           test -s dist/index.html
 
@@ -159,7 +171,7 @@ jobs:
       - name: Preserve debug APK for manual device QA
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && 'spacefighter-android-cloud-qa-c8-debug-not-for-release' || (github.event_name == 'workflow_dispatch' && inputs.touch_qa == true && 'spacefighter-android-touch-qa-debug-not-for-release' || 'spacefighter-android-debug-not-for-release') }}
+          name: ${{ github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && inputs.c9_babylon_qa == true && 'spacefighter-android-c9-babylon-qa-debug-not-for-release' || (github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && 'spacefighter-android-cloud-qa-c8-debug-not-for-release' || (github.event_name == 'workflow_dispatch' && inputs.touch_qa == true && 'spacefighter-android-touch-qa-debug-not-for-release' || 'spacefighter-android-debug-not-for-release')) }}
           path: client/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 3

@@ -9,6 +9,7 @@ import {auth} from '../../firebase';
 import {openCloudQaC8,sendCloudQaInputC8,getCloudQaStatusC8,
   finalizeCloudQaC8,auditCloudQaC8,abandonCloudQaC8} from '../../services/gameApi';
 import {createCloudQaSessionC8} from '../../game/combat/CloudQaSessionC8';
+import {createServerSceneModelC9} from '../../game/combat/ServerSceneModelC9';
 
 const COLORS=Object.freeze({bg:'#020c1b',grid:'#16385a',enemy:'#ff7687',
   shot:'#68ffdc',hostile:'#ffa849',player:'#69f0ff'});
@@ -51,11 +52,13 @@ function drawCockpit(canvas,visual,predicted){
   ctx.closePath();ctx.fill();ctx.restore();
 }
 export default function CloudQaAlpha1({setScreen,lang='vi'}){
-  const canvasRef=useRef(null),sessionRef=useRef(null),pointerRef=useRef(null);
+  const canvasRef=useRef(null),babylonCanvasRef=useRef(null);
+  const sessionRef=useRef(null),pointerRef=useRef(null);
   const finishStarted=useRef(false),mounted=useRef(true),latestRef=useRef(null);
   const [status,setStatus]=useState('opening');
   const [hud,setHud]=useState(null),[fault,setFault]=useState(''),[proof,setProof]=useState(null);
   const [nowTick,setNowTick]=useState(0);
+  const [renderMode,setRenderMode]=useState('2D FALLBACK');
   const vi=lang==='vi';
   useEffect(()=>{
     mounted.current=true;
@@ -70,6 +73,8 @@ export default function CloudQaAlpha1({setScreen,lang='vi'}){
       abandon:body=>abandonCloudQaC8(expectedUid,body),
     };
     const canvas=canvasRef.current,rect=canvas.getBoundingClientRect();
+    const sceneModel=createServerSceneModelC9({clock:()=>performance.now()});
+    let babylon=null;
     const viewport={aspect:rect.width/Math.max(1,rect.height),
       canvasWidth:Math.max(1,rect.width),canvasHeight:Math.max(1,rect.height),
       halfHeight:15};
@@ -77,7 +82,12 @@ export default function CloudQaAlpha1({setScreen,lang='vi'}){
     const update=info=>{
       if(!mounted.current||closed)return;
       latestRef.current=info;
-      if(info.reply)setHud(info.reply.visual);
+      if(info.reply){
+        try{sceneModel.accept(info.reply.visual);setHud(info.reply.visual);}catch(_e){
+          setFault('C9_SERVER_VISUAL_INVALID');setStatus('error');
+          void session.abandon();return;
+        }
+      }
       if(info.error){setStatus('error');setFault(info.error.code||info.error.message||'NETWORK_ERROR');}
       if(info.terminal&&!finishStarted.current){
         finishStarted.current=true;setStatus('auditing');
@@ -96,6 +106,22 @@ export default function CloudQaAlpha1({setScreen,lang='vi'}){
       deviceGone=true;setStatus('error');setFault('C8_QA_APP_INTERRUPTED_RESTART');
       void session.abandon();
     };
+    const visualRequested=import.meta.env.VITE_C9_BABYLON_QA_UI==='true';
+    // Keep the existing 2D canvas for no-WebGL devices and context-loss.
+    // Babylon is lazy-loaded only in a manually enabled QA APK.
+    if(visualRequested){
+      import('./BabylonServerRendererC9').then(mod=>{
+        if(closed||deviceGone||!mounted.current)return;
+        try{
+          babylon=mod.createBabylonServerRendererC9({canvas:babylonCanvasRef.current,
+            onFault:()=>{
+              babylon?.dispose();babylon=null;
+              if(!closed&&mounted.current)setRenderMode('2D FALLBACK');
+            }});
+          setRenderMode('BABYLON QA');
+        }catch(_){setRenderMode('2D FALLBACK');}
+      }).catch(()=>{if(!closed&&mounted.current)setRenderMode('2D FALLBACK');});
+    }
     const onHidden=()=>{if(document.hidden)halt();};
     const onBlur=()=>halt();
     const onResize=()=>halt();
@@ -108,7 +134,13 @@ export default function CloudQaAlpha1({setScreen,lang='vi'}){
     const draw=()=>{
       const state=session.state;
       if(!closed&&mounted.current){
-        drawCockpit(canvas,latestRef.current?.reply?.visual,state.player);
+        const frame=sceneModel.frame(state.player);
+        if(babylon){
+          try{babylon.update(frame);}catch(_){
+            babylon.dispose();babylon=null;setRenderMode('2D FALLBACK');
+          }
+        }
+        if(!babylon)drawCockpit(canvas,latestRef.current?.reply?.visual,state.player);
         animation=requestAnimationFrame(draw);
       }
     };animation=requestAnimationFrame(draw);
@@ -129,7 +161,7 @@ export default function CloudQaAlpha1({setScreen,lang='vi'}){
       if(animation!==null)cancelAnimationFrame(animation);
       unsubscribe();document.removeEventListener('visibilitychange',onHidden);
       window.removeEventListener('blur',onBlur);window.removeEventListener('resize',onResize);
-      session.stopLocal();
+      babylon?.dispose();babylon=null;session.stopLocal();
     };
   },[]);
   const down=e=>{
@@ -159,13 +191,20 @@ export default function CloudQaAlpha1({setScreen,lang='vi'}){
   const buttonStyle={background:'#142c46',border:'1px solid #65f5ef',
     color:'#a9fbef',borderRadius:8,padding:'10px 16px',fontWeight:700};
   return <div style={{position:'absolute',inset:0,zIndex:80,background:'#020c1b',color:'#e8f5ff',overflow:'hidden'}}>
-    <canvas ref={canvasRef} onPointerDown={down} onPointerMove={move}
-      onPointerUp={up} onPointerCancel={up} onLostPointerCapture={up}
-      style={{position:'absolute',inset:0,width:'100%',height:'100%',touchAction:'none'}} />
+    <canvas ref={canvasRef} aria-hidden="true"
+      style={{position:'absolute',inset:0,width:'100%',height:'100%',
+        visibility:renderMode==='BABYLON QA'?'hidden':'visible',pointerEvents:'none'}} />
+    {import.meta.env.VITE_C9_BABYLON_QA_UI === 'true'&&<canvas ref={babylonCanvasRef}
+      aria-hidden="true" style={{position:'absolute',inset:0,width:'100%',height:'100%',
+        visibility:renderMode==='BABYLON QA'?'visible':'hidden',pointerEvents:'none'}}/>}
+    <div onPointerDown={down} onPointerMove={move} onPointerUp={up}
+      onPointerCancel={up} onLostPointerCapture={up}
+      aria-label="C9 server-authoritative QA input surface"
+      style={{position:'absolute',inset:0,touchAction:'none',zIndex:1}} />
     <div style={{position:'absolute',top:'calc(env(safe-area-inset-top) + 10px)',
-      left:12,right:12,pointerEvents:'none',textShadow:'0 1px 4px black'}}>
+      left:12,right:12,zIndex:2,pointerEvents:'none',textShadow:'0 1px 4px black'}}>
       <div style={{fontSize:13,fontWeight:700,color:'#ffd075'}}>
-        C8 QA CLOUD ALPHA 1 · OFFICIAL REWARDS DISABLED
+        C9 QA CLOUD ALPHA 1 · {renderMode} · NO REWARDS
       </div>
       <div style={{fontSize:12,opacity:.85}}>{vi?'Máy chủ quyết định HP / quái / kết quả; tàu hiển thị vị trí dự đoán':'Server owns HP / enemies / outcome; local ship is predicted'}</div>
       {hud&&<div style={{marginTop:8,fontSize:14,fontWeight:600}}>
@@ -174,7 +213,7 @@ export default function CloudQaAlpha1({setScreen,lang='vi'}){
       {!hud&&<div style={{marginTop:8}}>{vi?'Đang mở vé QA từ máy chủ...':'Opening QA ticket...'}</div>}
     </div>
     <div style={{position:'absolute',bottom:'calc(env(safe-area-inset-bottom) + 12px)',
-      left:12,right:12,display:'flex',gap:8,alignItems:'flex-end',justifyContent:'space-between'}}>
+      left:12,right:12,zIndex:2,display:'flex',gap:8,alignItems:'flex-end',justifyContent:'space-between'}}>
       <button style={buttonStyle} onClick={exit}>{vi?'◀ VỀ HQ':'◀ HQ'}</button>
       <div style={{textAlign:'right',maxWidth:'65%',fontSize:12,background:'#071726c9',
         border:'1px solid #244b63',borderRadius:8,padding:8}}>
