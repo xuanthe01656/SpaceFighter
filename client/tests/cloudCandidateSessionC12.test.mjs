@@ -81,7 +81,7 @@ test('C12 client: abandoned prior candidate is closed before new open',async()=>
 test('C12 client: terminal tail is split into valid frames, no invented input',async()=>{
   const f=fixture({terminalTail:18});await f.session.start();
   for(let i=0;i<15;i++)f.sample();await f.session.flush();
-  for(let i=0;i<15;i++)f.sample();await f.session.flush();
+  for(let i=0;i<30;i++)f.sample();await f.session.flush();
   assert.equal(f.session.state.ackTick,18);assert.equal(f.session.state.terminal,true);
 });
 test('C12 client: never accepts candidate reply with production reward grant or missing flags',()=>{

@@ -10,6 +10,10 @@ export const C12_CLIENT_VERSION='v8-c12-mobile-candidate-non-economic-v1';
 const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/;
 const PHASES=new Set(['active','lab-clear','lab-defeat']);
 const V='sf-c8-alpha1-server-render-qa-v1';
+// C12-PERF-B: keep first checkpoint responsive, then amortize the verified
+// HTTP/Auth/Firestore round trips over 30 frames. QA only. No queue growth,
+// no parallel transactions, no skipping input, and no C10 authority.
+const WARMUP_FRAMES=15,STEADY_FRAMES=30,MAX_PENDING_FRAMES=60;
 const error=(code)=>{const x=new Error(code);x.code=code;throw x;};
 const record=o=>o!==null&&typeof o==='object'&&!Array.isArray(o);
 const safeTick=n=>Number.isSafeInteger(n)&&n>=0&&n<=4500;
@@ -46,6 +50,7 @@ export function createCloudCandidateSessionC12({api,viewport,clock,randomId,
   const update=()=>onUpdate({reply:current,ackTick,queued:pending.length,
     terminal,error:fault,proof,diagnostics:diagnostics()});
   const assertLive=()=>{if(closed)error('C12_CLOSED');if(fault)throw fault;};
+  const batchSize=()=>ackTick===0?WARMUP_FRAMES:STEADY_FRAMES;
   function accept(reply,tick,rttMs=null){
     requireCandidateReplyC12(reply,{battleId,expectedTick:tick});
     if(reply.nextTick<ackTick)error('C12_TICK_REWIND');
@@ -83,12 +88,12 @@ export function createCloudCandidateSessionC12({api,viewport,clock,randomId,
       fault=new Error('C12_CLOCK_GAP_RESTART');update();throw fault;
     }
     if(lastMs!==null&&nowMs-lastMs<25)return null;
-    if(pending.length>=60){fault=new Error('C12_NETWORK_BACKPRESSURE');update();throw fault;}
+    if(pending.length>=MAX_PENDING_FRAMES){fault=new Error('C12_NETWORK_BACKPRESSURE');update();throw fault;}
     lastMs=nowMs;
     const next=sampleCloudInputTick(sampler);sampler=next.state;
     evidence.sample({tick:sampler.tick,x:sampler.positionX,z:sampler.positionZ,
       queued:pending.length+1});
-    pending.push(next.frame);if(pending.length>=15)void flush();
+    pending.push(next.frame);if(pending.length>=batchSize())void flush();
     return {x:sampler.positionX,z:sampler.positionZ,tick:sampler.tick};
   }
   async function sendFrames(frames,start){
@@ -99,9 +104,9 @@ export function createCloudCandidateSessionC12({api,viewport,clock,randomId,
     accept(reply,start+frames.length,clock()-sentAt);return true;
   }
   async function pump(){
-    while(!closed&&!terminal&&pending.length>=15){
-      const first=pending.slice(0,15);
-      try{if(!await sendFrames(first,ackTick))return;pending.splice(0,15);}catch(e){
+    while(!closed&&!terminal&&pending.length>=batchSize()){
+      const count=batchSize(),first=pending.slice(0,count);
+      try{if(!await sendFrames(first,ackTick))return;pending.splice(0,count);}catch(e){
         if(e?.code!=='SLICE_TERMINAL_FRAME_TAIL')throw e;
         for(const frame of first){
           if(closed||terminal)break;
@@ -112,7 +117,7 @@ export function createCloudCandidateSessionC12({api,viewport,clock,randomId,
     }
   }
   function flush(){
-    if(busy||closed||terminal||pending.length<15)return busy||Promise.resolve();
+    if(busy||closed||terminal||pending.length<batchSize())return busy||Promise.resolve();
     busy=pump().catch(e=>{if(!closed){fault=e;update();}}).finally(()=>{busy=null;});
     return busy;
   }
