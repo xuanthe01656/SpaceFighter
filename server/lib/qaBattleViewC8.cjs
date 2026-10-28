@@ -22,6 +22,13 @@ function projectQaBattleViewC8(run){
     ||!integer(p.pilotHitRadiusUnits,100,2500)
     ||!integer(p.movePerTickUnits,1,3000)
     ||!finite(p.speedMultiplier,0,5)
+    // A checkpoint pilot moves, but the signed server preview's spawn does not.
+    // Keep C9 visual.config stable across legitimate C12 movement ACKs.
+    ||!record(p.startPosition)
+    ||!integer(p.startPosition.xUnits,-50000,50000)
+    ||!integer(p.startPosition.zUnits,-50000,50000)
+    ||Math.abs(p.startPosition.xUnits)>p.arena.halfWidthUnits-p.pilotHitRadiusUnits
+    ||Math.abs(p.startPosition.zUnits)>p.arena.halfHeightUnits-p.pilotHitRadiusUnits
     ||!record(cp.position)||!integer(cp.position.xUnits,-50000,50000)
     ||!integer(cp.position.zUnits,-50000,50000))deny('authoritative checkpoint');
   function objects(list,cap,withHp=false){
@@ -39,8 +46,8 @@ function projectQaBattleViewC8(run){
   }
   const config={arenaHalfWidth:p.arena.halfWidthUnits,
     arenaHalfHeight:p.arena.halfHeightUnits,hitRadius:p.pilotHitRadiusUnits,
-    movePerTick:p.movePerTickUnits,startX:cp.position.xUnits,
-    startZ:cp.position.zUnits,speedMultiplier:p.speedMultiplier};
+    movePerTick:p.movePerTickUnits,startX:p.startPosition.xUnits,
+    startZ:p.startPosition.zUnits,speedMultiplier:p.speedMultiplier};
   // Public presentation data only. Not an attestation, not a saveable outcome.
   return Object.freeze({version:VIEW_VERSION,qaOnly:true,settlementEnabled:false,
     locationId:'alpha_stage_1',tick:s.tick,phase:s.phase,

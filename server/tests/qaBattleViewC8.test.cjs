@@ -13,6 +13,7 @@ function run(){
       position:{xUnits:123,zUnits:456},snapshotHash:'do-not-return'},
       preview:{arena:{halfWidthUnits:13200,halfHeightUnits:15000},
         pilotHitRadiusUnits:700,movePerTickUnits:420,speedMultiplier:1.2,
+        startPosition:{xUnits:123,zUnits:456},
         uid:'never-send',seed:999,loadoutHash:'never-send'}}};
 }
 test('C8 server: QA visual projection omits identity, HMAC, seeds, rewards and loadout',()=>{
@@ -51,4 +52,31 @@ test('C8 server: patch never hooks settlement or unlocks gameService P0',()=>{
   assert.doesNotMatch(server,/createVerifiedSettlementC7B2B/);
   assert.match(server,/\/api\/v1\/qa\/battle\/abandon/);
   assert.doesNotMatch(server,/\/api\/v1\/battle\/settle/);
+});
+
+// C12: position changes on every real mobile gesture; only pilot is dynamic.
+// The stable config must come from the server-owned foundation spawn position.
+test('C12/C9: moving pilot checkpoints preserve immutable spawn config across ACKs',async()=>{
+  const {createServerSceneModelC9}=await import('../../client/src/game/combat/ServerSceneModelC9.js');
+  const model=createServerSceneModelC9({clock:()=>1000});
+  const first=run();
+  const origin=projectQaBattleViewC8(first);
+  assert.equal(model.accept(origin),true);
+  const moved=run();
+  moved.state.tick=45;
+  moved.foundation.checkpoint.tick=45;
+  moved.foundation.checkpoint.position={xUnits:1123,zUnits:756};
+  const following=projectQaBattleViewC8(moved);
+  assert.deepEqual(following.config,origin.config,
+    'spawn, rules and arena are immutable even when checkpoint pilot moves');
+  assert.deepEqual(following.pilot,{x:1123,z:756});
+  assert.equal(model.accept(following),true,'C9 must accept a legitimate moved pilot');
+  assert.equal(model.frame().serverTick,45);
+});
+
+test('C12: missing or out-of-arena server spawn is rejected',()=>{
+  const missing=run();delete missing.foundation.preview.startPosition;
+  assert.throws(()=>projectQaBattleViewC8(missing),/C8 QA view invalid/);
+  const unsafe=run();unsafe.foundation.preview.startPosition.xUnits=14000;
+  assert.throws(()=>projectQaBattleViewC8(unsafe),/C8 QA view invalid/);
 });
