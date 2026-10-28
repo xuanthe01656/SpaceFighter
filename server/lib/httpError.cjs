@@ -1,5 +1,6 @@
 'use strict';
 const { GameError } = require('./economy.cjs');
+const { CampaignAlphaC6CError } = require('./combatCampaignAlphaC6CV8.cjs');
 
 // Only token/user-status failures are authentication errors. IAM errors,
 // unexpected Firebase outages and misconfiguration remain HTTP 500, so they
@@ -13,6 +14,13 @@ const INVALID_ID_TOKEN_CODES = new Set([
 ]);
 
 function classifyGameApiError(error) {
+  // A constrained, expected QA policy denial is NOT an internal server fault.
+  // Do not generalize this mapping to other simulator errors.
+  if(error instanceof CampaignAlphaC6CError
+    && error.code==='ALPHA_C6C_LOADOUT_UNSUPPORTED') {
+    return {status:409,code:'ALPHA_C6C_LOADOUT_UNSUPPORTED',
+      message:'C12 QA requires Alpha/X-Wing/Rail at level 1 with no auxiliary equipment'};
+  }
   if (error instanceof GameError) {
     const status = Number.isInteger(error.status) && error.status >= 400 && error.status < 600
       ? error.status : 500;

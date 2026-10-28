@@ -441,3 +441,30 @@ test('C12 exit: new candidate ticket allowed after abandoned ticket in same sess
   assert.notEqual(next.battleId,first.battleId);
   assert.equal(next.eligibleForSettlement,false);
 });
+
+test('C12-PERF-A: transaction telemetry remains numeric-only, optional and non-authoritative',async()=>{
+  const f=fixture(),metrics=[];
+  const svc=await f.create({onPerfInput:event=>metrics.push(event)});
+  await svc.open(UID,SID,openBody());
+  f.setClock(T0+1000);
+  const reply=await svc.ingest(UID,SID,chunk(0,15));
+  assert.equal(reply.nextTick,15);
+  assert.equal(reply.nonEconomic,true);
+  assert.equal(reply.eligibleForSettlement,false);
+  assert.equal(metrics.length,1);
+  const meter=metrics[0];
+  assert.equal(meter.outcome,'ok');
+  assert.equal(meter.attempts,1);
+  for(const name of ['transactionMs','readMs','simulationMs','otherMs']){
+    assert.equal(typeof meter[name],'number');
+    assert.ok(Number.isFinite(meter[name])&&meter[name]>=0);
+  }
+  assert.deepEqual(Object.keys(meter).sort(),
+    ['outcome','attempts','transactionMs','readMs','simulationMs','otherMs'].sort());
+  assert.doesNotMatch(JSON.stringify(meter),new RegExp(UID+'|'+SID+'|'+BID));
+  const f2=fixture(),svc2=await f2.create({onPerfInput:()=>{throw new Error('telemetry sink failed');}});
+  await svc2.open(UID,SID,openBody());
+  f2.setClock(T0+1000);
+  const out2=await svc2.ingest(UID,SID,chunk(0,15));
+  assert.equal(out2.nextTick,15,'telemetry must never affect committed candidate input');
+});

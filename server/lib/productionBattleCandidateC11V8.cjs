@@ -8,6 +8,7 @@
  * payload beyond the exact open/ingest schemas validated below.
  */
 const crypto=require('node:crypto');
+const {performance}=require('node:perf_hooks');
 const path=require('node:path');
 const {pathToFileURL}=require('node:url');
 const {GameError}=require('./economy.cjs');
@@ -108,7 +109,8 @@ const answer=(active,duplicate=false)=>Object.freeze({
 async function createProductionBattleCandidateC11({db,enabled=false,allowedUids=[],
   signingKeyId,signingKey,verificationKeys,
   now=Date.now,uuidFactory=crypto.randomUUID,
-  randomSeed=()=>crypto.randomInt(1,0x100000000),catalogModule,schemaModule}={}){
+  randomSeed=()=>crypto.randomInt(1,0x100000000),catalogModule,schemaModule,
+  onPerfInput=null}={}){
   if(enabled!==true){
     const blocked=()=>deny('C11_DISABLED','C11 candidate is disabled',423);
     return Object.freeze({enabled:false,open:blocked,ingest:blocked,
@@ -126,6 +128,8 @@ async function createProductionBattleCandidateC11({db,enabled=false,allowedUids=
     ||typeof now!=='function'||typeof uuidFactory!=='function'
     ||typeof randomSeed!=='function')
     throw new Error('C11 requires explicit server config, closed allowlist and HMAC key ring');
+  if(onPerfInput!==null && typeof onPerfInput!=='function')
+    throw new TypeError('C11 optional performance sink must be a function');
   const catalog=catalogModule||await import(pathToFileURL(path.resolve(__dirname,
     '../../client/src/constants.js')).href);
   const schema=schemaModule||await import(pathToFileURL(path.resolve(__dirname,
@@ -225,41 +229,61 @@ async function createProductionBattleCandidateC11({db,enabled=false,allowedUids=
     actor(uid,sid);
     if(!exact(body,['chunk']))deny('C11_INPUT_INVALID','Only input chunk accepted',400);
     const checked=validateChunk(body.chunk),at=clock();
-    return db.runTransaction(async t=>{
-      const [user,job,activeSnap,originSnap]=await Promise.all([
-        t.get(userRef(uid)),t.get(jobRef(uid)),t.get(activeRef(uid)),
-        t.get(originRef(uid,checked.battleId))]);
-      profile(user,job,sid);
-      const active=checkActive(activeSnap,uid,sid,checked.battleId,at);
-      if(!originSnap.exists)deny('C11_ORIGIN_MISSING','Cannot ingest without signed origin');
-      const origin=originSnap.data();
-      checkOrigin(origin,{uid,sessionId:sid,battleId:checked.battleId,keys:verificationKeys});
-      if(origin.mac!==active.originMac)
-        deny('C11_ORIGIN_BINDING','Active checkpoint has different origin');
-      const run=freeze(structuredClone(active.run));
-      const step=replayCombatSliceChunk({run,chunk:body.chunk,receivedAtMs:at});
-      if(step.duplicate){
-        const existing=await t.get(chunkRef(uid,checked.battleId,checked.startTick));
-        if(!existing.exists||existing.data().chunkDigest!==checked.chunkDigest)
-          deny('C11_DUPLICATE_INVALID','Missing/mismatched stored duplicate chunk');
-        return answer(active,true);
+    const meter=onPerfInput?{attempts:0,readMs:0,simulationMs:0}:null;
+    const start=onPerfInput?performance.now():0;
+    const ms=n=>Math.round(Math.max(0,n)*1000)/1000;
+    let outcome='error';
+    try{
+      const result=await db.runTransaction(async t=>{
+        if(meter)meter.attempts++;
+        const readsAt=meter?performance.now():0;
+        const [user,job,activeSnap,originSnap]=await Promise.all([
+          t.get(userRef(uid)),t.get(jobRef(uid)),t.get(activeRef(uid)),
+          t.get(originRef(uid,checked.battleId))]);
+        if(meter)meter.readMs+=performance.now()-readsAt;
+        profile(user,job,sid);
+        const active=checkActive(activeSnap,uid,sid,checked.battleId,at);
+        if(!originSnap.exists)deny('C11_ORIGIN_MISSING','Cannot ingest without signed origin');
+        const origin=originSnap.data();
+        checkOrigin(origin,{uid,sessionId:sid,battleId:checked.battleId,keys:verificationKeys});
+        if(origin.mac!==active.originMac)
+          deny('C11_ORIGIN_BINDING','Active checkpoint has different origin');
+        const simulateAt=meter?performance.now():0;
+        const run=freeze(structuredClone(active.run));
+        const step=replayCombatSliceChunk({run,chunk:body.chunk,receivedAtMs:at});
+        if(meter)meter.simulationMs+=performance.now()-simulateAt;
+        if(step.duplicate){
+          const existing=await t.get(chunkRef(uid,checked.battleId,checked.startTick));
+          if(!existing.exists||existing.data().chunkDigest!==checked.chunkDigest)
+            deny('C11_DUPLICATE_INVALID','Missing/mismatched stored duplicate chunk');
+          return answer(active,true);
+        }
+        if(active.chunkCount>=MAX_AUDIT_CHUNKS)
+          deny('C11_CHUNK_LIMIT','Candidate journal full',429);
+        if(step.run.state.qaOnly!==true||step.run.state.safeForCloudBattle!==false
+          ||step.run.foundation.journal.nextTick!==step.run.state.tick)
+          deny('C11_MODEL_UNSAFE','Unapproved simulator returned unsafe state');
+        const next=safeDoc({...active,run:step.run,chunkCount:active.chunkCount+1,
+          updatedAtMs:at});
+        const row=safeDoc({version:VERSION,battleId:checked.battleId,
+          startTick:checked.startTick,endTick:checked.endTick,frames:body.chunk.frames,
+          receivedAtMs:at,chunkDigest:checked.chunkDigest,
+          nextTick:step.run.state.tick,journalDigest:step.run.foundation.journal.digest,
+          traceDigest:step.run.state.traceDigest,terminalPhase:step.run.state.phase});
+        t.create(chunkRef(uid,checked.battleId,checked.startTick),row);
+        t.set(activeRef(uid),next);
+        return answer(next);
+      });
+      outcome='ok';return result;
+    }finally{
+      if(meter){
+        const transactionMs=ms(performance.now()-start);
+        const readMs=ms(meter.readMs),simulationMs=ms(meter.simulationMs);
+        try{onPerfInput({outcome,attempts:meter.attempts,
+          transactionMs,readMs,simulationMs,
+          otherMs:ms(transactionMs-readMs-simulationMs)});}catch(_){/* no effect on authority */}
       }
-      if(active.chunkCount>=MAX_AUDIT_CHUNKS)
-        deny('C11_CHUNK_LIMIT','Candidate journal full',429);
-      if(step.run.state.qaOnly!==true||step.run.state.safeForCloudBattle!==false
-        ||step.run.foundation.journal.nextTick!==step.run.state.tick)
-        deny('C11_MODEL_UNSAFE','Unapproved simulator returned unsafe state');
-      const next=safeDoc({...active,run:step.run,chunkCount:active.chunkCount+1,
-        updatedAtMs:at});
-      const row=safeDoc({version:VERSION,battleId:checked.battleId,
-        startTick:checked.startTick,endTick:checked.endTick,frames:body.chunk.frames,
-        receivedAtMs:at,chunkDigest:checked.chunkDigest,
-        nextTick:step.run.state.tick,journalDigest:step.run.foundation.journal.digest,
-        traceDigest:step.run.state.traceDigest,terminalPhase:step.run.state.phase});
-      t.create(chunkRef(uid,checked.battleId,checked.startTick),row);
-      t.set(activeRef(uid),next);
-      return answer(next);
-    });
+    }
   }
   async function status(uid,sid){
     actor(uid,sid);const at=clock();

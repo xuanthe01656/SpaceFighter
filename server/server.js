@@ -2,6 +2,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const {performance} = require('node:perf_hooks');
 require('dotenv').config();
 const { createGameService } = require('./lib/gameService.cjs');
 const { GameError } = require('./lib/economy.cjs');
@@ -34,21 +35,52 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
       res.setHeader('Vary','Origin');
       res.setHeader('Access-Control-Allow-Headers','Authorization, Content-Type, X-Game-Session');
       res.setHeader('Access-Control-Allow-Methods','GET, POST, OPTIONS');
+      // The preflight cache is independent of the HTTP response cache. Keep
+      // ordinary API responses no-store and cache ONLY the allowlisted C12
+      // input preflight (not the token, ticket or game state).
+      if(req.method==='OPTIONS' && req.path==='/candidate/battle/input'){
+        res.setHeader('Access-Control-Max-Age','600');
+      }
+      if(req.method==='OPTIONS'){
+        res.setHeader('Vary','Origin, Access-Control-Request-Method, Access-Control-Request-Headers');
+      }
     }
     if (req.method==='OPTIONS') return res.sendStatus(204);
     next();
   });
   const apiReady=Boolean(options.auth && options.service);
+  const c12PerfEnabled=options.candidateEnabled===true && options.candidatePerfEnabled===true;
+  const c12PerfSink=typeof options.candidatePerfSink==='function'
+    ?options.candidatePerfSink : event=>console.info(JSON.stringify(event));
+  // Telemetry is opt-in, numeric-only and never allowed to break requests.
+  const emitC12Perf=event=>{try{c12PerfSink(Object.freeze(event));}catch(_){/* observability only */}};
+  const roundMs=value=>Math.round(Math.max(0,value)*1000)/1000;
   const withAuth = (fn, successStatus=200) => async(req,res,next)=>{
     if(!apiReady) return res.status(503).json({ok:false,code:'GAME_API_UNAVAILABLE',message:'Protected game API not configured'});
+    const measure=c12PerfEnabled && req.method==='POST'
+      && req.path==='/api/v1/candidate/battle/input';
+    const started=measure?performance.now():0;
+    let authMs=null,serviceMs=null,outcome='error',responseStatus=500;
     try {
       const header=req.get('authorization')||'';
       if (!/^Bearer [A-Za-z0-9_.-]{20,}$/.test(header)) throw new GameError('UNAUTHORIZED','Firebase ID token required',401);
-      const decoded=await options.auth.verifyIdToken(header.slice(7),true);
+      const authStart=measure?performance.now():0;
+      let decoded;
+      try{decoded=await options.auth.verifyIdToken(header.slice(7),true);}
+      finally{if(measure)authMs=roundMs(performance.now()-authStart);}
       if (!decoded.uid) throw new GameError('UNAUTHORIZED','Invalid ID token',401);
-      const result=await fn(req,decoded);
+      const serviceStart=measure?performance.now():0;
+      let result;
+      try{result=await fn(req,decoded);}
+      finally{if(measure)serviceMs=roundMs(performance.now()-serviceStart);}
+      outcome='ok';responseStatus=successStatus;
       return res.status(successStatus).json({ok:true,...result});
-    }catch(e){next(e);}
+    }catch(e){responseStatus=classifyGameApiError(e).status;next(e);}
+    finally{
+      if(measure)emitC12Perf({event:'sf.c12.input.http.v1',outcome,
+        status:responseStatus,authVerifyMs:authMs,serviceMs,
+        totalMs:roundMs(performance.now()-started)});
+    }
   };
   app.post('/api/v1/session',withAuth((_req,user)=>options.service.openSession(user)));
   app.get('/api/v1/profile',withAuth((req,user)=>options.service.getProfile(user.uid,req.get('x-game-session'))));
@@ -187,6 +219,7 @@ async function start() {
     qaBattleService,qaBattleEnabled:Boolean(qaBattleService),
     qaVerifierService,qaVerifierEnabled:Boolean(qaVerifierService),
     candidateService,candidateEnabled:Boolean(candidateService),
+    candidatePerfEnabled:process.env.GAME_C12_PERF_LOG_ENABLED==='true',
     allowLocalOrigin:process.env.NODE_ENV!=='production'});
   app.listen(port,'0.0.0.0',()=>console.log(`Space Fighter Phase 1 listening on ${port}; API ${service?'enabled':'disabled'}`));
 }

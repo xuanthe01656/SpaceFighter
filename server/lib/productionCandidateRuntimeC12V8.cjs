@@ -50,6 +50,11 @@ async function createCandidateStagingRuntimeC12({db,env={},catalogModule,
   if(now!==undefined)opts.now=now;
   if(uuidFactory!==undefined)opts.uuidFactory=uuidFactory;
   if(randomSeed!==undefined)opts.randomSeed=randomSeed;
+  // C12-only opt-in transaction spans: no UID, session, HMAC, payload or trace.
+  // The independent C12 and staging gates above are still mandatory.
+  if(env.GAME_C12_PERF_LOG_ENABLED==='true'){
+    opts.onPerfInput=sample=>console.info(JSON.stringify({event:'sf.c12.input.tx.v1',...sample}));
+  }
   const service=await createProductionBattleCandidateC11(opts);
   return Object.freeze({version:VERSION,enabled:true,service,
     candidateOnly:true,nonEconomic:true,settlementEnabled:false});
