@@ -5,9 +5,11 @@
  * Imported dynamically only for manually enabled C9 Cloud QA APKs.
  */
 import * as BABYLON from '@babylonjs/core';
+import {toC9BabylonWorld,chooseC9PilotDisplay,c9VisualSmoothingAlpha}
+  from '../../game/combat/C9VisualProjection.js';
 const MAX_ENEMIES=32,MAX_SHOTS=128;
 const bound=(n,min,max)=>Math.max(min,Math.min(max,n));
-const loc=o=>new BABYLON.Vector3(-o.x/1000,0.14,o.z/1000);
+const loc=o=>{const p=toC9BabylonWorld(o);return new BABYLON.Vector3(p.x,p.y,p.z);};
 const material=(scene,name,hex)=>{
   const m=new BABYLON.StandardMaterial(name,scene);
   m.diffuseColor=BABYLON.Color3.FromHexString(hex);
@@ -33,16 +35,16 @@ export function createBabylonServerRendererC9({canvas,onFault=()=>{}}={}){
     camera.mode=BABYLON.Camera.ORTHOGRAPHIC_CAMERA;
     scene.activeCamera=camera;
     const matPilot=material(scene,'c9-pilot','#64edff');
-    const matGhost=material(scene,'c9-predicted-ghost','#377c89');
+    const matGhost=material(scene,'c9-server-reference','#377c89');
     matGhost.alpha=.5;
     const matEnemy=material(scene,'c9-enemy','#ff657b');
     const matShot=material(scene,'c9-shot','#65ffe0');
     const matEnemyShot=material(scene,'c9-enemy-shot','#ffb85c');
     const matGrid=material(scene,'c9-grid','#1d3b59');
-    const pilot=BABYLON.MeshBuilder.CreateCylinder('c9-server-pilot',{
+    const pilot=BABYLON.MeshBuilder.CreateCylinder('c9-displayed-predicted-pilot',{
       diameterTop:0,diameterBottom:1.35,height:2.3,tessellation:3},scene);
     pilot.rotation.x=Math.PI/2;pilot.material=matPilot;
-    const ghost=pilot.clone('c9-local-prediction');ghost.material=matGhost;
+    const ghost=pilot.clone('c9-authoritative-server-reference');ghost.material=matGhost;
     ghost.isVisible=false;
     const enemies=new Map(),shots=[],enemyShots=[],lines=[];
     const createSphere=(name,mat,r)=>{
@@ -68,7 +70,7 @@ export function createBabylonServerRendererC9({canvas,onFault=()=>{}}={}){
         lines.push(row,col);
       }
     };
-    let configHash=null;
+    let configHash=null,displayedTarget=null;
     function update(frame){
       if(disposed||!frame)return;
       if(frame.version!=='c9-server-checkpoint-babylon-qa-v1'
@@ -76,9 +78,14 @@ export function createBabylonServerRendererC9({canvas,onFault=()=>{}}={}){
         ||frame.productionOutcomeIssued!==false)throw new TypeError('C9 unsafe scene frame');
       const key=`${frame.config.arenaHalfWidth}:${frame.config.arenaHalfHeight}`;
       if(key!==configHash){cameraFit(frame.config);makeGrid(frame.config);configHash=key;}
-      pilot.position=loc(frame.pilot);
-      ghost.isVisible=Boolean(frame.predictedGhost);
-      if(ghost.isVisible)ghost.position=loc(frame.predictedGhost);
+      // Show local, bounded 30Hz prediction as the responsive bright ship.
+      // The server-authoritative pilot remains a dim reference, never an input.
+      const display=chooseC9PilotDisplay(frame);
+      const nextTarget=loc(display.primary);
+      if(displayedTarget===null)pilot.position.copyFrom(nextTarget);
+      displayedTarget=nextTarget;
+      ghost.isVisible=Boolean(display.serverReference);
+      if(ghost.isVisible)ghost.position=loc(display.serverReference);
       const current=new Set();
       for(const e of frame.enemies.slice(0,MAX_ENEMIES)){
         current.add(e.id);
@@ -102,7 +109,16 @@ export function createBabylonServerRendererC9({canvas,onFault=()=>{}}={}){
     const lostHandler=e=>{e.preventDefault();if(!disposed){lost=true;onFault('C9_WEBGL_CONTEXT_LOST');}};
     canvas.addEventListener('webglcontextlost',lostHandler,false);
     events.push(()=>canvas.removeEventListener('webglcontextlost',lostHandler));
-    engine.runRenderLoop(()=>{if(!disposed&&!lost)scene.render();});
+    engine.runRenderLoop(()=>{
+      if(disposed||lost)return;
+      if(displayedTarget){
+        // A 22ms visual-only lag smooths 30Hz samples across render frames.
+        const elapsed=Math.max(0,engine.getDeltaTime());
+        const alpha=c9VisualSmoothingAlpha(elapsed);
+        BABYLON.Vector3.LerpToRef(pilot.position,displayedTarget,alpha,pilot.position);
+      }
+      scene.render();
+    });
     return Object.freeze({update,resize:()=>{if(!disposed)engine.resize();},dispose:()=>{
       if(disposed)return;disposed=true;events.forEach(fn=>fn());
       engine?.stopRenderLoop();scene?.dispose();engine?.dispose();

@@ -1,0 +1,35 @@
+/**
+ * C9 presentation-only mapping for the top-down left-handed Babylon QA camera.
+ * Camera: eye +Y, forward -Y, up -Z -> screen-right basis -world-X.
+ * Therefore POSITIVE server X already projects to screen LEFT: do not negate X.
+ * This module never creates a gameplay input, checkpoint, outcome or reward.
+ */
+export const C9_WORLD_UNIT_SCALE=1000;
+const own=(o,k)=>Object.prototype.hasOwnProperty.call(o,k);
+const coord=p=>p!==null&&typeof p==='object'&&!Array.isArray(p)
+  &&Object.keys(p).length===2&&own(p,'x')&&own(p,'z')&&Number.isSafeInteger(p.x)&&Number.isSafeInteger(p.z)
+  &&Math.abs(p.x)<=60000&&Math.abs(p.z)<=60000;
+
+export function toC9BabylonWorld(p){
+  if(!coord(p))throw new TypeError('C9 visual position invalid');
+  return Object.freeze({x:p.x/C9_WORLD_UNIT_SCALE,y:.14,z:p.z/C9_WORLD_UNIT_SCALE});
+}
+
+/** Local 30Hz prediction is the bright displayed ship. A server checkpoint
+ * remains a dim reference for QA only; server still owns HP, enemy and result. */
+export function chooseC9PilotDisplay(frame){
+  if(!frame||!coord(frame.pilot)
+    ||(frame.predictedGhost!=null&&!coord(frame.predictedGhost)))
+    throw new TypeError('C9 visual pilot invalid');
+  return Object.freeze({
+    primary:frame.predictedGhost??frame.pilot,
+    serverReference:frame.predictedGhost==null?null:frame.pilot,
+  });
+}
+
+/** Visual smoothing only; it never changes the quantized 30Hz sampler. */
+export function c9VisualSmoothingAlpha(deltaMs){
+  if(typeof deltaMs!=='number'||!Number.isFinite(deltaMs)||deltaMs<0)
+    throw new TypeError('C9 visual frame time invalid');
+  return 1-Math.exp(-Math.min(64,deltaMs)/22);
+}
