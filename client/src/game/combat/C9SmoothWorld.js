@@ -5,7 +5,9 @@
  */
 export const C9_SMOOTH_WORLD_VERSION='c9-server-motion-visual-qa-v1';
 const TICK_MS=1000/30;
-const MAX_PREDICTION_MS=850;
+// One 30-frame (1000ms) checkpoint interval plus 200ms ACK jitter.
+// A shorter 850ms cap caused a visible stop on nearly every ~999ms ACK gap.
+const MAX_PREDICTION_MS=1200;
 const CORRECTION_MS=140;
 const MAX_ENEMY_SPEED=900; // server units/tick, visual estimate safety cap
 const MAX_SHOT_SPEED=3000;

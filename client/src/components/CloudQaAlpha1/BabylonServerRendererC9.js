@@ -4,7 +4,7 @@
  * Render-only movement estimates are visually bounded and QA-only.
  */
 import * as BABYLON from '@babylonjs/core';
-import {toC9ServerEntityWorld,chooseC9PilotDisplay,c9VisualSmoothingAlpha}
+import {toC9ServerEntityWorld,chooseC9PilotDisplay,c9PilotStepAlpha}
   from '../../game/combat/C9VisualProjection.js';
 import {createC9SmoothWorld} from '../../game/combat/C9SmoothWorld.js';
 import {createC9PerformanceTelemetry} from '../../game/combat/C9PerformanceTelemetry.js';
@@ -74,7 +74,8 @@ export function createBabylonServerRendererC9({canvas,onFault=()=>{},onPerf=()=>
       }
     };
     let configHash=null,displayedTarget=null,serverPilot=null,serverPilotRaw=null;
-    let terminal=false,lastPredictedX=null,lastPredictedZ=null;
+    let terminal=false,lastPredictedX=null,lastPredictedZ=null,pilotStepAt=null;
+    const pilotFrom=pilot.position.clone();
     const place=(mesh,x,z)=>{mesh.position.x=x/1000;mesh.position.z=z/1000;};
     const drawMotion={
       enemy:(id,x,z)=>{const m=enemies.get(id);if(m)place(m,x,z);},
@@ -92,9 +93,13 @@ export function createBabylonServerRendererC9({canvas,onFault=()=>{},onPerf=()=>
       const display=chooseC9PilotDisplay(frame);
       serverPilotRaw={x:frame.pilot.x,z:frame.pilot.z};
       serverPilot=loc(display.primary);
-      if(displayedTarget===null){pilot.position.copyFrom(serverPilot);displayedTarget=loc(frame.pilot);}
+      if(displayedTarget===null){pilot.position.copyFrom(serverPilot);
+        displayedTarget=loc(frame.pilot);pilotFrom.copyFrom(pilot.position);
+        pilotStepAt=performance.now();}
       terminal=frame.phase!=='active';
-      if(terminal){displayedTarget.copyFrom(serverPilot);lastPredictedX=null;lastPredictedZ=null;}
+      if(terminal){displayedTarget.copyFrom(serverPilot);pilotFrom.copyFrom(serverPilot);
+        pilot.position.copyFrom(serverPilot);pilotStepAt=performance.now();
+        lastPredictedX=null;lastPredictedZ=null;}
       ghost.isVisible=showServerReference&&Boolean(display.serverReference);
       if(ghost.isVisible)ghost.position=loc(display.serverReference);
       const current=new Set();
@@ -130,7 +135,11 @@ export function createBabylonServerRendererC9({canvas,onFault=()=>{},onPerf=()=>
       }
       if(position.x===lastPredictedX&&position.z===lastPredictedZ)return;
       const selected=chooseC9PilotDisplay({pilot:serverPilotRaw,predictedGhost:position});
-      displayedTarget.copyFrom(loc(selected.primary));
+      // Sampled coordinates are server-journal compatible at 30Hz. Present
+      // each already-accepted local sample linearly across 120Hz render frames.
+      // This changes no position sent to the authoritative simulator.
+      pilotFrom.copyFrom(pilot.position);
+      displayedTarget.copyFrom(loc(selected.primary));pilotStepAt=performance.now();
       lastPredictedX=position.x;lastPredictedZ=position.z;
       ghost.isVisible=showServerReference&&Boolean(selected.serverReference);
       if(ghost.isVisible)ghost.position.copyFrom(serverPilot);
@@ -141,9 +150,9 @@ export function createBabylonServerRendererC9({canvas,onFault=()=>{},onPerf=()=>
     engine.runRenderLoop(()=>{
       if(disposed||lost)return;
       const frameAt=performance.now(),elapsed=Math.max(0,engine.getDeltaTime());
-      if(displayedTarget){
-        const alpha=c9VisualSmoothingAlpha(elapsed);
-        BABYLON.Vector3.LerpToRef(pilot.position,displayedTarget,alpha,pilot.position);
+      if(displayedTarget&&pilotStepAt!==null){
+        const alpha=c9PilotStepAlpha(Math.max(0,frameAt-pilotStepAt));
+        BABYLON.Vector3.LerpToRef(pilotFrom,displayedTarget,alpha,pilot.position);
       }
       motion.each(drawMotion,frameAt);
       const cpuStart=performance.now();scene.render();

@@ -14,6 +14,9 @@ const V='sf-c8-alpha1-server-render-qa-v1';
 // HTTP/Auth/Firestore round trips over 30 frames. QA only. No queue growth,
 // no parallel transactions, no skipping input, and no C10 authority.
 const WARMUP_FRAMES=15,STEADY_FRAMES=30,MAX_PENDING_FRAMES=60;
+// QA flow-control: stop sampling when saturated, then fail closed if an ACK
+// does not drain the original bounded queue. Do not create catch-up ticks.
+const MAX_NETWORK_WAIT_MS=4000;
 const error=(code)=>{const x=new Error(code);x.code=code;throw x;};
 const record=o=>o!==null&&typeof o==='object'&&!Array.isArray(o);
 const safeTick=n=>Number.isSafeInteger(n)&&n>=0&&n<=4500;
@@ -46,8 +49,29 @@ export function createCloudCandidateSessionC12({api,viewport,clock,randomId,
   let battleId=null,sampler=null,current=null,ackTick=0,pending=[],lastMs=null;
   let busy=null,closed=false,terminal=false,fault=null,proof=null;
   let recoveringTerminalTail=false;
+  let networkWaitSince=null,networkWaitCount=0,networkWaitTotalMs=0;
+  let networkWaitMaxMs=0,inFlightSince=null;
   const evidence=createCandidateMovementEvidenceC13();
   const diagnostics=()=>evidence.report({terminal,auditComplete:Boolean(proof),error:fault});
+  function transport(){
+    const now=clock();
+    const active=networkWaitSince!==null&&Number.isFinite(now)
+      ?Math.max(0,now-networkWaitSince):0;
+    const inflight=inFlightSince!==null&&Number.isFinite(now)
+      ?Math.max(0,now-inFlightSince):null;
+    return Object.freeze({waiting:networkWaitSince!==null,
+      waitMs:Math.round(active),waitCount:networkWaitCount,
+      totalWaitMs:Math.round(networkWaitTotalMs+active),
+      maxWaitMs:Math.round(Math.max(networkWaitMaxMs,active)),
+      inflightMs:inflight===null?null:Math.round(inflight),
+      pendingFrames:pending.length,maxPendingFrames:MAX_PENDING_FRAMES});
+  }
+  function stopWaiting(at){
+    if(networkWaitSince===null)return;
+    const wait=Math.max(0,at-networkWaitSince);
+    networkWaitTotalMs+=wait;networkWaitMaxMs=Math.max(networkWaitMaxMs,wait);
+    networkWaitSince=null;update();
+  }
   const update=()=>onUpdate({reply:current,ackTick,queued:pending.length,
     terminal,error:fault,proof,diagnostics:diagnostics()});
   const assertLive=()=>{if(closed)error('C12_CLOSED');if(fault)throw fault;};
@@ -56,7 +80,9 @@ export function createCloudCandidateSessionC12({api,viewport,clock,randomId,
     requireCandidateReplyC12(reply,{battleId,expectedTick:tick});
     if(reply.nextTick<ackTick)error('C12_TICK_REWIND');
     evidence.acknowledge({tick:reply.nextTick,pilot:reply.visual.pilot,rttMs});
-    ackTick=reply.nextTick;current=reply;terminal=reply.phase!=='active';update();
+    ackTick=reply.nextTick;current=reply;terminal=reply.phase!=='active';
+    if(terminal)stopWaiting(clock());
+    update();
     return reply;
   }
   async function start(){
@@ -89,7 +115,17 @@ export function createCloudCandidateSessionC12({api,viewport,clock,randomId,
       fault=new Error('C12_CLOCK_GAP_RESTART');update();throw fault;
     }
     if(lastMs!==null&&nowMs-lastMs<25)return null;
-    if(pending.length>=MAX_PENDING_FRAMES){fault=new Error('C12_NETWORK_BACKPRESSURE');update();throw fault;}
+    if(pending.length>=MAX_PENDING_FRAMES){
+      if(networkWaitSince===null){networkWaitSince=nowMs;networkWaitCount++;update();}
+      // This is a deliberate pause, not an unsent input tick. The next
+      // timer callback is checked normally; a real background gap still fails.
+      lastMs=nowMs;
+      if(nowMs-networkWaitSince>=MAX_NETWORK_WAIT_MS){
+        fault=new Error('C12_NETWORK_BACKPRESSURE_TIMEOUT');update();throw fault;
+      }
+      return null;
+    }
+    stopWaiting(nowMs);
     lastMs=nowMs;
     const next=sampleCloudInputTick(sampler);sampler=next.state;
     evidence.sample({tick:sampler.tick,x:sampler.positionX,z:sampler.positionZ,
@@ -98,11 +134,13 @@ export function createCloudCandidateSessionC12({api,viewport,clock,randomId,
     return {x:sampler.positionX,z:sampler.positionZ,tick:sampler.tick};
   }
   async function sendFrames(frames,start){
-    const sentAt=clock();
-    const reply=await api.input({chunk:{protocol:'pve-input-v1',battleId,
-      startTick:start,frames}});
-    if(closed)return false;
-    accept(reply,start+frames.length,clock()-sentAt);return true;
+    const sentAt=clock();inFlightSince=sentAt;
+    try{
+      const reply=await api.input({chunk:{protocol:'pve-input-v1',battleId,
+        startTick:start,frames}});
+      if(closed||fault)return false;
+      accept(reply,start+frames.length,clock()-sentAt);return true;
+    }finally{inFlightSince=null;}
   }
   // C6-E rejects any whole chunk that contains post-terminal input, without
   // committing that chunk. Keep the authoritative guard and retry a sequence
@@ -166,6 +204,6 @@ export function createCloudCandidateSessionC12({api,viewport,clock,randomId,
   return Object.freeze({start,drag,release,sample,flush,finish,abandon,stopLocal,
     getDiagnostics:diagnostics,
     get state(){return {battleId,current,terminal,ackTick,pending:pending.length,
-      busy:Boolean(busy),error:fault,proof,diagnostics:diagnostics(),
+      busy:Boolean(busy),error:fault,proof,diagnostics:diagnostics(),transport:transport(),
       player:sampler?{x:sampler.positionX,z:sampler.positionZ}:null};}});
 }

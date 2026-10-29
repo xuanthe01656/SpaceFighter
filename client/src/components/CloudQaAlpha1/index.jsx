@@ -249,7 +249,8 @@ export default function CloudQaAlpha1({setScreen,lang='vi',candidate=false}){
     if(!candidate||!renderPerf)return;
     // Deliberately separate from the C13 attestation-shaped report.
     // This is a LOCAL render-performance snapshot without identity or inputs.
-    const data=JSON.stringify(renderPerf,null,2)+'\n';
+    const data=JSON.stringify({...renderPerf,
+      c12Transport:sessionRef.current?.state?.transport??null},null,2)+'\n';
     try{
       const file=typeof File==='function'
         ?new File([data],'spacefighter-c9-render-performance.json',{type:'application/json'})
@@ -302,6 +303,10 @@ export default function CloudQaAlpha1({setScreen,lang='vi',candidate=false}){
         C9 QA FPS ~{renderPerf.fps} · p95 frame {renderPerf.p95FrameMs}ms ·
         ACK gap {renderPerf.meanAckGapMs}ms · age {renderPerf.checkpointAgeMs}ms ·
         enemies {renderPerf.enemies} / shots {renderPerf.shots+renderPerf.enemyShots}
+        {sessionRef.current?.state?.transport?.waiting&&<span style={{color:'#ffce91'}}>
+          {' '}· NETWORK WAIT · queued {sessionRef.current.state.pending}/60 ·
+          {sessionRef.current.state.transport.waitMs}ms
+        </span>}
       </div>}
       {!hud&&<div style={{marginTop:8}}>{vi?'Đang mở vé QA từ máy chủ...':'Opening QA ticket...'}</div>}
     </div>

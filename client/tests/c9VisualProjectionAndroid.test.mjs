@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {openCloudInputIntent,addCloudPointerDelta,sampleCloudInputTick}
   from '../src/game/combat/CloudInputIntentV8.js';
-import {toC9BabylonWorld,toC9ServerEntityWorld,chooseC9PilotDisplay,c9VisualSmoothingAlpha}
+import {toC9BabylonWorld,toC9ServerEntityWorld,chooseC9PilotDisplay,c9VisualSmoothingAlpha,c9PilotStepAlpha}
   from '../src/game/combat/C9VisualProjection.js';
 
 const config=Object.freeze({arenaHalfWidth:13200,arenaHalfHeight:15000,
@@ -70,7 +70,7 @@ test('C9 renderer uses parity adapter; no direct negation or economy path',()=>{
   const renderer=readFileSync(fileURLToPath(new URL('../src/components/CloudQaAlpha1/BabylonServerRendererC9.js',import.meta.url)),'utf8');
   assert.match(renderer,/toC9ServerEntityWorld\(o\)/);
   assert.match(renderer,/chooseC9PilotDisplay\(frame\)/);
-  assert.match(renderer,/LerpToRef\(pilot\.position,displayedTarget,alpha,pilot\.position\)/);
+  assert.match(renderer,/LerpToRef\(pilotFrom,displayedTarget,alpha,pilot\.position\)/);
   assert.doesNotMatch(renderer,/new BABYLON\.Vector3\(-o\.x\/1000/);
   assert.match(renderer,/frame\.qaOnly!==true/);
   assert.match(renderer,/frame\.settlementEnabled!==false/);
@@ -100,4 +100,13 @@ test('C9 fallback reports safe diagnostic codes and uses server-scene interpolat
   }
   assert.match(ui,/renderMode==='2D FALLBACK'&&renderFault/);
   assert.doesNotMatch(ui,/setRenderFault\(.*(?:error\.message|error\.stack)/);
+});
+
+test('C9 pilot: quantized 30Hz predictions have uniform intermediate 120Hz visual steps',()=>{
+  assert.equal(c9PilotStepAlpha(0),0);
+  assert.ok(Math.abs(c9PilotStepAlpha(1000/120)-.25)<1e-9);
+  assert.ok(Math.abs(c9PilotStepAlpha(1000/60)-.5)<1e-9);
+  assert.equal(c9PilotStepAlpha(1000/30),1);
+  assert.equal(c9PilotStepAlpha(1000),1,'no visual extrapolation past sampled tick');
+  assert.throws(()=>c9PilotStepAlpha(-1),TypeError);
 });

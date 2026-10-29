@@ -83,13 +83,21 @@ test('C12-PERF-B amortizes steady inputs: 15 warmup then sequential 30, preservi
   f.session.stopLocal();
 });
 
-test('C12-PERF-B retains strict 60 pending frame limit if server ACK is lost',async()=>{
+test('C12-PERF-B caps pending at 60, waits without minting ticks, then fails closed on prolonged loss',async()=>{
   const f=fixture();await f.session.start();f.sample(60);
   assert.equal(f.session.state.pending,60);
   assert.equal(f.calls.length,1); // no overlapping/forged chunks
-  assert.throws(()=>f.sample(1),/C12_NETWORK_BACKPRESSURE/);
-  assert.equal(f.session.state.error?.message,'C12_NETWORK_BACKPRESSURE');
+  const before=f.session.state.diagnostics.sampledTicks;
+  f.sample(50); // 1.7s of backpressure must not forge 50 more input ticks
+  assert.equal(f.session.state.pending,60);
+  assert.equal(f.session.state.diagnostics.sampledTicks,before);
+  assert.equal(f.session.state.error,null);
+  assert.equal(f.session.state.transport.waiting,true);
+  assert.equal(f.session.state.transport.waitCount,1);
+  assert.equal(f.session.state.transport.maxPendingFrames,60);
+  assert.throws(()=>f.sample(70),/C12_NETWORK_BACKPRESSURE_TIMEOUT/);
   assert.equal(f.session.state.diagnostics.interrupted,true);
   assert.equal(f.session.state.diagnostics.eligibleForSettlement,false);
+  assert.equal(f.maxConcurrent,1);
   f.session.stopLocal();
 });

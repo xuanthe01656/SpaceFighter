@@ -43,3 +43,10 @@ export function c9VisualSmoothingAlpha(deltaMs){
     throw new TypeError('C9 visual frame time invalid');
   return 1-Math.exp(-Math.min(64,deltaMs)/22);
 }
+
+/** Interpolate BETWEEN already sampled 30Hz client positions. Strictly visual. */
+export function c9PilotStepAlpha(elapsedMs){
+  if(typeof elapsedMs!=='number'||!Number.isFinite(elapsedMs)||elapsedMs<0)
+    throw new TypeError('C9 pilot visual time invalid');
+  return Math.min(1,elapsedMs/(1000/30));
+}

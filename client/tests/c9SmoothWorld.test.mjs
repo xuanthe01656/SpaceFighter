@@ -37,9 +37,12 @@ test('C9 smooth: prediction is bounded by time and arena, cannot run indefinitel
   const f=fixture();f.world.accept(frame(0,{enemies:[enemy('e1',0,5000)]}));
   f.time(2000);f.world.accept(frame(30,{enemies:[enemy('e1',12000,5000)]}));
   const at850=sample(f.world,2850).enemies[0];
-  assert.deepEqual(sample(f.world,90000).enemies,[at850]);
-  assert.ok(at850.x<=config.arenaHalfWidth+3000);
-  assert.ok(at850.z<=config.arenaHalfHeight+3000);
+  const at1000=sample(f.world,3000).enemies[0];
+  const at1200=sample(f.world,3200).enemies[0];
+  assert.ok(at1000.x>=at850.x,'visual motion should not freeze before normal 1s ACK');
+  assert.deepEqual(sample(f.world,90000).enemies,[at1200]);
+  assert.ok(at1200.x<=config.arenaHalfWidth+3000);
+  assert.ok(at1200.z<=config.arenaHalfHeight+3000);
 });
 
 test('C9 smooth: latest server checkpoint owns entity existence and terminal snap',()=>{
