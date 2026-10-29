@@ -13,6 +13,7 @@ import {openCloudQaC8,sendCloudQaInputC8,getCloudQaStatusC8,
 import {createCloudQaSessionC8} from '../../game/combat/CloudQaSessionC8';
 import {createCloudCandidateSessionC12} from '../../game/combat/CloudCandidateSessionC12';
 import {createServerSceneModelC9} from '../../game/combat/ServerSceneModelC9';
+import {ignoreQaLifecycleAfterTerminal} from '../../game/combat/CloudQaLifecyclePolicy.js';
 
 const COLORS=Object.freeze({bg:'#020c1b',grid:'#16385a',enemy:'#ff7687',
   shot:'#68ffdc',hostile:'#ffa849',player:'#69f0ff'});
@@ -117,8 +118,11 @@ export default function CloudQaAlpha1({setScreen,lang='vi',candidate=false}){
     const session=(candidate?createCloudCandidateSessionC12:createCloudQaSessionC8)({api:transport,viewport,
       clock:()=>performance.now(),randomId:()=>crypto.randomUUID(),onUpdate:update});
     sessionRef.current=session;
-    const halt=()=>{
+    const halt=(reason='unknown')=>{
       if(closed||deviceGone)return;
+      // Backgrounding / sharing after server terminal cannot invalidate an
+      // already accepted terminal or completed audit. Auth changes still halt.
+      if(ignoreQaLifecycleAfterTerminal({reason,terminal:session.state.terminal}))return;
       deviceGone=true;setStatus('error');setFault('C8_QA_APP_INTERRUPTED_RESTART');
       void session.abandon();
     };
@@ -139,11 +143,11 @@ export default function CloudQaAlpha1({setScreen,lang='vi',candidate=false}){
         }catch(_){fallback('C9_BABYLON_INIT_FAILED');}
       }).catch(()=>fallback('C9_BABYLON_IMPORT_FAILED'));
     }
-    const onHidden=()=>{if(document.hidden)halt();};
-    const onBlur=()=>halt();
-    const onResize=()=>halt();
+    const onHidden=()=>{if(document.hidden)halt('hidden');};
+    const onBlur=()=>halt('blur');
+    const onResize=()=>halt('resize');
     const unsubscribe=onAuthStateChanged(auth,user=>{
-      if(!user||user.uid!==expectedUid)halt();
+      if(!user||user.uid!==expectedUid)halt('auth');
     });
     document.addEventListener('visibilitychange',onHidden);
     window.addEventListener('blur',onBlur);
