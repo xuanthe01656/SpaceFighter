@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {openCloudInputIntent,addCloudPointerDelta,sampleCloudInputTick}
   from '../src/game/combat/CloudInputIntentV8.js';
-import {toC9BabylonWorld,chooseC9PilotDisplay,c9VisualSmoothingAlpha}
+import {toC9BabylonWorld,toC9ServerEntityWorld,chooseC9PilotDisplay,c9VisualSmoothingAlpha}
   from '../src/game/combat/C9VisualProjection.js';
 
 const config=Object.freeze({arenaHalfWidth:13200,arenaHalfHeight:15000,
@@ -68,11 +68,36 @@ test('C9 render smoothing is visual only, time-bounded and monotone',()=>{
 
 test('C9 renderer uses parity adapter; no direct negation or economy path',()=>{
   const renderer=readFileSync(fileURLToPath(new URL('../src/components/CloudQaAlpha1/BabylonServerRendererC9.js',import.meta.url)),'utf8');
-  assert.match(renderer,/toC9BabylonWorld\(o\)/);
+  assert.match(renderer,/toC9ServerEntityWorld\(o\)/);
   assert.match(renderer,/chooseC9PilotDisplay\(frame\)/);
   assert.match(renderer,/LerpToRef\(pilot\.position,displayedTarget,alpha,pilot\.position\)/);
   assert.doesNotMatch(renderer,/new BABYLON\.Vector3\(-o\.x\/1000/);
   assert.match(renderer,/frame\.qaOnly!==true/);
   assert.match(renderer,/frame\.settlementEnabled!==false/);
   assert.doesNotMatch(renderer,/grantReward|settleBattle|wallet\.|battle\.finish/);
+});
+
+
+test('C9 full server enemy metadata is projected without dropping strict x/z guards',()=>{
+  const serverEnemy=Object.freeze({id:'e-1',x:2700,z:8500,hp:25,maxHp:40});
+  // Before the fix, passing this full enemy to the 2-field adapter threw.
+  assert.throws(()=>toC9BabylonWorld(serverEnemy),TypeError);
+  assert.deepEqual(toC9ServerEntityWorld(serverEnemy),{x:2.7,y:.14,z:8.5});
+  assert.deepEqual(toC9ServerEntityWorld({x:-500,z:3000}),{x:-0.5,y:.14,z:3});
+  for(const invalid of [{id:'bad',x:1.5,z:100,hp:1,maxHp:1},
+    {id:'bad',x:Infinity,z:100,hp:1,maxHp:1},
+    Object.create({x:100,z:200}),null]){
+    assert.throws(()=>toC9ServerEntityWorld(invalid),TypeError);
+  }
+});
+
+test('C9 fallback reports safe diagnostic codes and uses server-scene interpolation',()=>{
+  const ui=readFileSync(fileURLToPath(new URL('../src/components/CloudQaAlpha1/index.jsx',import.meta.url)),'utf8');
+  assert.match(ui,/drawCockpit\(canvas,frame\?\?latestRef\.current\?\.reply\?\.visual,state\.player\)/);
+  for(const code of ['C9_WEBGL_CONTEXT_LOST','C9_BABYLON_INIT_FAILED',
+    'C9_BABYLON_IMPORT_FAILED','C9_BABYLON_UPDATE_FAILED']){
+    assert.ok(ui.includes(code),'missing sanitized QA fallback code '+code);
+  }
+  assert.match(ui,/renderMode==='2D FALLBACK'&&renderFault/);
+  assert.doesNotMatch(ui,/setRenderFault\(.*(?:error\.message|error\.stack)/);
 });

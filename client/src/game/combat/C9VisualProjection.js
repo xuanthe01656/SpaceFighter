@@ -15,6 +15,16 @@ export function toC9BabylonWorld(p){
   return Object.freeze({x:p.x/C9_WORLD_UNIT_SCALE,y:.14,z:p.z/C9_WORLD_UNIT_SCALE});
 }
 
+/** C9 validated enemies include {id,hp,maxHp} as well as coordinates.
+ * Convert ONLY the x/z geometry; never let presentation metadata leak into
+ * the strict two-field coordinate contract or affect server-authoritative data. */
+export function toC9ServerEntityWorld(entity){
+  if(entity===null||typeof entity!=='object'||Array.isArray(entity)
+    ||!own(entity,'x')||!own(entity,'z'))
+    throw new TypeError('C9 visual entity invalid');
+  return toC9BabylonWorld({x:entity.x,z:entity.z});
+}
+
 /** Local 30Hz prediction is the bright displayed ship. A server checkpoint
  * remains a dim reference for QA only; server still owns HP, enemy and result. */
 export function chooseC9PilotDisplay(frame){

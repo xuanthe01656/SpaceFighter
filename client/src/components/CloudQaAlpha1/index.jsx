@@ -62,6 +62,7 @@ export default function CloudQaAlpha1({setScreen,lang='vi',candidate=false}){
   const [hud,setHud]=useState(null),[fault,setFault]=useState(''),[proof,setProof]=useState(null);
   const [nowTick,setNowTick]=useState(0);
   const [renderMode,setRenderMode]=useState('2D FALLBACK');
+  const [renderFault,setRenderFault]=useState('');
   const [diagnostics,setDiagnostics]=useState(null),[exportNotice,setExportNotice]=useState('');
   const vi=lang==='vi';
   useEffect(()=>{
@@ -85,6 +86,9 @@ export default function CloudQaAlpha1({setScreen,lang='vi',candidate=false}){
     const canvas=canvasRef.current,rect=canvas.getBoundingClientRect();
     const sceneModel=createServerSceneModelC9({clock:()=>performance.now()});
     let babylon=null;
+    const fallback=code=>{
+      if(!closed&&mounted.current){setRenderMode('2D FALLBACK');setRenderFault(code);}
+    };
     const viewport={aspect:rect.width/Math.max(1,rect.height),
       canvasWidth:Math.max(1,rect.width),canvasHeight:Math.max(1,rect.height),
       halfHeight:15};
@@ -127,11 +131,11 @@ export default function CloudQaAlpha1({setScreen,lang='vi',candidate=false}){
           babylon=mod.createBabylonServerRendererC9({canvas:babylonCanvasRef.current,
             onFault:()=>{
               babylon?.dispose();babylon=null;
-              if(!closed&&mounted.current)setRenderMode('2D FALLBACK');
+              fallback('C9_WEBGL_CONTEXT_LOST');
             }});
-          setRenderMode('BABYLON QA');
-        }catch(_){setRenderMode('2D FALLBACK');}
-      }).catch(()=>{if(!closed&&mounted.current)setRenderMode('2D FALLBACK');});
+          setRenderFault('');setRenderMode('BABYLON QA');
+        }catch(_){fallback('C9_BABYLON_INIT_FAILED');}
+      }).catch(()=>fallback('C9_BABYLON_IMPORT_FAILED'));
     }
     const onHidden=()=>{if(document.hidden)halt();};
     const onBlur=()=>halt();
@@ -148,10 +152,12 @@ export default function CloudQaAlpha1({setScreen,lang='vi',candidate=false}){
         const frame=sceneModel.frame(state.player);
         if(babylon){
           try{babylon.update(frame);}catch(_){
-            babylon.dispose();babylon=null;setRenderMode('2D FALLBACK');
+            babylon.dispose();babylon=null;fallback('C9_BABYLON_UPDATE_FAILED');
           }
         }
-        if(!babylon)drawCockpit(canvas,latestRef.current?.reply?.visual,state.player);
+        // Reuse validated server-scene interpolation in the 2D contingency.
+        // Enemy existence, projectile count, HP and terminal remain server data.
+        if(!babylon)drawCockpit(canvas,frame??latestRef.current?.reply?.visual,state.player);
         animation=requestAnimationFrame(draw);
       }
     };animation=requestAnimationFrame(draw);
@@ -246,6 +252,9 @@ export default function CloudQaAlpha1({setScreen,lang='vi',candidate=false}){
       <div style={{fontSize:13,fontWeight:700,color:'#ffd075'}}>
         {candidate?'C12 CANDIDATE ALPHA 1':'C9 QA CLOUD ALPHA 1'} · {renderMode} · NO REWARDS
       </div>
+      {renderMode==='2D FALLBACK'&&renderFault&&<div role="status" style={{fontSize:10,color:'#ffcb86'}}>
+        C9 render diagnostic: {renderFault}
+      </div>}
       <div style={{fontSize:12,opacity:.85}}>{vi?'Máy chủ quyết định HP / quái / kết quả; tàu hiển thị vị trí dự đoán':'Server owns HP / enemies / outcome; local ship is predicted'}</div>
       {hud&&<div style={{marginTop:8,fontSize:14,fontWeight:600}}>
         HP {hud.hp}/{hud.maxHp} · Wave {hud.spawnedWaves}/5 · Kills {hud.kills} · Tick {hud.tick}

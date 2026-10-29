@@ -5,11 +5,11 @@
  * Imported dynamically only for manually enabled C9 Cloud QA APKs.
  */
 import * as BABYLON from '@babylonjs/core';
-import {toC9BabylonWorld,chooseC9PilotDisplay,c9VisualSmoothingAlpha}
+import {toC9ServerEntityWorld,chooseC9PilotDisplay,c9VisualSmoothingAlpha}
   from '../../game/combat/C9VisualProjection.js';
 const MAX_ENEMIES=32,MAX_SHOTS=128;
 const bound=(n,min,max)=>Math.max(min,Math.min(max,n));
-const loc=o=>{const p=toC9BabylonWorld(o);return new BABYLON.Vector3(p.x,p.y,p.z);};
+const loc=o=>{const p=toC9ServerEntityWorld(o);return new BABYLON.Vector3(p.x,p.y,p.z);};
 const material=(scene,name,hex)=>{
   const m=new BABYLON.StandardMaterial(name,scene);
   m.diffuseColor=BABYLON.Color3.FromHexString(hex);
