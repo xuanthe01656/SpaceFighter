@@ -1,3 +1,16 @@
+def sfStableQaSigning = System.getenv('SF_ANDROID_QA_SIGNING_ENABLED') == 'true'
+if (sfStableQaSigning) {
+    ['SF_ANDROID_QA_KEYSTORE_PATH', 'ANDROID_KEYSTORE_PASSWORD',
+     'ANDROID_KEY_ALIAS', 'ANDROID_KEY_PASSWORD'].each { key ->
+        if (!System.getenv(key)?.trim()) {
+            throw new GradleException('Missing required stable QA signing setting: ' + key)
+        }
+    }
+    if (!file(System.getenv('SF_ANDROID_QA_KEYSTORE_PATH')).isFile()) {
+        throw new GradleException('Stable QA signing keystore file is missing')
+    }
+}
+
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 
@@ -19,7 +32,23 @@ android {
         }
     }
 
+    signingConfigs {
+        if (sfStableQaSigning) {
+            spacefighterStableQa {
+                storeFile file(System.getenv('SF_ANDROID_QA_KEYSTORE_PATH'))
+                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            if (sfStableQaSigning) {
+                signingConfig signingConfigs.spacefighterStableQa
+            }
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'

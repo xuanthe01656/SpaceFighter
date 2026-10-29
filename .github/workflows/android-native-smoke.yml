@@ -1,6 +1,6 @@
 name: SpaceFighter Android - Capacitor 8 Native Smoke
 
-# Build-only validation after an approved main push. Cloud Run remains staging. No release signing or distribution.
+# Build-only validation after an approved main push. Stable signed DEBUG APK only. No release/distribution.
 on:
   push:
     branches:
@@ -42,6 +42,7 @@ jobs:
   android-native-debug:
     name: Android API 36 / Java 21 / Gradle 8.14.3
     runs-on: ubuntu-24.04
+    if: github.ref == 'refs/heads/main'
     timeout-minutes: 75
 
     defaults:
@@ -83,6 +84,52 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+
+      - name: Restore existing Android keystore secrets and verify registered SHA fingerprints
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for key in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            [[ -n "${!key:-}" ]] || { echo "::error::Missing required GitHub Actions secret: $key" >&2; exit 1; }
+          done
+          python3 - <<'PY'
+          import base64, os, pathlib, re, subprocess, sys
+          path = pathlib.Path(os.environ['RUNNER_TEMP']) / 'spacefighter-stable-qa-signing.jks'
+          try:
+              content = base64.b64decode(''.join(os.environ['ANDROID_KEYSTORE_BASE64'].split()), validate=True)
+          except (ValueError, base64.binascii.Error):
+              sys.exit('QA keystore secret is not valid Base64')
+          if not (128 <= len(content) <= 1024 * 1024):
+              sys.exit('QA keystore size is invalid')
+          path.write_bytes(content)
+          path.chmod(0o600)
+          command = [
+              'keytool', '-list', '-v', '-keystore', str(path),
+              '-alias', os.environ['ANDROID_KEY_ALIAS'],
+              '-storepass:env', 'ANDROID_KEYSTORE_PASSWORD',
+          ]
+          result = subprocess.run(command, capture_output=True, text=True)
+          if result.returncode != 0 or 'PrivateKeyEntry' not in result.stdout:
+              sys.exit('Keystore/alias/password invalid, or alias has no private key')
+          expected = {
+              'SHA1': 'D667B762E0A5EA09BB43B0730EF7CFDA1707F55A',
+              'SHA256': '60B1E4349BA776EBD0138E7713AE2E78E292EB048A52FBBE187699F2CE09D8C4',
+          }
+          for algorithm, want in expected.items():
+              match = re.search(r'^\s*' + algorithm + r':\s*([0-9a-fA-F:]+)\s*$', result.stdout, re.M)
+              if not match:
+                  sys.exit('Cannot inspect ' + algorithm + ' signing fingerprint')
+              actual = match.group(1).replace(':', '').upper()
+              if actual != want:
+                  sys.exit('QA signing certificate ' + algorithm + ' does not match Firebase registration')
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as handle:
+              handle.write('SF_ANDROID_QA_KEYSTORE_PATH=' + str(path) + '\n')
+          print('Stable QA certificate SHA-1 and SHA-256 verified; private signing material not logged')
+          PY
 
       - name: Set up Node 22 and npm cache
         uses: actions/setup-node@v4
@@ -173,12 +220,45 @@ jobs:
           set -euo pipefail
           sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0'
 
-      - name: Compile actual Android debug APK (no release signing)
+      - name: Compile Android DEBUG APK using existing stable key (never release)
+        env:
+          SF_ANDROID_QA_SIGNING_ENABLED: 'true'
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
+          [[ -s "$SF_ANDROID_QA_KEYSTORE_PATH" ]] || { echo 'QA signing keystore was not restored' >&2; exit 1; }
           cd android
           gradle --no-daemon --stacktrace :app:assembleDebug
           test -s app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Verify actual APK uses the registered SHA-1 and SHA-256
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, pathlib, re, subprocess, sys
+          signer = pathlib.Path(os.environ['ANDROID_HOME']) / 'build-tools' / '36.0.0' / 'apksigner'
+          apk = pathlib.Path('android/app/build/outputs/apk/debug/app-debug.apk')
+          if not signer.is_file() or not apk.is_file():
+              sys.exit('Android apksigner or output APK is missing')
+          result = subprocess.run([str(signer), 'verify', '--verbose', '--print-certs', str(apk)],
+                                  capture_output=True, text=True)
+          if result.returncode != 0:
+              sys.exit('APK signature verification failed')
+          expected = {
+              'SHA-1': 'D667B762E0A5EA09BB43B0730EF7CFDA1707F55A',
+              'SHA-256': '60B1E4349BA776EBD0138E7713AE2E78E292EB048A52FBBE187699F2CE09D8C4',
+          }
+          if re.search(r'^\s*Signer #2 certificate', result.stdout, re.M):
+              sys.exit('Multiple APK certificate signers are not permitted for QA')
+          for label, want in expected.items():
+              match = re.search(r'^\s*Signer #1 certificate ' + label + r' digest:\s*([0-9a-fA-F:]+)\s*$',
+                                result.stdout, re.M)
+              if not match or match.group(1).replace(':', '').upper() != want:
+                  sys.exit('Signed APK ' + label + ' mismatch; artifact upload blocked')
+          print('SIGNED_APK_SHA_MATCH: exact registered QA signing certificate verified')
+          PY
 
       - name: Preserve debug APK for manual device QA
         uses: actions/upload-artifact@v4
@@ -187,3 +267,8 @@ jobs:
           path: client/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 3
+
+      - name: Remove temporary QA signing keystore
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/spacefighter-stable-qa-signing.jks"
