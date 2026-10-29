@@ -1,12 +1,13 @@
 /**
- * C9 non-economic Babylon visualization of server-authored Cloud Alpha 1 QA.
- * NO local enemy AI, fire cadence, collisions, death/clear decisions or payout.
- * Geometry is procedural diagnostic art; this does not replace Campaign assets.
- * Imported dynamically only for manually enabled C9 Cloud QA APKs.
+ * C9 non-economic Babylon presentation of validated server checkpoints.
+ * NO local AI, damage, kills, collision, economy or outcome decisions.
+ * Render-only movement estimates are visually bounded and QA-only.
  */
 import * as BABYLON from '@babylonjs/core';
 import {toC9ServerEntityWorld,chooseC9PilotDisplay,c9VisualSmoothingAlpha}
   from '../../game/combat/C9VisualProjection.js';
+import {createC9SmoothWorld} from '../../game/combat/C9SmoothWorld.js';
+import {createC9PerformanceTelemetry} from '../../game/combat/C9PerformanceTelemetry.js';
 const MAX_ENEMIES=32,MAX_SHOTS=128;
 const bound=(n,min,max)=>Math.max(min,Math.min(max,n));
 const loc=o=>{const p=toC9ServerEntityWorld(o);return new BABYLON.Vector3(p.x,p.y,p.z);};
@@ -15,13 +16,15 @@ const material=(scene,name,hex)=>{
   m.diffuseColor=BABYLON.Color3.FromHexString(hex);
   m.emissiveColor=BABYLON.Color3.FromHexString(hex).scale(.65);
   m.specularColor=new BABYLON.Color3(0,0,0);
-  m.disableLighting=true;
-  return m;
+  m.disableLighting=true;return m;
 };
-export function createBabylonServerRendererC9({canvas,onFault=()=>{}}={}){
-  if(!canvas||typeof onFault!=='function')throw new TypeError('C9 canvas required');
+export function createBabylonServerRendererC9({canvas,onFault=()=>{},onPerf=()=>{},
+  showServerReference=false}={}){
+  if(!canvas||typeof onFault!=='function'||typeof onPerf!=='function'
+    ||typeof showServerReference!=='boolean')throw new TypeError('C9 canvas required');
   let engine=null,scene=null,disposed=false,lost=false;
   const events=[];
+  const motion=createC9SmoothWorld(),perf=createC9PerformanceTelemetry();
   const disposeMesh=m=>{if(m){m.material=null;m.dispose();}};
   try{
     engine=new BABYLON.Engine(canvas,true,{stencil:false,preserveDrawingBuffer:false,
@@ -70,7 +73,14 @@ export function createBabylonServerRendererC9({canvas,onFault=()=>{}}={}){
         lines.push(row,col);
       }
     };
-    let configHash=null,displayedTarget=null;
+    let configHash=null,displayedTarget=null,serverPilot=null,serverPilotRaw=null;
+    let terminal=false,lastPredictedX=null,lastPredictedZ=null;
+    const place=(mesh,x,z)=>{mesh.position.x=x/1000;mesh.position.z=z/1000;};
+    const drawMotion={
+      enemy:(id,x,z)=>{const m=enemies.get(id);if(m)place(m,x,z);},
+      shot:(i,x,z)=>{const m=shots[i];if(m?.isVisible)place(m,x,z);},
+      enemyShot:(i,x,z)=>{const m=enemyShots[i];if(m?.isVisible)place(m,x,z);},
+    };
     function update(frame){
       if(disposed||!frame)return;
       if(frame.version!=='c9-server-checkpoint-babylon-qa-v1'
@@ -78,20 +88,21 @@ export function createBabylonServerRendererC9({canvas,onFault=()=>{}}={}){
         ||frame.productionOutcomeIssued!==false)throw new TypeError('C9 unsafe scene frame');
       const key=`${frame.config.arenaHalfWidth}:${frame.config.arenaHalfHeight}`;
       if(key!==configHash){cameraFit(frame.config);makeGrid(frame.config);configHash=key;}
-      // Show local, bounded 30Hz prediction as the responsive bright ship.
-      // The server-authoritative pilot remains a dim reference, never an input.
+      // Server is still authoritative; predicted pilot only changes a mesh.
       const display=chooseC9PilotDisplay(frame);
-      const nextTarget=loc(display.primary);
-      if(displayedTarget===null)pilot.position.copyFrom(nextTarget);
-      displayedTarget=nextTarget;
-      ghost.isVisible=Boolean(display.serverReference);
+      serverPilotRaw={x:frame.pilot.x,z:frame.pilot.z};
+      serverPilot=loc(display.primary);
+      if(displayedTarget===null){pilot.position.copyFrom(serverPilot);displayedTarget=loc(frame.pilot);}
+      terminal=frame.phase!=='active';
+      if(terminal){displayedTarget.copyFrom(serverPilot);lastPredictedX=null;lastPredictedZ=null;}
+      ghost.isVisible=showServerReference&&Boolean(display.serverReference);
       if(ghost.isVisible)ghost.position=loc(display.serverReference);
       const current=new Set();
       for(const e of frame.enemies.slice(0,MAX_ENEMIES)){
         current.add(e.id);
         let m=enemies.get(e.id);
         if(!m){m=createSphere(`c9-server-enemy-${e.id}`,matEnemy,.75);enemies.set(e.id,m);}
-        m.position=loc(e);
+        const p=loc(e);m.position.copyFrom(p);
         m.scaling.setAll(bound(.35+.65*e.hp/Math.max(1,e.maxHp),.2,1));
       }
       for(const [id,m] of enemies){if(!current.has(id)){disposeMesh(m);enemies.delete(id);}}
@@ -105,21 +116,41 @@ export function createBabylonServerRendererC9({canvas,onFault=()=>{}}={}){
       };
       batch(shots,frame.shots,matShot,'c9-shot',.23);
       batch(enemyShots,frame.enemyShots,matEnemyShot,'c9-enemy-shot',.3);
+      motion.accept(frame);
+      perf.checkpoint(frame.serverTick,motion.counts);
+    }
+    function updatePrediction(position){
+      if(disposed||!serverPilot)return;
+      // On terminal, snap the bright mesh to the last ACK. Never display an
+      // unauthorised post-terminal predicted pilot as the QA result.
+      if(terminal||position==null){
+        if(lastPredictedX!==null){displayedTarget.copyFrom(serverPilot);
+          lastPredictedX=null;lastPredictedZ=null;}
+        ghost.isVisible=false;return;
+      }
+      if(position.x===lastPredictedX&&position.z===lastPredictedZ)return;
+      const selected=chooseC9PilotDisplay({pilot:serverPilotRaw,predictedGhost:position});
+      displayedTarget.copyFrom(loc(selected.primary));
+      lastPredictedX=position.x;lastPredictedZ=position.z;
+      ghost.isVisible=showServerReference&&Boolean(selected.serverReference);
+      if(ghost.isVisible)ghost.position.copyFrom(serverPilot);
     }
     const lostHandler=e=>{e.preventDefault();if(!disposed){lost=true;onFault('C9_WEBGL_CONTEXT_LOST');}};
     canvas.addEventListener('webglcontextlost',lostHandler,false);
     events.push(()=>canvas.removeEventListener('webglcontextlost',lostHandler));
     engine.runRenderLoop(()=>{
       if(disposed||lost)return;
+      const frameAt=performance.now(),elapsed=Math.max(0,engine.getDeltaTime());
       if(displayedTarget){
-        // A 22ms visual-only lag smooths 30Hz samples across render frames.
-        const elapsed=Math.max(0,engine.getDeltaTime());
         const alpha=c9VisualSmoothingAlpha(elapsed);
         BABYLON.Vector3.LerpToRef(pilot.position,displayedTarget,alpha,pilot.position);
       }
-      scene.render();
+      motion.each(drawMotion,frameAt);
+      const cpuStart=performance.now();scene.render();
+      perf.render(elapsed,performance.now()-cpuStart,frameAt);
+      if(perf.shouldPublish(frameAt))onPerf(perf.snapshot(frameAt));
     });
-    return Object.freeze({update,resize:()=>{if(!disposed)engine.resize();},dispose:()=>{
+    return Object.freeze({update,updatePrediction,resize:()=>{if(!disposed)engine.resize();},dispose:()=>{
       if(disposed)return;disposed=true;events.forEach(fn=>fn());
       engine?.stopRenderLoop();scene?.dispose();engine?.dispose();
     }});

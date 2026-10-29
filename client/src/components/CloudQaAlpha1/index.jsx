@@ -63,6 +63,7 @@ export default function CloudQaAlpha1({setScreen,lang='vi',candidate=false}){
   const [nowTick,setNowTick]=useState(0);
   const [renderMode,setRenderMode]=useState('2D FALLBACK');
   const [renderFault,setRenderFault]=useState('');
+  const [renderPerf,setRenderPerf]=useState(null);
   const [diagnostics,setDiagnostics]=useState(null),[exportNotice,setExportNotice]=useState('');
   const vi=lang==='vi';
   useEffect(()=>{
@@ -85,9 +86,9 @@ export default function CloudQaAlpha1({setScreen,lang='vi',candidate=false}){
     };
     const canvas=canvasRef.current,rect=canvas.getBoundingClientRect();
     const sceneModel=createServerSceneModelC9({clock:()=>performance.now()});
-    let babylon=null;
+    let babylon=null,displayedServerTick=null;
     const fallback=code=>{
-      if(!closed&&mounted.current){setRenderMode('2D FALLBACK');setRenderFault(code);}
+      if(!closed&&mounted.current){setRenderMode('2D FALLBACK');setRenderFault(code);setRenderPerf(null);}
     };
     const viewport={aspect:rect.width/Math.max(1,rect.height),
       canvasWidth:Math.max(1,rect.width),canvasHeight:Math.max(1,rect.height),
@@ -129,11 +130,12 @@ export default function CloudQaAlpha1({setScreen,lang='vi',candidate=false}){
         if(closed||deviceGone||!mounted.current)return;
         try{
           babylon=mod.createBabylonServerRendererC9({canvas:babylonCanvasRef.current,
+            onPerf:metrics=>{if(mounted.current&&!closed)setRenderPerf(metrics);},
             onFault:()=>{
               babylon?.dispose();babylon=null;
               fallback('C9_WEBGL_CONTEXT_LOST');
             }});
-          setRenderFault('');setRenderMode('BABYLON QA');
+          displayedServerTick=null;setRenderFault('');setRenderMode('BABYLON QA');
         }catch(_){fallback('C9_BABYLON_INIT_FAILED');}
       }).catch(()=>fallback('C9_BABYLON_IMPORT_FAILED'));
     }
@@ -149,15 +151,24 @@ export default function CloudQaAlpha1({setScreen,lang='vi',candidate=false}){
     const draw=()=>{
       const state=session.state;
       if(!closed&&mounted.current){
-        const frame=sceneModel.frame(state.player);
         if(babylon){
-          try{babylon.update(frame);}catch(_){
+          try{
+            // Large server arrays are copied only when an ACK arrives, not
+            // 60 times/second. Babylon motion runs independently per render.
+            if(sceneModel.tick!==null&&sceneModel.tick!==displayedServerTick){
+              babylon.update(sceneModel.authoritativeFrame());
+              displayedServerTick=sceneModel.tick;
+            }
+            babylon.updatePrediction(state.terminal?null:state.player);
+          }catch(_){
             babylon.dispose();babylon=null;fallback('C9_BABYLON_UPDATE_FAILED');
           }
         }
-        // Reuse validated server-scene interpolation in the 2D contingency.
-        // Enemy existence, projectile count, HP and terminal remain server data.
-        if(!babylon)drawCockpit(canvas,frame??latestRef.current?.reply?.visual,state.player);
+        // 2D remains strictly based on validated checkpoint interpolation.
+        if(!babylon){
+          const frame=sceneModel.frame(state.player);
+          drawCockpit(canvas,frame??latestRef.current?.reply?.visual,state.player);
+        }
         animation=requestAnimationFrame(draw);
       }
     };animation=requestAnimationFrame(draw);
@@ -234,6 +245,33 @@ export default function CloudQaAlpha1({setScreen,lang='vi',candidate=false}){
       setExportNotice(e?.name==='AbortError'?'':(vi?'Không thể xuất JSON':'Export failed'));
     }
   };
+  const exportC9Perf=async()=>{
+    if(!candidate||!renderPerf)return;
+    // Deliberately separate from the C13 attestation-shaped report.
+    // This is a LOCAL render-performance snapshot without identity or inputs.
+    const data=JSON.stringify(renderPerf,null,2)+'\n';
+    try{
+      const file=typeof File==='function'
+        ?new File([data],'spacefighter-c9-render-performance.json',{type:'application/json'})
+        :null;
+      if(file&&navigator.share&&navigator.canShare?.({files:[file]})){
+        await navigator.share({files:[file],title:'SpaceFighter C9 local render QA'});
+        setExportNotice(vi?'Đã mở chia sẻ C9':'C9 share opened');return;
+      }
+      if(navigator.clipboard?.writeText){
+        await navigator.clipboard.writeText(data);
+        setExportNotice(vi?'Đã sao chép C9 JSON':'C9 JSON copied');return;
+      }
+      const url=URL.createObjectURL(new Blob([data],{type:'application/json'}));
+      const anchor=document.createElement('a');anchor.href=url;
+      anchor.download='spacefighter-c9-render-performance.json';
+      document.body.appendChild(anchor);anchor.click();anchor.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),30000);
+      setExportNotice(vi?'Đã yêu cầu lưu C9 JSON':'C9 JSON download requested');
+    }catch(e){
+      setExportNotice(e?.name==='AbortError'?'':(vi?'Không thể xuất C9':'C9 export failed'));
+    }
+  };
   const buttonStyle={background:'#142c46',border:'1px solid #65f5ef',
     color:'#a9fbef',borderRadius:8,padding:'10px 16px',fontWeight:700};
   return <div style={{position:'absolute',inset:0,zIndex:80,background:'#020c1b',color:'#e8f5ff',overflow:'hidden'}}>
@@ -259,6 +297,12 @@ export default function CloudQaAlpha1({setScreen,lang='vi',candidate=false}){
       {hud&&<div style={{marginTop:8,fontSize:14,fontWeight:600}}>
         HP {hud.hp}/{hud.maxHp} · Wave {hud.spawnedWaves}/5 · Kills {hud.kills} · Tick {hud.tick}
       </div>}
+      {candidate&&renderMode==='BABYLON QA'&&renderPerf&&<div role="status"
+        style={{marginTop:4,fontSize:10,color:'#a4d8ff'}}>
+        C9 QA FPS ~{renderPerf.fps} · p95 frame {renderPerf.p95FrameMs}ms ·
+        ACK gap {renderPerf.meanAckGapMs}ms · age {renderPerf.checkpointAgeMs}ms ·
+        enemies {renderPerf.enemies} / shots {renderPerf.shots+renderPerf.enemyShots}
+      </div>}
       {!hud&&<div style={{marginTop:8}}>{vi?'Đang mở vé QA từ máy chủ...':'Opening QA ticket...'}</div>}
     </div>
     <div style={{position:'absolute',bottom:'calc(env(safe-area-inset-bottom) + 12px)',
@@ -276,6 +320,11 @@ export default function CloudQaAlpha1({setScreen,lang='vi',candidate=false}){
         {candidate&&<button type="button" onClick={exportCandidateEvidence}
           style={{...buttonStyle,marginTop:7,padding:'6px 9px',fontSize:12}}>
           {vi?'Xuất báo cáo C13 JSON':'Export C13 JSON'}
+        </button>}
+        {candidate&&renderMode==='BABYLON QA'&&renderPerf&&<button type="button"
+          onClick={exportC9Perf}
+          style={{...buttonStyle,marginTop:4,padding:'5px 8px',fontSize:10}}>
+          {vi?'Xuất C9 Perf JSON':'Export C9 Perf JSON'}
         </button>}
         {candidate&&exportNotice&&<div role="status" style={{marginTop:3}}>{exportNotice}</div>}
         <div style={{opacity:.7}}>30Hz · {candidate?'C11 candidate model (NOT production approved)':'clear-release QA'} · no wallet/mission changes</div>

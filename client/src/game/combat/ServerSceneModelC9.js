@@ -82,11 +82,11 @@ export function createServerSceneModelC9({clock=()=>Date.now(),interpolationMs=9
     previous=current;current=next;receivedAt=at;
     return true;
   }
-  function frame(predicted=null){
+  function frame(predicted=null,authoritative=false){
     if(!current)return null;
     const now=clock();
     if(!finite(now,0,Number.MAX_SAFE_INTEGER))error('C9_RENDER_CLOCK_INVALID');
-    const eligible=previous&&previous.phase==='active'&&current.tick-previous.tick<=30
+    const eligible=!authoritative&&previous&&previous.phase==='active'&&current.tick-previous.tick<=30
       &&interpolationMs>0&&now>=receivedAt;
     const alpha=eligible?Math.max(0,Math.min(1,(now-receivedAt)/interpolationMs)):1;
     const enemyPrev=new Map((previous?.enemies||[]).map(e=>[e.id,e]));
@@ -111,6 +111,7 @@ export function createServerSceneModelC9({clock=()=>Date.now(),interpolationMs=9
       enemyShots:structuredClone(current.enemyShots),
       qaOnly:true,settlementEnabled:false,productionOutcomeIssued:false};
   }
-  return Object.freeze({accept,frame,get tick(){return current?.tick??null;},
+  return Object.freeze({accept,frame,authoritativeFrame:()=>frame(null,true),
+    get tick(){return current?.tick??null;},
     get phase(){return current?.phase??null;}});
 }
