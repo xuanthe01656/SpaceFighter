@@ -1,6 +1,7 @@
 'use strict';
 const { GameError } = require('./economy.cjs');
 const { CampaignAlphaC6CError } = require('./combatCampaignAlphaC6CV8.cjs');
+const { CombatVerticalSliceError } = require('./combatVerticalSliceV8.cjs');
 
 // Only token/user-status failures are authentication errors. IAM errors,
 // unexpected Firebase outages and misconfiguration remain HTTP 500, so they
@@ -20,6 +21,15 @@ function classifyGameApiError(error) {
     && error.code==='ALPHA_C6C_LOADOUT_UNSUPPORTED') {
     return {status:409,code:'ALPHA_C6C_LOADOUT_UNSUPPORTED',
       message:'C12 QA requires Alpha/X-Wing/Rail at level 1 with no auxiliary equipment'};
+  }
+  // The authoritative C6-E simulator can end mid-batch. It rejects the
+  // entire uncommitted chunk, so the C12 client may replay only a strictly
+  // shorter prefix to find the server-owned terminal tick. This is NOT a win
+  // receipt, nor permission to accept any post-terminal frame.
+  if(error instanceof CombatVerticalSliceError
+    && error.code==='SLICE_TERMINAL_FRAME_TAIL') {
+    return {status:409,code:'SLICE_TERMINAL_FRAME_TAIL',
+      message:'Candidate input spans the server terminal tick; submit a shorter prefix'};
   }
   if (error instanceof GameError) {
     const status = Number.isInteger(error.status) && error.status >= 400 && error.status < 600

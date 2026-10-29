@@ -45,6 +45,7 @@ export function createCloudCandidateSessionC12({api,viewport,clock,randomId,
     ||typeof onUpdate!=='function')throw new TypeError('C12 dependencies required');
   let battleId=null,sampler=null,current=null,ackTick=0,pending=[],lastMs=null;
   let busy=null,closed=false,terminal=false,fault=null,proof=null;
+  let recoveringTerminalTail=false;
   const evidence=createCandidateMovementEvidenceC13();
   const diagnostics=()=>evidence.report({terminal,auditComplete:Boolean(proof),error:fault});
   const update=()=>onUpdate({reply:current,ackTick,queued:pending.length,
@@ -83,7 +84,7 @@ export function createCloudCandidateSessionC12({api,viewport,clock,randomId,
   function release(){assertLive();if(!sampler||terminal)return false;
     sampler=clearCloudPointerTarget(sampler);return true;}
   function sample(nowMs=clock()){
-    assertLive();if(!sampler||terminal)return null;
+    assertLive();if(!sampler||terminal||recoveringTerminalTail)return null;
     if(!Number.isFinite(nowMs)||(lastMs!==null&&nowMs-lastMs>250)){
       fault=new Error('C12_CLOCK_GAP_RESTART');update();throw fault;
     }
@@ -103,16 +104,36 @@ export function createCloudCandidateSessionC12({api,viewport,clock,randomId,
     if(closed)return false;
     accept(reply,start+frames.length,clock()-sentAt);return true;
   }
+  // C6-E rejects any whole chunk that contains post-terminal input, without
+  // committing that chunk. Keep the authoritative guard and retry a sequence
+  // of shorter, contiguous ORIGINAL prefixes (never manufacture new frames).
+  // While recovering, stop sampling rather than filling the 60-frame queue
+  // with future inputs that cannot belong to a closed server battle.
+  async function recoverTerminalTail(frames){
+    recoveringTerminalTail=true;
+    let accepted=0,count=Math.ceil(frames.length/2);
+    try{
+      while(!closed&&!terminal&&accepted<frames.length){
+        const size=Math.min(count,frames.length-accepted);
+        try{
+          if(!await sendFrames(frames.slice(accepted,accepted+size),ackTick))return;
+          pending.splice(0,size);accepted+=size;
+          count=Math.max(1,Math.ceil((frames.length-accepted)/2));
+        }catch(e){
+          if(e?.code!=='SLICE_TERMINAL_FRAME_TAIL'||size===1)throw e;
+          count=Math.ceil(size/2);
+        }
+      }
+      if(!closed&&!terminal)error('C12_TERMINAL_RECOVERY_INVALID');
+      if(terminal)pending=[]; // unsent post-terminal samples have no authority
+    }finally{recoveringTerminalTail=false;}
+  }
   async function pump(){
     while(!closed&&!terminal&&pending.length>=batchSize()){
       const count=batchSize(),first=pending.slice(0,count);
       try{if(!await sendFrames(first,ackTick))return;pending.splice(0,count);}catch(e){
         if(e?.code!=='SLICE_TERMINAL_FRAME_TAIL')throw e;
-        for(const frame of first){
-          if(closed||terminal)break;
-          if(!await sendFrames([frame],ackTick))return;
-          pending.shift();
-        }
+        await recoverTerminalTail(first);
       }
     }
   }
