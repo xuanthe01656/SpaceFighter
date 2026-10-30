@@ -3,6 +3,7 @@
  * Presentation math cannot issue victories, rewards, HP, spawn, hits or ticks.
  * This is deliberately NON-ECONOMIC: QA fixture outcomes are NOT production grants.
  */
+import {validateC9MotionHintsV2} from './C9MotionHintsV2.js';
 export const C9_SERVER_SCENE_VERSION='c9-server-checkpoint-babylon-qa-v1';
 const VIEW='sf-c8-alpha1-server-render-qa-v1';
 const PHASES=new Set(['active','lab-clear','lab-defeat']);
@@ -63,15 +64,20 @@ const mix=(a,b,alpha)=>({x:lerp(a.x,b.x,alpha),z:lerp(a.z,b.z,alpha)});
 /** The `predicted` pointer is visual-only; it never updates server-derived data. */
 export function createServerSceneModelC9({clock=()=>Date.now(),interpolationMs=90}={}){
   if(typeof clock!=='function'||!integer(interpolationMs,0,150))throw new TypeError('C9 render clock');
-  let previous=null,current=null,receivedAt=0;
-  function accept(visual){
+  let previous=null,current=null,receivedAt=0,currentMotion=null;
+  function accept(visual,motionHints=null){
     const next=normalizeView(visual),at=clock();
+    const hints=motionHints==null?null:validateC9MotionHintsV2(motionHints,next);
     if(!finite(at,0,Number.MAX_SAFE_INTEGER)||(current&&at<receivedAt))
       error('C9_RENDER_CLOCK_INVALID');
     if(current){
       if(next.tick<current.tick)error('C9_SERVER_TICK_REWIND');
       if(next.tick===current.tick){
-        if(JSON.stringify(next)!==JSON.stringify(current))error('C9_SERVER_TICK_EQUIVOCATION');
+        // Different valid hint availability across a staging deploy must not
+        // change or equivocate an immutable visual-v1 checkpoint.
+        if(JSON.stringify(next)!==JSON.stringify(current)
+          ||(hints&&currentMotion&&JSON.stringify(hints)!==JSON.stringify(currentMotion)))
+          error('C9_SERVER_TICK_EQUIVOCATION');
         return false;
       }
       if(current.phase!=='active')error('C9_SERVER_TERMINAL_REOPEN');
@@ -79,7 +85,7 @@ export function createServerSceneModelC9({clock=()=>Date.now(),interpolationMs=9
       if(JSON.stringify(next.config)!==JSON.stringify(current.config))
         error('C9_SERVER_CONFIG_CHANGED');
     }
-    previous=current;current=next;receivedAt=at;
+    previous=current;current=next;currentMotion=hints;receivedAt=at;
     return true;
   }
   function frame(predicted=null,authoritative=false){
@@ -109,6 +115,7 @@ export function createServerSceneModelC9({clock=()=>Date.now(),interpolationMs=9
       pilot:eligible?mix(previous.pilot,current.pilot,alpha):{...current.pilot},
       predictedGhost:ghost,enemies,shots:structuredClone(current.shots),
       enemyShots:structuredClone(current.enemyShots),
+      ...(currentMotion?{motionHints:structuredClone(currentMotion)}:{}),
       qaOnly:true,settlementEnabled:false,productionOutcomeIssued:false};
   }
   return Object.freeze({accept,frame,authoritativeFrame:()=>frame(null,true),

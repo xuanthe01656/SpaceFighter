@@ -19,6 +19,7 @@ const {openCombatVerticalSlice,replayCombatSliceChunk}=require('./combatVertical
 const {resolveCampaignAlphaStage1C6E,LOCATION_ID,RULES_VERSION,CATALOG_VERSION}
   =require('./combatCampaignAlphaC6CV8.cjs');
 const {projectQaBattleViewC8}=require('./qaBattleViewC8.cjs');
+const {projectQaMotionC9V2}=require('./qaBattleMotionC9V2.cjs');
 const {replayCandidateC11,makeCandidateAuditC11,verifyCandidateAuditC11,
   MAX_AUDIT_CHUNKS}=require('./productionReplayAuditC11V8.cjs');
 
@@ -93,18 +94,23 @@ function checkOrigin(origin,{uid,sessionId,battleId,keys}){
     deny('C11_ORIGIN_BINDING','Candidate genesis identity/policy mismatch');
   return true;
 }
-const answer=(active,duplicate=false)=>Object.freeze({
+const answer=(active,duplicate=false)=>{
+  const visual=projectQaBattleViewC8(active.run);
+  return Object.freeze({
   version:VERSION,candidateOnly:true,nonEconomic:true,
   safeForCloudBattle:false,eligibleForSettlement:false,
   battleId:active.battleId,expiresAtMs:active.expiresAtMs,
   nextTick:active.run.state.tick,duplicate,
   qaOnly:true,qaSourceModel:true,settlementEnabled:false,
   protocol:'pve-input-v1',phase:active.run.state.phase,
-  visual:projectQaBattleViewC8(active.run),
+  visual,
+  // Backward-compatible sidecar: old visual-v1 APKs safely ignore this.
+  visualMotion:projectQaMotionC9V2(active.run,visual),
   terminal:active.run.state.phase!=='active',
   // No client/server `victory` or `verified-clear` field exists here.
   replayCandidate:'not-yet-independent-audited',
-});
+  });
+};
 
 async function createProductionBattleCandidateC11({db,enabled=false,allowedUids=[],
   signingKeyId,signingKey,verificationKeys,

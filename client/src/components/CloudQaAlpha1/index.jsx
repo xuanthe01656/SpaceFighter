@@ -100,7 +100,8 @@ export default function CloudQaAlpha1({setScreen,lang='vi',candidate=false}){
       latestRef.current=info;
       if(candidate&&info.diagnostics)setDiagnostics(info.diagnostics);
       if(info.reply){
-        try{sceneModel.accept(info.reply.visual);setHud(info.reply.visual);}catch(_e){
+        try{sceneModel.accept(info.reply.visual,info.reply.visualMotion??null);
+          setHud(info.reply.visual);}catch(_e){
           setFault('C9_SERVER_VISUAL_INVALID');setStatus('error');
           void session.abandon();return;
         }
@@ -306,7 +307,8 @@ export default function CloudQaAlpha1({setScreen,lang='vi',candidate=false}){
         style={{marginTop:4,fontSize:10,color:'#a4d8ff'}}>
         C9 QA FPS ~{renderPerf.fps} · p95 frame {renderPerf.p95FrameMs}ms ·
         ACK gap {renderPerf.meanAckGapMs}ms · age {renderPerf.checkpointAgeMs}ms ·
-        enemies {renderPerf.enemies} / shots {renderPerf.shots+renderPerf.enemyShots}
+        enemies {renderPerf.enemies} / shots {renderPerf.shots+renderPerf.enemyShots} ·
+        motion {renderPerf.serverMotionHintsV2?'V2':'V1'}
         {sessionRef.current?.state?.transport?.waiting&&<span style={{color:'#ffce91'}}>
           {' '}· NETWORK WAIT · queued {sessionRef.current.state.pending}/60 ·
           {sessionRef.current.state.transport.waitMs}ms

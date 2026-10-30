@@ -3,6 +3,7 @@
  * This module never creates bullets/enemies, input ticks, hits or outcomes.
  * Motion is a bounded, best-effort visual estimate, not a replay/verifier.
  */
+import {validateC9MotionHintsV2} from './C9MotionHintsV2.js';
 export const C9_SMOOTH_WORLD_VERSION='c9-server-motion-visual-qa-v1';
 const TICK_MS=1000/30;
 // One 30-frame (1000ms) checkpoint interval plus 200ms ACK jitter.
@@ -23,7 +24,7 @@ const bad=()=>{throw new TypeError('C9 smooth-world checkpoint invalid');};
 export function createC9SmoothWorld({clock=()=>performance.now()}={}){
   if(typeof clock!=='function')throw new TypeError('C9 visual clock');
   let lastTick=-1,lastAt=0,phase='active',arenaX=0,arenaZ=0;
-  let enemies=new Map(),shots=[],enemyShots=[];
+  let enemies=new Map(),shots=[],enemyShots=[],hintsActive=false;
   // A single scratch vector avoids allocating hundreds of arrays per RAF.
   const scratch=new Float64Array(2);
   const samplePoint=(track,at)=>{
@@ -56,15 +57,19 @@ export function createC9SmoothWorld({clock=()=>performance.now()}={}){
     return {x:item.x,z:item.z,vx,vz,correctionX,correctionZ,
       ...(own(item,'id')?{id:item.id,hp:item.hp,maxHp:item.maxHp}:{})};
   };
-  function projectiles(list,previous,tickDelta,at,type){
+  function projectiles(list,previous,tickDelta,at,type,hints=null){
     // Projectiles have no stable ID in C8 visual-v1. Only match small lists
     // with an unambiguous nearest predecessor. Never invent projectile count.
     const eligible=phase==='active'&&tickDelta>0&&tickDelta<=30
       &&list.length===previous.length&&list.length<=16;
     const used=new Set();
-    return list.map(item=>{
+    const byId=hints===null?null:new Map(previous.filter(p=>own(p,'id'))
+      .map(p=>[p.id,p]));
+    return list.map((item,index)=>{
       let matched=null;
-      if(eligible){
+      const hint=hints?.[index]??null;
+      if(hint&&byId){matched=byId.get(hint.id)??null;}
+      if(!hint&&eligible){
         let best=Infinity,second=Infinity,bestIndex=-1;
         for(let i=0;i<previous.length;i++){
           if(used.has(i))continue;
@@ -84,6 +89,13 @@ export function createC9SmoothWorld({clock=()=>performance.now()}={}){
         }
       }
       const track=estimate(item,matched,tickDelta,at,MAX_SHOT_SPEED);
+      if(hint){
+        // These motion vectors are server-derived, presentation ONLY. No new
+        // bullet, hit or damage event is ever created by this renderer.
+        track.id=hint.id;
+        track.vx=hint.vx;
+        track.vz=hint.vz;
+      }
       if(type==='friendly'&&track.vz>0)track.vz=0;
       return track;
     });
@@ -113,15 +125,23 @@ export function createC9SmoothWorld({clock=()=>performance.now()}={}){
     if(frame.shots.some(p=>!coord(p))||frame.enemyShots.some(p=>!coord(p)))bad();
     const ids=frame.enemies.map(e=>e.id);
     if(new Set(ids).size!==ids.length)bad();
+    const hints=frame.motionHints==null?null:validateC9MotionHintsV2(
+      frame.motionHints,frame);
     const tickDelta=lastTick>=0?frame.serverTick-lastTick:0;
     // Project prior visual motion using the OLD time origin first.
     const oldE=enemies,oldS=shots,oldH=enemyShots;
     const nextE=new Map();
-    for(const e of frame.enemies)
-      nextE.set(e.id,estimate(e,oldE.get(e.id),tickDelta,at,MAX_ENEMY_SPEED));
-    const nextS=projectiles(frame.shots,oldS,tickDelta,at,'friendly');
-    const nextH=projectiles(frame.enemyShots,oldH,tickDelta,at,'hostile');
-    enemies=nextE;shots=nextS;enemyShots=nextH;
+    for(let i=0;i<frame.enemies.length;i++){
+      const e=frame.enemies[i];
+      // The server-provided upper speed bound narrows visual extrapolation,
+      // but still cannot predict changes to chase/sine AI between ACKs.
+      const speed=hints?Math.min(MAX_ENEMY_SPEED,
+        hints.enemies[i].maxSpeedUnitsPerTick):MAX_ENEMY_SPEED;
+      nextE.set(e.id,estimate(e,oldE.get(e.id),tickDelta,at,speed));
+    }
+    const nextS=projectiles(frame.shots,oldS,tickDelta,at,'friendly',hints?.shots??null);
+    const nextH=projectiles(frame.enemyShots,oldH,tickDelta,at,'hostile',hints?.enemyShots??null);
+    enemies=nextE;shots=nextS;enemyShots=nextH;hintsActive=Boolean(hints);
     lastAt=at;lastTick=frame.serverTick;phase=frame.phase;
     arenaX=frame.config.arenaHalfWidth;arenaZ=frame.config.arenaHalfHeight;
     return true;
@@ -132,15 +152,16 @@ export function createC9SmoothWorld({clock=()=>performance.now()}={}){
       const p=samplePoint(e,at);enemy?.(e.id,p[0],p[1],e.hp,e.maxHp);
     }
     for(let i=0;i<shots.length;i++){
-      const p=samplePoint(shots[i],at);shot?.(i,p[0],p[1]);
+      const p=samplePoint(shots[i],at);shot?.(i,p[0],p[1],shots[i].id??null);
     }
     for(let i=0;i<enemyShots.length;i++){
-      const p=samplePoint(enemyShots[i],at);enemyShot?.(i,p[0],p[1]);
+      const p=samplePoint(enemyShots[i],at);enemyShot?.(i,p[0],p[1],enemyShots[i].id??null);
     }
   }
   return Object.freeze({accept,each,
     get latestTick(){return lastTick;},
     get counts(){return Object.freeze({enemies:enemies.size,shots:shots.length,
       enemyShots:enemyShots.length});},
-    get lastReceivedAt(){return lastAt;}});
+    get lastReceivedAt(){return lastAt;},
+    get usingServerHintsV2(){return hintsActive;}});
 }

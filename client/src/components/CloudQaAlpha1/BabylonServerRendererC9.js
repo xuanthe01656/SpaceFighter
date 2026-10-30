@@ -50,6 +50,8 @@ export function createBabylonServerRendererC9({canvas,onFault=()=>{},onPerf=()=>
     const ghost=pilot.clone('c9-authoritative-server-reference');ghost.material=matGhost;
     ghost.isVisible=false;
     const enemies=new Map(),shots=[],enemyShots=[],lines=[];
+    // Render-v2 keeps each projectile mesh bound to its server-authored ID.
+    const shotsById=new Map(),hostilesById=new Map();
     const createSphere=(name,mat,r)=>{
       const mesh=BABYLON.MeshBuilder.CreateSphere(name,{diameter:r*2,segments:6},scene);
       mesh.material=mat;mesh.position.y=.14;return mesh;
@@ -79,8 +81,10 @@ export function createBabylonServerRendererC9({canvas,onFault=()=>{},onPerf=()=>
     const place=(mesh,x,z)=>{mesh.position.x=x/1000;mesh.position.z=z/1000;};
     const drawMotion={
       enemy:(id,x,z)=>{const m=enemies.get(id);if(m)place(m,x,z);},
-      shot:(i,x,z)=>{const m=shots[i];if(m?.isVisible)place(m,x,z);},
-      enemyShot:(i,x,z)=>{const m=enemyShots[i];if(m?.isVisible)place(m,x,z);},
+      shot:(i,x,z,id)=>{const m=motion.usingServerHintsV2&&id!==null
+        ?shotsById.get(id):shots[i];if(m?.isVisible)place(m,x,z);},
+      enemyShot:(i,x,z,id)=>{const m=motion.usingServerHintsV2&&id!==null
+        ?hostilesById.get(id):enemyShots[i];if(m?.isVisible)place(m,x,z);},
     };
     function update(frame){
       if(disposed||!frame)return;
@@ -119,9 +123,33 @@ export function createBabylonServerRendererC9({canvas,onFault=()=>{},onPerf=()=>
           if(m.isVisible)m.position=loc(capped[i]);
         }
       };
-      batch(shots,frame.shots,matShot,'c9-shot',.23);
-      batch(enemyShots,frame.enemyShots,matEnemyShot,'c9-enemy-shot',.3);
       motion.accept(frame);
+      const updateById=(pool,items,mat,prefix,rad)=>{
+        const present=new Set();
+        for(const item of items){
+          present.add(item.id);
+          let mesh=pool.get(item.id);
+          if(!mesh){mesh=createSphere(`${prefix}-${item.id}`,mat,rad);pool.set(item.id,mesh);}
+          place(mesh,item.x,item.z);
+        }
+        for(const [id,mesh] of pool){
+          if(!present.has(id)){disposeMesh(mesh);pool.delete(id);}
+        }
+      };
+      if(motion.usingServerHintsV2){
+        for(const mesh of shots)mesh.isVisible=false;
+        for(const mesh of enemyShots)mesh.isVisible=false;
+        updateById(shotsById,frame.motionHints.shots,matShot,'c9-shot-id',.23);
+        updateById(hostilesById,frame.motionHints.enemyShots,matEnemyShot,
+          'c9-hostile-shot-id',.3);
+      }else{
+        for(const pool of [shotsById,hostilesById]){
+          for(const mesh of pool.values())disposeMesh(mesh);
+          pool.clear();
+        }
+        batch(shots,frame.shots,matShot,'c9-shot',.23);
+        batch(enemyShots,frame.enemyShots,matEnemyShot,'c9-enemy-shot',.3);
+      }
       perf.checkpoint(frame.serverTick,motion.counts);
     }
     function updatePrediction(position){
@@ -157,7 +185,8 @@ export function createBabylonServerRendererC9({canvas,onFault=()=>{},onPerf=()=>
       motion.each(drawMotion,frameAt);
       const cpuStart=performance.now();scene.render();
       perf.render(elapsed,performance.now()-cpuStart,frameAt);
-      if(perf.shouldPublish(frameAt))onPerf(perf.snapshot(frameAt));
+      if(perf.shouldPublish(frameAt))onPerf({...perf.snapshot(frameAt),
+        serverMotionHintsV2:motion.usingServerHintsV2});
     });
     return Object.freeze({update,updatePrediction,resize:()=>{if(!disposed)engine.resize();},dispose:()=>{
       if(disposed)return;disposed=true;events.forEach(fn=>fn());

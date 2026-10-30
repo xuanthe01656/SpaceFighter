@@ -13,6 +13,7 @@ const V='sf-c8-alpha1-server-render-qa-v1';
 // C12-PERF-B: keep first checkpoint responsive, then amortize the verified
 // HTTP/Auth/Firestore round trips over 30 frames. QA only. No queue growth,
 // no parallel transactions, no skipping input, and no C10 authority.
+import {validateC9MotionHintsV2} from './C9MotionHintsV2.js';
 const WARMUP_FRAMES=15,STEADY_FRAMES=30,MAX_PENDING_FRAMES=60;
 // QA flow-control: stop sampling when saturated, then fail closed if an ACK
 // does not drain the original bounded queue. Do not create catch-up ticks.
@@ -39,6 +40,12 @@ export function requireCandidateReplyC12(reply,{battleId=null,expectedTick=null}
     ||Object.hasOwn(reply,'victory')||Object.hasOwn(reply,'rewards')
     ||Object.hasOwn(reply,'grant')||Object.hasOwn(reply,'settlement'))
     error('C12_UNTRUSTED_CANDIDATE_REPLY');
+  // Sidecar may be absent from an old QA server; when present it must match
+  // the already validated server checkpoint and cannot contain game results.
+  if(Object.hasOwn(reply,'visualMotion')){
+    try{validateC9MotionHintsV2(reply.visualMotion,reply.visual);}
+    catch(_){error('C12_UNTRUSTED_CANDIDATE_REPLY');}
+  }
   return reply;
 }
 export function createCloudCandidateSessionC12({api,viewport,clock,randomId,

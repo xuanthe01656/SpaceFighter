@@ -14,7 +14,11 @@ const {resolveCampaignAlphaStage1C6E,ENCOUNTER_C6E_VERSION}
   =require('./combatCampaignAlphaC6CV8.cjs');
 
 const AUDIT_VERSION='v8-c11-independent-candidate-audit-v1';
-const MAX_AUDIT_CHUNKS=128;
+// 15 warm-up frames + ceil((4500-15)/30)=150 steady batches = 151
+// chunks for a full-length 30Hz candidate. Allow bounded terminal retries
+// while retaining the independent 4500-tick and 2 MiB trace budgets.
+// A short-chunk flood still fails closed at this explicit 256-document cap.
+const MAX_AUDIT_CHUNKS=256;
 const MAX_AUDIT_TICKS=4500;
 const MAX_TRACE_BYTES=2*1024*1024;
 const HEX=/^[0-9a-f]{64}$/;
