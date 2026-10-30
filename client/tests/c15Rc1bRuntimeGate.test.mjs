@@ -13,6 +13,22 @@ test('C15 RC1B is build-gated to authenticated Alpha stage 1 and legacy Campaign
   assert.match(engine,/LegacyCampaignEngine/);assert.match(engine,/C15LocalAlpha1/);
 });
 
+test('HQ launch bridge enters C15 RC1B before the legacy P0 battle.start lane',()=>{
+  const hq=read('client/src/components/HQ/index.jsx');
+  assert.match(hq,/const c15Rc1bLaunch=import\.meta\.env\.VITE_C15_RC1B_ENABLED==='true'/);
+  assert.match(hq,/mode==='campaign'/);
+  assert.match(hq,/currentPlanet\|\|1\)===1/);
+  assert.match(hq,/selectedStage\|\|1\)===1/);
+  const bridge=hq.indexOf('if (c15Rc1bLaunch)');
+  const legacy=hq.indexOf("gameAction('battle.start'");
+  assert.ok(bridge>=0,'missing C15 launch bridge');
+  assert.ok(legacy>bridge,'legacy battle.start must remain after the C15 bridge');
+  const section=hq.slice(bridge,legacy);
+  assert.match(section,/setScreen\('campaign'\)/);
+  assert.match(section,/return;/);
+  assert.doesNotMatch(section,/gameAction\('battle\.start'/);
+});
+
 test('C15 local runtime renders device state and cannot import economy or settlement authority',()=>{
   for(const file of ['client/src/components/C15LocalAlpha1/index.jsx','client/src/components/C15LocalAlpha1/C15LocalRenderer.js',
     'client/src/game/c15/C15Rc1bSession.js','client/src/game/c15/C15KernelRuntime.js']){

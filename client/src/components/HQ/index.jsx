@@ -40,9 +40,22 @@ export default function HQ({ gsRef, setScreen, lang, saveUserProfile, gameAction
     }
     launchLockRef.current=true;setIsLaunching(true);
     try {
-      // Download/parse the lazily loaded Babylon scene before any Cloud
-      // battle.start (ticket time starts on the server) or Guest energy spend.
+      const progress=gsRef.current?.campaignData?.progress || {};
+      const c15Rc1bLaunch=import.meta.env.VITE_C15_RC1B_ENABLED==='true'
+        && Boolean(auth.currentUser)
+        && mode==='campaign'
+        && Number(progress.currentPlanet||1)===1
+        && Number(progress.selectedStage||1)===1;
+      // Download/parse the lazily loaded battle screen before entering either
+      // the C15 local runtime or the legacy Guest/Cloud flow.
       await preloadBattleScreen(mode);
+      if (c15Rc1bLaunch) {
+        // C15-RC1B opens its own signed, non-economic battle inside
+        // C15LocalAlpha1. Never call the legacy battle.start P0 lane here.
+        gsRef.current.pendingEnergyCost=0;
+        setScreen('campaign');
+        return;
+      }
       if (auth.currentUser) {
         // Recover a ticket left after app crash/reload. Energy from an
         // interrupted dungeon run is not refunded (documented game policy).
@@ -50,7 +63,6 @@ export default function HQ({ gsRef, setScreen, lang, saveUserProfile, gameAction
           await gameAction('battle.abandon',{ticketId:gsRef.current.activeBattleId});
           toast(lang==='vi'?'Đã đóng trận trước chưa hoàn tất.':'Previous interrupted battle closed.');
         }
-        const progress=gsRef.current.campaignData.progress || {};
         const payload=mode==='dungeon' ? {mode,dungeonId:gsRef.current.selectedDungeonId}
           : {mode,planetId:Number(progress.currentPlanet)||1,stage:Number(progress.selectedStage)||1};
         const reply=await gameAction('battle.start',payload);
