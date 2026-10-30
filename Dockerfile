@@ -10,6 +10,7 @@ RUN npm ci --omit=dev --no-audit --no-fund
 
 COPY server/server.js ./server.js
 COPY server/lib/ ./lib/
+COPY server/resources/ ./resources/
 COPY client/package.json /app/client/package.json
 COPY client/src/constants.js /app/client/src/constants.js
 COPY client/src/utils/profileSchema.js /app/client/src/utils/profileSchema.js

@@ -1,0 +1,6 @@
+{
+  "version": "c15-bootstrap-pack-v1",
+  "fallback": true,
+  "required": true,
+  "description": "SpaceFighter C15 bootstrap fallback metadata"
+}

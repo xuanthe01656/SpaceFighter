@@ -12,6 +12,7 @@ const { createAccountDeletionService } = require('./lib/accountDeletion.cjs');
 function createApp(clientPath=path.join(__dirname,'..','client','dist'), options={}) {
   const app=express();
   app.disable('x-powered-by');
+  if(typeof app.set==='function')app.set('trust proxy',1);
   app.use((_req,res,next)=>{
     res.setHeader('X-Content-Type-Options','nosniff');
     res.setHeader('Referrer-Policy','strict-origin-when-cross-origin');
@@ -85,6 +86,64 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
   app.post('/api/v1/session',withAuth((_req,user)=>options.service.openSession(user)));
   app.get('/api/v1/profile',withAuth((req,user)=>options.service.getProfile(user.uid,req.get('x-game-session'))));
   app.post('/api/v1/command',withAuth((req,user)=>options.service.apply(user.uid,req.get('x-game-session'),req.body||{})));
+  // C15-RC1B immutable visual resources. These routes contain no secrets or
+  // gameplay authority. Pack URLs are versioned and cacheable; the manifest
+  // remains no-store so the operator may roll forward/rollback atomically.
+  const c15ResourceReady=Boolean(options.c15ResourceCatalog?.manifest);
+  app.get('/api/v1/c15/resources/manifest',(req,res)=>{
+    if(!c15ResourceReady)return res.status(503).json({ok:false,code:'C15_RESOURCES_UNAVAILABLE'});
+    res.setHeader('Cache-Control','no-store');
+    return res.status(200).json({ok:true,manifest:options.c15ResourceCatalog.manifest});
+  });
+  app.get('/api/v1/c15/resources/packs/:id/v:revision/descriptor.json',(req,res)=>{
+    if(!c15ResourceReady)return res.status(503).json({ok:false,code:'C15_RESOURCES_UNAVAILABLE'});
+    const revision=Number(req.params.revision);
+    const found=options.c15ResourceCatalog.getDescriptor(req.params.id,revision);
+    if(!found)return res.status(404).json({ok:false,code:'C15_RESOURCE_NOT_FOUND'});
+    res.setHeader('Cache-Control','public, max-age=31536000, immutable');
+    res.setHeader('ETag',`"${found.sha256}"`);
+    res.type('application/json').status(200).send(found.bytes);
+  });
+  app.get('/api/v1/c15/resources/packs/:id/v:revision/files/*',(req,res)=>{
+    if(!c15ResourceReady)return res.status(503).json({ok:false,code:'C15_RESOURCES_UNAVAILABLE'});
+    const revision=Number(req.params.revision),relative=req.params[0]||'';
+    const found=options.c15ResourceCatalog.getFile(req.params.id,revision,relative);
+    if(!found)return res.status(404).json({ok:false,code:'C15_RESOURCE_NOT_FOUND'});
+    const range=req.get('range');
+    let start=0,end=found.sizeBytes-1,status=200;
+    if(range){
+      const match=/^bytes=(\d+)-(\d*)$/.exec(range);
+      if(!match)return res.status(416).end();
+      start=Number(match[1]);end=match[2]?Number(match[2]):end;
+      if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end<start||start>=found.sizeBytes)
+        return res.status(416).setHeader('Content-Range',`bytes */${found.sizeBytes}`).end();
+      end=Math.min(end,found.sizeBytes-1);status=206;
+      res.setHeader('Content-Range',`bytes ${start}-${end}/${found.sizeBytes}`);
+      res.setHeader('Accept-Ranges','bytes');
+    }
+    res.setHeader('Cache-Control','public, max-age=31536000, immutable');
+    res.setHeader('ETag',`"${found.sha256}"`);
+    res.setHeader('Content-Type',found.contentType);
+    res.setHeader('Content-Length',String(end-start+1));
+    return require('fs').createReadStream(found.absolute,{start,end}).pipe(res.status(status));
+  });
+  // C15-RC1B: local deterministic gameplay with background journal upload and
+  // independent replay. This staging lane is allowlisted and NON-ECONOMIC.
+  const c15Ready=options.c15Rc1bEnabled===true&&Boolean(options.c15Rc1bService?.enabled);
+  const withC15=fn=>async(req,res,next)=>{
+    if(!c15Ready)return res.status(503).json({ok:false,code:'C15_RC1B_DISABLED'});
+    return withAuth(fn)(req,res,next);
+  };
+  app.post('/api/v1/c15/battle/open',withC15((req,user)=>options.c15Rc1bService.open(
+    user.uid,req.get('x-game-session'),req.body)));
+  app.post('/api/v1/c15/battle/chunk',withC15((req,user)=>options.c15Rc1bService.upload(
+    user.uid,req.get('x-game-session'),req.body)));
+  app.get('/api/v1/c15/battle/status',withC15((req,user)=>options.c15Rc1bService.status(
+    user.uid,req.get('x-game-session'))));
+  app.post('/api/v1/c15/battle/finalize',withC15((req,user)=>options.c15Rc1bService.finalize(
+    user.uid,req.get('x-game-session'),req.body)));
+  app.post('/api/v1/c15/battle/abandon',withC15((req,user)=>options.c15Rc1bService.abandon(
+    user.uid,req.get('x-game-session'),req.body)));
   // C7-A: isolated, default-OFF, allowlisted QA replay. NEVER legacy battle.start/finish.
   // No energy, rewards, missions, progress or economy mutation in these routes.
   const qaReady=options.qaBattleEnabled===true && Boolean(options.qaBattleService);
@@ -167,7 +226,7 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
 async function start() {
   const port=Number(process.env.PORT||3000);
   if(!Number.isInteger(port)||port<1||port>65535) throw new Error('Invalid PORT');
-  let service=null,auth=null,admin=null,accountDeletionService=null,qaBattleService=null,qaVerifierService=null,candidateService=null;
+  let service=null,auth=null,admin=null,accountDeletionService=null,qaBattleService=null,qaVerifierService=null,candidateService=null,c15Rc1bService=null,c15ResourceCatalog=null;
   if(process.env.GAME_API_ENABLED==='true') {
     admin=require('firebase-admin');
     if(!admin.apps.length) {
@@ -209,6 +268,25 @@ async function start() {
         console.error('C12 non-economic candidate routes disabled: invalid staged runtime configuration');
       }
     }
+    if(process.env.GAME_C15_RC1B_PUBLIC_BASE_URL){
+      try{
+        const {createC15Rc1bResourceCatalog}=require('./lib/c15Rc1bResourceCatalog.cjs');
+        c15ResourceCatalog=createC15Rc1bResourceCatalog({
+          publicBaseUrl:process.env.GAME_C15_RC1B_PUBLIC_BASE_URL,generatedAtMs:Date.now()});
+      }catch(_error){
+        console.error('C15 RC1B resource delivery disabled: invalid immutable resource catalog');
+      }
+    }
+    if(process.env.GAME_C15_RC1B_ENABLED==='true'){
+      try{
+        if(!c15ResourceCatalog)throw new Error('C15 resource catalog unavailable');
+        const {createC15Rc1bStagingRuntime}=require('./lib/c15Rc1bRuntimeV1.cjs');
+        c15Rc1bService=await createC15Rc1bStagingRuntime({db:admin.firestore(),env:process.env,
+          resourceCatalog:c15ResourceCatalog});
+      }catch(_error){
+        console.error('C15 RC1B non-economic runtime disabled: invalid staged configuration');
+      }
+    }
     if (process.env.GAME_ACCOUNT_DELETION_ENABLED==='true' &&
         process.env.GAME_ACCOUNT_DELETION_WORKER_READY==='true') {
       accountDeletionService=createAccountDeletionService({db:admin.firestore(),auth});
@@ -220,6 +298,7 @@ async function start() {
     qaVerifierService,qaVerifierEnabled:Boolean(qaVerifierService),
     candidateService,candidateEnabled:Boolean(candidateService),
     candidatePerfEnabled:process.env.GAME_C12_PERF_LOG_ENABLED==='true',
+    c15Rc1bService,c15Rc1bEnabled:Boolean(c15Rc1bService),c15ResourceCatalog,
     allowLocalOrigin:process.env.NODE_ENV!=='production'});
   app.listen(port,'0.0.0.0',()=>console.log(`Space Fighter Phase 1 listening on ${port}; API ${service?'enabled':'disabled'}`));
 }

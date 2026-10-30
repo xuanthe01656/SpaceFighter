@@ -104,3 +104,30 @@ export const sendCandidateInputC12=(uid,body)=>candidateBoundC12('input',body,ui
 export const getCandidateStatusC12=uid=>callApi('/candidate/battle/status',null,{expectedUid:uid});
 export const auditCandidateBattleC12=(uid,body)=>candidateBoundC12('audit',body,uid);
 export const abandonCandidateBattleC12=(uid,body)=>candidateBoundC12('abandon',body,uid);
+
+// C15-RC1B: staging-only commercial-local runtime. Gameplay runs locally;
+// these endpoints only issue signed genesis, persist input journal chunks and
+// independently replay/finalize a NON-ECONOMIC result.
+async function c15Bound(path,body,expectedUid,{retry=true}={}) {
+  if(!expectedUid)throw new GameApiError('LOGIN_REQUIRED','Google session required for C15 RC1B');
+  const request=()=>callApi(`/c15/battle/${path}`,body,{expectedUid});
+  return retry ? retrySameAuthUser({expectedUid,getCurrentUid:()=>auth.currentUser?.uid,
+    request,shouldRetry:e=>e?.code==='TIMEOUT'||e instanceof TypeError}) : request();
+}
+export const openC15Rc1bBattle=(uid,body)=>c15Bound('open',body,uid);
+export const uploadC15Rc1bChunk=(uid,body)=>c15Bound('chunk',body,uid);
+export const getC15Rc1bStatus=uid=>callApi('/c15/battle/status',null,{expectedUid:uid});
+export const finalizeC15Rc1bBattle=(uid,body)=>c15Bound('finalize',body,uid,{retry:false});
+export const abandonC15Rc1bBattle=(uid,body)=>c15Bound('abandon',body,uid,{retry:false});
+export async function fetchC15ResourceManifest(){
+  const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),15000);
+  try{
+    const response=await fetch(`${BASE_URL}/c15/resources/manifest`,{method:'GET',headers:{Accept:'application/json'},
+      signal:controller.signal,cache:'no-store'});
+    const body=await response.json().catch(()=>({}));
+    if(!response.ok||body.ok!==true)throw new GameApiError(body.code||'C15_RESOURCE_ERROR',
+      body.message||`Resource manifest failed (${response.status})`,response.status);
+    return body.manifest;
+  }catch(error){if(error.name==='AbortError')throw new GameApiError('TIMEOUT','Resource manifest timed out');throw error;}
+  finally{clearTimeout(timeout);}
+}

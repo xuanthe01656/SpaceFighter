@@ -1,13 +1,6 @@
 name: SpaceFighter C15-RC1 Commercial Foundation Gate
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'client/**'
-      - 'server/**'
-      - 'tools/**'
-      - '.github/workflows/c15-rc1-gate.yml'
 concurrency:
   group: c15-rc1-${{ github.ref }}
   cancel-in-progress: true

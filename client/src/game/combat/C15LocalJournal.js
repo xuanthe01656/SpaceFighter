@@ -44,4 +44,57 @@ export function closeC15LocalJournal(state){check(state);if(state.inflight||stat
 export function c15JournalSummary(state){check(state);return freeze({version:'c15-journal-summary-v1',battleId:state.battleId,
   ticks:state.nextTick,chunks:state.chunkCount,uploadedThroughTick:state.uploadedThroughTick,
   closed:state.closed,containsOutcome:false,settlementEnabled:false});}
+
+function cloneFrame(value){return {x:value.x,z:value.z};}
+function validateSerializedChunk(value,battleId){
+  if(value===null)return null;
+  if(!exact(value,['protocol','battleId','startTick','frames'])||value.protocol!=='pve-input-v1'
+    ||value.battleId!==battleId||!int(value.startTick,0,MAX_TICKS)||!Array.isArray(value.frames)
+    ||value.frames.length<1||value.frames.length>STEADY)throw new TypeError('C15 serialized chunk invalid');
+  return freeze({protocol:value.protocol,battleId:value.battleId,startTick:value.startTick,
+    frames:value.frames.map(frame)});
+}
+export function serializeC15LocalJournal(state){
+  check(state);
+  return freeze({version:C15_LOCAL_JOURNAL_VERSION,battleId:state.battleId,rulesVersion:state.rulesVersion,
+    loadoutHash:state.loadoutHash,issuedAtMs:state.issuedAtMs,nextTick:state.nextTick,
+    uploadedThroughTick:state.uploadedThroughTick,chunkCount:state.chunkCount,
+    pending:state.pending.map(cloneFrame),inflight:state.inflight?{
+      protocol:state.inflight.protocol,battleId:state.inflight.battleId,startTick:state.inflight.startTick,
+      frames:state.inflight.frames.map(cloneFrame)}:null,closed:state.closed});
+}
+export function restoreC15LocalJournal(raw){
+  const keys=['version','battleId','rulesVersion','loadoutHash','issuedAtMs','nextTick','uploadedThroughTick',
+    'chunkCount','pending','inflight','closed'];
+  if(!exact(raw,keys)||raw.version!==C15_LOCAL_JOURNAL_VERSION||!UUID.test(raw.battleId||'')
+    ||typeof raw.rulesVersion!=='string'||raw.rulesVersion.length<3||!/^[a-f0-9]{64}$/.test(raw.loadoutHash||'')
+    ||!int(raw.issuedAtMs,1,Number.MAX_SAFE_INTEGER)||!int(raw.nextTick,0,MAX_TICKS)
+    ||!int(raw.uploadedThroughTick,0,raw.nextTick)||!int(raw.chunkCount,0,MAX_CHUNKS)
+    ||!Array.isArray(raw.pending)||raw.pending.length>MAX_TICKS||typeof raw.closed!=='boolean')
+    throw new TypeError('C15 serialized journal invalid');
+  const pending=raw.pending.map(frame);
+  const inflight=validateSerializedChunk(raw.inflight,raw.battleId);
+  const inFlightCount=inflight?.frames.length||0;
+  if(raw.uploadedThroughTick+inFlightCount+pending.length!==raw.nextTick
+    ||(inflight&&inflight.startTick!==raw.uploadedThroughTick)
+    ||(raw.closed&&(pending.length||inflight||raw.uploadedThroughTick!==raw.nextTick)))
+    throw new TypeError('C15 serialized journal continuity invalid');
+  return seal({version:C15_LOCAL_JOURNAL_VERSION,battleId:raw.battleId,rulesVersion:raw.rulesVersion,
+    loadoutHash:raw.loadoutHash,issuedAtMs:raw.issuedAtMs,nextTick:raw.nextTick,
+    uploadedThroughTick:raw.uploadedThroughTick,chunkCount:raw.chunkCount,pending,inflight,closed:raw.closed});
+}
+export function peekC15InflightChunk(state){check(state);return state.inflight;}
+export function reconcileC15UploadProgress(state,{uploadedThroughTick,chunkCount}){
+  check(state);
+  if(!int(uploadedThroughTick,0,state.nextTick)||!int(chunkCount,0,MAX_CHUNKS))
+    throw new TypeError('C15 upload progress invalid');
+  if(uploadedThroughTick===state.uploadedThroughTick&&chunkCount===state.chunkCount)return state;
+  const inflight=state.inflight;
+  if(inflight&&uploadedThroughTick===inflight.startTick+inflight.frames.length
+    &&chunkCount===state.chunkCount+1){
+    return acknowledgeC15UploadChunk(state,{startTick:inflight.startTick,endTick:uploadedThroughTick});
+  }
+  throw new TypeError('C15 server upload progress cannot be reconciled');
+}
+
 export const C15_LOCAL_JOURNAL_LIMITS=freeze({maxTicks:MAX_TICKS,maxChunks:MAX_CHUNKS,firstFrames:FIRST,steadyFrames:STEADY});

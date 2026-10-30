@@ -30,13 +30,18 @@ on:
         required: false
         type: boolean
         default: false
+      c15_rc1b:
+        description: 'Build C15-RC1B local deterministic + resource delivery milestone (manual, NON-ECONOMIC)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
   group: spacefighter-android-native-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   android-native-debug:
@@ -64,6 +69,7 @@ jobs:
       VITE_C8_CLOUD_QA_UI: ${{ github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && 'true' || 'false' }}
       VITE_C9_BABYLON_QA_UI: ${{ github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && inputs.c9_babylon_qa == true && 'true' || 'false' }}
       VITE_C12_CANDIDATE_QA_UI: ${{ github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && inputs.c9_babylon_qa == true && inputs.c12_candidate_qa == true && 'true' || 'false' }}
+      VITE_C15_RC1B_ENABLED: ${{ github.event_name == 'workflow_dispatch' && inputs.c15_rc1b == true && 'true' || 'false' }}
 
     steps:
       - name: Check out only current revision
@@ -201,6 +207,12 @@ jobs:
             [[ "$VITE_GAME_API_ENABLED" == 'false' ]] || exit 1
             echo 'C12 candidate test ONLY, requires separately approved server flag and UID allowlist; no rewards'
           fi
+          if [[ "$VITE_C15_RC1B_ENABLED" == 'true' ]]; then
+            [[ "$GITHUB_EVENT_NAME" == 'workflow_dispatch' ]] || { echo 'C15 RC1B is manual-only' >&2; exit 1; }
+            [[ "$VITE_SF_NATIVE_TOUCH_QA" == '0' && "$VITE_C8_CLOUD_QA_UI" == 'false' && "$VITE_C9_BABYLON_QA_UI" == 'false' && "$VITE_C12_CANDIDATE_QA_UI" == 'false' ]] || { echo 'C15 RC1B must be built separately from legacy QA modes' >&2; exit 1; }
+            [[ "$VITE_GAME_API_ENABLED" == 'false' ]] || exit 1
+            echo 'Building C15-RC1B local deterministic runtime + resource delivery; NON-ECONOMIC, NO SETTLEMENT'
+          fi
           npm run build:mobile
           test -s dist/index.html
 
@@ -263,7 +275,7 @@ jobs:
       - name: Preserve debug APK for manual device QA
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && inputs.c9_babylon_qa == true && inputs.c12_candidate_qa == true && 'spacefighter-android-c12-candidate-debug-not-for-release' || (github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && inputs.c9_babylon_qa == true && 'spacefighter-android-c9-babylon-qa-debug-not-for-release' || (github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && 'spacefighter-android-cloud-qa-c8-debug-not-for-release' || (github.event_name == 'workflow_dispatch' && inputs.touch_qa == true && 'spacefighter-android-touch-qa-debug-not-for-release' || 'spacefighter-android-debug-not-for-release'))) }}
+          name: ${{ github.event_name == 'workflow_dispatch' && inputs.c15_rc1b == true && 'spacefighter-android-c15-rc1b-debug-not-for-release' || (github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && inputs.c9_babylon_qa == true && inputs.c12_candidate_qa == true && 'spacefighter-android-c12-candidate-debug-not-for-release' || (github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && inputs.c9_babylon_qa == true && 'spacefighter-android-c9-babylon-qa-debug-not-for-release' || (github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && 'spacefighter-android-cloud-qa-c8-debug-not-for-release' || (github.event_name == 'workflow_dispatch' && inputs.touch_qa == true && 'spacefighter-android-touch-qa-debug-not-for-release' || 'spacefighter-android-debug-not-for-release')))) }}
           path: client/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 3

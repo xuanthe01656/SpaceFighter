@@ -4,8 +4,19 @@ import { choosePerformancePreset, attachAdaptiveRenderQuality } from '../../game
 import { createCampaignScene } from './CampaignScene';
 import { auth } from '../../firebase';
 import toast from 'react-hot-toast';
+import C15LocalAlpha1 from '../C15LocalAlpha1/index.jsx';
 
-export default function CampaignEngine({ gsRef, setScreen, lang, saveUserProfile, getRealTime, gameAction }) {
+export default function CampaignEngine(props) {
+  const data=props.gsRef?.current?.campaignData;
+  const progress=data?.progress||{};
+  const c15Enabled=import.meta.env.VITE_C15_RC1B_ENABLED==='true'&&Boolean(auth.currentUser)
+    &&Number(progress.currentPlanet||1)===1&&Number(progress.selectedStage||1)===1;
+  return c15Enabled
+    ? <C15LocalAlpha1 setScreen={props.setScreen} lang={props.lang}/>
+    : <LegacyCampaignEngine {...props}/>;
+}
+
+function LegacyCampaignEngine({ gsRef, setScreen, lang, saveUserProfile, getRealTime, gameAction }) {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
   const sceneRef  = useRef(null);

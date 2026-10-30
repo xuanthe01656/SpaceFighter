@@ -35,10 +35,15 @@ function replayC15CommercialFoundationV1({origin,chunks,nowMs,keyRing}){
   }
   const minimumElapsedMs=Math.ceil(totalTicks*1000/TICK_HZ);
   if(nowMs+2000<g.issuedAtMs+minimumElapsedMs)throw new TypeError('C15 replay submitted before deterministic duration elapsed');
-  const snapshot=origin.snapshot;
+  // Firestore serialization removes Object.freeze markers. Rehydrate the
+  // HMAC-verified origin into the exact deeply-frozen contracts required by
+  // the deterministic kernel; never rebuild these values from client input.
+  const snapshot=freeze(structuredClone(origin.snapshot));
+  const policy=freeze(structuredClone(origin.policy));
+  const encounter=freeze(structuredClone(origin.encounter));
   const journal=openInputJournal({uid:g.uid,sessionId:g.sessionId,battleId:g.battleId,
     rulesVersion:snapshot.context.rulesVersion,loadoutHash:snapshot.loadoutHash,issuedAtMs:g.issuedAtMs});
-  let run=openCombatVerticalSlice({snapshot,journal,policy:origin.policy,encounter:origin.encounter});
+  let run=openCombatVerticalSlice({snapshot,journal,policy,encounter});
   for(const chunk of normalized){
     if(run.state.phase!=='active')throw new TypeError('C15 replay has chunks after terminal');
     const endTick=chunk.startTick+chunk.frames.length;
