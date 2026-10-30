@@ -1,0 +1,44 @@
+name: SpaceFighter C15-RC1 Commercial Foundation Gate
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'client/**'
+      - 'server/**'
+      - 'tools/**'
+      - '.github/workflows/c15-rc1-gate.yml'
+concurrency:
+  group: c15-rc1-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            client/package-lock.json
+            server/package-lock.json
+      - name: Install client dependencies
+        working-directory: client
+        run: npm ci --no-audit --no-fund
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci --no-audit --no-fund
+      - name: Run one integrated C15-RC1 gate
+        working-directory: client
+        run: npm run gate:c15-rc1
+      - name: Upload C15-RC1 evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: spacefighter-c15-rc1-gate-report
+          path: client/dist/c15-rc1/
+          if-no-files-found: error
+          retention-days: 30

@@ -32,7 +32,8 @@
     "check:asset-contracts": "node scripts/generate-visual-manifest.mjs --check && node scripts/check-asset-contracts.mjs && npm run check:enemy-boss-art && npm run check:enemy-boss-models",
     "assets:preview": "node scripts/export-visual-placeholders.mjs",
     "check:enemy-boss-art": "node scripts/check-enemy-boss-contracts.mjs",
-    "check:enemy-boss-models": "node scripts/check-enemy-boss-models.mjs"
+    "check:enemy-boss-models": "node scripts/check-enemy-boss-models.mjs",
+    "gate:c15-rc1": "node ../tools/run-c15-rc1-gate.mjs"
   },
   "dependencies": {
     "@babylonjs/core": "^9.5.1",
