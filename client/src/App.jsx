@@ -98,7 +98,7 @@ export default function Game() {
 
   const getRealTime = () => Date.now() + (gsRef.current.timeOffset || 0);
   
-  const { currentUser, loginWithGoogle, loginWithApple, logout, deleteAccount, saveUserProfile, gameAction, renamePlayer } = useAuth(
+  const { currentUser, loginWithGoogle, loginWithApple, logout, deleteAccount, saveUserProfile, gameAction, refreshCloudProfile, renamePlayer } = useAuth(
     gsRef, setUIUpdates, setScreen, langRef, getRealTime
   );
   
@@ -220,7 +220,7 @@ export default function Game() {
       )}
 
       {screen === 'campaign' && (
-        <CampaignEngine gameAction={gameAction} gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} getRealTime={getRealTime}/>
+        <CampaignEngine gameAction={gameAction} gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} refreshCloudProfile={refreshCloudProfile} getRealTime={getRealTime}/>
       )}
       
       {screen === 'inventory' && (

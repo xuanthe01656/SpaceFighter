@@ -240,13 +240,19 @@ test('C7-B2B stored ledger tamper and missing operation are rejected on retry',a
   f.db.data.delete(operationPath);
   await assert.rejects(svc.settle(UID,SID,one()),failCode('SETTLEMENT_LEDGER_INVALID'));
 });
-test('C7-B2B no settlement route or GameService command exists, legacy P0 remains unchanged',()=>{
+test('C7-B2B legacy settlement remains disconnected while RC3 is explicit staging-only',()=>{
   const server=fs.readFileSync(path.resolve(__dirname,'../server.js'),'utf8');
   const gameService=fs.readFileSync(path.resolve(__dirname,'../lib/gameService.cjs'),'utf8');
+  const rc3=fs.readFileSync(path.resolve(__dirname,'../lib/c15Rc3SettlementV1.cjs'),'utf8');
   assert.equal(server.includes('verifiedSettlementC7B2BV8'),false);
   assert.equal(server.includes('/api/v1/battle/settle'),false);
   assert.equal(server.includes('/api/v1/qa/battle/settle'),false);
+  assert.match(server,/\/api\/v1\/c15\/settlement\/claim/);
+  assert.match(rc3,/GAME_C15_RC3_SETTLEMENT_STAGING_APPROVED/);
   assert.equal(gameService.includes('verifiedSettlementC7B2BV8'),false);
+  assert.equal(gameService.includes('c15Rc3SettlementV1'),false);
   assert.match(gameService,/command === 'battle.start'/);
   assert.match(gameService,/BATTLE_VERIFICATION_UNAVAILABLE/);
+  assert.match(rc3,/productionSettlementEnabled:false/);
+  assert.match(rc3,/productionCloudRewards:false/);
 });

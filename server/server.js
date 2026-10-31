@@ -144,6 +144,14 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
     user.uid,req.get('x-game-session'),req.body)));
   app.post('/api/v1/c15/battle/abandon',withC15((req,user)=>options.c15Rc1bService.abandon(
     user.uid,req.get('x-game-session'),req.body)));
+  // C15-RC3: staging-only atomic claim of a server-stored RC2 trusted outcome.
+  // The request never contains reward amounts and production settlement stays OFF.
+  const c15Rc3Ready=options.c15Rc3SettlementEnabled===true&&Boolean(options.c15Rc3SettlementService?.enabled);
+  app.post('/api/v1/c15/settlement/claim',(req,res,next)=>{
+    if(!c15Rc3Ready)return res.status(503).json({ok:false,code:'C15_RC3_SETTLEMENT_DISABLED'});
+    return withAuth((r,user)=>options.c15Rc3SettlementService.settle(
+      user.uid,r.get('x-game-session'),r.body))(req,res,next);
+  });
   // C7-A: isolated, default-OFF, allowlisted QA replay. NEVER legacy battle.start/finish.
   // No energy, rewards, missions, progress or economy mutation in these routes.
   const qaReady=options.qaBattleEnabled===true && Boolean(options.qaBattleService);
@@ -226,7 +234,7 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
 async function start() {
   const port=Number(process.env.PORT||3000);
   if(!Number.isInteger(port)||port<1||port>65535) throw new Error('Invalid PORT');
-  let service=null,auth=null,admin=null,accountDeletionService=null,qaBattleService=null,qaVerifierService=null,candidateService=null,c15Rc1bService=null,c15ResourceCatalog=null;
+  let service=null,auth=null,admin=null,accountDeletionService=null,qaBattleService=null,qaVerifierService=null,candidateService=null,c15Rc1bService=null,c15Rc3SettlementService=null,c15ResourceCatalog=null;
   if(process.env.GAME_API_ENABLED==='true') {
     admin=require('firebase-admin');
     if(!admin.apps.length) {
@@ -287,6 +295,15 @@ async function start() {
         console.error('C15 RC1B non-economic runtime disabled: invalid staged configuration');
       }
     }
+    if(process.env.GAME_C15_RC3_SETTLEMENT_ENABLED==='true'){
+      try{
+        if(!c15Rc1bService?.enabled)throw new Error('C15 RC1B/RC2 runtime unavailable');
+        const {createC15Rc3StagingSettlement}=require('./lib/c15Rc3SettlementV1.cjs');
+        c15Rc3SettlementService=await createC15Rc3StagingSettlement({db:admin.firestore(),env:process.env});
+      }catch(_error){
+        console.error('C15 RC3 staging settlement disabled: invalid staged configuration');
+      }
+    }
     if (process.env.GAME_ACCOUNT_DELETION_ENABLED==='true' &&
         process.env.GAME_ACCOUNT_DELETION_WORKER_READY==='true') {
       accountDeletionService=createAccountDeletionService({db:admin.firestore(),auth});
@@ -299,6 +316,7 @@ async function start() {
     candidateService,candidateEnabled:Boolean(candidateService),
     candidatePerfEnabled:process.env.GAME_C12_PERF_LOG_ENABLED==='true',
     c15Rc1bService,c15Rc1bEnabled:Boolean(c15Rc1bService),c15ResourceCatalog,
+    c15Rc3SettlementService,c15Rc3SettlementEnabled:Boolean(c15Rc3SettlementService),
     allowLocalOrigin:process.env.NODE_ENV!=='production'});
   app.listen(port,'0.0.0.0',()=>console.log(`Space Fighter Phase 1 listening on ${port}; API ${service?'enabled':'disabled'}`));
 }

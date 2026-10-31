@@ -12,7 +12,7 @@ import { DEFAULT_CAMPAIGN_DATA } from '../constants';
 import { createDefaultCampaignData, parseGuestCampaign } from '../utils/profileSchema';
 import { isCurrentAuthAttempt, canProcessSessionSnapshot, guestEnergyFromStorage } from '../utils/authSessionGuards.mjs';
 import { runAuthBoundOperation } from '../utils/authRequestGuards.mjs';
-import { GameApiError, openGameSession, executeGameCommand, changePlayerName, deleteCloudAccount } from '../services/gameApi';
+import { GameApiError, openGameSession, fetchGameProfile, executeGameCommand, changePlayerName, deleteCloudAccount } from '../services/gameApi';
 
 // One bridge per module: initialize native providers once, not on every button press.
 const nativeSocial = createNativeSocialLoginBridge({
@@ -53,6 +53,23 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
       getCurrentAttempt:()=>authAttemptRef.current,
       request:()=>executeGameCommand(command,payload,requestId),
       apply:reply=>{applyServerState(reply.state);return reply;}
+    }));
+  }, [runQueued,applyServerState]);
+
+  // RC3 settlement writes through the Admin SDK, outside the legacy /command
+  // queue. Re-read the canonical profile after a verified claim so every UI
+  // surface observes exactly the server state rather than applying reward
+  // deltas locally.
+  const refreshCloudProfile = useCallback(() => {
+    const expectedUid=auth.currentUser?.uid;
+    const expectedAttempt=authAttemptRef.current;
+    if (!expectedUid) return Promise.reject(new GameApiError('LOGIN_REQUIRED','Please sign in to refresh cloud profile'));
+    return runQueued(() => runAuthBoundOperation({
+      expectedUid, expectedAttempt,
+      getCurrentUid:()=>auth.currentUser?.uid,
+      getCurrentAttempt:()=>authAttemptRef.current,
+      request:()=>fetchGameProfile(),
+      apply:reply=>{applyServerState(reply.state);return reply.state;}
     }));
   }, [runQueued,applyServerState]);
 
@@ -305,5 +322,5 @@ export function useAuth(gsRef, setUIUpdates, setScreen, langRef, getRealTime) {
   }, []);
 
 
-  return { currentUser, loginWithGoogle, loginWithApple, logout, deleteAccount, saveUserProfile, gameAction, renamePlayer };
+  return { currentUser, loginWithGoogle, loginWithApple, logout, deleteAccount, saveUserProfile, gameAction, refreshCloudProfile, renamePlayer };
 }

@@ -13,6 +13,7 @@ const surface={position:'absolute',inset:0,background:'#020814',overflow:'hidden
 const chip={background:'rgba(3,15,30,.78)',border:'1px solid #2a6680',borderRadius:8,padding:'6px 9px',color:'#d9fbff'};
 const abQa=()=>String(import.meta.env?.VITE_C15_CONTROL_AB_QA||'false')==='true';
 const envProfile=()=>String(import.meta.env?.VITE_C15_CONTROL_PROFILE_ID||C15_ARCADE_CONTROL_PROFILE_ID);
+const rc3Enabled=()=>String(import.meta.env?.VITE_C15_RC3_ENABLED||'false')==='true';
 export function formatC15Rc1bFault(error,fallback='C15_RC1B_ERROR'){
   if(error?.code===25||error?.name==='DataCloneError')
     return 'C15_IDB_DATA_CLONE · Local session/resource cache could not be stored';
@@ -23,13 +24,14 @@ export function formatC15Rc1bFault(error,fallback='C15_RC1B_ERROR'){
   return code||message||name||fallback;
 }
 
-export default function C15LocalAlpha1({setScreen,lang='vi'}){
+export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=async()=>null}){
   const canvasRef=useRef(null),rendererRef=useRef(null),sessionRef=useRef(null),inputRef=useRef(null),telemetryRef=useRef(null);
   const timerRef=useRef(null),pointerRef=useRef(null),resourceRef=useRef(null),lastHudTick=useRef(-1);
   const [profileId,setProfileId]=useState(()=>abQa()?null:envProfile());
   const [ui,setUi]=useState({status:abQa()?'profile-select':'opening',message:lang==='vi'?'Đang mở trận và chuẩn bị tài nguyên…':'Opening battle and resources…',
     view:null,fps:null,fault:null});
   const [continuing,setContinuing]=useState(false);
+  const [claiming,setClaiming]=useState(false);
   useEffect(()=>{
     if(!profileId)return undefined;
     let cancelled=false,unsubscribe=()=>{};
@@ -93,15 +95,23 @@ export default function C15LocalAlpha1({setScreen,lang='vi'}){
   const continueVerified=async()=>{if(continuing)return;setContinuing(true);try{
       await sessionRef.current?.completeVerified();setScreen('stage_select');
     }catch(error){setContinuing(false);toast.error(error?.message||'Unable to close verified battle');}};
+  const claimVerifiedReward=async()=>{if(claiming)return;setClaiming(true);try{
+      const response=await sessionRef.current?.claimVerifiedReward();
+      try{await refreshCloudProfile();}
+      catch(_refreshError){toast.error(lang==='vi'?'Đã cấp thưởng nhưng chưa thể làm mới hồ sơ. Hãy mở lại HQ.':'Reward settled, but profile refresh failed. Reopen HQ.');}
+      toast.success(response?.duplicate
+        ?(lang==='vi'?'Phần thưởng đã được quyết toán trước đó.':'Reward already settled')
+        :(lang==='vi'?'Phần thưởng đã được xác minh và quyết toán.':'Verified reward settled'));
+    }catch(error){toast.error(error?.message||'Unable to settle verified reward');}finally{setClaiming(false);}};
   const exportTelemetry=async()=>{try{const report=telemetryRef.current?.report();if(!report)throw new Error('No control telemetry yet');
       await navigator.clipboard.writeText(JSON.stringify(report,null,2));toast.success('Đã sao chép Control Feel JSON');
     }catch(error){toast.error(error?.message||'Không thể xuất Control Feel JSON');}};
-  const k=ui.view?.kernel,t=ui.view?.transport,profile=ui.view?.controlProfile;
+  const k=ui.view?.kernel,t=ui.view?.transport,profile=ui.view?.controlProfile,settlement=ui.view?.settlement;
   return <div style={surface}>
     <canvas ref={canvasRef} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}
       style={{width:'100%',height:'100%',display:'block',touchAction:'none'}}/>
     <div style={{position:'absolute',top:'calc(env(safe-area-inset-top) + 10px)',left:10,right:10,display:'flex',gap:7,flexWrap:'wrap',fontSize:12,pointerEvents:'none'}}>
-      <span style={chip}>C15 RC1C · LOCAL 30Hz · NON-ECONOMIC</span>
+      <span style={chip}>{rc3Enabled()?'C15 RC3 · LOCAL 30Hz · STAGING ECONOMY':'C15 RC1C · LOCAL 30Hz · NON-ECONOMIC'}</span>
       {profile&&<span style={chip}>{profile.id}</span>}
       {k&&<><span style={chip}>HP {Math.max(0,Math.round(k.hp))}/{Math.round(k.maxHp)}</span><span style={chip}>WAVE {k.wave}/{k.wavesTotal}</span>
         <span style={chip}>KILLS {k.kills}</span><span style={chip}>TICK {k.tick}</span></>}
@@ -129,9 +139,14 @@ export default function C15LocalAlpha1({setScreen,lang='vi'}){
             <button onClick={retry}>RETRY VERIFY</button></>}
           {ui.status==='verified'&&<><b>{ui.view?.result?.phase==='rc1-verified-clear'?'SERVER VERIFIED CLEAR':'SERVER VERIFIED DEFEAT'}</b><br/>
             {ui.view?.outcome&&<><b>RC2 SIGNED OUTCOME</b><br/><small>{ui.view.outcome.outcomeDigest.slice(0,16)}…</small><br/></>}
-            {lang==='vi'?'RC1C/RC2 chưa cấp thưởng.':'RC1C/RC2 remains non-economic.'}<br/>
-            <button disabled={continuing} onClick={continueVerified}>{continuing?'CLOSING…':'CONTINUE'}</button></>}
-          {ui.status==='error'&&<><b>RC1C ERROR</b><br/>{ui.fault}</>}
+            {settlement?<><b>RC3 SETTLEMENT VERIFIED</b><br/>
+              <small>+{settlement.receipt.coins} coins · +{settlement.receipt.experience} XP · +{settlement.receipt.stars} star</small><br/>
+              <small>{settlement.receipt.receiptDigest.slice(0,16)}…</small><br/></>
+              :rc3Enabled()?<><button disabled={claiming} onClick={claimVerifiedReward}>{claiming?'CLAIMING…':'CLAIM VERIFIED REWARD'}</button><br/>
+                <small>{lang==='vi'?'Chỉ staging allowlist; production rewards vẫn tắt.':'Staging allowlist only; production rewards remain off.'}</small><br/></>
+              :<>{lang==='vi'?'RC1C/RC2 chưa cấp thưởng.':'RC1C/RC2 remains non-economic.'}<br/></>}
+            <button disabled={continuing||claiming} onClick={continueVerified}>{continuing?'CLOSING…':'CONTINUE'}</button></>}
+          {ui.status==='error'&&<><b>{rc3Enabled()?'RC3 ERROR':'RC1C ERROR'}</b><br/>{ui.fault}</>}
         </div>
       </div>}
   </div>;

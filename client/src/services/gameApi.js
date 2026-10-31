@@ -119,6 +119,9 @@ export const uploadC15Rc1bChunk=(uid,body)=>c15Bound('chunk',body,uid);
 export const getC15Rc1bStatus=uid=>callApi('/c15/battle/status',null,{expectedUid:uid});
 export const finalizeC15Rc1bBattle=(uid,body)=>c15Bound('finalize',body,uid,{retry:false});
 export const abandonC15Rc1bBattle=(uid,body)=>c15Bound('abandon',body,uid,{retry:false});
+export const claimC15Rc3Settlement=(uid,body)=>retrySameAuthUser({expectedUid:uid,getCurrentUid:()=>auth.currentUser?.uid,
+  request:()=>callApi('/c15/settlement/claim',body,{expectedUid:uid}),
+  shouldRetry:error=>error?.code==='TIMEOUT'||error instanceof TypeError});
 export async function fetchC15ResourceManifest(){
   const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),15000);
   try{

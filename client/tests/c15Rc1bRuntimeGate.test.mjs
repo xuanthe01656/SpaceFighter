@@ -29,11 +29,14 @@ test('HQ launch bridge enters C15 RC1B before the legacy P0 battle.start lane',(
   assert.doesNotMatch(section,/gameAction\('battle\.start'/);
 });
 
-test('C15 local runtime renders device state and cannot import economy or settlement authority',()=>{
-  for(const file of ['client/src/components/C15LocalAlpha1/index.jsx','client/src/components/C15LocalAlpha1/C15LocalRenderer.js',
-    'client/src/game/c15/C15Rc1bSession.js','client/src/game/c15/C15KernelRuntime.js']){
-    const source=read(file);assert.doesNotMatch(source,/battle\.finish|wallet|verifiedSettlement|productionOutcomeAuthority|cloudRewards\s*:\s*true/);}
-  assert.match(read('client/src/game/c15/C15Rc1bSession.js'),/independent server finalize/);
+test('C15 local combat remains authority-free; RC3 claim is explicit staging transport only',()=>{
+  for(const file of ['client/src/components/C15LocalAlpha1/C15LocalRenderer.js','client/src/game/c15/C15KernelRuntime.js']){
+    const source=read(file);assert.doesNotMatch(source,/battle\.finish|wallet|claimSettlement|verifiedSettlement|productionOutcomeAuthority|cloudRewards\s*:\s*true/);}
+  const session=read('client/src/game/c15/C15Rc1bSession.js');
+  assert.match(session,/independent server finalize/);assert.match(session,/VITE_C15_RC3_ENABLED/);
+  assert.match(session,/claimC15Rc3Settlement/);assert.match(session,/productionSettlementEnabled!==false/);
+  assert.match(session,/productionCloudRewards!==false/);assert.match(session,/nonEconomic:true/);
+  assert.doesNotMatch(session,/wallet\.(coins|diamonds)\s*[+\-]=/);
 });
 
 test('Android milestone is manual-only, separately gated, stable-signed and non-economic',()=>{
@@ -59,7 +62,7 @@ test('verified Continue consumes the local terminal session before returning to 
 test('RC1C Android milestone enables one A/B control APK and keeps legacy QA mutually exclusive',()=>{
   const workflow=read('.github/workflows/android-native-smoke.yml');
   assert.match(workflow,/c15_rc1c:/);assert.match(workflow,/VITE_C15_CONTROL_AB_QA/);
-  assert.match(workflow,/arcade-responsive-v1/);assert.match(workflow,/RC1B and RC1C inputs are mutually exclusive/);
+  assert.match(workflow,/arcade-responsive-v1/);assert.match(workflow,/RC1B, RC1C and RC3 inputs are mutually exclusive/);
   assert.match(workflow,/spacefighter-android-c15-rc1c-debug-not-for-release/);
   assert.match(workflow,/NON-ECONOMIC, NO SETTLEMENT/);
 });

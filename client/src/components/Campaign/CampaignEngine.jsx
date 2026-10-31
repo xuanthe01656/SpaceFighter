@@ -12,7 +12,7 @@ export default function CampaignEngine(props) {
   const c15Enabled=import.meta.env.VITE_C15_RC1B_ENABLED==='true'&&Boolean(auth.currentUser)
     &&Number(progress.currentPlanet||1)===1&&Number(progress.selectedStage||1)===1;
   return c15Enabled
-    ? <C15LocalAlpha1 setScreen={props.setScreen} lang={props.lang}/>
+    ? <C15LocalAlpha1 setScreen={props.setScreen} lang={props.lang} refreshCloudProfile={props.refreshCloudProfile}/>
     : <LegacyCampaignEngine {...props}/>;
 }
 

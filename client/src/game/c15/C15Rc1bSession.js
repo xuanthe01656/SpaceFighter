@@ -22,11 +22,13 @@ const record=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const freeze=x=>{if(x&&typeof x==='object'){for(const value of Object.values(x))freeze(value);Object.freeze(x);}return x;};
 const appVersion=()=>String(import.meta.env?.VITE_APP_VERSION||'1.2.1');
 const defaultControlProfile=()=>String(import.meta.env?.VITE_C15_CONTROL_PROFILE_ID||C15_DEFAULT_CONTROL_PROFILE_ID);
+const rc3BuildEnabled=()=>String(import.meta.env?.VITE_C15_RC3_ENABLED||'false')==='true';
 let defaultApiPromise=null;
 async function loadDefaultApi(){
   if(!defaultApiPromise)defaultApiPromise=import('../../services/gameApi.js').then(mod=>Object.freeze({
     openBattle:mod.openC15Rc1bBattle,getStatus:mod.getC15Rc1bStatus,uploadChunk:mod.uploadC15Rc1bChunk,
-    finalize:mod.finalizeC15Rc1bBattle,abandon:mod.abandonC15Rc1bBattle,fetchManifest:mod.fetchC15ResourceManifest,
+    finalize:mod.finalizeC15Rc1bBattle,abandon:mod.abandonC15Rc1bBattle,claimSettlement:mod.claimC15Rc3Settlement,
+    fetchManifest:mod.fetchC15ResourceManifest,
   }));
   return defaultApiPromise;
 }
@@ -48,6 +50,21 @@ function validateOutcome(value,battleId){
     throw new TypeError('C15 RC2 trusted outcome invalid');
   return value;
 }
+function validateSettlement(value,battleId,outcomeDigest){
+  if(value===null||value===undefined)return null;
+  if(!record(value)||value.version!=='c15-rc3-settlement-v1'||value.battleId!==battleId
+    ||value.stagingOnly!==true||value.productionSettlementEnabled!==false||value.productionCloudRewards!==false
+    ||!record(value.receipt)||value.receipt.version!=='c15-rc3-settlement-receipt-v1'
+    ||value.receipt.battleId!==battleId||value.receipt.outcomeDigest!==outcomeDigest
+    ||typeof value.receipt.receiptDigest!=='string'||!/^[a-f0-9]{64}$/.test(value.receipt.receiptDigest)
+    ||typeof value.receipt.mac!=='string'||!/^[a-f0-9]{64}$/.test(value.receipt.mac)
+    ||!Number.isSafeInteger(value.receipt.coins)||value.receipt.coins<0
+    ||!Number.isSafeInteger(value.receipt.experience)||value.receipt.experience<0
+    ||![0,1].includes(value.receipt.stars)||!record(value.wallet)||!record(value.progress))
+    throw new TypeError('C15 RC3 settlement response invalid');
+  return value;
+}
+
 function validateEnvelope(value,uid){
   if(!record(value)||value.version!=='c15-rc1b-runtime-v1'||value.rc1bOnly!==true
     ||value.nonEconomic!==true||value.safeForSettlement!==false||value.settlementEnabled!==false
@@ -64,39 +81,42 @@ function validateEnvelope(value,uid){
   if(value.outcome!==null&&value.outcome!==undefined)validateOutcome(value.outcome,value.battleId);
   return {...value,controlProfile:control,outcome:value.outcome??null,rc2OutcomeEnabled:value.rc2OutcomeEnabled===true};
 }
-function persisted({uid,requestId,envelope,frames,journal,phase,result=null,outcome=null,
-  resourcesReady=false,updatedAtMs=Date.now()}){
+function persisted({uid,requestId,envelope,frames,journal,phase,result=null,outcome=null,settlement=null,
+  settlementRequestId=null,resourcesReady=false,updatedAtMs=Date.now()}){
   return {version:VERSION,uid,requestId,battleId:envelope.battleId,envelope:cloneC15PersistentValue(envelope),
     frames:frames.map(frame=>({x:frame.x,z:frame.z})),journal:serializeC15LocalJournal(journal),phase,
     result:result?cloneC15PersistentValue(result):null,outcome:outcome?cloneC15PersistentValue(outcome):null,
-    resourcesReady,updatedAtMs};
+    settlement:settlement?cloneC15PersistentValue(settlement):null,settlementRequestId,resourcesReady,updatedAtMs};
 }
 
 export async function openOrResumeC15Rc1bSession({uid,quality='mobile-low',controlProfileId=defaultControlProfile(),
   store=createC15BrowserStore(),online=()=>globalThis.navigator?.onLine!==false,onChange=()=>{},api=null,
-  fetchImpl=globalThis.fetch,clock=Date.now,uuidFactory=()=>crypto.randomUUID()}={}){
+  fetchImpl=globalThis.fetch,clock=Date.now,uuidFactory=()=>crypto.randomUUID(),rc3Enabled=rc3BuildEnabled()}={}){
   if(typeof uid!=='string'||uid.length<1||!['mobile-low','mobile-high'].includes(quality)
     ||!store||typeof onChange!=='function'||typeof online!=='function'||typeof fetchImpl!=='function'
     ||typeof clock!=='function'||typeof uuidFactory!=='function')throw new TypeError('C15 client session configuration invalid');
   resolveC15ControlProfile(controlProfileId);
   api=api||await loadDefaultApi();
   if(typeof api.openBattle!=='function'||typeof api.getStatus!=='function'||typeof api.uploadChunk!=='function'
-    ||typeof api.finalize!=='function'||typeof api.abandon!=='function'||typeof api.fetchManifest!=='function')
+    ||typeof api.finalize!=='function'||typeof api.abandon!=='function'||typeof api.fetchManifest!=='function'
+    ||(rc3Enabled===true&&typeof api.claimSettlement!=='function'))
     throw new TypeError('C15 client API invalid');
   const now=()=>{const value=clock();if(!Number.isSafeInteger(value)||value<1)throw new TypeError('C15 client clock invalid');return value;};
   const clearPersistedBattle=async battleId=>{await store.remove('meta',activeKey(uid));
     if(typeof battleId==='string'&&battleId.length)await store.remove('battles',journalKey(battleId));};
   let saved=await store.get('meta',activeKey(uid));
-  let envelope,requestId,frames=[],journal,kernel,result=null,outcome=null,phase='opening',resourcesReady=false;
+  let envelope,requestId,frames=[],journal,kernel,result=null,outcome=null,settlement=null,settlementRequestId=null,phase='opening',resourcesReady=false;
   const resetSavedState=async()=>{const oldBattleId=saved?.battleId||envelope?.battleId;
     await clearPersistedBattle(oldBattleId);saved=null;envelope=undefined;requestId=undefined;frames=[];journal=undefined;
-    kernel=undefined;result=null;outcome=null;phase='opening';resourcesReady=false;};
+    kernel=undefined;result=null;outcome=null;settlement=null;settlementRequestId=null;phase='opening';resourcesReady=false;};
   if(saved?.version===VERSION&&saved.uid===uid&&saved.envelope?.genesis?.expiresAtMs>now()){
     try{
       envelope=validateEnvelope(saved.envelope,uid);requestId=saved.requestId;frames=Array.isArray(saved.frames)?saved.frames:[];
       journal=restoreC15LocalJournal(saved.journal);kernel=replayC15KernelRuntime({genesis:envelope.genesis,
         runtime:envelope.runtime,frames});result=saved.result||envelope.result||null;outcome=saved.outcome||envelope.outcome||null;
       if(result)validateResult(result,envelope.battleId);if(outcome)validateOutcome(outcome,envelope.battleId);
+      settlement=saved.settlement?validateSettlement(saved.settlement,envelope.battleId,outcome?.outcomeDigest):null;
+      settlementRequestId=typeof saved.settlementRequestId==='string'?saved.settlementRequestId:null;
       phase=result&&(!envelope.rc2OutcomeEnabled||outcome)?'verified':kernel.terminal?'provisional-terminal':'active';resourcesReady=saved.resourcesReady===true;
     }catch(_invalidLocal){await store.remove('meta',activeKey(uid));saved=null;}
   }else if(saved){await clearPersistedBattle(saved.battleId);saved=null;}
@@ -138,12 +158,13 @@ export async function openOrResumeC15Rc1bSession({uid,quality='mobile-low',contr
   await uploader.reconcile({uploadedThroughTick:envelope.uploadedThroughTick,chunkCount:envelope.chunkCount});
   journal=uploader.getJournal();
   const view=()=>freeze({version:VERSION,uid,battleId:envelope.battleId,phase,kernel:c15KernelRuntimeView(kernel),
-    controlProfile:envelope.controlProfile,result,outcome,resourcesReady,transport:uploader.getView(),
-    rc2OutcomeEnabled:envelope.rc2OutcomeEnabled===true,nonEconomic:true,safeForSettlement:false,cloudRewards:false});
+    controlProfile:envelope.controlProfile,result,outcome,settlement,resourcesReady,transport:uploader.getView(),
+    rc2OutcomeEnabled:envelope.rc2OutcomeEnabled===true,rc3SettlementEnabled:rc3Enabled===true,
+    nonEconomic:true,stagingSettlementApplied:Boolean(settlement),safeForSettlement:false,cloudRewards:false});
   function publish(){if(disposed)return;const value=view();for(const subscriber of subscribers){try{subscriber(value);}catch(_){}}}
   function persistNow(){const run=async()=>{if(disposed)return false;journal=uploader.getJournal();await uploader.persistNow();
-      if(disposed)return false;const snapshot=persisted({uid,requestId,envelope,frames,journal,phase,result,outcome,
-        resourcesReady,updatedAtMs:now()});if(disposed)return false;await store.put('meta',activeKey(uid),snapshot);return true;};
+      if(disposed)return false;const snapshot=persisted({uid,requestId,envelope,frames,journal,phase,result,outcome,settlement,
+        settlementRequestId,resourcesReady,updatedAtMs:now()});if(disposed)return false;await store.put('meta',activeKey(uid),snapshot);return true;};
     persistChain=persistChain.then(run,run);return persistChain;}
   function advance(input){if(disposed||phase!=='active')throw new TypeError('C15 local session is not active');
     const advanced=advanceC15KernelRuntime(kernel,input);kernel=advanced.state;frames.push(freeze({x:input.x,z:input.z}));
@@ -161,6 +182,17 @@ export async function openOrResumeC15Rc1bSession({uid,quality='mobile-low',contr
         if(envelope.rc2OutcomeEnabled===true&&!outcome)throw new TypeError('C15 RC2 signed outcome missing');
         phase='verified';await persistNow();publish();return result;
       }catch(error){phase='provisional-terminal';await persistNow();publish();throw error;}finally{finalizePromise=null;}})();return finalizePromise;}
+  async function claimVerifiedReward(){
+    if(disposed)throw new TypeError('C15 local session is closed');
+    if(rc3Enabled!==true){const error=new Error('C15 RC3 settlement build flag is disabled');error.code='C15_RC3_CLIENT_DISABLED';throw error;}
+    if(phase!=='verified'||!result||!outcome){const error=new Error('RC2 signed outcome is required before RC3 claim');
+      error.code='C15_RC3_OUTCOME_REQUIRED';throw error;}
+    if(settlement)return settlement;
+    settlementRequestId=settlementRequestId||uuidFactory();await persistNow();
+    const reply=validateSettlement(await api.claimSettlement(uid,{battleId:envelope.battleId,
+      outcomeDigest:outcome.outcomeDigest,requestId:settlementRequestId}),envelope.battleId,outcome.outcomeDigest);
+    settlement=freeze(cloneC15PersistentValue(reply));await persistNow();publish();return settlement;
+  }
   async function retryNetwork(){if(disposed)return null;await uploader.pump();if(kernel.terminal)return finalizeWhenOnline();return null;}
   async function suspend(){if(disposed)return view();await persistNow();return view();}
   async function clearLocalSession(){if(disposed)return;disposed=true;uploader.dispose();
@@ -173,7 +205,7 @@ export async function openOrResumeC15Rc1bSession({uid,quality='mobile-low',contr
   function subscribe(fn){if(typeof fn!=='function')throw new TypeError('C15 subscriber invalid');subscribers.add(fn);fn(view());return()=>subscribers.delete(fn);}
   async function resolveResource(packId,path){return resolveC15ActiveResource({store,stageKey:'alpha-stage-1',packId,path});}
   await persistNow();publish();
-  return Object.freeze({advance,finalizeWhenOnline,retryNetwork,suspend,completeVerified,abandon,subscribe,resolveResource,
+  return Object.freeze({advance,finalizeWhenOnline,claimVerifiedReward,retryNetwork,suspend,completeVerified,abandon,subscribe,resolveResource,
     getView:view,getKernel:()=>kernel,getEnvelope:()=>envelope,getControlProfile:()=>envelope.controlProfile,
     dispose:()=>{disposed=true;uploader.dispose();subscribers.clear();}});
 }
