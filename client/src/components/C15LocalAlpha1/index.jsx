@@ -24,6 +24,7 @@ export default function C15LocalAlpha1({setScreen,lang='vi'}){
   const timerRef=useRef(null),pointerRef=useRef(null),resourceRef=useRef(null),lastHudTick=useRef(-1);
   const [ui,setUi]=useState({status:'opening',message:lang==='vi'?'Đang mở trận và chuẩn bị tài nguyên…':'Opening battle and resources…',
     view:null,fps:null,fault:null});
+  const [continuing,setContinuing]=useState(false);
   useEffect(()=>{
     let cancelled=false,unsubscribe=()=>{};
     const stopTimer=()=>{if(timerRef.current){clearInterval(timerRef.current);timerRef.current=null;}};
@@ -64,7 +65,9 @@ export default function C15LocalAlpha1({setScreen,lang='vi'}){
     const online=()=>{void sessionRef.current?.retryNetwork().catch(()=>{});};
     window.addEventListener('resize',resize);window.addEventListener('online',online);document.addEventListener('visibilitychange',visibility);
     return()=>{cancelled=true;stopTimer();unsubscribe();window.removeEventListener('resize',resize);window.removeEventListener('online',online);
-      document.removeEventListener('visibilitychange',visibility);void sessionRef.current?.suspend();sessionRef.current?.dispose();rendererRef.current?.dispose();resourceRef.current?.revoke?.();};
+      document.removeEventListener('visibilitychange',visibility);const session=sessionRef.current;
+      if(session)void session.suspend().catch(()=>{}).finally(()=>session.dispose());
+      rendererRef.current?.dispose();resourceRef.current?.revoke?.();};
   },[lang]);
   const pointerDown=event=>{if(!inputRef.current||pointerRef.current!==null)return;pointerRef.current={id:event.pointerId,x:event.clientX,y:event.clientY};
     event.currentTarget.setPointerCapture?.(event.pointerId);};
@@ -74,6 +77,9 @@ export default function C15LocalAlpha1({setScreen,lang='vi'}){
   const pointerUp=event=>{if(pointerRef.current?.id!==event.pointerId)return;pointerRef.current=null;try{if(inputRef.current)inputRef.current=clearCloudPointerTarget(inputRef.current);}catch(_){}};
   const retreat=async()=>{try{await sessionRef.current?.abandon();setScreen('stage_select');}catch(error){toast.error(error?.message||'Retreat failed');}};
   const retry=()=>{void sessionRef.current?.retryNetwork().catch(error=>toast.error(error?.message||'Verification retry failed'));};
+  const continueVerified=async()=>{if(continuing)return;setContinuing(true);try{
+      await sessionRef.current?.completeVerified();setScreen('stage_select');
+    }catch(error){setContinuing(false);toast.error(error?.message||'Unable to close verified battle');}};
   const k=ui.view?.kernel,t=ui.view?.transport;
   return <div style={surface}>
     <canvas ref={canvasRef} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}
@@ -96,7 +102,8 @@ export default function C15LocalAlpha1({setScreen,lang='vi'}){
             {lang==='vi'?'Kết quả tạm thời; cần mạng để server xác minh.':'Provisional result; network is required for server verification.'}<br/>
             <button onClick={retry}>RETRY VERIFY</button></>}
           {ui.status==='verified'&&<><b>{ui.view?.result?.phase==='rc1-verified-clear'?'SERVER VERIFIED CLEAR':'SERVER VERIFIED DEFEAT'}</b><br/>
-            {lang==='vi'?'RC1B không cấp thưởng.':'RC1B is non-economic.'}<br/><button onClick={()=>setScreen('stage_select')}>CONTINUE</button></>}
+            {lang==='vi'?'RC1B không cấp thưởng.':'RC1B is non-economic.'}<br/>
+            <button disabled={continuing} onClick={continueVerified}>{continuing?'CLOSING…':'CONTINUE'}</button></>}
           {ui.status==='error'&&<><b>RC1B ERROR</b><br/>{ui.fault}</>}
         </div>
       </div>}

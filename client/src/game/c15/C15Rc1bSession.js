@@ -13,6 +13,9 @@ import {openC15KernelRuntime,replayC15KernelRuntime,advanceC15KernelRuntime,c15K
 
 const VERSION='c15-rc1b-client-session-v1';
 const activeKey=uid=>`active:${uid}`;
+const journalKey=battleId=>`journal:${battleId}`;
+const completedRecoveryCodes=new Set(['C15_RC1B_SESSION_INVALID','C15_RC1B_SESSION_MISSING',
+  'C15_RC1B_EXPIRED','C15_RC1B_ABANDONED','SESSION_EXPIRED']);
 const record=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const freeze=x=>{if(x&&typeof x==='object'){for(const value of Object.values(x))freeze(value);Object.freeze(x);}return x;};
 const appVersion=()=>String(import.meta.env?.VITE_APP_VERSION||'1.2.1');
@@ -62,6 +65,8 @@ export async function openOrResumeC15Rc1bSession({uid,quality='mobile-low',store
     ||typeof api.finalize!=='function'||typeof api.abandon!=='function'||typeof api.fetchManifest!=='function')
     throw new TypeError('C15 RC1B client API invalid');
   const now=()=>{const value=clock();if(!Number.isSafeInteger(value)||value<1)throw new TypeError('C15 client clock invalid');return value;};
+  const clearPersistedBattle=async battleId=>{await store.remove('meta',activeKey(uid));
+    if(typeof battleId==='string'&&battleId.length)await store.remove('battles',journalKey(battleId));};
   let saved=await store.get('meta',activeKey(uid));
   let envelope,requestId,frames=[],journal,kernel,result=null,phase='opening',resourcesReady=false;
   if(saved?.version===VERSION&&saved.uid===uid&&saved.envelope?.genesis?.expiresAtMs>now()){
@@ -77,11 +82,15 @@ export async function openOrResumeC15Rc1bSession({uid,quality='mobile-low',store
     let remoteRaw=null;
     try{remoteRaw=await api.getStatus(uid);}
     catch(error){
-      // A timeout/offline fetch may resume from the signed, unexpired local
-      // envelope. Authentication/session/server rejections must remain fatal.
-      if(error?.code!=='TIMEOUT'&&!(error instanceof TypeError))throw error;
+      // A completed local result is safe to consume when the old server-bound
+      // game session no longer exists (for example after an app/login restart).
+      // Active or provisional journals remain fail-closed and are never dropped.
+      if(result&&completedRecoveryCodes.has(error?.code)){
+        await clearPersistedBattle(saved.battleId);saved=null;envelope=undefined;requestId=undefined;
+        frames=[];journal=undefined;kernel=undefined;result=null;phase='opening';resourcesReady=false;
+      }else if(error?.code!=='TIMEOUT'&&!(error instanceof TypeError))throw error;
     }
-    if(remoteRaw!==null){
+    if(saved&&remoteRaw!==null){
       const remote=validateEnvelope(remoteRaw,uid);
       if(remote.battleId!==saved.battleId)throw new TypeError('C15 remote/local battle mismatch');
       envelope=remote;result=remote.result||result;phase=result?'verified':kernel.terminal?'provisional-terminal':'active';
@@ -105,6 +114,7 @@ export async function openOrResumeC15Rc1bSession({uid,quality='mobile-low',store
     await ensureC15StageResources({manifest,stageKey:'alpha-stage-1',quality,store,fetchImpl});resourcesReady=true;
   }
   const subscribers=new Set([onChange]);let disposed=false,persistCounter=0,finalizePromise=null;
+  let persistChain=Promise.resolve();
   const uploader=createC15JournalUploader({uid,battleId:envelope.battleId,journal,store,
     uploadChunk:api.uploadChunk,online,onUpdate:()=>publish()});
   await uploader.reconcile({uploadedThroughTick:envelope.uploadedThroughTick,chunkCount:envelope.chunkCount});
@@ -112,8 +122,12 @@ export async function openOrResumeC15Rc1bSession({uid,quality='mobile-low',store
   const view=()=>freeze({version:VERSION,uid,battleId:envelope.battleId,phase,kernel:c15KernelRuntimeView(kernel),
     result,resourcesReady,transport:uploader.getView(),nonEconomic:true,safeForSettlement:false,cloudRewards:false});
   function publish(){if(disposed)return;const value=view();for(const subscriber of subscribers){try{subscriber(value);}catch(_){}}}
-  async function persistNow(){journal=uploader.getJournal();await uploader.persistNow();await store.put('meta',activeKey(uid),
-    persisted({uid,requestId,envelope,frames,journal,phase,result,resourcesReady,updatedAtMs:now()}));}
+  function persistNow(){
+    const run=async()=>{if(disposed)return false;journal=uploader.getJournal();await uploader.persistNow();
+      if(disposed)return false;const snapshot=persisted({uid,requestId,envelope,frames,journal,phase,result,resourcesReady,updatedAtMs:now()});
+      if(disposed)return false;await store.put('meta',activeKey(uid),snapshot);return true;};
+    persistChain=persistChain.then(run,run);return persistChain;
+  }
   function advance(input){
     if(disposed||phase!=='active')throw new TypeError('C15 local session is not active');
     const advanced=advanceC15KernelRuntime(kernel,input);kernel=advanced.state;frames.push(freeze({x:input.x,z:input.z}));
@@ -138,14 +152,25 @@ export async function openOrResumeC15Rc1bSession({uid,quality='mobile-low',store
     })();return finalizePromise;
   }
   async function retryNetwork(){if(disposed)return null;await uploader.pump();if(kernel.terminal)return finalizeWhenOnline();return null;}
-  async function suspend(){await persistNow();return view();}
+  async function suspend(){if(disposed)return view();await persistNow();return view();}
+  async function clearLocalSession(){
+    if(disposed)return;disposed=true;uploader.dispose();
+    try{await persistChain.catch(()=>{});}finally{await clearPersistedBattle(envelope.battleId);subscribers.clear();}
+  }
+  async function completeVerified(){
+    if(disposed)return result;
+    if(phase!=='verified'||!result){const error=new Error('C15 verified result required before continuing');
+      error.code='C15_RC1B_RESULT_NOT_VERIFIED';throw error;}
+    const completed=result;await clearLocalSession();return completed;
+  }
   async function abandon(){
-    if(disposed)return;try{if(online())await api.abandon(uid,{battleId:envelope.battleId});}finally{
-      disposed=true;uploader.dispose();await store.remove('meta',activeKey(uid));subscribers.clear();}
+    if(disposed)return;
+    if(phase==='verified'){await clearLocalSession();return;}
+    try{if(online())await api.abandon(uid,{battleId:envelope.battleId});}finally{await clearLocalSession();}
   }
   function subscribe(fn){if(typeof fn!=='function')throw new TypeError('C15 subscriber invalid');subscribers.add(fn);fn(view());return()=>subscribers.delete(fn);}
   async function resolveResource(packId,path){return resolveC15ActiveResource({store,stageKey:'alpha-stage-1',packId,path});}
   await persistNow();publish();
-  return Object.freeze({advance,finalizeWhenOnline,retryNetwork,suspend,abandon,subscribe,resolveResource,
+  return Object.freeze({advance,finalizeWhenOnline,retryNetwork,suspend,completeVerified,abandon,subscribe,resolveResource,
     getView:view,getKernel:()=>kernel,getEnvelope:()=>envelope,dispose:()=>{disposed=true;uploader.dispose();subscribers.clear();}});
 }

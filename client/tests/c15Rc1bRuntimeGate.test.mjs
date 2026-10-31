@@ -42,3 +42,15 @@ test('Android milestone is manual-only, separately gated, stable-signed and non-
   assert.match(workflow,/C15 RC1B is manual-only/);assert.match(workflow,/must be built separately from legacy QA modes/);
   assert.match(workflow,/spacefighter-android-c15-rc1b-debug-not-for-release/);assert.match(workflow,/SIGNED_APK_SHA_MATCH/);
 });
+
+test('verified Continue consumes the local terminal session before returning to stage select',()=>{
+  const screen=read('client/src/components/C15LocalAlpha1/index.jsx');
+  const session=read('client/src/game/c15/C15Rc1bSession.js');
+  assert.match(screen,/await sessionRef\.current\?\.completeVerified\(\)/);
+  assert.match(screen,/setScreen\('stage_select'\)/);
+  assert.doesNotMatch(screen,/onClick=\{\(\)=>setScreen\('stage_select'\)\}>CONTINUE/);
+  assert.match(session,/async function completeVerified\(\)/);
+  assert.match(session,/store\.remove\('meta',activeKey\(uid\)\)/);
+  assert.match(session,/store\.remove\('battles',journalKey\(battleId\)\)/);
+  assert.match(session,/completedRecoveryCodes/);
+});

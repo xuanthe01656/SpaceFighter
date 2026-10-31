@@ -25,14 +25,14 @@ async function harness(){
   const origin=createC15CommercialOriginV1({snapshot:fixture.snapshot,encounter:fixture.encounter,policy:fixture.policy,
     resourceManifest:catalog.manifest,selectedResourcePackIds:['core-bootstrap','campaign-alpha-mobile-low'],
     keyId:'c15_rc1b_key_v1',key:KEY,issuedAtMs:T0,expiresAtMs:fixture.snapshot.context.expiresAtMs});
-  let uploadedThroughTick=0,chunkCount=0,openCount=0,statusCount=0,finalizeCount=0;
+  let uploadedThroughTick=0,chunkCount=0,openCount=0,statusCount=0,finalizeCount=0,abandonCount=0;
   const chunks=[];
   const envelope=()=>({version:'c15-rc1b-runtime-v1',battleId:BID,duplicate:false,issuedAtMs:T0,
     expiresAtMs:fixture.snapshot.context.expiresAtMs,uploadedThroughTick,chunkCount,phase:'active',genesis:origin.genesis,
     runtime:{snapshot:origin.snapshot,encounter:origin.encounter,policy:origin.policy},resourceManifest:catalog.manifest,
     result:null,rc1bOnly:true,nonEconomic:true,safeForSettlement:false,settlementEnabled:false,cloudRewards:false});
   const api={
-    async openBattle(){openCount++;return envelope();},
+    async openBattle(){openCount++;if(openCount>1){uploadedThroughTick=0;chunkCount=0;chunks.length=0;}return envelope();},
     async getStatus(){statusCount++;return envelope();},
     async uploadChunk(_uid,{battleId,chunk}){assert.equal(battleId,BID);assert.equal(chunk.startTick,uploadedThroughTick);
       chunks.push(structuredClone(chunk));uploadedThroughTick+=chunk.frames.length;chunkCount++;
@@ -41,10 +41,10 @@ async function harness(){
       safeForSettlement:false,settlementEnabled:false,cloudRewards:false,result:{version:'c15-commercial-replay-result-v1',
         battleId:BID,phase:'rc1-verified-defeat',ticks:uploadedThroughTick,rc1Only:true,nonEconomic:true,
         safeForSettlement:false,eligibleForSettlement:false}};},
-    async abandon(){return {battleId:BID,nonEconomic:true};},
+    async abandon(){abandonCount++;return {battleId:BID,nonEconomic:true};},
     async fetchManifest(){return catalog.manifest;},
   };
-  return {fixture,catalog,origin,api,envelope,chunks,counts:()=>({openCount,statusCount,finalizeCount,uploadedThroughTick,chunkCount})};
+  return {fixture,catalog,origin,api,envelope,chunks,counts:()=>({openCount,statusCount,finalizeCount,abandonCount,uploadedThroughTick,chunkCount})};
 }
 
 const waitFor=async(predicate,limit=200)=>{for(let i=0;i<limit;i++){if(predicate())return;await new Promise(r=>setTimeout(r,2));}throw new Error('condition timeout');};
@@ -88,4 +88,37 @@ test('C15 session resumes an unexpired signed local battle after a transient sta
   const resumed=await openOrResumeC15Rc1bSession({uid:UID,store,api:timeoutApi,fetchImpl:fetchFor(h.catalog),
     online:()=>true,clock:()=>T0+2000,uuidFactory:()=> 'should_not_open'});
   assert.equal(resumed.getView().kernel.tick,10);assert.equal(h.counts().openCount,1);resumed.dispose();
+});
+
+
+test('C15 verified Continue consumes local active state and a new stage opens a fresh battle',async()=>{
+  const h=await harness(),store=createC15MemoryStore();
+  const options={uid:UID,store,api:h.api,fetchImpl:fetchFor(h.catalog),online:()=>true,clock:()=>T0+120000,
+    uuidFactory:()=>`rc1b_request_${String(h.counts().openCount+10).padStart(4,'0')}`};
+  const first=await openOrResumeC15Rc1bSession(options),defeat=generateC15DefeatFrames(h.fixture);
+  for(const frame of defeat.frames)first.advance(frame);
+  await first.finalizeWhenOnline();assert.equal(first.getView().phase,'verified');
+  await first.completeVerified();
+  assert.equal(await store.get('meta',`active:${UID}`),null);
+  assert.equal(await store.get('battles',`journal:${BID}`),null);
+  await first.suspend();first.dispose();
+  assert.equal(await store.get('meta',`active:${UID}`),null,'unmount suspend must not resurrect completed battle');
+  assert.equal(h.counts().abandonCount,0,'verified Continue is local consume, not server abandon');
+  const second=await openOrResumeC15Rc1bSession(options);
+  assert.equal(h.counts().openCount,2);assert.equal(second.getView().phase,'active');assert.equal(second.getView().result,null);
+  second.dispose();
+});
+
+test('C15 stale verified cache from a prior game session is cleared before opening a new battle',async()=>{
+  const h=await harness(),store=createC15MemoryStore();
+  const first=await openOrResumeC15Rc1bSession({uid:UID,store,api:h.api,fetchImpl:fetchFor(h.catalog),
+    online:()=>true,clock:()=>T0+120000,uuidFactory:()=> 'rc1b_request_stale_01'});
+  const defeat=generateC15DefeatFrames(h.fixture);for(const frame of defeat.frames)first.advance(frame);
+  await first.finalizeWhenOnline();await first.suspend();first.dispose();
+  const rotatedApi={...h.api,async getStatus(){const error=new Error('C15 battle session invalid');
+    error.code='C15_RC1B_SESSION_INVALID';throw error;}};
+  const fresh=await openOrResumeC15Rc1bSession({uid:UID,store,api:rotatedApi,fetchImpl:fetchFor(h.catalog),
+    online:()=>true,clock:()=>T0+121000,uuidFactory:()=> 'rc1b_request_fresh_02'});
+  assert.equal(h.counts().openCount,2);assert.equal(fresh.getView().phase,'active');assert.equal(fresh.getView().result,null);
+  fresh.dispose();
 });
