@@ -52,7 +52,8 @@ test('verified Continue consumes the local terminal session before returning to 
   assert.match(session,/async function completeVerified\(\)/);
   assert.match(session,/store\.remove\('meta',activeKey\(uid\)\)/);
   assert.match(session,/store\.remove\('battles',journalKey\(battleId\)\)/);
-  assert.match(session,/completedRecoveryCodes/);
+  assert.match(session,/recoverableLifecycleCodes/);
+  assert.match(session,/C15_RC1C_PROFILE_SWITCH_REQUIRES_ONLINE/);
 });
 
 test('RC1C Android milestone enables one A/B control APK and keeps legacy QA mutually exclusive',()=>{

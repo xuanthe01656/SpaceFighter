@@ -16,8 +16,8 @@ import {C15_DEFAULT_CONTROL_PROFILE_ID,resolveC15ControlProfile,
 const VERSION='c15-rc1b-client-session-v1';
 const activeKey=uid=>`active:${uid}`;
 const journalKey=battleId=>`journal:${battleId}`;
-const completedRecoveryCodes=new Set(['C15_RC1B_SESSION_INVALID','C15_RC1B_SESSION_MISSING',
-  'C15_RC1B_EXPIRED','C15_RC1B_ABANDONED','SESSION_EXPIRED']);
+const recoverableLifecycleCodes=new Set(['C15_RC1B_SESSION_INVALID','C15_RC1B_SESSION_MISSING',
+  'C15_RC1B_EXPIRED','C15_RC1B_ABANDONED','C15_RC1B_SESSION_CLOSED','SESSION_EXPIRED']);
 const record=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const freeze=x=>{if(x&&typeof x==='object'){for(const value of Object.values(x))freeze(value);Object.freeze(x);}return x;};
 const appVersion=()=>String(import.meta.env?.VITE_APP_VERSION||'1.2.1');
@@ -88,6 +88,9 @@ export async function openOrResumeC15Rc1bSession({uid,quality='mobile-low',contr
     if(typeof battleId==='string'&&battleId.length)await store.remove('battles',journalKey(battleId));};
   let saved=await store.get('meta',activeKey(uid));
   let envelope,requestId,frames=[],journal,kernel,result=null,outcome=null,phase='opening',resourcesReady=false;
+  const resetSavedState=async()=>{const oldBattleId=saved?.battleId||envelope?.battleId;
+    await clearPersistedBattle(oldBattleId);saved=null;envelope=undefined;requestId=undefined;frames=[];journal=undefined;
+    kernel=undefined;result=null;outcome=null;phase='opening';resourcesReady=false;};
   if(saved?.version===VERSION&&saved.uid===uid&&saved.envelope?.genesis?.expiresAtMs>now()){
     try{
       envelope=validateEnvelope(saved.envelope,uid);requestId=saved.requestId;frames=Array.isArray(saved.frames)?saved.frames:[];
@@ -96,14 +99,22 @@ export async function openOrResumeC15Rc1bSession({uid,quality='mobile-low',contr
       if(result)validateResult(result,envelope.battleId);if(outcome)validateOutcome(outcome,envelope.battleId);
       phase=result&&(!envelope.rc2OutcomeEnabled||outcome)?'verified':kernel.terminal?'provisional-terminal':'active';resourcesReady=saved.resourcesReady===true;
     }catch(_invalidLocal){await store.remove('meta',activeKey(uid));saved=null;}
-  }else if(saved){await store.remove('meta',activeKey(uid));saved=null;}
+  }else if(saved){await clearPersistedBattle(saved.battleId);saved=null;}
+  if(saved&&envelope.controlProfile.id!==controlProfileId){
+    if(result){await resetSavedState();}
+    else{
+      if(!online()){const error=new Error('C15 control profile change requires network');
+        error.code='C15_RC1C_PROFILE_SWITCH_REQUIRES_ONLINE';throw error;}
+      try{await api.abandon(uid,{battleId:envelope.battleId});}
+      catch(error){if(!recoverableLifecycleCodes.has(error?.code))throw error;}
+      await resetSavedState();
+    }
+  }
   if(saved&&online()){
     let remoteRaw=null;
     try{remoteRaw=await api.getStatus(uid);}catch(error){
-      if(result&&completedRecoveryCodes.has(error?.code)){
-        await clearPersistedBattle(saved.battleId);saved=null;envelope=undefined;requestId=undefined;frames=[];journal=undefined;
-        kernel=undefined;result=null;outcome=null;phase='opening';resourcesReady=false;
-      }else if(error?.code!=='TIMEOUT'&&!(error instanceof TypeError))throw error;
+      if(recoverableLifecycleCodes.has(error?.code))await resetSavedState();
+      else if(error?.code!=='TIMEOUT'&&!(error instanceof TypeError))throw error;
     }
     if(saved&&remoteRaw!==null){const remote=validateEnvelope(remoteRaw,uid);
       if(remote.battleId!==saved.battleId)throw new TypeError('C15 remote/local battle mismatch');
