@@ -39,7 +39,7 @@ test('C15 local runtime renders device state and cannot import economy or settle
 test('Android milestone is manual-only, separately gated, stable-signed and non-economic',()=>{
   const workflow=read('.github/workflows/android-native-smoke.yml');
   assert.match(workflow,/c15_rc1b:/);assert.match(workflow,/VITE_C15_RC1B_ENABLED/);
-  assert.match(workflow,/C15 RC1B is manual-only/);assert.match(workflow,/must be built separately from legacy QA modes/);
+  assert.match(workflow,/C15 local runtime is manual-only/);assert.match(workflow,/must be built separately from legacy QA modes/);
   assert.match(workflow,/spacefighter-android-c15-rc1b-debug-not-for-release/);assert.match(workflow,/SIGNED_APK_SHA_MATCH/);
 });
 
@@ -53,4 +53,20 @@ test('verified Continue consumes the local terminal session before returning to 
   assert.match(session,/store\.remove\('meta',activeKey\(uid\)\)/);
   assert.match(session,/store\.remove\('battles',journalKey\(battleId\)\)/);
   assert.match(session,/completedRecoveryCodes/);
+});
+
+test('RC1C Android milestone enables one A/B control APK and keeps legacy QA mutually exclusive',()=>{
+  const workflow=read('.github/workflows/android-native-smoke.yml');
+  assert.match(workflow,/c15_rc1c:/);assert.match(workflow,/VITE_C15_CONTROL_AB_QA/);
+  assert.match(workflow,/arcade-responsive-v1/);assert.match(workflow,/RC1B and RC1C inputs are mutually exclusive/);
+  assert.match(workflow,/spacefighter-android-c15-rc1c-debug-not-for-release/);
+  assert.match(workflow,/NON-ECONOMIC, NO SETTLEMENT/);
+});
+
+test('RC1C local screen uses deterministic control intent, local telemetry and signed RC2 outcome display',()=>{
+  const screen=read('client/src/components/C15LocalAlpha1/index.jsx');
+  assert.match(screen,/openC15ControlIntent/);assert.match(screen,/sampleC15ControlTick/);
+  assert.match(screen,/releaseC15ControlTarget/);assert.match(screen,/createC15ControlTelemetry/);
+  assert.match(screen,/CONTROL JSON/);assert.match(screen,/RC2 SIGNED OUTCOME/);
+  assert.doesNotMatch(screen,/openCloudInputIntent|sampleCloudInputTick|clearCloudPointerTarget/);
 });

@@ -7,6 +7,7 @@ const {createC15Rc1bRuntimeV1,parseC15Rc1bConfig}=require('../lib/c15Rc1bRuntime
 const {createC15Rc1bResourceCatalog}=require('../lib/c15Rc1bResourceCatalog.cjs');
 const {openInputJournal}=require('../lib/combatInputJournalV8.cjs');
 const {openCombatVerticalSlice,replayCombatSliceChunk}=require('../lib/combatVerticalSliceV8.cjs');
+const {verifyC15TrustedOutcomeV1}=require('../lib/c15TrustedOutcomeV1.cjs');
 
 const T0=Date.parse('2026-10-30T03:00:00Z');
 const UID='c15_rc1b_allowlisted_user';
@@ -14,6 +15,8 @@ const SID='53f3a57d-28c3-469b-9e0f-69d16a1f3228';
 const BID='92e2ee38-1cd8-4c5f-869b-56e31f6300a1';
 const KEY_ID='c15_rc1b_key_v1';
 const KEY=Buffer.alloc(32,0x6a);
+const OUTCOME_KEY_ID='c15_rc2_outcome_v1';
+const OUTCOME_KEY=Buffer.alloc(32,0x7b);
 const isCode=code=>error=>error?.code===code;
 class Query{constructor(db,p){this.db=db;this.path=p;this.max=Number.MAX_SAFE_INTEGER;}orderBy(f){assert.equal(f,'startTick');return this;}limit(n){this.max=n;return this;}
   async get(){const docs=[...this.db.data].filter(([p])=>p.startsWith(this.path+'/')&&p.slice(this.path.length+1).indexOf('/')===-1)
@@ -41,7 +44,8 @@ function fixture(){const db=new FakeDb();let current=T0;const data=schema.create
   db.data.set(`users/${UID}`,user);const resources=createC15Rc1bResourceCatalog({publicBaseUrl:'https://example.invalid'});
   const create=()=>createC15Rc1bRuntimeV1({db,enabled:true,allowedUids:[UID],signingKeyId:KEY_ID,signingKey:KEY,
     verificationKeys:new Map([[KEY_ID,KEY]]),resourceCatalog:resources,now:()=>current,uuidFactory:()=>BID,randomSeed:()=>11335577,
-    catalogModule:catalog,schemaModule:schema});
+    outcomeEnabled:true,outcomeSigningKeyId:OUTCOME_KEY_ID,outcomeSigningKey:OUTCOME_KEY,
+    outcomeVerificationKeys:new Map([[OUTCOME_KEY_ID,OUTCOME_KEY]]),catalogModule:catalog,schemaModule:schema});
   return {db,resources,create,setTime:value=>{current=value;},userBefore:structuredClone(user)};}
 function generateFrames(opened,kind='victory'){let run=openCombatVerticalSlice({snapshot:opened.runtime.snapshot,
   journal:openInputJournal({uid:UID,sessionId:SID,battleId:BID,rulesVersion:opened.runtime.snapshot.context.rulesVersion,
@@ -62,14 +66,18 @@ test('C15 RC1B config is explicit, allowlisted and requires independent HMAC',()
   assert.equal(parseC15Rc1bConfig({}),null);
   assert.throws(()=>parseC15Rc1bConfig({GAME_C15_RC1B_ENABLED:'true'}),/approval/);
   const env={GAME_C15_RC1B_ENABLED:'true',GAME_C15_RC1B_STAGING_APPROVED:'true',GAME_C15_RC1B_ALLOW_UIDS:UID,
-    GAME_C15_RC1B_HMAC_KEY_ID:KEY_ID,GAME_C15_RC1B_HMAC_KEY_B64:KEY.toString('base64')};
+    GAME_C15_RC1B_HMAC_KEY_ID:KEY_ID,GAME_C15_RC1B_HMAC_KEY_B64:KEY.toString('base64'),
+    GAME_C15_RC2_OUTCOME_ENABLED:'true',GAME_C15_RC2_OUTCOME_STAGING_APPROVED:'true',
+    GAME_C15_RC2_OUTCOME_HMAC_KEY_ID:OUTCOME_KEY_ID,GAME_C15_RC2_OUTCOME_HMAC_KEY_B64:OUTCOME_KEY.toString('base64')};
   const value=parseC15Rc1bConfig(env);assert.deepEqual(value.uids,[UID]);assert.equal(value.keyId,KEY_ID);
+  assert.equal(value.outcome.keyId,OUTCOME_KEY_ID);
 });
 
 test('C15 RC1B open is signed, resource-bound and never mutates economy',async()=>{const f=fixture(),svc=await f.create();
   const before=structuredClone(f.db.data.get(`users/${UID}`));const out=await svc.open(UID,SID,{stageId:'alpha-stage-1',requestId:'c15_rc1b_open_0001',appVersion:'1.2.1',quality:'mobile-low'});
   assert.equal(out.nonEconomic,true);assert.equal(out.safeForSettlement,false);assert.equal(out.cloudRewards,false);assert.equal(out.genesis.mac.length,64);
   assert.equal(out.resourceManifest.manifestDigest,out.genesis.resourceManifestDigest);assert.equal(out.runtime.encounter.waves.length,5);
+  assert.equal(out.controlProfile.id,'arcade-responsive-v1');assert.equal(out.rc2OutcomeEnabled,true);
   assert.deepEqual(f.db.data.get(`users/${UID}`),before);assert.ok(f.db.ops.every(op=>!op.path.includes('wallet')&&!op.path.includes('settlement')));
 });
 
@@ -81,7 +89,10 @@ test('C15 RC1B local full battle uploads in background and finalizes by independ
   f.setTime(T0+Math.ceil(golden.frames.length*1000/30)+5000);const final=await svc.finalize(UID,SID,{battleId:BID});
   assert.equal(final.result.phase,'rc1-verified-clear');assert.equal(final.result.waves,5);assert.equal(final.result.kills,70);
   assert.equal(final.nonEconomic,true);assert.equal(final.safeForSettlement,false);assert.equal(final.cloudRewards,false);
+  assert.equal(final.outcome.phase,'rc2-trusted-clear');assert.equal(final.outcome.controlProfileId,'arcade-responsive-v1');
+  assert.equal(verifyC15TrustedOutcomeV1(final.outcome,{[OUTCOME_KEY_ID]:OUTCOME_KEY},{uid:UID,sessionId:SID,battleId:BID}),true);
   const duplicate=await svc.finalize(UID,SID,{battleId:BID});assert.equal(duplicate.duplicate,true);
+  assert.equal(duplicate.outcome.outcomeDigest,final.outcome.outcomeDigest);
   const afterTerminal={protocol:'pve-input-v1',battleId:BID,startTick:golden.frames.length,frames:[{x:0,z:0}]};
   await assert.rejects(svc.upload(UID,SID,{battleId:BID,chunk:afterTerminal}),isCode('C15_RC1B_SESSION_CLOSED'));
 });
@@ -112,4 +123,41 @@ test('C15 RC1B finalize fails closed if journal changes during independent repla
   release();
   await assert.rejects(finalizing,isCode('C15_RC1B_FINALIZE_RETRY'));
   await assert.rejects(svc.finalize(UID,SID,{battleId:BID}),isCode('C15_RC1B_REPLAY_REJECTED'));
+});
+
+test('C15 RC2 outcome remains create-only, non-economic and blocks rotated sessions or deletion',async()=>{
+  const f=fixture(),svc=await f.create();
+  const opened=await svc.open(UID,SID,{stageId:'alpha-stage-1',requestId:'c15_rc2_outcome_0001',appVersion:'1.2.1',
+    quality:'mobile-low',controlProfileId:'current-balanced-v1'});
+  assert.equal(opened.controlProfile.id,'current-balanced-v1');
+  const golden=generateFrames(opened,'defeat'),list=chunks(golden.frames);for(const chunk of list)await svc.upload(UID,SID,{battleId:BID,chunk});
+  f.setTime(T0+Math.ceil(golden.frames.length*1000/30)+5000);const final=await svc.finalize(UID,SID,{battleId:BID});
+  assert.equal(final.outcome.phase,'rc2-trusted-defeat');assert.equal(final.outcome.controlProfileId,'current-balanced-v1');
+  assert.equal(final.outcome.safeForSettlement,false);assert.equal(final.outcome.eligibleForSettlement,false);
+  assert.ok(f.db.ops.some(op=>op.path===`users/${UID}/c15Rc2Outcomes/${BID}`));
+  assert.ok(f.db.ops.every(op=>!op.path.includes('wallet')&&!op.path.includes('settlement')));
+  const user=f.db.data.get(`users/${UID}`);user.sessionId='11111111-1111-4111-8111-111111111111';f.db.data.set(`users/${UID}`,user);
+  await assert.rejects(svc.status(UID,SID),isCode('SESSION_EXPIRED'));
+  user.sessionId=SID;f.db.data.set(`users/${UID}`,user);f.db.data.set(`accountDeletionJobs/${UID}`,{status:'pending'});
+  await assert.rejects(svc.status(UID,SID),isCode('ACCOUNT_DELETION_PENDING'));
+});
+
+test('C15 RC2 duplicate finalize rechecks immutable journal root after outcome issuance',async()=>{
+  const f=fixture(),svc=await f.create();
+  const opened=await svc.open(UID,SID,{stageId:'alpha-stage-1',requestId:'c15_rc2_recheck_001',appVersion:'1.2.1',quality:'mobile-low'});
+  const golden=generateFrames(opened,'victory'),list=chunks(golden.frames);for(const chunk of list)await svc.upload(UID,SID,{battleId:BID,chunk});
+  f.setTime(T0+Math.ceil(golden.frames.length*1000/30)+5000);await svc.finalize(UID,SID,{battleId:BID});
+  const path=`users/${UID}/c15Rc1bTrace/${BID}/chunks/${String(0).padStart(6,'0')}`;
+  const stored=f.db.data.get(path);stored.chunkDigest='f'.repeat(64);f.db.data.set(path,stored);
+  await assert.rejects(svc.finalize(UID,SID,{battleId:BID}),/context mismatch|journal root|digest/i);
+});
+
+test('C15 RC2 concurrent finalize returns one immutable outcome',async()=>{
+  const f=fixture(),svc=await f.create();
+  const opened=await svc.open(UID,SID,{stageId:'alpha-stage-1',requestId:'c15_rc2_concurrent_1',appVersion:'1.2.1',quality:'mobile-low'});
+  const golden=generateFrames(opened,'victory'),list=chunks(golden.frames);for(const chunk of list)await svc.upload(UID,SID,{battleId:BID,chunk});
+  f.setTime(T0+Math.ceil(golden.frames.length*1000/30)+5000);
+  const results=await Promise.all([svc.finalize(UID,SID,{battleId:BID}),svc.finalize(UID,SID,{battleId:BID})]);
+  assert.equal(results[0].outcome.outcomeDigest,results[1].outcome.outcomeDigest);
+  const writes=f.db.ops.filter(op=>op.path===`users/${UID}/c15Rc2Outcomes/${BID}`&&op.kind==='create');assert.equal(writes.length,1);
 });

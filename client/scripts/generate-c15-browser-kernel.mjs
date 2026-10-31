@@ -34,7 +34,7 @@ const specs={
       ["const { CORE_VERSION, TICK_HZ, UNITS_PER_WORLD } = require('./combatCoreV8.cjs');",''],
       ["const { PROTOCOL_VERSION, MAX_BATTLE_TICKS } = require('./combatInputJournalV8.cjs');","import {PROTOCOL_VERSION,MAX_BATTLE_TICKS} from './CombatInputJournalV8.js';"]
     ],
-    exports:'FOUNDATION_VERSION,POLICY_VERSION,TIMER_VERSION,MovementWeaponError,previewFromTrustedSnapshot,advancePreviewMovement,previewMainProjectile,openFireClock,advanceFireClock'
+    exports:'FOUNDATION_VERSION,POLICY_VERSION,ARCADE_POLICY_VERSION,TIMER_VERSION,MovementWeaponError,previewFromTrustedSnapshot,advancePreviewMovement,previewMainProjectile,openFireClock,advanceFireClock'
   },
   'combatPreviewReplayV8.cjs':{
     out:'CombatPreviewReplayV8.js',

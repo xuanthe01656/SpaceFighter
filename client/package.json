@@ -36,7 +36,8 @@
     "gate:c15-rc1": "node ../tools/run-c15-rc1-gate.mjs",
     "generate:c15-kernel": "node scripts/generate-c15-browser-kernel.mjs",
     "check:c15-kernel": "node scripts/generate-c15-browser-kernel.mjs --check",
-    "gate:c15-rc1b": "node ../tools/run-c15-rc1b-gate.mjs"
+    "gate:c15-rc1b": "node ../tools/run-c15-rc1b-gate.mjs",
+    "gate:c15-rc1c": "node ../tools/run-c15-rc1c-rc2-gate.mjs"
   },
   "dependencies": {
     "@babylonjs/core": "^9.5.1",

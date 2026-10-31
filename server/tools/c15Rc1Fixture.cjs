@@ -8,15 +8,15 @@ const {openCombatVerticalSlice,replayCombatSliceChunk}=require('../lib/combatVer
 const {resolveCampaignAlphaStage1C6E}=require('../lib/combatCampaignAlphaC6CV8.cjs');
 const {createResourceManifestV1}=require('../lib/resourceManifestV1.cjs');
 const {createC15CommercialOriginV1}=require('../lib/c15CommercialGenesisV1.cjs');
+const {CURRENT_PROFILE_ID,createC15MovementPolicy}=require('../lib/c15ControlProfilesV1.cjs');
 const T0=1782000000000;
 const UID='c15_rc1_fixture_user';
 const SID='53f3a57d-28c3-469b-9e0f-69d16a1f3228';
 const BID='92e2ee38-1cd8-4c5f-869b-56e31f6300a1';
 const KEY_ID='c15_rc1_key_v1';
 const KEY=Buffer.alloc(32,0x5a);
-const POLICY=Object.freeze({version:'v8c6b-pierce-burst-preview-v3',keyboardUnitsPer60HzFrame:.3,
-  pilotHitRadiusUnits:700,projectileHitRadiusUnits:200});
-async function createC15Rc1Fixture({battleId=BID,seed=11335577}={}){
+async function createC15Rc1Fixture({battleId=BID,seed=11335577,profileId=CURRENT_PROFILE_ID}={}){
+  const POLICY=createC15MovementPolicy(profileId);
   const catalog=await import(pathToFileURL(path.resolve(__dirname,'../../client/src/constants.js')).href);
   const identity={uid:UID,sessionId:SID,battleId,issuedAtMs:T0,expiresAtMs:T0+10*60*1000};
   const profile={campaignData:{loadout:{pilot:'pilot_alpha',aircraft:'ship_xwing',mainGun:'qa_rail',wingman:'',armor:'',drone:''},

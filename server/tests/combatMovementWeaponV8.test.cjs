@@ -226,7 +226,7 @@ test('V8B-2C2A: separate preview remains isolated from HTTP/economy and P0', () 
   assert.doesNotMatch(httpFile,/combatMovementWeaponV8/);
   assert.doesNotMatch(moduleFile,/require\([^)]*(economy|gameService|firebase-admin|server\.js)/);
   for(const key of ['victory','winner','rewards','settlement','grant']) assert.equal(Object.hasOwn(api,key),false);
-  assert.deepEqual(Object.keys(api).sort(),['FOUNDATION_VERSION','POLICY_VERSION','TIMER_VERSION',
+  assert.deepEqual(Object.keys(api).sort(),['ARCADE_POLICY_VERSION','FOUNDATION_VERSION','POLICY_VERSION','TIMER_VERSION',
     'MovementWeaponError','previewFromTrustedSnapshot','advancePreviewMovement',
     'previewMainProjectile','openFireClock','advanceFireClock'].sort());
 });

@@ -5,11 +5,13 @@ const fs=require('node:fs');
 const path=require('node:path');
 const read=file=>fs.readFileSync(path.resolve(__dirname,'..',file),'utf8');
 
-test('C15 RC1B server lane remains allowlisted, non-economic and disconnected from settlement',()=>{
+test('C15 RC1C/RC2 server lane remains allowlisted, non-economic and disconnected from settlement',()=>{
   for(const file of ['server.js','lib/c15Rc1bRuntimeV1.cjs']){const source=read(file);
     assert.doesNotMatch(source,/verifiedSettlementC7B2BV8|productionOutcomeAuthorityC10V8|createC10SettlementBridge|wallet\.coins|missionDelta/);}
   const runtime=read('lib/c15Rc1bRuntimeV1.cjs');assert.match(runtime,/GAME_C15_RC1B_STAGING_APPROVED/);
-  assert.match(runtime,/GAME_C15_RC1B_ALLOW_UIDS/);assert.match(runtime,/safeForSettlement:false/);assert.match(runtime,/cloudRewards:false/);
+  assert.match(runtime,/GAME_C15_RC1B_ALLOW_UIDS/);assert.match(runtime,/GAME_C15_RC2_OUTCOME_STAGING_APPROVED/);
+  assert.match(runtime,/safeForSettlement:false/);assert.match(runtime,/cloudRewards:false/);
+  assert.match(runtime,/c15Rc2Outcomes/);assert.doesNotMatch(runtime,/settlementEnabled\s*:\s*true|cloudRewards\s*:\s*true/);
 });
 
 test('C12 remains frozen and RC1B adds no production settle/reward endpoint',()=>{
