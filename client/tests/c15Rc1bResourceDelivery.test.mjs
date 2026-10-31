@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
+import {runInNewContext} from 'node:vm';
 import {createC15MemoryStore} from '../src/game/c15/C15Rc1bStore.js';
 import {ensureC15StageResources,resolveC15ActiveResource,downloadResumable} from '../src/game/c15/C15ResourceDelivery.js';
 const require=createRequire(import.meta.url);
@@ -54,4 +55,48 @@ test('C15 active pack metadata is not trusted when a verified disk file is missi
   assert.ok(requests>firstRequests,'missing disk file must force a verified redownload');
   const restored=await resolveC15ActiveResource({store,packId:'campaign-alpha-mobile-low',path:'ship_xwing_top.png'});
   assert.ok(restored?.url.startsWith('blob:'));restored.revoke();
+});
+
+
+test('C15 resource activation replaces legacy uncloneable rollback with one bounded plain snapshot',async()=>{
+  const catalog=createC15Rc1bResourceCatalog({publicBaseUrl:'https://assets.example.test'});
+  const memory=createC15MemoryStore();
+  const foreignPrevious=runInNewContext(`(()=>{
+    class LegacyRollback{}
+    return {
+      version:'c15-active-resource-set-v1',
+      stageKey:'alpha-stage-1',
+      packs:{},
+      fileIndex:{},
+      rollback:new LegacyRollback()
+    };
+  })()`);
+  let firstMetaRead=true;
+  const store={
+    async get(name,key){
+      if(name==='meta'&&key==='active-set:alpha-stage-1'&&firstMetaRead){firstMetaRead=false;return foreignPrevious;}
+      return memory.get(name,key);
+    },
+    async put(name,key,value){return memory.put(name,key,value);},
+    async remove(name,key){return memory.remove(name,key);},
+    async list(name,prefix=''){return memory.list(name,prefix);},
+  };
+  await ensureC15StageResources({manifest:catalog.manifest,store,quality:'mobile-low',
+    fetchImpl:fetchFor(catalog,{chunkBytes:2_000_000})});
+  const active=await memory.get('meta','active-set:alpha-stage-1');
+  assert.equal(active.rollback.version,'c15-active-resource-set-v1');
+  assert.equal(active.rollback.stageKey,'alpha-stage-1');
+  assert.deepEqual(active.rollback.packs,{});
+  assert.deepEqual(active.rollback.fileIndex,{});
+  assert.equal(Object.hasOwn(active.rollback,'rollback'),false,'rollback history must stay one level deep');
+});
+
+test('C15 repeated resource activation keeps rollback metadata bounded',async()=>{
+  const catalog=createC15Rc1bResourceCatalog({publicBaseUrl:'https://assets.example.test'}),store=createC15MemoryStore();
+  const fetchImpl=fetchFor(catalog,{chunkBytes:2_000_000});
+  await ensureC15StageResources({manifest:catalog.manifest,store,quality:'mobile-low',fetchImpl});
+  await ensureC15StageResources({manifest:catalog.manifest,store,quality:'mobile-low',fetchImpl});
+  const active=await store.get('meta','active-set:alpha-stage-1');
+  assert.equal(Object.hasOwn(active.rollback,'rollback'),false);
+  assert.equal(active.rollback.packs['campaign-alpha-mobile-low'].revision,1);
 });

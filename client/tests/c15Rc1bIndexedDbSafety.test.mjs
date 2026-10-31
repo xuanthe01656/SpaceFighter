@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {dirname,resolve} from 'node:path';
+import {runInNewContext} from 'node:vm';
 import {cloneC15PersistentValue,c15StandaloneArrayBuffer,createC15MemoryStore}
   from '../src/game/c15/C15Rc1bStore.js';
 
@@ -62,4 +63,35 @@ test('RC1B UI surfaces legacy DOM DataCloneError code 25 as an actionable code',
   assert.match(ui,/error\?\.code===25/);
   assert.match(ui,/C15_IDB_DATA_CLONE/);
   assert.match(ui,/formatC15Rc1bFault\(error,'C15_RC1B_OPEN_FAILED'\)/);
+});
+
+
+test('C15 persistent clone accepts cross-realm plain rollback metadata but rejects class instances',()=>{
+  const foreign=runInNewContext(`({
+    version:'c15-active-resource-set-v1',
+    rollback:{packs:{alpha:{revision:1,sha256:'${'a'.repeat(64)}'}}}
+  })`);
+  const cloned=cloneC15PersistentValue(foreign);
+  assert.equal(cloned.rollback.packs.alpha.revision,1);
+  assert.equal(Object.getPrototypeOf(cloned),Object.prototype);
+  assert.equal(Object.getPrototypeOf(cloned.rollback),Object.prototype);
+
+  class LegacyRollback{}
+  assert.throws(()=>cloneC15PersistentValue({rollback:new LegacyRollback()}),error=>{
+    assert.equal(error.code,'C15_STORE_UNCLONEABLE');
+    assert.match(error.message,/root\.rollback/);
+    return true;
+  });
+});
+
+test('C15 persistent clone rejects enumerable accessors without invoking them',()=>{
+  let invoked=false;
+  const value={};
+  Object.defineProperty(value,'rollback',{enumerable:true,get(){invoked=true;return {};}});
+  assert.throws(()=>cloneC15PersistentValue(value),error=>{
+    assert.equal(error.code,'C15_STORE_UNCLONEABLE');
+    assert.match(error.message,/root\.rollback/);
+    return true;
+  });
+  assert.equal(invoked,false);
 });

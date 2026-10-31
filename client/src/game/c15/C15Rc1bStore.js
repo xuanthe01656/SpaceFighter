@@ -2,8 +2,40 @@
 const DB_NAME='spacefighter-c15-rc1b-v1';
 const DB_VERSION=1;
 const STORES=['meta','partials','files','battles','chunks'];
-const record=value=>value!==null&&typeof value==='object'&&!Array.isArray(value)
-  &&(Object.getPrototypeOf(value)===Object.prototype||Object.getPrototypeOf(value)===null);
+function record(value){
+  if(value===null||typeof value!=='object'||Array.isArray(value))return false;
+  try{
+    if(Object.prototype.toString.call(value)!=='[object Object]')return false;
+    const prototype=Object.getPrototypeOf(value);
+    if(prototype===null||prototype===Object.prototype)return true;
+    const constructor=Object.prototype.hasOwnProperty.call(prototype,'constructor')
+      ?prototype.constructor:null;
+    // IndexedDB/WebView values can be materialized from another JavaScript
+    // realm. Their Object prototype is not reference-equal to this realm's
+    // Object.prototype, but the intrinsic constructor remains Object. Custom
+    // class instances continue to fail closed.
+    return typeof constructor==='function'&&constructor.name==='Object';
+  }catch(_){return false;}
+}
+function uncloneable(path,message=`C15 persisted value unsupported at ${path}`){
+  return Object.assign(new TypeError(message),{code:'C15_STORE_UNCLONEABLE'});
+}
+function cloneRecord(value,path){
+  let descriptors;
+  try{descriptors=Object.getOwnPropertyDescriptors(value);}
+  catch(_){throw uncloneable(path);}
+  const out={};
+  for(const [key,descriptor] of Object.entries(descriptors)){
+    if(!descriptor.enumerable)continue;
+    if('get' in descriptor||'set' in descriptor)throw uncloneable(`${path}.${key}`);
+    out[key]=cloneC15PersistentValue(descriptor.value,`${path}.${key}`);
+  }
+  for(const symbol of Object.getOwnPropertySymbols(value)){
+    const descriptor=Object.getOwnPropertyDescriptor(value,symbol);
+    if(descriptor?.enumerable)throw uncloneable(`${path}.[symbol]`);
+  }
+  return out;
+}
 
 function storageError(error,store,key){
   const cloneFailure=error?.name==='DataCloneError'||error?.code===25;
@@ -27,7 +59,7 @@ function storageError(error,store,key){
 export function cloneC15PersistentValue(value,path='root'){
   if(value===null||value===undefined||typeof value==='string'||typeof value==='boolean')return value;
   if(typeof value==='number'){
-    if(!Number.isFinite(value))throw Object.assign(new TypeError(`C15 persisted number invalid at ${path}`),{code:'C15_STORE_UNCLONEABLE'});
+    if(!Number.isFinite(value))throw uncloneable(path,`C15 persisted number invalid at ${path}`);
     return value;
   }
   if(typeof value==='bigint')return value;
@@ -44,18 +76,14 @@ export function cloneC15PersistentValue(value,path='root'){
   if(typeof Blob!=='undefined'&&value instanceof Blob)return value.slice(0,value.size,value.type);
   if(value instanceof Date)return new Date(value.getTime());
   if(Array.isArray(value))return value.map((item,index)=>cloneC15PersistentValue(item,`${path}[${index}]`));
-  if(record(value)){
-    const out={};
-    for(const [key,item] of Object.entries(value))out[key]=cloneC15PersistentValue(item,`${path}.${key}`);
-    return out;
-  }
-  throw Object.assign(new TypeError(`C15 persisted value unsupported at ${path}`),{code:'C15_STORE_UNCLONEABLE'});
+  if(record(value))return cloneRecord(value,path);
+  throw uncloneable(path);
 }
 
 export function c15StandaloneArrayBuffer(bytes){
   if(bytes instanceof ArrayBuffer)return bytes.slice(0);
   if(ArrayBuffer.isView(bytes))return bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength);
-  throw Object.assign(new TypeError('C15 binary payload invalid'),{code:'C15_STORE_UNCLONEABLE'});
+  throw uncloneable('root','C15 binary payload invalid');
 }
 
 const memory=()=>{

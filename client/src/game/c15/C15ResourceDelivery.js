@@ -1,7 +1,7 @@
 import {validateResourceManifestV1,selectResourcePacksV1,planAtomicResourceActivationV1}
   from '../assets/ResourceManifestV1.js';
 import {c15Sha256Hex,c15CanonicalJson} from './C15Crypto.js';
-import {c15StandaloneArrayBuffer} from './C15Rc1bStore.js';
+import {c15StandaloneArrayBuffer,cloneC15PersistentValue} from './C15Rc1bStore.js';
 
 const DESCRIPTOR_VERSION='c15-resource-pack-descriptor-v1';
 const record=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
@@ -13,6 +13,24 @@ const FILE_KEYS=['path','sizeBytes','sha256','contentType','url'];
 const ACTIVE_KEY=stageKey=>`active-set:${stageKey}`;
 const partialKey=(kind,id,revision,path='')=>`${kind}:${id}:v${revision}:${path}`;
 const fileKey=(id,revision,path)=>`${id}:v${revision}:${path}`;
+
+function rollbackSnapshot(previous,stageKey){
+  const source=record(previous)?previous:{};
+  // Keep one bounded, JSON-like rollback snapshot. Never persist the previous
+  // rollback chain: repeated pack activations would otherwise grow metadata
+  // recursively and Android WebView may return a foreign-realm object that a
+  // strict prototype check rejects. Pack bytes remain in the immutable file
+  // store and are referenced by this plain metadata only.
+  return cloneC15PersistentValue({
+    version:source.version==='c15-active-resource-set-v1'
+      ?source.version:'c15-active-resource-set-v1',
+    stageKey,
+    manifestDigest:typeof source.manifestDigest==='string'?source.manifestDigest:null,
+    activatedAtMs:Number.isSafeInteger(source.activatedAtMs)?source.activatedAtMs:null,
+    packs:record(source.packs)?source.packs:{},
+    fileIndex:record(source.fileIndex)?source.fileIndex:{},
+  });
+}
 
 async function verifyManifestDigest(manifest){
   validateResourceManifestV1(manifest);
@@ -125,7 +143,7 @@ export async function ensureC15StageResources({manifest,stageKey='alpha-stage-1'
   for(const [packId,meta] of Object.entries(nextPacks))for(const file of meta.files||[])
     fileIndex[`${packId}/${file.path}`]={packId,revision:meta.revision,path:file.path};
   const active={version:'c15-active-resource-set-v1',stageKey,manifestDigest:manifest.manifestDigest,
-    activatedAtMs:Date.now(),packs:nextPacks,fileIndex,rollback:previous};
+    activatedAtMs:Date.now(),packs:nextPacks,fileIndex,rollback:rollbackSnapshot(previous,stageKey)};
   // Single metadata write is the activation boundary. Any failed download
   // leaves the previous active set untouched.
   await store.put('meta',ACTIVE_KEY(stageKey),active);
