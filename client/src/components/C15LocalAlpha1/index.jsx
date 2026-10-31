@@ -9,6 +9,15 @@ import {c15KernelInputConfig} from '../../game/c15/C15KernelRuntime.js';
 
 const surface={position:'absolute',inset:0,background:'#020814',overflow:'hidden',zIndex:60};
 const chip={background:'rgba(3,15,30,.78)',border:'1px solid #2a6680',borderRadius:8,padding:'6px 9px',color:'#d9fbff'};
+export function formatC15Rc1bFault(error,fallback='C15_RC1B_ERROR'){
+  if(error?.code===25||error?.name==='DataCloneError')
+    return 'C15_IDB_DATA_CLONE · Local session/resource cache could not be stored';
+  const code=typeof error?.code==='string'&&error.code.trim()?error.code.trim():'';
+  const name=typeof error?.name==='string'&&error.name!=='Error'?error.name:'';
+  const message=typeof error?.message==='string'&&error.message.trim()?error.message.trim():'';
+  if(code&&message&&code!==message)return `${code} · ${message}`;
+  return code||message||name||fallback;
+}
 
 export default function C15LocalAlpha1({setScreen,lang='vi'}){
   const canvasRef=useRef(null),rendererRef=useRef(null),sessionRef=useRef(null),inputRef=useRef(null);
@@ -22,7 +31,7 @@ export default function C15LocalAlpha1({setScreen,lang='vi'}){
       timerRef.current=setInterval(()=>{try{const current=sessionRef.current?.getView();if(!current||current.phase!=='active'){stopTimer();return;}
         const sampled=sampleCloudInputTick(inputRef.current);inputRef.current=sampled.state;
         const advanced=sessionRef.current.advance(sampled.frame);rendererRef.current?.update(advanced.view.kernel);
-      }catch(error){stopTimer();setUi(value=>({...value,status:'error',fault:error?.code||error?.message||'C15_LOCAL_RUNTIME_ERROR'}));}},1000/30);};
+      }catch(error){stopTimer();setUi(value=>({...value,status:'error',fault:formatC15Rc1bFault(error,'C15_LOCAL_RUNTIME_ERROR')}));}},1000/30);};
     const init=async()=>{
       const user=auth.currentUser;if(!user)throw new Error('C15 RC1B requires an authenticated account');
       const quality=(navigator.deviceMemory||0)>=6?'mobile-high':'mobile-low';
@@ -44,7 +53,7 @@ export default function C15LocalAlpha1({setScreen,lang='vi'}){
         if(value.phase==='active')startTimer();else stopTimer();});
       startTimer();
     };
-    init().catch(error=>{if(!cancelled)setUi(value=>({...value,status:'error',fault:error?.code||error?.message||'C15_RC1B_OPEN_FAILED'}));});
+    init().catch(error=>{if(!cancelled)setUi(value=>({...value,status:'error',fault:formatC15Rc1bFault(error,'C15_RC1B_OPEN_FAILED')}));});
     const resize=()=>{rendererRef.current?.resize();if(!inputRef.current||!canvasRef.current)return;try{const rect=canvasRef.current.getBoundingClientRect();
       inputRef.current=reconfigureCloudViewport(inputRef.current,{aspect:rect.width/Math.max(1,rect.height),canvasWidth:Math.max(1,rect.width),
         canvasHeight:Math.max(1,rect.height),halfHeight:15,speedMultiplier:1});}catch(_){}};

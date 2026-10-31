@@ -5,7 +5,7 @@
  * network. Only input frames are persisted/uploaded. Victory/defeat shown by
  * the device remains provisional until independent server finalize succeeds.
  */
-import {createC15BrowserStore} from './C15Rc1bStore.js';
+import {createC15BrowserStore,cloneC15PersistentValue} from './C15Rc1bStore.js';
 import {ensureC15StageResources,resolveC15ActiveResource} from './C15ResourceDelivery.js';
 import {openC15LocalJournal,restoreC15LocalJournal,serializeC15LocalJournal} from '../combat/C15LocalJournal.js';
 import {createC15JournalUploader} from './C15JournalUploader.js';
@@ -45,7 +45,7 @@ function validateEnvelope(value,uid){
   return value;
 }
 function persisted({uid,requestId,envelope,frames,journal,phase,result=null,resourcesReady=false,updatedAtMs=Date.now()}){
-  return {version:VERSION,uid,requestId,battleId:envelope.battleId,envelope:structuredClone(envelope),
+  return {version:VERSION,uid,requestId,battleId:envelope.battleId,envelope:cloneC15PersistentValue(envelope),
     frames:frames.map(frame=>({x:frame.x,z:frame.z})),journal:serializeC15LocalJournal(journal),phase,result,
     resourcesReady,updatedAtMs};
 }
@@ -132,7 +132,7 @@ export async function openOrResumeC15Rc1bSession({uid,quality='mobile-low',store
         const reply=await api.finalize(uid,{battleId:envelope.battleId});
         if(!record(reply)||reply.nonEconomic!==true||reply.settlementEnabled!==false||!record(reply.result))
           throw new TypeError('C15 finalize response invalid');
-        result=freeze(structuredClone(validateResult(reply.result,envelope.battleId)));phase='verified';await persistNow();publish();return result;
+        result=freeze(cloneC15PersistentValue(validateResult(reply.result,envelope.battleId)));phase='verified';await persistNow();publish();return result;
       }catch(error){phase='provisional-terminal';await persistNow();publish();throw error;}
       finally{finalizePromise=null;}
     })();return finalizePromise;

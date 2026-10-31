@@ -1,6 +1,7 @@
 import {validateResourceManifestV1,selectResourcePacksV1,planAtomicResourceActivationV1}
   from '../assets/ResourceManifestV1.js';
 import {c15Sha256Hex,c15CanonicalJson} from './C15Crypto.js';
+import {c15StandaloneArrayBuffer} from './C15Rc1bStore.js';
 
 const DESCRIPTOR_VERSION='c15-resource-pack-descriptor-v1';
 const record=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
@@ -61,14 +62,14 @@ async function downloadResumable({url,sizeBytes,store,key,fetchImpl=fetch,maxRes
       while(true){const {done,value}=await reader.read();if(done)break;if(!(value instanceof Uint8Array)||value.length===0)continue;
         parts.push(value);length+=value.length;if(length>sizeBytes)throw new Error('C15 resource exceeded declared size');
         if(length-lastPersist>=262144){const merged=new Uint8Array(length);let offset=0;for(const part of parts){merged.set(part,offset);offset+=part.length;}
-          parts.splice(0,parts.length,merged);await store.put('partials',key,{bytes:merged.buffer,updatedAtMs:Date.now()});lastPersist=length;}
+          parts.splice(0,parts.length,merged);await store.put('partials',key,{bytes:c15StandaloneArrayBuffer(merged),updatedAtMs:Date.now()});lastPersist=length;}
       }
       const merged=new Uint8Array(length);let offset=0;for(const part of parts){merged.set(part,offset);offset+=part.length;}bytes=merged;
     }else{
       const incoming=new Uint8Array(await response.arrayBuffer());const merged=new Uint8Array(bytes.length+incoming.length);
       merged.set(bytes);merged.set(incoming,bytes.length);bytes=merged;
     }
-    await store.put('partials',key,{bytes:bytes.buffer,updatedAtMs:Date.now()});
+    await store.put('partials',key,{bytes:c15StandaloneArrayBuffer(bytes),updatedAtMs:Date.now()});
   }
   if(bytes.length!==sizeBytes)throw new Error('C15 resource download incomplete');
   return bytes;
@@ -90,7 +91,7 @@ async function downloadPack({pack,store,fetchImpl}){
     const key=partialKey('file',pack.id,pack.revision,file.path);
     const bytes=await downloadResumable({url:file.url,sizeBytes:file.sizeBytes,store,key,fetchImpl});
     if(await c15Sha256Hex(bytes)!==file.sha256)throw new TypeError(`C15 resource SHA mismatch: ${file.path}`);
-    await store.put('files',fileKey(pack.id,pack.revision,file.path),{bytes:bytes.buffer,
+    await store.put('files',fileKey(pack.id,pack.revision,file.path),{bytes:c15StandaloneArrayBuffer(bytes),
       sha256:file.sha256,sizeBytes:file.sizeBytes,contentType:file.contentType,verifiedAtMs:Date.now()});
     await store.remove('partials',key);files.push({path:file.path,sha256:file.sha256,sizeBytes:file.sizeBytes,contentType:file.contentType});
   }

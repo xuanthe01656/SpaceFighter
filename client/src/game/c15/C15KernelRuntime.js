@@ -16,6 +16,18 @@ const freeze=x=>{if(x&&typeof x==='object'){for(const value of Object.values(x))
 const seal=x=>{const out=freeze(x);states.add(out);return out;};
 const check=x=>{if(!record(x)||!states.has(x))throw new TypeError('C15 kernel runtime state invalid');};
 const phase=value=>value==='lab-clear'?'local-clear':value==='lab-defeat'?'local-defeat':'active';
+function cloneTransport(value,path='root'){
+  if(value===null||typeof value==='string'||typeof value==='boolean')return value;
+  if(typeof value==='number'){
+    if(!Number.isFinite(value))throw Object.assign(new TypeError(`C15 transport number invalid at ${path}`),{code:'C15_TRANSPORT_CLONE_INVALID'});
+    return value;
+  }
+  if(Array.isArray(value))return value.map((item,index)=>cloneTransport(item,`${path}[${index}]`));
+  if(record(value)){
+    const out={};for(const [key,item] of Object.entries(value))out[key]=cloneTransport(item,`${path}.${key}`);return out;
+  }
+  throw Object.assign(new TypeError(`C15 transport value invalid at ${path}`),{code:'C15_TRANSPORT_CLONE_INVALID'});
+}
 
 export function openC15KernelRuntime({genesis,runtime}={}){
   const view=parseC15CommercialGenesis(genesis);
@@ -23,9 +35,9 @@ export function openC15KernelRuntime({genesis,runtime}={}){
     throw new TypeError('C15 local runtime envelope invalid');
   // JSON transport and IndexedDB remove Object.freeze markers. Rehydrate the
   // HMAC-bound contracts before passing them into the deterministic kernel.
-  const snapshot=freeze(structuredClone(runtime.snapshot));
-  const encounter=freeze(structuredClone(runtime.encounter));
-  const policy=freeze(structuredClone(runtime.policy));
+  const snapshot=freeze(cloneTransport(runtime.snapshot,'runtime.snapshot'));
+  const encounter=freeze(cloneTransport(runtime.encounter,'runtime.encounter'));
+  const policy=freeze(cloneTransport(runtime.policy,'runtime.policy'));
   if(snapshot.snapshotHash!==genesis.snapshotHash||snapshot.loadoutHash!==genesis.loadoutHash
     ||snapshot.context?.battleId!==genesis.battleId||snapshot.context?.uid!==genesis.uid
     ||snapshot.context?.sessionId!==genesis.sessionId||encounter.snapshotHash!==genesis.snapshotHash)
@@ -33,7 +45,7 @@ export function openC15KernelRuntime({genesis,runtime}={}){
   const journal=openInputJournal({uid:genesis.uid,sessionId:genesis.sessionId,battleId:genesis.battleId,
     rulesVersion:snapshot.context.rulesVersion,loadoutHash:snapshot.loadoutHash,issuedAtMs:genesis.issuedAtMs});
   const run=openCombatVerticalSlice({snapshot,journal,policy,encounter});
-  return seal({version:'c15-browser-kernel-runtime-v1',genesis:view,rawGenesis:freeze(structuredClone(genesis)),
+  return seal({version:'c15-browser-kernel-runtime-v1',genesis:view,rawGenesis:freeze(cloneTransport(genesis,'genesis')),
     run,tick:0,terminal:false,provisionalPhase:'active'});
 }
 export function advanceC15KernelRuntime(state,input){
