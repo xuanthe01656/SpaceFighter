@@ -9,8 +9,14 @@ import C15LocalAlpha1 from '../C15LocalAlpha1/index.jsx';
 export default function CampaignEngine(props) {
   const data=props.gsRef?.current?.campaignData;
   const progress=data?.progress||{};
-  const c15Enabled=import.meta.env.VITE_C15_RC1B_ENABLED==='true'&&Boolean(auth.currentUser)
+  const c15Eligible=import.meta.env.VITE_C15_RC1B_ENABLED==='true'&&Boolean(auth.currentUser)
     &&Number(progress.currentPlanet||1)===1&&Number(progress.selectedStage||1)===1;
+  // Pin the engine lane for this mounted battle screen. RC3 settlement refreshes
+  // canonical campaign progress (and may unlock/select stage 2), but that state
+  // update must never replace an active/terminal C15 screen with the legacy
+  // Campaign engine before the player explicitly presses CONTINUE.
+  const c15LaneRef=useRef(c15Eligible);
+  const c15Enabled=c15LaneRef.current;
   return c15Enabled
     ? <C15LocalAlpha1 setScreen={props.setScreen} lang={props.lang} refreshCloudProfile={props.refreshCloudProfile}/>
     : <LegacyCampaignEngine {...props}/>;

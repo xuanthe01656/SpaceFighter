@@ -32,6 +32,7 @@ export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=
     view:null,fps:null,fault:null});
   const [continuing,setContinuing]=useState(false);
   const [claiming,setClaiming]=useState(false);
+  const [retryingClaim,setRetryingClaim]=useState(false);
   useEffect(()=>{
     if(!profileId)return undefined;
     let cancelled=false,unsubscribe=()=>{};
@@ -95,7 +96,7 @@ export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=
   const continueVerified=async()=>{if(continuing)return;setContinuing(true);try{
       await sessionRef.current?.completeVerified();setScreen('stage_select');
     }catch(error){setContinuing(false);toast.error(error?.message||'Unable to close verified battle');}};
-  const claimVerifiedReward=async()=>{if(claiming)return;setClaiming(true);try{
+  const claimVerifiedReward=async()=>{if(claiming||retryingClaim)return;setClaiming(true);try{
       const response=await sessionRef.current?.claimVerifiedReward();
       try{await refreshCloudProfile();}
       catch(_refreshError){toast.error(lang==='vi'?'Đã cấp thưởng nhưng chưa thể làm mới hồ sơ. Hãy mở lại HQ.':'Reward settled, but profile refresh failed. Reopen HQ.');}
@@ -103,6 +104,13 @@ export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=
         ?(lang==='vi'?'Phần thưởng đã được quyết toán trước đó.':'Reward already settled')
         :(lang==='vi'?'Phần thưởng đã được xác minh và quyết toán.':'Verified reward settled'));
     }catch(error){toast.error(error?.message||'Unable to settle verified reward');}finally{setClaiming(false);}};
+  const retryDuplicateClaim=async()=>{if(claiming||retryingClaim)return;setRetryingClaim(true);try{
+      const response=await sessionRef.current?.retryVerifiedRewardClaim();
+      try{await refreshCloudProfile();}catch(_refreshError){}
+      toast.success(response?.duplicate
+        ?(lang==='vi'?'Đã xác nhận claim trùng: không cộng thưởng lần hai.':'Duplicate claim verified: no second reward')
+        :(lang==='vi'?'Phản hồi duplicate không hợp lệ.':'Duplicate response invalid'));
+    }catch(error){toast.error(error?.message||'Unable to verify duplicate claim');}finally{setRetryingClaim(false);}};
   const exportTelemetry=async()=>{try{const report=telemetryRef.current?.report();if(!report)throw new Error('No control telemetry yet');
       await navigator.clipboard.writeText(JSON.stringify(report,null,2));toast.success('Đã sao chép Control Feel JSON');
     }catch(error){toast.error(error?.message||'Không thể xuất Control Feel JSON');}};
@@ -141,11 +149,13 @@ export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=
             {ui.view?.outcome&&<><b>RC2 SIGNED OUTCOME</b><br/><small>{ui.view.outcome.outcomeDigest.slice(0,16)}…</small><br/></>}
             {settlement?<><b>RC3 SETTLEMENT VERIFIED</b><br/>
               <small>+{settlement.receipt.coins} coins · +{settlement.receipt.experience} XP · +{settlement.receipt.stars} star</small><br/>
-              <small>{settlement.receipt.receiptDigest.slice(0,16)}…</small><br/></>
+              <small>{settlement.receipt.receiptDigest.slice(0,16)}…</small><br/>
+              {settlement.duplicate===true&&<><small>DUPLICATE CLAIM VERIFIED · NO SECOND REWARD</small><br/></>}
+              <button disabled={claiming||retryingClaim} onClick={retryDuplicateClaim}>{retryingClaim?'RETRYING…':'CHECK DUPLICATE CLAIM'}</button><br/></>
               :rc3Enabled()?<><button disabled={claiming} onClick={claimVerifiedReward}>{claiming?'CLAIMING…':'CLAIM VERIFIED REWARD'}</button><br/>
                 <small>{lang==='vi'?'Chỉ staging allowlist; production rewards vẫn tắt.':'Staging allowlist only; production rewards remain off.'}</small><br/></>
               :<>{lang==='vi'?'RC1C/RC2 chưa cấp thưởng.':'RC1C/RC2 remains non-economic.'}<br/></>}
-            <button disabled={continuing||claiming} onClick={continueVerified}>{continuing?'CLOSING…':'CONTINUE'}</button></>}
+            <button disabled={continuing||claiming||retryingClaim} onClick={continueVerified}>{continuing?'CLOSING…':'CONTINUE'}</button></>}
           {ui.status==='error'&&<><b>{rc3Enabled()?'RC3 ERROR':'RC1C ERROR'}</b><br/>{ui.fault}</>}
         </div>
       </div>}

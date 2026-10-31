@@ -53,6 +53,7 @@ function validateOutcome(value,battleId){
 function validateSettlement(value,battleId,outcomeDigest){
   if(value===null||value===undefined)return null;
   if(!record(value)||value.version!=='c15-rc3-settlement-v1'||value.battleId!==battleId
+    ||typeof value.duplicate!=='boolean'
     ||value.stagingOnly!==true||value.productionSettlementEnabled!==false||value.productionCloudRewards!==false
     ||!record(value.receipt)||value.receipt.version!=='c15-rc3-settlement-receipt-v1'
     ||value.receipt.battleId!==battleId||value.receipt.outcomeDigest!==outcomeDigest
@@ -182,17 +183,27 @@ export async function openOrResumeC15Rc1bSession({uid,quality='mobile-low',contr
         if(envelope.rc2OutcomeEnabled===true&&!outcome)throw new TypeError('C15 RC2 signed outcome missing');
         phase='verified';await persistNow();publish();return result;
       }catch(error){phase='provisional-terminal';await persistNow();publish();throw error;}finally{finalizePromise=null;}})();return finalizePromise;}
-  async function claimVerifiedReward(){
+  async function requestVerifiedSettlement({forceNetworkRetry=false}={}){
     if(disposed)throw new TypeError('C15 local session is closed');
     if(rc3Enabled!==true){const error=new Error('C15 RC3 settlement build flag is disabled');error.code='C15_RC3_CLIENT_DISABLED';throw error;}
     if(phase!=='verified'||!result||!outcome){const error=new Error('RC2 signed outcome is required before RC3 claim');
       error.code='C15_RC3_OUTCOME_REQUIRED';throw error;}
-    if(settlement)return settlement;
+    if(settlement&&!forceNetworkRetry)return settlement;
+    if(forceNetworkRetry&&!settlement){const error=new Error('An existing RC3 settlement is required before duplicate verification');
+      error.code='C15_RC3_SETTLEMENT_REQUIRED';throw error;}
+    const priorSettlement=settlement;
     settlementRequestId=settlementRequestId||uuidFactory();await persistNow();
     const reply=validateSettlement(await api.claimSettlement(uid,{battleId:envelope.battleId,
       outcomeDigest:outcome.outcomeDigest,requestId:settlementRequestId}),envelope.battleId,outcome.outcomeDigest);
+    if(forceNetworkRetry){
+      if(reply.duplicate!==true||reply.receipt.receiptDigest!==priorSettlement.receipt.receiptDigest
+        ||reply.receipt.mac!==priorSettlement.receipt.mac){const error=new Error('RC3 duplicate claim did not return the immutable original receipt');
+        error.code='C15_RC3_DUPLICATE_MISMATCH';throw error;}
+    }
     settlement=freeze(cloneC15PersistentValue(reply));await persistNow();publish();return settlement;
   }
+  async function claimVerifiedReward(){return requestVerifiedSettlement();}
+  async function retryVerifiedRewardClaim(){return requestVerifiedSettlement({forceNetworkRetry:true});}
   async function retryNetwork(){if(disposed)return null;await uploader.pump();if(kernel.terminal)return finalizeWhenOnline();return null;}
   async function suspend(){if(disposed)return view();await persistNow();return view();}
   async function clearLocalSession(){if(disposed)return;disposed=true;uploader.dispose();
@@ -205,7 +216,7 @@ export async function openOrResumeC15Rc1bSession({uid,quality='mobile-low',contr
   function subscribe(fn){if(typeof fn!=='function')throw new TypeError('C15 subscriber invalid');subscribers.add(fn);fn(view());return()=>subscribers.delete(fn);}
   async function resolveResource(packId,path){return resolveC15ActiveResource({store,stageKey:'alpha-stage-1',packId,path});}
   await persistNow();publish();
-  return Object.freeze({advance,finalizeWhenOnline,claimVerifiedReward,retryNetwork,suspend,completeVerified,abandon,subscribe,resolveResource,
+  return Object.freeze({advance,finalizeWhenOnline,claimVerifiedReward,retryVerifiedRewardClaim,retryNetwork,suspend,completeVerified,abandon,subscribe,resolveResource,
     getView:view,getKernel:()=>kernel,getEnvelope:()=>envelope,getControlProfile:()=>envelope.controlProfile,
     dispose:()=>{disposed=true;uploader.dispose();subscribers.clear();}});
 }
