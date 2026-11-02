@@ -12,6 +12,7 @@ import {createC15JournalUploader} from './C15JournalUploader.js';
 import {openC15KernelRuntime,replayC15KernelRuntime,advanceC15KernelRuntime,c15KernelRuntimeView} from './C15KernelRuntime.js';
 import {C15_DEFAULT_CONTROL_PROFILE_ID,resolveC15ControlProfile,
   resolveC15ControlProfileForPolicy} from './C15ControlProfilesV1.js';
+import {c15ReleaseChannelFromImportMeta} from '../../config/C15ReleaseChannel.js';
 
 const VERSION='c15-rc1b-client-session-v1';
 const activeKey=uid=>`active:${uid}`;
@@ -22,7 +23,7 @@ const record=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
 const freeze=x=>{if(x&&typeof x==='object'){for(const value of Object.values(x))freeze(value);Object.freeze(x);}return x;};
 const appVersion=()=>String(import.meta.env?.VITE_APP_VERSION||'1.2.1');
 const defaultControlProfile=()=>String(import.meta.env?.VITE_C15_CONTROL_PROFILE_ID||C15_DEFAULT_CONTROL_PROFILE_ID);
-const rc3BuildEnabled=()=>String(import.meta.env?.VITE_C15_RC3_ENABLED||'false')==='true';
+const settlementClientBuildEnabled=()=>c15ReleaseChannelFromImportMeta().settlementClientEnabled;
 let defaultApiPromise=null;
 async function loadDefaultApi(){
   if(!defaultApiPromise)defaultApiPromise=import('../../services/gameApi.js').then(mod=>Object.freeze({
@@ -92,7 +93,7 @@ function persisted({uid,requestId,envelope,frames,journal,phase,result=null,outc
 
 export async function openOrResumeC15Rc1bSession({uid,quality='mobile-low',controlProfileId=defaultControlProfile(),
   store=createC15BrowserStore(),online=()=>globalThis.navigator?.onLine!==false,onChange=()=>{},api=null,
-  fetchImpl=globalThis.fetch,clock=Date.now,uuidFactory=()=>crypto.randomUUID(),rc3Enabled=rc3BuildEnabled()}={}){
+  fetchImpl=globalThis.fetch,clock=Date.now,uuidFactory=()=>crypto.randomUUID(),rc3Enabled=settlementClientBuildEnabled()}={}){
   if(typeof uid!=='string'||uid.length<1||!['mobile-low','mobile-high'].includes(quality)
     ||!store||typeof onChange!=='function'||typeof online!=='function'||typeof fetchImpl!=='function'
     ||typeof clock!=='function'||typeof uuidFactory!=='function')throw new TypeError('C15 client session configuration invalid');

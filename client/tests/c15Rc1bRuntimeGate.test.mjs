@@ -33,7 +33,8 @@ test('C15 local combat remains authority-free; RC3 claim is explicit staging tra
   for(const file of ['client/src/components/C15LocalAlpha1/C15LocalRenderer.js','client/src/game/c15/C15KernelRuntime.js']){
     const source=read(file);assert.doesNotMatch(source,/battle\.finish|wallet|claimSettlement|verifiedSettlement|productionOutcomeAuthority|cloudRewards\s*:\s*true/);}
   const session=read('client/src/game/c15/C15Rc1bSession.js');
-  assert.match(session,/independent server finalize/);assert.match(session,/VITE_C15_RC3_ENABLED/);
+  assert.match(session,/independent server finalize/);assert.match(session,/c15ReleaseChannelFromImportMeta/);
+  assert.match(session,/settlementClientEnabled/);assert.doesNotMatch(session,/const rc3BuildEnabled=.*VITE_C15_RC3_ENABLED/);
   assert.match(session,/claimC15Rc3Settlement/);assert.match(session,/productionSettlementEnabled!==false/);
   assert.match(session,/productionCloudRewards!==false/);assert.match(session,/nonEconomic:true/);
   assert.doesNotMatch(session,/wallet\.(coins|diamonds)\s*[+\-]=/);

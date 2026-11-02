@@ -7,6 +7,7 @@ import {resolveC15ReleaseChannel,C15_BUILD_CHANNEL_STAGING_QA,C15_BUILD_CHANNEL_
 const here=path.dirname(fileURLToPath(import.meta.url));
 const screen=fs.readFileSync(path.resolve(here,'../src/components/C15LocalAlpha1/index.jsx'),'utf8');
 const api=fs.readFileSync(path.resolve(here,'../src/services/gameApi.js'),'utf8');
+const session=fs.readFileSync(path.resolve(here,'../src/game/c15/C15Rc1bSession.js'),'utf8');
 
 test('RC4 build channels are strict and production defaults fail closed',()=>{
   const qa=resolveC15ReleaseChannel({VITE_SF_BUILD_CHANNEL:C15_BUILD_CHANNEL_STAGING_QA,VITE_C15_RC3_ENABLED:'true'});
@@ -29,4 +30,8 @@ test('RC4 release UI hides diagnostic controls while staging retains explicit QA
   assert.match(screen,/releaseChannel\.qaControls&&profileId===null/);
   assert.match(api,/'X-SF-App-Version':releaseChannel\.appVersion/);
   assert.match(api,/'X-SF-Build-Channel':releaseChannel\.id/);
+  assert.match(session,/c15ReleaseChannelFromImportMeta/);
+  assert.match(session,/settlementClientBuildEnabled=.*settlementClientEnabled/);
+  assert.match(session,/rc3Enabled=settlementClientBuildEnabled\(\)/);
+  assert.doesNotMatch(session,/const rc3BuildEnabled=.*VITE_C15_RC3_ENABLED/);
 });
