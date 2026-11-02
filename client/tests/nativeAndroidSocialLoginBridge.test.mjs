@@ -48,10 +48,10 @@ test('Existing immersive mobile experience remains enabled', () => {
     assert.ok(java.includes(marker), 'Missing: ' + marker);
   }
 });
-test('Android native CI runs only after main push or explicit manual dispatch', () => {
-  assert.match(workflow, /^on:\s*\n  push:\s*\n    branches:\s*\n      - main/m);
-  assert.match(workflow, /^  workflow_dispatch:/m);
-  assert.doesNotMatch(workflow, /^  (?:pull_request|schedule):/m);
+test('Android native build is explicit manual-only after the single RC4 full gate', () => {
+  assert.match(workflow, /^on:\s*\n  workflow_dispatch:/m);
+  assert.doesNotMatch(workflow, /^  (?:push|pull_request|schedule):/m);
+  assert.match(workflow, /npm run gate:c15-rc4:fast/);
   assert.match(workflow, /permissions:\s*\n\s*contents: read/);
 });
 test('Android native smoke uses locked dependencies, sync and actual Gradle compile', () => {
@@ -61,7 +61,7 @@ test('Android native smoke uses locked dependencies, sync and actual Gradle comp
   assert.match(workflow, /npm ci --no-audit --no-fund/);
   assert.match(workflow, /npm run build:mobile/);
   assert.match(workflow, /npx --no-install cap sync android/);
-  assert.match(workflow, /gradle --no-daemon --stacktrace :app:assembleDebug/);
+  assert.match(workflow, /gradle --no-daemon --stacktrace :app:assembleDebug :app:bundleDebug/);
 });
 test('Native workflow does not automatically distribute builds', () => {
   assert.doesNotMatch(workflow, /publish|deploy|google-play|fastlane|upload_to_play|gradle[^\n]*publish/i);

@@ -1,15 +1,6 @@
 name: SpaceFighter C15-RC3 Settlement Staging Gate
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'client/**'
-      - 'server/**'
-      - 'tools/**'
-      - 'security/**'
-      - 'Dockerfile'
-      - '.github/workflows/c15-rc3-gate.yml'
 concurrency:
   group: c15-rc3-${{ github.ref }}
   cancel-in-progress: true

@@ -8,12 +8,14 @@ import {openC15ControlIntent,addC15PointerDelta,sampleC15ControlTick,releaseC15C
 import {createC15ControlTelemetry} from '../../game/c15/C15ControlTelemetry.js';
 import {C15_ARCADE_CONTROL_PROFILE_ID,C15_CURRENT_CONTROL_PROFILE_ID} from '../../game/c15/C15ControlProfilesV1.js';
 import {c15KernelInputConfig} from '../../game/c15/C15KernelRuntime.js';
+import {c15ReleaseChannelFromImportMeta} from '../../config/C15ReleaseChannel.js';
 
 const surface={position:'absolute',inset:0,background:'#020814',overflow:'hidden',zIndex:60};
 const chip={background:'rgba(3,15,30,.78)',border:'1px solid #2a6680',borderRadius:8,padding:'6px 9px',color:'#d9fbff'};
-const abQa=()=>String(import.meta.env?.VITE_C15_CONTROL_AB_QA||'false')==='true';
+const releaseChannel=c15ReleaseChannelFromImportMeta();
+const abQa=()=>releaseChannel.qaControls&&String(import.meta.env?.VITE_C15_CONTROL_AB_QA||'false')==='true';
 const envProfile=()=>String(import.meta.env?.VITE_C15_CONTROL_PROFILE_ID||C15_ARCADE_CONTROL_PROFILE_ID);
-const rc3Enabled=()=>String(import.meta.env?.VITE_C15_RC3_ENABLED||'false')==='true';
+const rc3Enabled=()=>releaseChannel.settlementClientEnabled;
 export function formatC15Rc1bFault(error,fallback='C15_RC1B_ERROR'){
   if(error?.code===25||error?.name==='DataCloneError')
     return 'C15_IDB_DATA_CLONE · Local session/resource cache could not be stored';
@@ -119,18 +121,20 @@ export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=
     <canvas ref={canvasRef} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}
       style={{width:'100%',height:'100%',display:'block',touchAction:'none'}}/>
     <div style={{position:'absolute',top:'calc(env(safe-area-inset-top) + 10px)',left:10,right:10,display:'flex',gap:7,flexWrap:'wrap',fontSize:12,pointerEvents:'none'}}>
-      <span style={chip}>{rc3Enabled()?'C15 RC3 · LOCAL 30Hz · STAGING ECONOMY':'C15 RC1C · LOCAL 30Hz · NON-ECONOMIC'}</span>
-      {profile&&<span style={chip}>{profile.id}</span>}
+      <span style={chip}>{releaseChannel.qaControls
+        ?(rc3Enabled()?'C15 RC3 · LOCAL 30Hz · STAGING ECONOMY':'C15 RC1C · LOCAL 30Hz · NON-ECONOMIC')
+        :(releaseChannel.production?'SPACEFIGHTER · VERIFIED':'C15 RC4 · RELEASE CANDIDATE')}</span>
+      {releaseChannel.qaControls&&profile&&<span style={chip}>{profile.id}</span>}
       {k&&<><span style={chip}>HP {Math.max(0,Math.round(k.hp))}/{Math.round(k.maxHp)}</span><span style={chip}>WAVE {k.wave}/{k.wavesTotal}</span>
-        <span style={chip}>KILLS {k.kills}</span><span style={chip}>TICK {k.tick}</span></>}
-      {ui.fps&&<span style={chip}>{ui.fps} FPS</span>}
-      {t&&<span style={chip}>UPLOAD {t.summary.uploadedThroughTick}/{t.summary.ticks}{t.online?'':' · OFFLINE'}</span>}
+        <span style={chip}>KILLS {k.kills}</span>{releaseChannel.showDiagnosticHud&&<span style={chip}>TICK {k.tick}</span>}</>}
+      {releaseChannel.showDiagnosticHud&&ui.fps&&<span style={chip}>{ui.fps} FPS</span>}
+      {releaseChannel.showDiagnosticHud&&t&&<span style={chip}>UPLOAD {t.summary.uploadedThroughTick}/{t.summary.ticks}{t.online?'':' · OFFLINE'}</span>}
     </div>
     <button onClick={retreat} style={{position:'absolute',left:14,bottom:'calc(env(safe-area-inset-bottom) + 15px)',zIndex:5,
       padding:'9px 14px',borderRadius:7,border:'1px solid #5de8ff',background:'rgba(0,0,0,.65)',color:'#bdf9ff'}}>◀ {lang==='vi'?'RÚT LUI':'RETREAT'}</button>
-    {profile&&<button onClick={exportTelemetry} style={{position:'absolute',right:14,bottom:'calc(env(safe-area-inset-bottom) + 15px)',zIndex:5,
+    {releaseChannel.showControlExport&&profile&&<button onClick={exportTelemetry} style={{position:'absolute',right:14,bottom:'calc(env(safe-area-inset-bottom) + 15px)',zIndex:5,
       padding:'9px 12px',borderRadius:7,border:'1px solid #5de8ff',background:'rgba(0,0,0,.65)',color:'#bdf9ff'}}>CONTROL JSON</button>}
-    {profileId===null&&<div style={{position:'absolute',inset:0,display:'grid',placeItems:'center',background:'rgba(1,6,15,.88)'}}>
+    {releaseChannel.qaControls&&profileId===null&&<div style={{position:'absolute',inset:0,display:'grid',placeItems:'center',background:'rgba(1,6,15,.88)'}}>
       <div style={{...chip,maxWidth:430,textAlign:'center',fontSize:14,padding:18}}><b>RC1C CONTROL A/B</b><br/><br/>
         <button onClick={()=>setProfileId(C15_CURRENT_CONTROL_PROFILE_ID)}>A · CURRENT BALANCED</button>{' '}
         <button onClick={()=>setProfileId(C15_ARCADE_CONTROL_PROFILE_ID)}>B · ARCADE RESPONSIVE</button><br/><br/>
@@ -146,17 +150,20 @@ export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=
             {lang==='vi'?'Kết quả tạm thời; cần mạng để server xác minh.':'Provisional result; network is required for server verification.'}<br/>
             <button onClick={retry}>RETRY VERIFY</button></>}
           {ui.status==='verified'&&<><b>{ui.view?.result?.phase==='rc1-verified-clear'?'SERVER VERIFIED CLEAR':'SERVER VERIFIED DEFEAT'}</b><br/>
-            {ui.view?.outcome&&<><b>RC2 SIGNED OUTCOME</b><br/><small>{ui.view.outcome.outcomeDigest.slice(0,16)}…</small><br/></>}
-            {settlement?<><b>RC3 SETTLEMENT VERIFIED</b><br/>
+            {ui.view?.outcome&&<><b>{releaseChannel.qaControls?'RC2 SIGNED OUTCOME':'SERVER RESULT VERIFIED'}</b><br/>
+              {releaseChannel.showDigestPrefixes&&<><small>{ui.view.outcome.outcomeDigest.slice(0,16)}…</small><br/></>}</>}
+            {settlement?<><b>{releaseChannel.qaControls?'RC3 SETTLEMENT VERIFIED':'REWARD RECEIVED'}</b><br/>
               <small>+{settlement.receipt.coins} coins · +{settlement.receipt.experience} XP · +{settlement.receipt.stars} star</small><br/>
-              <small>{settlement.receipt.receiptDigest.slice(0,16)}…</small><br/>
-              {settlement.duplicate===true&&<><small>DUPLICATE CLAIM VERIFIED · NO SECOND REWARD</small><br/></>}
-              <button disabled={claiming||retryingClaim} onClick={retryDuplicateClaim}>{retryingClaim?'RETRYING…':'CHECK DUPLICATE CLAIM'}</button><br/></>
-              :rc3Enabled()?<><button disabled={claiming} onClick={claimVerifiedReward}>{claiming?'CLAIMING…':'CLAIM VERIFIED REWARD'}</button><br/>
-                <small>{lang==='vi'?'Chỉ staging allowlist; production rewards vẫn tắt.':'Staging allowlist only; production rewards remain off.'}</small><br/></>
-              :<>{lang==='vi'?'RC1C/RC2 chưa cấp thưởng.':'RC1C/RC2 remains non-economic.'}<br/></>}
+              {releaseChannel.showDigestPrefixes&&<><small>{settlement.receipt.receiptDigest.slice(0,16)}…</small><br/></>}
+              {releaseChannel.qaControls&&settlement.duplicate===true&&<><small>DUPLICATE CLAIM VERIFIED · NO SECOND REWARD</small><br/></>}
+              {releaseChannel.showDuplicateButton&&<><button disabled={claiming||retryingClaim} onClick={retryDuplicateClaim}>{retryingClaim?'RETRYING…':'CHECK DUPLICATE CLAIM'}</button><br/></>}</>
+              :rc3Enabled()?<><button disabled={claiming} onClick={claimVerifiedReward}>{claiming?'CLAIMING…':(releaseChannel.qaControls?'CLAIM VERIFIED REWARD':'RECEIVE REWARD')}</button><br/>
+                {releaseChannel.qaControls&&<><small>{lang==='vi'?'Chỉ staging allowlist; production rewards vẫn tắt.':'Staging allowlist only; production rewards remain off.'}</small><br/></>}</>
+              :<>{releaseChannel.production
+                ?(lang==='vi'?'Phần thưởng trực tuyến hiện đang tạm khóa.':'Online rewards are currently unavailable.')
+                :(lang==='vi'?'Ứng viên phát hành chưa bật cấp thưởng.':'Release candidate rewards are not enabled.')}<br/></>}
             <button disabled={continuing||claiming||retryingClaim} onClick={continueVerified}>{continuing?'CLOSING…':'CONTINUE'}</button></>}
-          {ui.status==='error'&&<><b>{rc3Enabled()?'RC3 ERROR':'RC1C ERROR'}</b><br/>{ui.fault}</>}
+          {ui.status==='error'&&<><b>{releaseChannel.qaControls?(rc3Enabled()?'RC3 ERROR':'RC1C ERROR'):'BATTLE ERROR'}</b><br/>{ui.fault}</>}
         </div>
       </div>}
   </div>;

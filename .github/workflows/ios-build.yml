@@ -47,6 +47,13 @@ jobs:
       VITE_FIREBASE_MEASUREMENT_ID: G-Y5CS812JKF
       # Staging only. GAME_API_ENABLED must remain false until backend QA is complete.
       VITE_GAME_API_URL: https://spacefighter-api-staging-528039759292.asia-southeast1.run.app/api/v1
+      VITE_SF_BUILD_CHANNEL: release-candidate
+      VITE_APP_VERSION: ${{ inputs.app_version }}
+      VITE_C15_RC1B_ENABLED: 'true'
+      VITE_C15_RC3_ENABLED: 'false'
+      VITE_C15_RC4_CANARY_SETTLEMENT_ENABLED: 'false'
+      VITE_C15_CONTROL_AB_QA: 'false'
+      VITE_C15_CONTROL_PROFILE_ID: arcade-responsive-v1
 
     steps:
       - name: Checkout source
@@ -112,7 +119,7 @@ jobs:
       - name: Client regression, gameplay and security gates
         run: |
           set -euo pipefail
-          npm test
+          npm run gate:c15-rc4:fast
           npm run check:gameplay
           npm run check:safety
 

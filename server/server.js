@@ -34,7 +34,7 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
     if (origin && (allowedOrigins.includes(origin) || (options.allowLocalOrigin && /^(https?:\/\/localhost:\d+|capacitor:\/\/localhost|https:\/\/localhost)$/.test(origin)))) {
       res.setHeader('Access-Control-Allow-Origin',origin);
       res.setHeader('Vary','Origin');
-      res.setHeader('Access-Control-Allow-Headers','Authorization, Content-Type, X-Game-Session');
+      res.setHeader('Access-Control-Allow-Headers','Authorization, Content-Type, X-Game-Session, X-SF-App-Version, X-SF-Build-Channel');
       res.setHeader('Access-Control-Allow-Methods','GET, POST, OPTIONS');
       // The preflight cache is independent of the HTTP response cache. Keep
       // ordinary API responses no-store and cache ONLY the allowlisted C12
@@ -147,10 +147,18 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
   // C15-RC3: staging-only atomic claim of a server-stored RC2 trusted outcome.
   // The request never contains reward amounts and production settlement stays OFF.
   const c15Rc3Ready=options.c15Rc3SettlementEnabled===true&&Boolean(options.c15Rc3SettlementService?.enabled);
+  const c15Rc4Gate=options.c15Rc4ReleaseGate;
+  const c15Rc4Log=typeof options.c15Rc4LogSink==='function'?options.c15Rc4LogSink:event=>console.info(JSON.stringify(event));
   app.post('/api/v1/c15/settlement/claim',(req,res,next)=>{
     if(!c15Rc3Ready)return res.status(503).json({ok:false,code:'C15_RC3_SETTLEMENT_DISABLED'});
-    return withAuth((r,user)=>options.c15Rc3SettlementService.settle(
-      user.uid,r.get('x-game-session'),r.body))(req,res,next);
+    return withAuth(async(r,user)=>{const started=performance.now();let statusCode=200,outcome='ok',reply;
+      try{
+        if(c15Rc4Gate?.enabled)c15Rc4Gate.authorize({uid:user.uid,appVersion:r.get('x-sf-app-version'),buildChannel:r.get('x-sf-build-channel')});
+        reply=await options.c15Rc3SettlementService.settle(user.uid,r.get('x-game-session'),r.body);return reply;
+      }catch(error){outcome='rejected';statusCode=classifyGameApiError(error).status;throw error;}
+      finally{if(c15Rc4Gate?.enabled){try{c15Rc4Log(c15Rc4Gate.event({uid:user.uid,battleId:r.body?.battleId,
+          outcomeDigest:r.body?.outcomeDigest,statusCode,outcome,duplicate:reply?.duplicate===true,latencyMs:performance.now()-started}));}catch(_){/* observability only */}}}
+    })(req,res,next);
   });
   // C7-A: isolated, default-OFF, allowlisted QA replay. NEVER legacy battle.start/finish.
   // No energy, rewards, missions, progress or economy mutation in these routes.
@@ -234,7 +242,7 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
 async function start() {
   const port=Number(process.env.PORT||3000);
   if(!Number.isInteger(port)||port<1||port>65535) throw new Error('Invalid PORT');
-  let service=null,auth=null,admin=null,accountDeletionService=null,qaBattleService=null,qaVerifierService=null,candidateService=null,c15Rc1bService=null,c15Rc3SettlementService=null,c15ResourceCatalog=null;
+  let service=null,auth=null,admin=null,accountDeletionService=null,qaBattleService=null,qaVerifierService=null,candidateService=null,c15Rc1bService=null,c15Rc3SettlementService=null,c15Rc4ReleaseGate=null,c15ResourceCatalog=null;
   if(process.env.GAME_API_ENABLED==='true') {
     admin=require('firebase-admin');
     if(!admin.apps.length) {
@@ -304,6 +312,15 @@ async function start() {
         console.error('C15 RC3 staging settlement disabled: invalid staged configuration');
       }
     }
+    if(process.env.GAME_C15_RC4_RELEASE_GATE_ENABLED==='true'){
+      try{
+        const {parseC15Rc4ReleaseGateConfig,createC15Rc4ReleaseGate}=require('./lib/c15Rc4ReleaseGateV1.cjs');
+        c15Rc4ReleaseGate=createC15Rc4ReleaseGate(parseC15Rc4ReleaseGateConfig(process.env));
+      }catch(_error){
+        console.error('C15 RC4 release gate configuration invalid; startup aborted');
+        throw _error;
+      }
+    }
     if (process.env.GAME_ACCOUNT_DELETION_ENABLED==='true' &&
         process.env.GAME_ACCOUNT_DELETION_WORKER_READY==='true') {
       accountDeletionService=createAccountDeletionService({db:admin.firestore(),auth});
@@ -316,7 +333,7 @@ async function start() {
     candidateService,candidateEnabled:Boolean(candidateService),
     candidatePerfEnabled:process.env.GAME_C12_PERF_LOG_ENABLED==='true',
     c15Rc1bService,c15Rc1bEnabled:Boolean(c15Rc1bService),c15ResourceCatalog,
-    c15Rc3SettlementService,c15Rc3SettlementEnabled:Boolean(c15Rc3SettlementService),
+    c15Rc3SettlementService,c15Rc3SettlementEnabled:Boolean(c15Rc3SettlementService),c15Rc4ReleaseGate,
     allowLocalOrigin:process.env.NODE_ENV!=='production'});
   app.listen(port,'0.0.0.0',()=>console.log(`Space Fighter Phase 1 listening on ${port}; API ${service?'enabled':'disabled'}`));
 }

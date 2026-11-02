@@ -1,14 +1,6 @@
 name: SpaceFighter C15-RC1C Control Feel and RC2 Trusted Outcome Gate
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'client/**'
-      - 'server/**'
-      - 'tools/**'
-      - 'Dockerfile'
-      - '.github/workflows/c15-rc1c-rc2-gate.yml'
 concurrency:
   group: c15-rc1c-rc2-${{ github.ref }}
   cancel-in-progress: true

@@ -68,8 +68,12 @@ test('QA keystore is temporary, private and excluded from uploaded artifact', ()
   assert.match(workflow, /path\.chmod\(0o600\)/);
   assert.match(workflow, /Remove temporary QA signing keystore/);
   assert.match(workflow, /if: always\(\)/);
-  assert.match(workflow, /path: client\/android\/app\/build\/outputs\/apk\/debug\/app-debug\.apk/);
-  assert.doesNotMatch(workflow, /path:.*\.jks/);
+  const uploadSection = workflow.slice(
+    workflow.indexOf('Preserve debug APK for manual device QA'),
+    workflow.indexOf('Remove temporary QA signing keystore'),
+  );
+  assert.match(uploadSection, /path:\s*(?:\|\s*)?[\s\S]*client\/android\/app\/build\/outputs\/apk\/debug\/app-debug\.apk/);
+  assert.doesNotMatch(uploadSection, /\.jks/);
 });
 
 test('C12 Cloud QA is still manual-only, independent from legacy Cloud Battle', () => {
@@ -81,11 +85,12 @@ test('C12 Cloud QA is still manual-only, independent from legacy Cloud Battle', 
   assert.doesNotMatch(workflow, /^  pull_request:/m);
 });
 
-test('default push smoke and manual C12 share stable signing but no external delivery', () => {
-  assert.match(workflow, /^  push:\s*\n    branches:\s*\n      - main/m);
-  assert.match(workflow, /if: github\.ref == 'refs\/heads\/main'/);
+test('manual native candidates share stable QA signing without automatic delivery', () => {
+  assert.match(workflow, /^  workflow_dispatch:/m);
+  assert.doesNotMatch(workflow, /^  push:/m);
   assert.match(workflow, /cloud_qa_ui:\s*\n[\s\S]*default: false/);
-  assert.match(workflow, /github\.event_name == 'workflow_dispatch'/);
+  assert.match(workflow, /c15_rc4:\s*\n[\s\S]*default: false/);
+  assert.match(workflow, /npm run gate:c15-rc4:fast/);
   assert.doesNotMatch(workflow, /gradle[^\n]*publish/);
   assert.doesNotMatch(workflow, /firebase appdistribution|play\/publish|google-play/);
 });

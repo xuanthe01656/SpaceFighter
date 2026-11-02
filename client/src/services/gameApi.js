@@ -1,11 +1,13 @@
 import { auth } from '../firebase';
 import { secureStorage } from '../utils/storageHelper';
 import { assertSameAuthUser, retrySameAuthUser } from '../utils/authRequestGuards.mjs';
+import { c15ReleaseChannelFromImportMeta } from '../config/C15ReleaseChannel.js';
 
 // The only network path allowed to change an authenticated player's economy.
 // Never submit client wallet balances, earned items or reward amounts here.
 const customUrl = (import.meta.env.VITE_GAME_API_URL || '').replace(/\/$/,'');
 const BASE_URL = customUrl || '/api/v1';
+const releaseChannel=c15ReleaseChannelFromImportMeta();
 export class GameApiError extends Error {
   constructor(code, message, status = 0) { super(message); this.code = code; this.status = status; }
 }
@@ -21,7 +23,8 @@ async function callApi(path, body=null, {session=true,expectedUid=null}={}) {
   // after the UI has switched to user B.
   assertSameAuthUser(user.uid,auth.currentUser?.uid);
   if (expectedUid !== null) assertSameAuthUser(expectedUid,auth.currentUser?.uid);
-  const headers={Authorization:`Bearer ${token}`,Accept:'application/json'};
+  const headers={Authorization:`Bearer ${token}`,Accept:'application/json',
+    'X-SF-App-Version':releaseChannel.appVersion,'X-SF-Build-Channel':releaseChannel.id};
   let boundSession=null;
   if (body!==null) headers['Content-Type']='application/json';
   if (session) {

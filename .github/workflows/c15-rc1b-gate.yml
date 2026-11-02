@@ -1,14 +1,6 @@
 name: SpaceFighter C15-RC1B Local Runtime and Resource Delivery Gate
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'client/**'
-      - 'server/**'
-      - 'tools/**'
-      - 'Dockerfile'
-      - '.github/workflows/c15-rc1b-gate.yml'
 concurrency:
   group: c15-rc1b-${{ github.ref }}
   cancel-in-progress: true
