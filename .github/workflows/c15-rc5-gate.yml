@@ -1,17 +1,6 @@
 name: SpaceFighter C15-RC5 Android Input and Frame-Pacing Gate
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'client/**'
-      - 'server/**'
-      - 'tools/**'
-      - 'security/**'
-      - 'Dockerfile'
-      - '.github/workflows/c15-rc5-gate.yml'
-      - '.github/workflows/c15-rc4-gate.yml'
-      - '.github/workflows/android-native-smoke.yml'
 concurrency:
   group: c15-rc5-${{ github.ref }}
   cancel-in-progress: true
@@ -23,6 +12,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -36,10 +27,10 @@ jobs:
       - name: Install exact server dependencies
         working-directory: server
         run: npm ci --no-audit --no-fund
-      - name: Run the only full C15 main-push gate
+      - name: Run frozen RC5 manual audit gate
         working-directory: client
         run: npm run gate:c15-rc5
-      - name: Upload RC5 Android control evidence
+      - name: Upload frozen RC5 Android control evidence
         uses: actions/upload-artifact@v4
         with:
           name: spacefighter-c15-rc5-gate-report

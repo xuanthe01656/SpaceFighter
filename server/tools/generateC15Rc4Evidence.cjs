@@ -23,7 +23,7 @@ const badAfter=structuredClone(after);badAfter.wallet.coins=551;
 const mismatch=reconcileC15Rc4Settlement({outcome,receipt,operation,userBefore:before,userAfter:badAfter});
 const read=name=>fs.readFileSync(path.join(root,'.github/workflows',name),'utf8');
 const manualOnly=['c15-rc1b-gate.yml','c15-rc1c-rc2-gate.yml','c15-rc3-gate.yml'].every(name=>!/^\s*push:/m.test(read(name)));
-const android=read('android-native-smoke.yml'),rc4Workflow=read('c15-rc4-gate.yml'),rc5Workflow=read('c15-rc5-gate.yml'),phase=read('phase0-ci.yml');
+const android=read('android-native-smoke.yml'),releaseAndroid=read('android-release-candidate.yml'),rc4Workflow=read('c15-rc4-gate.yml'),rc5Workflow=read('c15-rc5-gate.yml'),rc6Workflow=read('c15-rc6-gate.yml'),phase=read('phase0-ci.yml');
 let gitHead='0'.repeat(40);try{gitHead=execFileSync('git',['-C',root,'rev-parse','HEAD'],{encoding:'utf8',stdio:['ignore','pipe','ignore']}).trim();}catch(_){const marker=path.join(root,'GIT_HEAD.txt');if(fs.existsSync(marker))gitHead=fs.readFileSync(marker,'utf8').trim();}
 const event=gate.event({uid:UID,battleId:outcome.battleId,outcomeDigest:outcome.outcomeDigest,statusCode:200,outcome:'ok',duplicate:false,latencyMs:12.34});
 const report={version:'c15-rc4-gate-report-v1',status:'PASS',generatedAt:new Date().toISOString(),gitHead,baselineTag:'c15-rc3-settlement-staging-pass',
@@ -31,8 +31,9 @@ const report={version:'c15-rc4-gate-report-v1',status:'PASS',generatedAt:new Dat
   releaseGate:{admitted:admitted.mode==='staging',killSwitchBlocked,closedCanary:true,minimumVersionEnforced:true,rawIdentityLogged:JSON.stringify(event).includes(UID)},
   reconciliation:{pass:reconciliation.status==='PASS',mismatchDetected:mismatch.status==='FAIL'},
   pipeline:{frozenGatesManualOnly:manualOnly&&!/^\s*push:/m.test(rc4Workflow),phasePushDisabled:!/^\s*push:/m.test(phase),
-    rc4ManualAuditOnly:!/^\s*push:/m.test(rc4Workflow),rc5SupersedingPushGate:/^\s*push:/m.test(rc5Workflow)&&/npm run gate:c15-rc5/.test(rc5Workflow),
-    androidManualOnly:!/^\s*push:/m.test(android),nativeKeepsFrozenRc4Lane:/c15_rc4:/.test(android)&&/arcade-responsive-v1/.test(android)},
+    rc4ManualAuditOnly:!/^\s*push:/m.test(rc4Workflow),rc5ManualAuditOnly:!/^\s*push:/m.test(rc5Workflow),
+    rc6SupersedingPushGate:/^\s*push:/m.test(rc6Workflow)&&/npm run gate:c15-rc6/.test(rc6Workflow),
+    androidManualOnly:!/^\s*push:/m.test(android)&&!/^\s*push:/m.test(releaseAndroid),nativeKeepsFrozenRc4Lane:/c15_rc4:/.test(android)&&/arcade-responsive-v1/.test(android)},
   safety:{productionSettlementEnabled:false,productionCloudRewards:false,c12Frozen:true,rc3BaselineFrozen:true}};
 if(!report.releaseGate.admitted||!report.releaseGate.killSwitchBlocked||report.releaseGate.rawIdentityLogged||!report.reconciliation.pass
   ||!report.reconciliation.mismatchDetected||Object.values(report.pipeline).some(value=>value!==true))throw new Error('RC4 evidence invariant failed');
@@ -45,5 +46,6 @@ const releaseManifest={version:'c15-rc4-release-manifest-v1',gitHead,baselineTag
 fs.mkdirSync(output,{recursive:true});fs.writeFileSync(path.join(output,'C15_RC4_GATE_REPORT.json'),JSON.stringify(report,null,2)+'\n');
 fs.writeFileSync(path.join(output,'C15_RC4_RELEASE_MANIFEST.json'),JSON.stringify(releaseManifest,null,2)+'\n');
 fs.writeFileSync(path.join(output,'C15_RC4_GATE_REPORT.md'),`# SpaceFighter C15-RC4 Gate Report\n\n- Status: **PASS**\n- Git HEAD: \`${gitHead}\`\n- Frozen legacy gates manual-only: **true**\n- Frozen RC4 audit is manual-only: **true**
-- RC5 superseding main-push gate: **true**\n- Native builds manual + fast gate: **true**\n- Kill switch fail-closed: **true**\n- Canary/minimum-version admission: **true**\n- Reconciliation mismatch detection: **true**\n- Production settlement enabled: **false**\n- Production Cloud Rewards: **false**\n`);
+- RC5 frozen manual audit: **true**
+- RC6 superseding main-push gate: **true**\n- Native builds manual + fast gate: **true**\n- Kill switch fail-closed: **true**\n- Canary/minimum-version admission: **true**\n- Reconciliation mismatch detection: **true**\n- Production settlement enabled: **false**\n- Production Cloud Rewards: **false**\n`);
 console.log('C15_RC4_EVIDENCE_PASS',path.join(output,'C15_RC4_GATE_REPORT.json'));

@@ -62,13 +62,16 @@ async function main(){
     rc3:read('.github/workflows/c15-rc3-gate.yml'),
     rc4:read('.github/workflows/c15-rc4-gate.yml'),
     rc5:read('.github/workflows/c15-rc5-gate.yml'),
+    rc6:read('.github/workflows/c15-rc6-gate.yml'),
     phase:read('.github/workflows/phase0-ci.yml'),
     android:read('.github/workflows/android-native-smoke.yml'),
+    androidRelease:read('.github/workflows/android-release-candidate.yml'),
   };
   const frozenGatesManualOnly=['rc1b','rc1c','rc3','rc4'].every(name=>!pushEnabled(workflows[name]));
-  const singleRc5PushGate=pushEnabled(workflows.rc5)&&/npm run gate:c15-rc5/.test(workflows.rc5)
-    &&!/npm run gate:c15-rc4/.test(workflows.rc5);
-  const androidManualOnly=!pushEnabled(workflows.android)&&/c15_rc5:/.test(workflows.android)
+  const rc5ManualAuditOnly=!pushEnabled(workflows.rc5)&&/npm run gate:c15-rc5/.test(workflows.rc5);
+  const singleRc6PushGate=pushEnabled(workflows.rc6)&&/npm run gate:c15-rc6/.test(workflows.rc6)
+    &&!/npm run gate:c15-rc5/.test(workflows.rc6);
+  const androidManualOnly=!pushEnabled(workflows.android)&&!pushEnabled(workflows.androidRelease)&&/c15_rc5:/.test(workflows.android)
     &&/npm run gate:c15-rc5:fast/.test(workflows.android)
     &&/spacefighter-android-c15-rc5-internal-candidate/.test(workflows.android);
   const activity=read('client/android/app/src/main/java/com/theIT/spacefighter4/MainActivity.java');
@@ -97,7 +100,7 @@ async function main(){
       coalescedSamples:pointer.includes('getCoalescedEvents')},
     settlement:{legacyAndRc5ProfilesAllowed:SETTLEMENT_CONTROL_PROFILES.includes(clientProfiles.C15_LEGACY_ARCADE_CONTROL_PROFILE_ID)
       &&SETTLEMENT_CONTROL_PROFILES.includes(profileId),rewardPolicyChanged:false,receiptFormatChanged:false},
-    pipeline:{frozenGatesManualOnly,phasePushDisabled:!pushEnabled(workflows.phase),singleRc5PushGate,androidManualOnly},
+    pipeline:{frozenGatesManualOnly,phasePushDisabled:!pushEnabled(workflows.phase),rc5ManualAuditOnly,singleRc6PushGate,androidManualOnly},
     safety:{productionSettlementEnabled:false,productionCloudRewards:false,c12Frozen:true,rawPointerServerLogging:false,
       firestoreRulesChanged:false,secretsChanged:false}};
   const booleans=[report.control.legacyDefaultPreserved,report.control.profileParity,report.control.fullTravelPass,
@@ -118,7 +121,8 @@ async function main(){
   fs.mkdirSync(output,{recursive:true});
   fs.writeFileSync(path.join(output,'C15_RC5_GATE_REPORT.json'),JSON.stringify(report,null,2)+'\n');
   fs.writeFileSync(path.join(output,'C15_RC5_RELEASE_MANIFEST.json'),JSON.stringify(releaseManifest,null,2)+'\n');
-  fs.writeFileSync(path.join(output,'C15_RC5_GATE_REPORT.md'),`# SpaceFighter C15-RC5 Android Input & Frame-Pacing Gate\n\n- Status: **PASS**\n- Git HEAD: \`${gitHead}\`\n- Profile: \`${profileId}\`\n- Legacy V1 preserved: **true**\n- Full arena travel matrix: **PASS**\n- Starter center-to-edge authority: **${starterCenterToEdgeAuthorityMs} ms / ${starterCenterToEdgeTicks} ticks**\n- Fixed authority: **30 Hz**\n- Render schedules verified: **60 / 90 / 120 / 144 Hz**\n- Multi-touch/pointer cancel/lost capture: **PASS**\n- Native refresh policy: **PASS (system preference, graceful fallback)**\n- Single full RC5 push gate: **true**\n- Android candidate manual-only: **true**\n- Production settlement enabled: **false**\n- Production Cloud Rewards: **false**\n`);
+  fs.writeFileSync(path.join(output,'C15_RC5_GATE_REPORT.md'),`# SpaceFighter C15-RC5 Android Input & Frame-Pacing Gate\n\n- Status: **PASS**\n- Git HEAD: \`${gitHead}\`\n- Profile: \`${profileId}\`\n- Legacy V1 preserved: **true**\n- Full arena travel matrix: **PASS**\n- Starter center-to-edge authority: **${starterCenterToEdgeAuthorityMs} ms / ${starterCenterToEdgeTicks} ticks**\n- Fixed authority: **30 Hz**\n- Render schedules verified: **60 / 90 / 120 / 144 Hz**\n- Multi-touch/pointer cancel/lost capture: **PASS**\n- Native refresh policy: **PASS (system preference, graceful fallback)**\n- RC5 frozen manual audit: **true**
+- Single full RC6 push gate: **true**\n- Android candidate manual-only: **true**\n- Production settlement enabled: **false**\n- Production Cloud Rewards: **false**\n`);
   console.log('C15_RC5_EVIDENCE_PASS',path.join(output,'C15_RC5_GATE_REPORT.json'));
 }
 main().catch(error=>{console.error(error?.stack||error);process.exitCode=1;});

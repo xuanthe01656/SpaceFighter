@@ -1,0 +1,350 @@
+name: SpaceFighter Android - RC6 Signed Release Candidate
+
+# Manual release engineering only. Produces signed APK/AAB evidence; never uploads to Google Play.
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'Android versionName (for example 1.3.0-rc.1)'
+        required: true
+        type: string
+        default: '1.3.0-rc.1'
+      version_code:
+        description: 'Monotonic positive Android versionCode'
+        required: true
+        type: string
+        default: '1030001'
+      confirmation:
+        description: 'Type BUILD-C15-RC6-ANDROID-RELEASE'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spacefighter-android-rc6-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  signed-release-candidate:
+    name: Signed AAB/APK / API 36 / Java 21 / 16 KB verification
+    runs-on: ubuntu-24.04
+    if: github.ref == 'refs/heads/main' && inputs.confirmation == 'BUILD-C15-RC6-ANDROID-RELEASE'
+    timeout-minutes: 90
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: client
+
+    env:
+      VITE_FIREBASE_API_KEY: ${{ vars.SF_FIREBASE_API_KEY }}
+      VITE_FIREBASE_AUTH_DOMAIN: distributed-inn-482605-c6.firebaseapp.com
+      VITE_FIREBASE_PROJECT_ID: distributed-inn-482605-c6
+      VITE_FIREBASE_STORAGE_BUCKET: distributed-inn-482605-c6.firebasestorage.app
+      VITE_FIREBASE_MESSAGING_SENDER_ID: '528039759292'
+      VITE_FIREBASE_APP_ID: '1:528039759292:web:4aab5ad9ac2bddd9362fb9'
+      VITE_FIREBASE_MEASUREMENT_ID: G-Y5CS812JKF
+      VITE_GAME_API_URL: https://spacefighter-api-staging-528039759292.asia-southeast1.run.app/api/v1
+      VITE_GAME_API_ENABLED: 'false'
+      VITE_C15_RC1B_ENABLED: 'true'
+      VITE_C15_CONTROL_AB_QA: 'false'
+      VITE_C15_RC3_ENABLED: 'false'
+      VITE_C15_RC4_CANARY_SETTLEMENT_ENABLED: 'true'
+      VITE_C15_RC5_CONTROL_ENABLED: 'true'
+      VITE_SF_BUILD_CHANNEL: release-candidate
+      VITE_C15_CONTROL_PROFILE_ID: arcade-responsive-v2
+      VITE_APP_VERSION: ${{ inputs.version_name }}
+      SF_ANDROID_VERSION_NAME: ${{ inputs.version_name }}
+      SF_ANDROID_VERSION_CODE: ${{ inputs.version_code }}
+      BUNDLETOOL_VERSION: '1.18.3'
+      BUNDLETOOL_SHA256: a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29
+
+    steps:
+      - name: Check out exactly the requested main revision
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate manual release intent and version identity
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_EVENT_NAME" == 'workflow_dispatch' ]]
+          [[ "${{ inputs.confirmation }}" == 'BUILD-C15-RC6-ANDROID-RELEASE' ]]
+          [[ "${SF_ANDROID_VERSION_CODE}" =~ ^[1-9][0-9]*$ ]]
+          [[ "${SF_ANDROID_VERSION_NAME}" =~ ^[0-9A-Za-z][0-9A-Za-z._-]{0,49}$ ]]
+          [[ -n "${VITE_FIREBASE_API_KEY:-}" ]] || { echo 'SF_FIREBASE_API_KEY repository variable is required.' >&2; exit 1; }
+          if git -C .. ls-files --stage | grep -E '^160000 [[:xdigit:]]{40} 0[[:space:]]+\.claude/worktrees/'; then
+            echo '::error::Generated Claude worktrees must not be Git submodules.' >&2
+            exit 1
+          fi
+          echo "RC6 release candidate version ${SF_ANDROID_VERSION_NAME} (${SF_ANDROID_VERSION_CODE}) at ${GITHUB_SHA}"
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Node 22 with locked dependency cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            client/package-lock.json
+            server/package-lock.json
+
+      - name: Set up Android SDK and Gradle
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+
+      - name: Set up Gradle 8.14.3
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+
+      - name: Install API 36 and release verification tools
+        run: |
+          set -euo pipefail
+          sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0' 'platform-tools' 'cmdline-tools;latest'
+
+      - name: Install exact client and server dependencies
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+          npm --prefix ../server ci --no-audit --no-fund
+
+      - name: Run one consolidated RC6 fast gate
+        run: |
+          set -euo pipefail
+          npm run gate:c15-rc6:fast
+          npm audit --omit=dev --audit-level=high
+          npm --prefix ../server audit --omit=dev --audit-level=high
+
+      - name: Restore dedicated Android upload key and verify certificate
+        env:
+          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+          SF_ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
+          SF_ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+          SF_ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+          ANDROID_UPLOAD_CERT_SHA1: ${{ secrets.ANDROID_UPLOAD_CERT_SHA1 }}
+          ANDROID_UPLOAD_CERT_SHA256: ${{ secrets.ANDROID_UPLOAD_CERT_SHA256 }}
+          ANDROID_GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.ANDROID_GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          set -euo pipefail
+          for key in ANDROID_UPLOAD_KEYSTORE_BASE64 SF_ANDROID_UPLOAD_KEYSTORE_PASSWORD SF_ANDROID_UPLOAD_KEY_ALIAS SF_ANDROID_UPLOAD_KEY_PASSWORD ANDROID_UPLOAD_CERT_SHA1 ANDROID_UPLOAD_CERT_SHA256 ANDROID_GOOGLE_SERVICES_JSON_BASE64; do
+            [[ -n "${!key:-}" ]] || { echo "::error::Missing required GitHub Actions secret: $key" >&2; exit 1; }
+          done
+          python3 - <<'PY'
+          import base64, json, os, pathlib, re, subprocess, sys
+          output = pathlib.Path(os.environ['RUNNER_TEMP']) / 'spacefighter-upload-key.jks'
+          google_services = pathlib.Path('android/app/google-services.json')
+          try:
+              payload = base64.b64decode(''.join(os.environ['ANDROID_UPLOAD_KEYSTORE_BASE64'].split()), validate=True)
+          except Exception:
+              sys.exit('Android upload keystore secret is not valid Base64')
+          if not 128 <= len(payload) <= 2 * 1024 * 1024:
+              sys.exit('Android upload keystore size is invalid')
+          output.write_bytes(payload)
+          output.chmod(0o600)
+          command = [
+              'keytool', '-list', '-v', '-keystore', str(output),
+              '-alias', os.environ['SF_ANDROID_UPLOAD_KEY_ALIAS'],
+              '-storepass:env', 'SF_ANDROID_UPLOAD_KEYSTORE_PASSWORD',
+          ]
+          result = subprocess.run(command, capture_output=True, text=True)
+          if result.returncode != 0 or 'PrivateKeyEntry' not in result.stdout:
+              sys.exit('Upload keystore/alias/password invalid, or alias has no private key')
+          fingerprints = {}
+          for algorithm, env_name in [('SHA1', 'ANDROID_UPLOAD_CERT_SHA1'), ('SHA256', 'ANDROID_UPLOAD_CERT_SHA256')]:
+              match = re.search(r'^\s*' + algorithm + r':\s*([0-9a-fA-F:]+)\s*$', result.stdout, re.M)
+              if not match:
+                  sys.exit('Cannot inspect Android upload ' + algorithm + ' certificate fingerprint')
+              actual = match.group(1).replace(':', '').upper()
+              expected = re.sub(r'[^0-9A-Fa-f]', '', os.environ[env_name]).upper()
+              if actual != expected:
+                  sys.exit('Android upload signing certificate ' + algorithm + ' does not match the registered fingerprint')
+              fingerprints[algorithm] = actual
+          try:
+              config_bytes = base64.b64decode(''.join(os.environ['ANDROID_GOOGLE_SERVICES_JSON_BASE64'].split()), validate=True)
+              config = json.loads(config_bytes.decode('utf-8'))
+          except Exception:
+              sys.exit('ANDROID_GOOGLE_SERVICES_JSON_BASE64 is not valid Base64 JSON')
+          packages = {client.get('client_info', {}).get('android_client_info', {}).get('package_name')
+                      for client in config.get('client', [])}
+          if 'com.theIT.spacefighter4' not in packages:
+              sys.exit('google-services.json does not contain com.theIT.spacefighter4')
+          google_services.write_bytes(config_bytes)
+          google_services.chmod(0o600)
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as handle:
+              handle.write('SF_ANDROID_UPLOAD_KEYSTORE_PATH=' + str(output) + '\n')
+              handle.write('SF_ANDROID_UPLOAD_CERT_SHA1_NORMALIZED=' + fingerprints['SHA1'] + '\n')
+              handle.write('SF_ANDROID_UPLOAD_CERT_SHA256_NORMALIZED=' + fingerprints['SHA256'] + '\n')
+          print('Dedicated Android upload certificate and Firebase native config verified; private material not logged')
+          PY
+
+      - name: Build the release-candidate WebView payload
+        run: |
+          set -euo pipefail
+          [[ "$VITE_SF_BUILD_CHANNEL" == 'release-candidate' ]]
+          [[ "$VITE_C15_RC5_CONTROL_ENABLED" == 'true' ]]
+          [[ "$VITE_C15_CONTROL_PROFILE_ID" == 'arcade-responsive-v2' ]]
+          [[ "$VITE_C15_RC3_ENABLED" == 'false' ]]
+          [[ "$VITE_C15_CONTROL_AB_QA" == 'false' ]]
+          npm run build:mobile
+          test -s dist/index.html
+          npx --no-install cap sync android
+          grep -q 'compileSdkVersion = 36' android/variables.gradle
+          grep -q 'targetSdkVersion = 36' android/variables.gradle
+          grep -q 'com.theIT.spacefighter4' android/app/build.gradle
+          grep -q 'android:allowBackup="false"' android/app/src/main/AndroidManifest.xml
+
+      - name: Compile linted, optimized and upload-signed release artifacts
+        env:
+          SF_ANDROID_RELEASE_SIGNING_ENABLED: 'true'
+          SF_ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
+          SF_ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+          SF_ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          [[ -s "$SF_ANDROID_UPLOAD_KEYSTORE_PATH" ]] || { echo 'Upload keystore was not restored.' >&2; exit 1; }
+          cd android
+          gradle --no-daemon --stacktrace :app:lintRelease :app:assembleRelease :app:bundleRelease
+          test -s app/build/outputs/apk/release/app-release.apk
+          test -s app/build/outputs/bundle/release/app-release.aab
+          test -s app/build/outputs/mapping/release/mapping.txt
+
+      - name: Pin bundletool, validate AAB and create universal install evidence
+        env:
+          SF_ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
+          SF_ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+          SF_ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          tool="$RUNNER_TEMP/bundletool-all-${BUNDLETOOL_VERSION}.jar"
+          curl --fail --location --silent --show-error --retry 3 \
+            "https://github.com/google/bundletool/releases/download/${BUNDLETOOL_VERSION}/bundletool-all-${BUNDLETOOL_VERSION}.jar" \
+            --output "$tool"
+          echo "${BUNDLETOOL_SHA256}  ${tool}" | sha256sum --check --strict
+          aab='android/app/build/outputs/bundle/release/app-release.aab'
+          apks="$RUNNER_TEMP/spacefighter-rc6-universal.apks"
+          java -jar "$tool" validate --bundle="$aab"
+          java -jar "$tool" dump config --bundle="$aab" | tee "$RUNNER_TEMP/rc6-bundle-config.txt"
+          grep -q 'PAGE_ALIGNMENT_16K' "$RUNNER_TEMP/rc6-bundle-config.txt"
+          java -jar "$tool" build-apks \
+            --bundle="$aab" \
+            --output="$apks" \
+            --mode=universal \
+            --overwrite \
+            --ks="$SF_ANDROID_UPLOAD_KEYSTORE_PATH" \
+            --ks-key-alias="$SF_ANDROID_UPLOAD_KEY_ALIAS" \
+            --ks-pass="pass:$SF_ANDROID_UPLOAD_KEYSTORE_PASSWORD" \
+            --key-pass="pass:$SF_ANDROID_UPLOAD_KEY_PASSWORD"
+          unzip -p "$apks" universal.apk > "$RUNNER_TEMP/spacefighter-rc6-universal.apk"
+          test -s "$RUNNER_TEMP/spacefighter-rc6-universal.apk"
+
+      - name: Verify signatures, manifest identity, release hardening and 16 KB alignment
+        run: |
+          set -euo pipefail
+          build_tools="$ANDROID_HOME/build-tools/36.0.0"
+          release_apk='android/app/build/outputs/apk/release/app-release.apk'
+          release_aab='android/app/build/outputs/bundle/release/app-release.aab'
+          universal_apk="$RUNNER_TEMP/spacefighter-rc6-universal.apk"
+          "$build_tools/apksigner" verify --verbose --print-certs "$release_apk" | tee "$RUNNER_TEMP/release-apk-cert.txt"
+          "$build_tools/apksigner" verify --verbose --print-certs "$universal_apk" | tee "$RUNNER_TEMP/universal-apk-cert.txt"
+          jarsigner -verify -verbose -certs "$release_aab" > "$RUNNER_TEMP/release-aab-jarsigner.txt"
+          grep -q 'jar verified' "$RUNNER_TEMP/release-aab-jarsigner.txt"
+          expected_sha1="$(printf '%s' "$SF_ANDROID_UPLOAD_CERT_SHA1_NORMALIZED" | tr 'A-F' 'a-f')"
+          expected_sha256="$(printf '%s' "$SF_ANDROID_UPLOAD_CERT_SHA256_NORMALIZED" | tr 'A-F' 'a-f')"
+          for report in "$RUNNER_TEMP/release-apk-cert.txt" "$RUNNER_TEMP/universal-apk-cert.txt"; do
+            actual_sha1="$(grep -m1 'Signer #1 certificate SHA-1 digest:' "$report" | awk -F': ' '{print $2}' | tr -d ':' | tr 'A-F' 'a-f')"
+            actual_sha256="$(grep -m1 'Signer #1 certificate SHA-256 digest:' "$report" | awk -F': ' '{print $2}' | tr -d ':' | tr 'A-F' 'a-f')"
+            [[ "$actual_sha1" == "$expected_sha1" && "$actual_sha256" == "$expected_sha256" ]] || { echo 'Release APK certificate mismatch.' >&2; exit 1; }
+          done
+          "$build_tools/aapt2" dump badging "$release_apk" | tee "$RUNNER_TEMP/release-badging.txt"
+          grep -q "package: name='com.theIT.spacefighter4'" "$RUNNER_TEMP/release-badging.txt"
+          grep -q "versionCode='${SF_ANDROID_VERSION_CODE}'" "$RUNNER_TEMP/release-badging.txt"
+          grep -q "versionName='${SF_ANDROID_VERSION_NAME}'" "$RUNNER_TEMP/release-badging.txt"
+          grep -q "targetSdkVersion:'36'" "$RUNNER_TEMP/release-badging.txt"
+          debuggable="$(apkanalyzer manifest debuggable "$release_apk" | tr -d '\r\n')"
+          [[ "$debuggable" == 'false' ]] || { echo "Release APK must be non-debuggable, got: $debuggable" >&2; exit 1; }
+          "$build_tools/zipalign" -c -P 16 -v 4 "$release_apk"
+          "$build_tools/zipalign" -c -P 16 -v 4 "$universal_apk"
+          for artifact in "$release_apk" "$release_aab" "$universal_apk"; do
+            size="$(stat -c%s "$artifact")"
+            (( size <= 209715200 )) || { echo "Release artifact exceeds 200 MiB: $artifact ($size bytes)" >&2; exit 1; }
+          done
+          echo 'RC6_ANDROID_RELEASE_VERIFICATION_PASS'
+
+      - name: Create immutable release provenance and SHA-256 evidence
+        run: |
+          set -euo pipefail
+          out='dist/c15-rc6-release'
+          rm -rf "$out"
+          mkdir -p "$out"
+          cp android/app/build/outputs/apk/release/app-release.apk "$out/spacefighter-${SF_ANDROID_VERSION_NAME}-${SF_ANDROID_VERSION_CODE}-release.apk"
+          cp android/app/build/outputs/bundle/release/app-release.aab "$out/spacefighter-${SF_ANDROID_VERSION_NAME}-${SF_ANDROID_VERSION_CODE}-release.aab"
+          cp "$RUNNER_TEMP/spacefighter-rc6-universal.apk" "$out/spacefighter-${SF_ANDROID_VERSION_NAME}-${SF_ANDROID_VERSION_CODE}-universal.apk"
+          cp android/app/build/outputs/mapping/release/mapping.txt "$out/mapping.txt"
+          cp "$RUNNER_TEMP/rc6-bundle-config.txt" "$out/bundle-config.txt"
+          for report in android/app/build/reports/lint-results-release.html android/app/build/reports/lint-results-release.xml android/app/build/reports/lint-results-release.txt; do
+            [[ -f "$report" ]] && cp "$report" "$out/"
+          done
+          (cd "$out" && sha256sum *.apk *.aab mapping.txt bundle-config.txt > SHA256SUMS.txt)
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib
+          out = pathlib.Path('dist/c15-rc6-release')
+          artifacts = {}
+          for path in sorted(out.iterdir()):
+              if path.is_file() and path.name != 'RC6_ANDROID_RELEASE_PROVENANCE.json':
+                  artifacts[path.name] = {
+                      'bytes': path.stat().st_size,
+                      'sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
+                  }
+          report = {
+              'version': 'c15-rc6-android-release-provenance-v1',
+              'gitCommit': os.environ['GITHUB_SHA'],
+              'gitRef': os.environ['GITHUB_REF'],
+              'workflowRunId': os.environ['GITHUB_RUN_ID'],
+              'workflowRunAttempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'applicationId': 'com.theIT.spacefighter4',
+              'versionName': os.environ['SF_ANDROID_VERSION_NAME'],
+              'versionCode': int(os.environ['SF_ANDROID_VERSION_CODE']),
+              'compileSdk': 36,
+              'targetSdk': 36,
+              'buildChannel': 'release-candidate',
+              'controlProfile': 'arcade-responsive-v2',
+              'r8Enabled': True,
+              'resourceShrinkingEnabled': True,
+              'debuggable': False,
+              'bundletoolVersion': os.environ['BUNDLETOOL_VERSION'],
+              'bundletoolSha256': os.environ['BUNDLETOOL_SHA256'],
+              'pageAlignment': 'PAGE_ALIGNMENT_16K',
+              'uploadCertificateSha1': os.environ['SF_ANDROID_UPLOAD_CERT_SHA1_NORMALIZED'],
+              'uploadCertificateSha256': os.environ['SF_ANDROID_UPLOAD_CERT_SHA256_NORMALIZED'],
+              'googlePlayUploadPerformed': False,
+              'productionSettlementEnabled': False,
+              'productionCloudRewardsEnabled': False,
+              'artifacts': artifacts,
+          }
+          (out / 'RC6_ANDROID_RELEASE_PROVENANCE.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
+          PY
+          test -s "$out/RC6_ANDROID_RELEASE_PROVENANCE.json"
+          test -s "$out/SHA256SUMS.txt"
+
+      - name: Upload RC6 signed release-candidate evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: spacefighter-android-c15-rc6-upload-ready-candidate
+          path: client/dist/c15-rc6-release/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Remove temporary Android upload key
+        if: always()
+        run: |
+          set -euo pipefail
+          rm -f "${SF_ANDROID_UPLOAD_KEYSTORE_PATH:-$RUNNER_TEMP/spacefighter-upload-key.jks}" android/app/google-services.json

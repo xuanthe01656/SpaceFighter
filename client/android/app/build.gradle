@@ -1,13 +1,43 @@
-def sfStableQaSigning = System.getenv('SF_ANDROID_QA_SIGNING_ENABLED') == 'true'
+def sfEnv = { String name, String fallback = null ->
+    def value = System.getenv(name)?.trim()
+    return value ? value : fallback
+}
+
+def sfStableQaSigning = sfEnv('SF_ANDROID_QA_SIGNING_ENABLED', 'false') == 'true'
+def sfReleaseSigning = sfEnv('SF_ANDROID_RELEASE_SIGNING_ENABLED', 'false') == 'true'
+def sfAndroidVersionCodeRaw = sfEnv('SF_ANDROID_VERSION_CODE', '1')
+def sfAndroidVersionName = sfEnv('SF_ANDROID_VERSION_NAME', '1.0-dev')
+
+if (!(sfAndroidVersionCodeRaw ==~ /^[1-9][0-9]*$/)) {
+    throw new GradleException('SF_ANDROID_VERSION_CODE must be a positive integer')
+}
+if (!(sfAndroidVersionName ==~ /^[0-9A-Za-z][0-9A-Za-z._-]{0,49}$/)) {
+    throw new GradleException('SF_ANDROID_VERSION_NAME must be 1-50 safe release characters')
+}
+
+def sfAndroidVersionCode = Integer.parseInt(sfAndroidVersionCodeRaw)
+
 if (sfStableQaSigning) {
     ['SF_ANDROID_QA_KEYSTORE_PATH', 'ANDROID_KEYSTORE_PASSWORD',
      'ANDROID_KEY_ALIAS', 'ANDROID_KEY_PASSWORD'].each { key ->
-        if (!System.getenv(key)?.trim()) {
+        if (!sfEnv(key)) {
             throw new GradleException('Missing required stable QA signing setting: ' + key)
         }
     }
-    if (!file(System.getenv('SF_ANDROID_QA_KEYSTORE_PATH')).isFile()) {
+    if (!file(sfEnv('SF_ANDROID_QA_KEYSTORE_PATH')).isFile()) {
         throw new GradleException('Stable QA signing keystore file is missing')
+    }
+}
+
+if (sfReleaseSigning) {
+    ['SF_ANDROID_UPLOAD_KEYSTORE_PATH', 'SF_ANDROID_UPLOAD_KEYSTORE_PASSWORD',
+     'SF_ANDROID_UPLOAD_KEY_ALIAS', 'SF_ANDROID_UPLOAD_KEY_PASSWORD'].each { key ->
+        if (!sfEnv(key)) {
+            throw new GradleException('Missing required Android upload signing setting: ' + key)
+        }
+    }
+    if (!file(sfEnv('SF_ANDROID_UPLOAD_KEYSTORE_PATH')).isFile()) {
+        throw new GradleException('Android upload signing keystore file is missing')
     }
 }
 
@@ -17,17 +47,17 @@ apply plugin: 'kotlin-android'
 android {
     namespace = "com.theIT.spacefighter4"
     compileSdk = rootProject.ext.compileSdkVersion
-    
+
     defaultConfig {
         applicationId "com.theIT.spacefighter4"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode sfAndroidVersionCode
+        versionName sfAndroidVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
-             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
-             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+            // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
@@ -35,10 +65,22 @@ android {
     signingConfigs {
         if (sfStableQaSigning) {
             spacefighterStableQa {
-                storeFile file(System.getenv('SF_ANDROID_QA_KEYSTORE_PATH'))
-                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
-                keyAlias System.getenv('ANDROID_KEY_ALIAS')
-                keyPassword System.getenv('ANDROID_KEY_PASSWORD')
+                storeFile file(sfEnv('SF_ANDROID_QA_KEYSTORE_PATH'))
+                storePassword sfEnv('ANDROID_KEYSTORE_PASSWORD')
+                keyAlias sfEnv('ANDROID_KEY_ALIAS')
+                keyPassword sfEnv('ANDROID_KEY_PASSWORD')
+            }
+        }
+        if (sfReleaseSigning) {
+            spacefighterUpload {
+                storeFile file(sfEnv('SF_ANDROID_UPLOAD_KEYSTORE_PATH'))
+                storePassword sfEnv('SF_ANDROID_UPLOAD_KEYSTORE_PASSWORD')
+                keyAlias sfEnv('SF_ANDROID_UPLOAD_KEY_ALIAS')
+                keyPassword sfEnv('SF_ANDROID_UPLOAD_KEY_PASSWORD')
+                enableV1Signing true
+                enableV2Signing true
+                enableV3Signing true
+                enableV4Signing true
             }
         }
     }
@@ -50,12 +92,18 @@ android {
             }
         }
         release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            minifyEnabled true
+            shrinkResources true
+            debuggable false
+            jniDebuggable false
+            zipAlignEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (sfReleaseSigning) {
+                signingConfig signingConfigs.spacefighterUpload
+            }
         }
     }
 
-    // --- ĐÂY LÀ PHẦN BỔ SUNG QUAN TRỌNG ĐỂ FIX LỖI JAVA 21 ---
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_21
         targetCompatibility JavaVersion.VERSION_21
@@ -64,11 +112,19 @@ android {
     kotlinOptions {
         jvmTarget = '21'
     }
-    // --------------------------------------------------------
+}
+
+gradle.taskGraph.whenReady { graph ->
+    def releasePackagingRequested = graph.allTasks.any { task ->
+        task.project == project && ['assembleRelease', 'bundleRelease', 'packageRelease', 'signReleaseBundle'].contains(task.name)
+    }
+    if (releasePackagingRequested && !sfReleaseSigning) {
+        throw new GradleException('Release packaging is fail-closed. Set SF_ANDROID_RELEASE_SIGNING_ENABLED=true with the dedicated upload key settings.')
+    }
 }
 
 repositories {
-    flatDir{
+    flatDir {
         dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
     }
 }

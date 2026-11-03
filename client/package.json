@@ -42,7 +42,9 @@
     "gate:c15-rc4": "node ../tools/run-c15-rc4-gate.mjs",
     "gate:c15-rc4:fast": "node ../tools/run-c15-rc4-gate.mjs --fast",
     "gate:c15-rc5": "node ../tools/run-c15-rc5-gate.mjs",
-    "gate:c15-rc5:fast": "node ../tools/run-c15-rc5-gate.mjs --fast"
+    "gate:c15-rc5:fast": "node ../tools/run-c15-rc5-gate.mjs --fast",
+    "gate:c15-rc6": "node ../tools/run-c15-rc6-gate.mjs",
+    "gate:c15-rc6:fast": "node ../tools/run-c15-rc6-gate.mjs --fast"
   },
   "dependencies": {
     "@babylonjs/core": "^9.5.1",

@@ -18,7 +18,7 @@ test('QA signing reads exactly the 4 Android secrets already present in reposito
     'ANDROID_KEY_ALIAS', 'ANDROID_KEY_PASSWORD',
   ]) assert.ok(workflow.includes(githubSecret(name)), `Missing ${name}`);
   assert.doesNotMatch(workflow, /secrets\.SF_ANDROID_QA_/);
-  assert.doesNotMatch(gradle, /System\.getenv\('SF_ANDROID_QA_(?:KEY_ALIAS|KEY_PASSWORD|KEYSTORE_PASSWORD)'\)/);
+  assert.doesNotMatch(gradle, /SF_ANDROID_QA_(?:KEY_ALIAS|KEY_PASSWORD|KEYSTORE_PASSWORD)/);
 });
 
 test('QA signing verifies existing SHA-1 and SHA-256 certificates before compiling', () => {
@@ -42,14 +42,14 @@ test('invalid, missing, and mismatched signing material fails closed', () => {
 
 test('Gradle uses actual private keystore for debug only with explicit enable flag', () => {
   assert.match(workflow, /SF_ANDROID_QA_SIGNING_ENABLED: 'true'/);
-  assert.match(gradle, /System\.getenv\('SF_ANDROID_QA_SIGNING_ENABLED'\) == 'true'/);
+  assert.match(gradle, /sfEnv\('SF_ANDROID_QA_SIGNING_ENABLED', 'false'\) == 'true'/);
   assert.match(gradle, /signingConfigs \{[\s\S]*spacefighterStableQa/);
   assert.match(gradle, /signingConfig signingConfigs\.spacefighterStableQa/);
-  assert.match(gradle, /storeFile file\(System\.getenv\('SF_ANDROID_QA_KEYSTORE_PATH'\)\)/);
+  assert.match(gradle, /storeFile file\(sfEnv\('SF_ANDROID_QA_KEYSTORE_PATH'\)\)/);
   for (const name of ['ANDROID_KEYSTORE_PASSWORD', 'ANDROID_KEY_ALIAS', 'ANDROID_KEY_PASSWORD']) {
-    assert.ok(gradle.includes(`System.getenv('${name}')`));
+    assert.ok(gradle.includes(`sfEnv('${name}')`));
   }
-  assert.match(gradle, /release \{\s*minifyEnabled false/);
+  assert.match(gradle, /release \{[\s\S]*minifyEnabled true/);
   assert.doesNotMatch(gradle, /release \{[^}]*spacefighterStableQa/s);
 });
 
