@@ -20,7 +20,8 @@ if(fast){
     'tests/c15Rc7AssetPayloadStore.test.mjs','tests/c15Rc7StartupDownloads.test.mjs',
     'tests/c15Rc7CommercialPresentation.test.mjs',
     'tests/c15Rc7RemoteAssetDeliveryProduction.test.mjs','tests/c15Rc1bSessionLifecycle.test.mjs',
-    'tests/c15Rc1bRuntimeGate.test.mjs','tests/c15Rc4WorkflowTopology.test.mjs','tests/c15Rc5AndroidProduction.test.mjs',
+    'tests/c15Rc1bRuntimeGate.test.mjs','tests/c15Rc4WorkflowTopology.test.mjs','tests/c15Rc4ReleaseChannel.test.mjs',
+    'tests/missionSync212.test.mjs','tests/c15Rc5AndroidProduction.test.mjs',
     'tests/c15Rc6AndroidRelease.test.mjs','tests/nativeAndroidSocialLoginBridge.test.mjs'],path.join(root,'client'));
   requireZeroSkip('RC7 TARGETED SERVER TEST',process.execPath,['--test',
     'tests/resourceManifestV1.test.cjs','tests/c15Rc1bResourceCatalog.test.cjs','tests/c15Rc1bRuntimeV1.test.cjs','tests/c15Rc7AssetExport.test.cjs','tests/c15Rc4ReleaseGateV1.test.cjs',

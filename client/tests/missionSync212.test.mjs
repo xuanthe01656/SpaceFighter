@@ -13,7 +13,10 @@ test('X-Wing sprite UV correction is aircraft-specific, with mobile sprite rende
  const other=resolveShipVisual(AIRCRAFTS.find(a=>a.id!=='ship_xwing').id,AIRCRAFTS);
  assert.equal(other.spriteInvertY,false,'do not silently flip other ship art');
  const factory=fs.readFileSync(new URL('../src/game/rendering/ShipVisualFactory.js',import.meta.url),'utf8');
- assert.match(factory,/visual\.topSrc, scene, false, visual\.spriteInvertY,/);
+ // RC7 may supply an integrity-verified sprite; the catalogue sprite remains fallback.
+ assert.match(factory,/const presentationTopSrc = verifiedPresentationTopSrc \|\| visual\.topSrc/);
+ assert.match(factory,/quality !== 'procedural' && presentationTopSrc/);
+ assert.match(factory,/presentationTopSrc, scene, false, visual\.spriteInvertY,/);
 });
 test('Guest natural ledger is UTC-only, survives mission period repair, and excludes Ghosts',()=>{
  const c=structuredClone(DEFAULT_CAMPAIGN_DATA);
