@@ -36,6 +36,7 @@ test('Android native shell requests the best supported 60-144Hz refresh preferen
   assert.match(activity,/candidate\.getRefreshRate\(\) <= 144\.5f/);assert.match(activity,/best == null/);assert.doesNotMatch(activity,/preferredDisplayModeId/);
   assert.match(activity,/preferredRefreshRate = targetRefreshRate/);assert.match(activity,/preferMinimalPostProcessing = true/);
   assert.match(activity,/Build\.VERSION\.SDK_INT >= 35/);assert.match(activity,/attributes\.setFrameRateBoostOnTouchEnabled\(true\)/);
+  assert.match(activity,/@Override\s+public void onResume\(\)/);assert.doesNotMatch(activity,/@Override\s+protected void onResume\(\)/);
   assert.match(read('client/android/app/src/main/AndroidManifest.xml'),/android:appCategory="game"/);
 });
 

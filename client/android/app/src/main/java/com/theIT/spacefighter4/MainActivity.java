@@ -85,7 +85,7 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
     }
 
     @Override
-    protected void onResume() {
+    public void onResume() {
         super.onResume();
         applyGameDisplayPolicy();
     }
