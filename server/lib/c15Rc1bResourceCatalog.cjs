@@ -17,7 +17,8 @@ const canonical=value=>Array.isArray(value)?value.map(canonical):value&&typeof v
   ?Object.fromEntries(Object.keys(value).sort().map(key=>[key,canonical(value[key])])):value;
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const descriptorBytes=descriptor=>Buffer.from(JSON.stringify(canonical(descriptor))+'\n','utf8');
-const MIME=Object.freeze({'.json':'application/json; charset=utf-8','.webp':'image/webp','.png':'image/png'});
+const MIME=Object.freeze({'.json':'application/json; charset=utf-8','.webp':'image/webp','.png':'image/png',
+  '.jpg':'image/jpeg','.jpeg':'image/jpeg','.glb':'model/gltf-binary','.ogg':'audio/ogg','.mp3':'audio/mpeg'});
 
 const PACKS=Object.freeze([
   Object.freeze({id:'core-bootstrap',revision:1,quality:'bootstrap',required:true,stageKeys:[],
@@ -38,9 +39,19 @@ function safeJoin(root,relative){
   if(!target.startsWith(base))throw new TypeError('C15 resource path escapes root');
   return target;
 }
+function normalizePrefix(value){
+  const prefix=String(value||'spacefighter-assets/c15-rc1b').replace(/^\/+|\/+$/g,'');
+  if(!/^[a-z0-9][a-z0-9._/-]{2,159}$/.test(prefix)||prefix.includes('..')||prefix.includes('//'))
+    throw new TypeError('C15 asset path prefix invalid');
+  return prefix;
+}
 function createC15Rc1bResourceCatalog({rootDir=path.resolve(__dirname,'../resources/c15-rc1b'),
-  publicBaseUrl,generatedAtMs=Date.now(),catalogVersion='product-v1.0.0'}={}){
+  publicBaseUrl,assetBaseUrl=null,assetPathPrefix='spacefighter-assets/c15-rc1b',
+  generatedAtMs=Date.now(),catalogVersion='product-v1.0.0'}={}){
   const baseUrl=normalizeBaseUrl(publicBaseUrl);
+  const externalBase=assetBaseUrl?normalizeBaseUrl(assetBaseUrl):null;
+  const prefix=normalizePrefix(assetPathPrefix);
+  const assetRootUrl=externalBase?`${externalBase}/${prefix}`:`${baseUrl}/api/v1/c15/resources`;
   if(!Number.isSafeInteger(generatedAtMs)||generatedAtMs<1)throw new TypeError('C15 resource generatedAt invalid');
   const descriptors=new Map(),files=new Map(),manifestInputs=[];
   for(const pack of PACKS){
@@ -53,7 +64,7 @@ function createC15Rc1bResourceCatalog({rootDir=path.resolve(__dirname,'../resour
       if(!stat.isFile()||stat.size<1||stat.size>100_000_000)throw new TypeError(`Invalid C15 resource file: ${relative}`);
       const bytes=fs.readFileSync(absolute),digest=sha(bytes),ext=path.extname(relative).toLowerCase();
       const contentType=MIME[ext]||'application/octet-stream';
-      const url=`${baseUrl}/api/v1/c15/resources/packs/${pack.id}/v${pack.revision}/files/${relative}`;
+      const url=`${assetRootUrl}/packs/${pack.id}/v${pack.revision}/files/${relative}`;
       const entry=freeze({path:relative,sizeBytes:stat.size,sha256:digest,contentType,url});
       entries.push(entry);totalBytes+=stat.size;
       files.set(`${pack.id}:${pack.revision}:${relative}`,freeze({absolute,sizeBytes:stat.size,sha256:digest,contentType}));
@@ -62,7 +73,7 @@ function createC15Rc1bResourceCatalog({rootDir=path.resolve(__dirname,'../resour
       quality:pack.quality,required:pack.required,files:entries.sort((a,b)=>a.path.localeCompare(b.path)),totalBytes};
     const descriptor=freeze({...baseDescriptor,descriptorDigest:sha(Buffer.from(JSON.stringify(canonical(baseDescriptor)),'utf8'))});
     const bytes=descriptorBytes(descriptor),descriptorSha=sha(bytes);
-    const descriptorUrl=`${baseUrl}/api/v1/c15/resources/packs/${pack.id}/v${pack.revision}/descriptor.json`;
+    const descriptorUrl=`${assetRootUrl}/packs/${pack.id}/v${pack.revision}/descriptor.json`;
     descriptors.set(`${pack.id}:${pack.revision}`,freeze({descriptor,bytes,sha256:descriptorSha}));
     manifestInputs.push({id:pack.id,revision:pack.revision,sha256:descriptorSha,sizeBytes:totalBytes,
       quality:pack.quality,required:pack.required,stageKeys:pack.stageKeys,url:descriptorUrl,
@@ -72,7 +83,7 @@ function createC15Rc1bResourceCatalog({rootDir=path.resolve(__dirname,'../resour
   verifyResourceManifestV1(manifest);
   function getDescriptor(id,revision){return descriptors.get(`${id}:${revision}`)||null;}
   function getFile(id,revision,relative){return files.get(`${id}:${revision}:${relative}`)||null;}
-  return freeze({version:'c15-rc1b-resource-catalog-v1',baseUrl,manifest,
-    getDescriptor,getFile,packIds:freeze(PACKS.map(x=>x.id))});
+  return freeze({version:'c15-rc1b-resource-catalog-v1',baseUrl,assetRootUrl,assetPathPrefix:prefix,
+    externalAssetDelivery:Boolean(externalBase),manifest,getDescriptor,getFile,packIds:freeze(PACKS.map(x=>x.id))});
 }
 module.exports=freeze({DESCRIPTOR_VERSION,createC15Rc1bResourceCatalog,descriptorBytes});

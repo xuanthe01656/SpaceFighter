@@ -288,7 +288,10 @@ async function start() {
       try{
         const {createC15Rc1bResourceCatalog}=require('./lib/c15Rc1bResourceCatalog.cjs');
         c15ResourceCatalog=createC15Rc1bResourceCatalog({
-          publicBaseUrl:process.env.GAME_C15_RC1B_PUBLIC_BASE_URL,generatedAtMs:Date.now()});
+          publicBaseUrl:process.env.GAME_C15_RC1B_PUBLIC_BASE_URL,
+          assetBaseUrl:process.env.GAME_C15_ASSET_BASE_URL||null,
+          assetPathPrefix:process.env.GAME_C15_ASSET_PATH_PREFIX||'spacefighter-assets/c15-rc1b',
+          generatedAtMs:Date.now()});
       }catch(_error){
         console.error('C15 RC1B resource delivery disabled: invalid immutable resource catalog');
       }

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 const here=path.dirname(fileURLToPath(import.meta.url));
-const workflow=fs.readFileSync(path.resolve(here,'../../.github/workflows/android-native-smoke.yml'),'utf8');
+const workflow=fs.readFileSync(path.resolve(here,'../../.github/workflows/android-native-smoke.yml'),'utf8').replace(/\r\n/g,'\n');
 const screen=fs.readFileSync(path.resolve(here,'../src/components/C15LocalAlpha1/index.jsx'),'utf8');
 const session=fs.readFileSync(path.resolve(here,'../src/game/c15/C15Rc1bSession.js'),'utf8');
 const campaignEngine=fs.readFileSync(path.resolve(here,'../src/components/Campaign/CampaignEngine.jsx'),'utf8');

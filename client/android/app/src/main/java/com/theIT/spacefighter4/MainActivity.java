@@ -23,8 +23,7 @@ import ee.forgr.capacitor.social.login.SocialLoginPlugin;
 public class MainActivity extends BridgeActivity implements ModifiedMainActivityForSocialLoginPlugin {
     @Override
     public void onCreate(Bundle savedInstanceState) {
-
-
+        registerPlugin(SpaceFighterAssetStorePlugin.class);
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         applyGameDisplayPolicy();

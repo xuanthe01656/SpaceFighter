@@ -7,10 +7,13 @@ const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 function material(scene,name,color,alpha=1){const mat=new BABYLON.StandardMaterial(name,scene);
   mat.emissiveColor=BABYLON.Color3.FromHexString(color);mat.diffuseColor=mat.emissiveColor;
   mat.disableLighting=true;mat.specularColor=BABYLON.Color3.Black();mat.alpha=alpha;return mat;}
+function textureMaterial(scene,name,url){const mat=new BABYLON.StandardMaterial(name,scene);const texture=new BABYLON.Texture(url,scene,false,false);
+  texture.hasAlpha=true;mat.diffuseTexture=texture;mat.emissiveTexture=texture;mat.opacityTexture=texture;
+  mat.useAlphaFromDiffuseTexture=true;mat.disableLighting=true;mat.backFaceCulling=false;mat.specularColor=BABYLON.Color3.Black();return mat;}
 function follow(mesh,target,dt,responseMs){const alpha=responseMs<=0?1:1-Math.exp(-Math.max(0,dt)/responseMs);
   BABYLON.Vector3.LerpToRef(mesh.position,target,alpha,mesh.position);}
 
-export async function createC15LocalRenderer({canvas,backgroundUrl=null,pilotResponseMs=24,
+export async function createC15LocalRenderer({canvas,backgroundUrl=null,pilotTextureUrl=null,enemyAtlasUrl=null,pilotResponseMs=24,
   onMetrics=()=>{},onFrame=()=>{}}={}){
   if(!canvas)throw new TypeError('C15 renderer canvas required');
   if(!(Number.isFinite(pilotResponseMs)&&pilotResponseMs>=0&&pilotResponseMs<=250))
@@ -21,11 +24,13 @@ export async function createC15LocalRenderer({canvas,backgroundUrl=null,pilotRes
   const camera=new BABYLON.FreeCamera('c15-camera',new BABYLON.Vector3(0,50,0),scene);
   camera.upVector=new BABYLON.Vector3(0,0,-1);camera.setTarget(BABYLON.Vector3.Zero());camera.mode=BABYLON.Camera.ORTHOGRAPHIC_CAMERA;
   camera.orthoLeft=-13.2;camera.orthoRight=13.2;camera.orthoTop=15;camera.orthoBottom=-15;scene.activeCamera=camera;
-  const pilotMat=material(scene,'c15-pilot','#56f2ff');const enemyMat=material(scene,'c15-enemy','#ff5f78');
-  const bossMat=material(scene,'c15-boss','#ffbd4a');const shotMat=material(scene,'c15-shot','#72ffe1');
-  const enemyShotMat=material(scene,'c15-enemy-shot','#ff925c');
-  const pilot=BABYLON.MeshBuilder.CreateCylinder('c15-pilot',{diameterTop:0,diameterBottom:1.2,height:2.1,tessellation:3},scene);
-  pilot.rotation.x=Math.PI/2;pilot.material=pilotMat;pilot.metadata={authoritativeTarget:pilot.position.clone(),previewTarget:null};
+  const pilotMat=pilotTextureUrl?textureMaterial(scene,'c15-pilot-texture',pilotTextureUrl):material(scene,'c15-pilot','#56f2ff');
+  const enemyMat=material(scene,'c15-enemy','#ff5f78');const bossMat=material(scene,'c15-boss','#ffbd4a');
+  const shotMat=material(scene,'c15-shot','#72ffe1');const enemyShotMat=material(scene,'c15-enemy-shot','#ff925c');
+  let pilot;
+  if(pilotTextureUrl){pilot=BABYLON.MeshBuilder.CreatePlane('c15-pilot',{width:1.8,height:2.4},scene);pilot.rotation.x=Math.PI/2;}
+  else{pilot=BABYLON.MeshBuilder.CreateCylinder('c15-pilot',{diameterTop:0,diameterBottom:1.2,height:2.1,tessellation:3},scene);pilot.rotation.x=Math.PI/2;}
+  pilot.material=pilotMat;pilot.metadata={authoritativeTarget:pilot.position.clone(),previewTarget:null,remoteAsset:Boolean(pilotTextureUrl)};
   if(backgroundUrl){
     const bgMat=new BABYLON.StandardMaterial('c15-background',scene);const texture=new BABYLON.Texture(backgroundUrl,scene,false,false);
     texture.wrapU=texture.wrapV=BABYLON.Texture.WRAP_ADDRESSMODE;bgMat.diffuseTexture=texture;bgMat.emissiveTexture=texture;
@@ -33,16 +38,29 @@ export async function createC15LocalRenderer({canvas,backgroundUrl=null,pilotRes
     const background=BABYLON.MeshBuilder.CreateGround('c15-background',{width:26.4,height:30},scene);
     background.position.y=-.35;background.material=bgMat;
   }
+  const enemySpriteManager=enemyAtlasUrl?new BABYLON.SpriteManager('c15-enemy-atlas',enemyAtlasUrl,96,
+    {width:128,height:128},scene,.01,BABYLON.Texture.TRILINEAR_SAMPLINGMODE):null;
   const enemies=new Map(),shots=new Map(),enemyShots=new Map();let latest=null,disposed=false,lastMetricAt=performance.now(),frames=0;
   const target=(mesh,pos)=>{mesh.metadata={...(mesh.metadata||{}),target:world(pos)};};
-  const createSphere=(name,mat,diameter)=>{const mesh=BABYLON.MeshBuilder.CreateSphere(name,{diameter,segments:6},scene);mesh.material=mat;return mesh;};
+  const createSphere=(name,mat,diameter)=>{const mesh=BABYLON.MeshBuilder.CreateSphere(name,{diameter,segments:6},scene);mesh.material=mat;
+    mesh.metadata={baseSize:diameter,remoteAsset:false};return mesh;};
+  const createEnemy=(id,value,size)=>{
+    if(enemySpriteManager&&value.kind!=='boss'){
+      const sprite=new BABYLON.Sprite(`c15-enemy-${id}`,enemySpriteManager);sprite.width=size;sprite.height=size;
+      sprite.metadata={baseSize:size,remoteAsset:true};sprite.cellIndex=3;sprite.playAnimation(3,6,true,140);return sprite;
+    }
+    return createSphere(`c15-enemy-${id}`,value.kind==='boss'?bossMat:enemyMat,size);
+  };
+  function resizeVisual(visual,scale){const base=Number(visual.metadata?.baseSize||1);
+    if(visual.scaling?.setAll)visual.scaling.setAll(scale);else{visual.width=base*scale;visual.height=base*scale;}}
   function syncMap(map,values,{prefix,mat,size,enemy=false}={}){
     const alive=new Set();
-    for(const value of values){const id=String(value.id);alive.add(id);let mesh=map.get(id);
-      if(!mesh){mesh=createSphere(`${prefix}-${id}`,enemy&&value.kind==='boss'?bossMat:mat,size);mesh.position.copyFrom(world(value));map.set(id,mesh);}
-      target(mesh,value);if(enemy&&Number.isFinite(value.hp)&&Number.isFinite(value.maxHp))mesh.scaling.setAll(clamp(.35+.65*value.hp/Math.max(1,value.maxHp),.25,1));
+    for(const value of values){const id=String(value.id);alive.add(id);let visual=map.get(id);
+      if(!visual){visual=enemy?createEnemy(id,value,size):createSphere(`${prefix}-${id}`,mat,size);visual.position.copyFrom(world(value));map.set(id,visual);}
+      target(visual,value);if(enemy&&Number.isFinite(value.hp)&&Number.isFinite(value.maxHp))
+        resizeVisual(visual,clamp(.35+.65*value.hp/Math.max(1,value.maxHp),.25,1));
     }
-    for(const [id,mesh] of map){if(!alive.has(id)){mesh.dispose();map.delete(id);}}
+    for(const [id,visual] of map){if(!alive.has(id)){visual.dispose();map.delete(id);}}
   }
   function update(view){
     if(disposed||!view||view.version!=='c15-local-world-view-v1')return;latest=view;
@@ -57,11 +75,12 @@ export async function createC15LocalRenderer({canvas,backgroundUrl=null,pilotRes
   engine.runRenderLoop(()=>{if(disposed)return;const dt=engine.getDeltaTime();
     const pilotTarget=pilot.metadata?.previewTarget||pilot.metadata?.authoritativeTarget||pilot.position;
     follow(pilot,pilotTarget,dt,pilotResponseMs);
-    for(const map of [enemies,shots,enemyShots])for(const mesh of map.values())follow(mesh,mesh.metadata?.target||mesh.position,dt,24);
+    for(const map of [enemies,shots,enemyShots])for(const visual of map.values())follow(visual,visual.metadata?.target||visual.position,dt,24);
     scene.render();frames++;try{onFrame({frameMs:dt,tick:latest?.tick||0,pilotPosition:units(pilot.position)});}catch(_){}
     const now=performance.now();if(now-lastMetricAt>=1000){try{onMetrics({fps:Math.round(frames*1000/(now-lastMetricAt)),
       frameMs:dt,renderWidth:engine.getRenderWidth(),renderHeight:engine.getRenderHeight(),tick:latest?.tick||0,
-      enemies:enemies.size,shots:shots.size,enemyShots:enemyShots.size,pilotResponseMs,pilotPosition:units(pilot.position)});}catch(_){}
+      enemies:enemies.size,shots:shots.size,enemyShots:enemyShots.size,pilotResponseMs,pilotPosition:units(pilot.position),
+      remotePilot:Boolean(pilotTextureUrl),remoteEnemyAtlas:Boolean(enemyAtlasUrl)});}catch(_){}
       frames=0;lastMetricAt=now;}});
   return Object.freeze({update,previewPilot,clearPilotPreview,resize:()=>engine.resize(),dispose:()=>{if(disposed)return;disposed=true;
     engine.stopRenderLoop();scene.dispose();engine.dispose();}});

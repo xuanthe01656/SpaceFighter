@@ -45,7 +45,7 @@ if(report.status!=='PASS'||report.control?.fullTravelPass!==true||report.control
   ||report.control?.legacyDefaultPreserved!==true||report.framePacing?.renderRateIndependent!==true
   ||report.framePacing?.nativeRefreshPolicy!==true||report.pointer?.multiTouchIsolation!==true
   ||report.pointer?.cancelStopsAtShip!==true||report.settlement?.legacyAndRc5ProfilesAllowed!==true
-  ||report.pipeline?.rc5ManualAuditOnly!==true||report.pipeline?.singleRc6PushGate!==true||report.pipeline?.frozenGatesManualOnly!==true
+  ||report.pipeline?.rc5ManualAuditOnly!==true||report.pipeline?.rc7SupersedingPushGate!==true||report.pipeline?.frozenGatesManualOnly!==true
   ||report.pipeline?.androidManualOnly!==true||report.safety?.productionSettlementEnabled!==false
   ||report.safety?.productionCloudRewards!==false||report.safety?.c12Frozen!==true)throw new Error('RC5 integrated report failed');
 console.log(`\nC15_RC5_${fast?'FAST_':''}GATE_PASS ${path.join(output,'C15_RC5_GATE_REPORT.json')}`);

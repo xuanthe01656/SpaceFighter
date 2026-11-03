@@ -44,7 +44,7 @@ if(releaseManifest.version!=='c15-rc6-release-manifest-v1'||releaseManifest.appl
   ||releaseManifest.validation?.ci!=='gate:c15-rc6')throw new Error('RC6 release manifest failed');
 if(report.status!=='PASS'||report.release?.api36!==true||report.release?.dedicatedUploadSigning!==true
   ||report.release?.releaseHardening!==true||report.release?.page16k!==true||report.release?.signatureVerification!==true
-  ||report.release?.provenance!==true||report.release?.noAutomaticPlay!==true||report.pipeline?.singleRc6PushGate!==true
+  ||report.release?.provenance!==true||report.release?.noAutomaticPlay!==true||report.pipeline?.frozenRc6ManualOnly!==true||report.pipeline?.rc7SupersedingPushGate!==true
   ||report.pipeline?.frozenGatesManualOnly!==true||report.pipeline?.androidManualOnly!==true
   ||report.safety?.productionSettlementEnabled!==false||report.safety?.productionCloudRewards!==false
   ||report.safety?.c12Frozen!==true)throw new Error('RC6 integrated report failed');

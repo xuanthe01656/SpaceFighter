@@ -1,7 +1,9 @@
 import {validateResourceManifestV1,selectResourcePacksV1,planAtomicResourceActivationV1}
   from '../assets/ResourceManifestV1.js';
+import {assertAssetPayloadStore,createAutoAssetPayloadStore,downloadAssetBytesResumable}
+  from '../assets/AssetPayloadStoreV1.js';
 import {c15Sha256Hex,c15CanonicalJson} from './C15Crypto.js';
-import {c15StandaloneArrayBuffer,cloneC15PersistentValue} from './C15Rc1bStore.js';
+import {cloneC15PersistentValue} from './C15Rc1bStore.js';
 
 const DESCRIPTOR_VERSION='c15-resource-pack-descriptor-v1';
 const record=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
@@ -11,16 +13,15 @@ const FILE=/^[a-z0-9][a-z0-9._/-]{1,159}$/;
 const DESCRIPTOR_KEYS=['version','id','revision','quality','required','files','totalBytes','descriptorDigest'];
 const FILE_KEYS=['path','sizeBytes','sha256','contentType','url'];
 const ACTIVE_KEY=stageKey=>`active-set:${stageKey}`;
-const partialKey=(kind,id,revision,path='')=>`${kind}:${id}:v${revision}:${path}`;
 const fileKey=(id,revision,path)=>`${id}:v${revision}:${path}`;
+const nativePath=(id,revision,path)=>`packs/${id}/v${revision}/${path}`;
+const DEFAULT_FREE_RESERVE_BYTES=128*1024*1024;
 
+function safeProgress(listener,value){if(typeof listener==='function'){try{listener(Object.freeze({...value}));}catch(_){}}}
 function rollbackSnapshot(previous,stageKey){
   const source=record(previous)?previous:{};
   // Keep one bounded, JSON-like rollback snapshot. Never persist the previous
-  // rollback chain: repeated pack activations would otherwise grow metadata
-  // recursively and Android WebView may return a foreign-realm object that a
-  // strict prototype check rejects. Pack bytes remain in the immutable file
-  // store and are referenced by this plain metadata only.
+  // rollback chain. Immutable payload bytes stay in IndexedDB/native storage.
   return cloneC15PersistentValue({
     version:source.version==='c15-active-resource-set-v1'
       ?source.version:'c15-active-resource-set-v1',
@@ -48,7 +49,7 @@ async function validateDescriptor(descriptor,pack){
   let total=0;const seen=new Set();
   for(const file of descriptor.files){
     if(!exact(file,FILE_KEYS)||!FILE.test(file.path||'')||file.path.includes('..')||seen.has(file.path)
-      ||!Number.isSafeInteger(file.sizeBytes)||file.sizeBytes<1||file.sizeBytes>100_000_000
+      ||!Number.isSafeInteger(file.sizeBytes)||file.sizeBytes<1||file.sizeBytes>2_000_000_000
       ||!HEX.test(file.sha256||'')||typeof file.contentType!=='string'||file.contentType.length<3
       ||typeof file.url!=='string'||!/^https:\/\//.test(file.url)||!file.url.includes(`/v${pack.revision}/`))
       throw new TypeError(`C15 pack file invalid: ${pack.id}`);
@@ -60,100 +61,109 @@ async function validateDescriptor(descriptor,pack){
     throw new TypeError(`C15 pack descriptor digest mismatch: ${pack.id}`);
   return true;
 }
-async function downloadResumable({url,sizeBytes,store,key,fetchImpl=fetch,maxResponses=16}){
-  let saved=await store.get('partials',key);let bytes=saved?.bytes?new Uint8Array(saved.bytes):new Uint8Array(0);
-  if(bytes.length>sizeBytes){await store.remove('partials',key);bytes=new Uint8Array(0);}
-  for(let attempt=0;bytes.length<sizeBytes&&attempt<maxResponses;attempt++){
-    const headers=bytes.length?{Range:`bytes=${bytes.length}-`}:{};
-    const response=await fetchImpl(url,{headers,cache:'no-store'});
-    if(!response.ok&&response.status!==206)throw new Error(`C15 resource download failed (${response.status})`);
-    if(bytes.length&&response.status===200)bytes=new Uint8Array(0);
-    if(response.status===206){
-      const range=response.headers.get('content-range')||'';
-      const match=/^bytes (\d+)-(\d+)\/(\d+)$/.exec(range);
-      if(!match||Number(match[1])!==bytes.length||Number(match[3])!==sizeBytes)
-        throw new Error('C15 resource range response invalid');
-    }
-    const reader=response.body?.getReader?.();
-    if(reader){
-      const parts=[bytes];let length=bytes.length,lastPersist=length;
-      while(true){const {done,value}=await reader.read();if(done)break;if(!(value instanceof Uint8Array)||value.length===0)continue;
-        parts.push(value);length+=value.length;if(length>sizeBytes)throw new Error('C15 resource exceeded declared size');
-        if(length-lastPersist>=262144){const merged=new Uint8Array(length);let offset=0;for(const part of parts){merged.set(part,offset);offset+=part.length;}
-          parts.splice(0,parts.length,merged);await store.put('partials',key,{bytes:c15StandaloneArrayBuffer(merged),updatedAtMs:Date.now()});lastPersist=length;}
-      }
-      const merged=new Uint8Array(length);let offset=0;for(const part of parts){merged.set(part,offset);offset+=part.length;}bytes=merged;
-    }else{
-      const incoming=new Uint8Array(await response.arrayBuffer());const merged=new Uint8Array(bytes.length+incoming.length);
-      merged.set(bytes);merged.set(incoming,bytes.length);bytes=merged;
-    }
-    await store.put('partials',key,{bytes:c15StandaloneArrayBuffer(bytes),updatedAtMs:Date.now()});
-  }
-  if(bytes.length!==sizeBytes)throw new Error('C15 resource download incomplete');
-  return bytes;
-}
-async function downloadPack({pack,store,fetchImpl}){
-  // The manifest hashes the small descriptor itself. Its size is intentionally
-  // not part of ResourceManifestV1, so download it once; resumable range
-  // requests are reserved for declared file payloads.
-  const descriptorResponse=await fetchImpl(pack.url,{cache:'no-store'});
+
+async function downloadPack({pack,payloadStore,fetchImpl,onProgress,totalDownloadBytes,completedBefore,signal}){
+  // Manifest hashes the small descriptor. Payload files are resumable and may
+  // live in IndexedDB (web preview) or app-private native storage (Android).
+  if(signal?.aborted)throw Object.assign(new Error('Asset download cancelled'),{name:'AbortError',code:'ASSET_DOWNLOAD_CANCELLED'});
+  const descriptorResponse=await fetchImpl(pack.url,{cache:'no-store',signal});
   if(!descriptorResponse.ok)throw new Error(`C15 descriptor download failed (${descriptorResponse.status})`);
   const descriptorBytes=new Uint8Array(await descriptorResponse.arrayBuffer());
   if(descriptorBytes.length<2||descriptorBytes.length>1_000_000)
     throw new TypeError(`C15 descriptor size invalid: ${pack.id}`);
   if(await c15Sha256Hex(descriptorBytes)!==pack.sha256)throw new TypeError(`C15 descriptor SHA mismatch: ${pack.id}`);
-  let descriptor;try{descriptor=JSON.parse(new TextDecoder().decode(descriptorBytes));}catch{throw new TypeError(`C15 descriptor JSON invalid: ${pack.id}`);}
+  let descriptor;try{descriptor=JSON.parse(new TextDecoder().decode(descriptorBytes));}
+  catch{throw new TypeError(`C15 descriptor JSON invalid: ${pack.id}`);}
   await validateDescriptor(descriptor,pack);
-  const files=[];
+  const files=[];let packCompleted=0;
   for(const file of descriptor.files){
-    const key=partialKey('file',pack.id,pack.revision,file.path);
-    const bytes=await downloadResumable({url:file.url,sizeBytes:file.sizeBytes,store,key,fetchImpl});
-    if(await c15Sha256Hex(bytes)!==file.sha256)throw new TypeError(`C15 resource SHA mismatch: ${file.path}`);
-    await store.put('files',fileKey(pack.id,pack.revision,file.path),{bytes:c15StandaloneArrayBuffer(bytes),
-      sha256:file.sha256,sizeBytes:file.sizeBytes,contentType:file.contentType,verifiedAtMs:Date.now()});
-    await store.remove('partials',key);files.push({path:file.path,sha256:file.sha256,sizeBytes:file.sizeBytes,contentType:file.contentType});
+    const key=fileKey(pack.id,pack.revision,file.path);
+    const path=nativePath(pack.id,pack.revision,file.path);
+    await payloadStore.download({key,nativePath:path,url:file.url,sizeBytes:file.sizeBytes,sha256:file.sha256,
+      contentType:file.contentType,signal,onProgress:value=>{
+        safeProgress(onProgress,{version:'asset-download-progress-v1',phase:'downloading',packId:pack.id,path:file.path,
+          receivedBytes:completedBefore+packCompleted+Math.min(file.sizeBytes,Number(value.receivedBytes||0)),
+          totalBytes:totalDownloadBytes,fileReceivedBytes:Number(value.receivedBytes||0),fileTotalBytes:file.sizeBytes,
+          storage:payloadStore.kind});
+      }});
+    packCompleted+=file.sizeBytes;
+    files.push({path:file.path,sha256:file.sha256,sizeBytes:file.sizeBytes,contentType:file.contentType,
+      storageKey:key,nativePath:path});
   }
   return {revision:pack.revision,sha256:pack.sha256,verified:true,verifiedAtMs:Date.now(),files};
 }
-async function verifiedInstalledPacks(previous,store){
+async function verifiedInstalledPacks(previous,payloadStore){
   const installed={};
   for(const [id,meta] of Object.entries(previous?.packs||{})){
     if(!Number.isSafeInteger(meta?.revision)||typeof meta?.sha256!=='string'||!Array.isArray(meta?.files)||meta.files.length<1)continue;
     let valid=true;
     for(const file of meta.files){
       if(!record(file)||!FILE.test(file.path||'')||!HEX.test(file.sha256||'')||!Number.isSafeInteger(file.sizeBytes)){valid=false;break;}
-      const saved=await store.get('files',fileKey(id,meta.revision,file.path));
-      if(!saved?.bytes||saved.sha256!==file.sha256||saved.sizeBytes!==file.sizeBytes){valid=false;break;}
+      const key=typeof file.storageKey==='string'?file.storageKey:fileKey(id,meta.revision,file.path);
+      const path=typeof file.nativePath==='string'?file.nativePath:nativePath(id,meta.revision,file.path);
+      if(!await payloadStore.verify({key,nativePath:path,sizeBytes:file.sizeBytes,sha256:file.sha256})){valid=false;break;}
     }
     if(valid)installed[id]=meta;
   }
   return installed;
 }
-export async function ensureC15StageResources({manifest,stageKey='alpha-stage-1',quality='mobile-low',store,fetchImpl=fetch}){
-  if(!store)throw new TypeError('C15 resource store required');await verifyManifestDigest(manifest);
+
+export async function ensureC15StageResources({manifest,stageKey='alpha-stage-1',quality='mobile-low',store,
+  payloadStore=null,fetchImpl=fetch,onProgress=()=>{},signal=null,minFreeReserveBytes=DEFAULT_FREE_RESERVE_BYTES}={}){
+  if(!store)throw new TypeError('C15 resource store required');
+  if(!Number.isSafeInteger(minFreeReserveBytes)||minFreeReserveBytes<0||minFreeReserveBytes>2_000_000_000)
+    throw new TypeError('C15 resource storage reserve invalid');
+  await verifyManifestDigest(manifest);
+  payloadStore=payloadStore||await createAutoAssetPayloadStore({store,fetchImpl});
+  assertAssetPayloadStore(payloadStore);
   const previous=(await store.get('meta',ACTIVE_KEY(stageKey)))||{version:'c15-active-resource-set-v1',stageKey,packs:{}};
-  const installed=await verifiedInstalledPacks(previous,store);
+  const installed=await verifiedInstalledPacks(previous,payloadStore);
   const selection=selectResourcePacksV1({manifest,stageKey,quality,installed});
-  const verified={};
-  for(const pack of selection.download)verified[pack.id]=await downloadPack({pack,store,fetchImpl});
+  if(selection.totalBytes>0){
+    const capacity=await payloadStore.getCapacity();
+    if(Number.isFinite(capacity?.usableBytes)&&capacity.usableBytes<selection.totalBytes+minFreeReserveBytes){
+      const error=new Error('Not enough app-private storage for required game resources');
+      error.code='C15_ASSET_STORAGE_LOW';error.requiredBytes=selection.totalBytes+minFreeReserveBytes;
+      error.usableBytes=capacity.usableBytes;throw error;
+    }
+  }
+  safeProgress(onProgress,{version:'asset-download-progress-v1',phase:selection.download.length?'planning':'ready',
+    receivedBytes:0,totalBytes:selection.totalBytes,storage:payloadStore.kind});
+  const verified={};let completed=0;
+  for(const pack of selection.download){
+    verified[pack.id]=await downloadPack({pack,payloadStore,fetchImpl,onProgress,
+      totalDownloadBytes:selection.totalBytes,completedBefore:completed,signal});
+    completed+=pack.sizeBytes;
+  }
   const plan=planAtomicResourceActivationV1({selection,verifiedDownloads:verified,active:installed});
   const nextPacks={...plan.next};
   for(const pack of selection.packs){const info=verified[pack.id];if(info)nextPacks[pack.id]={...nextPacks[pack.id],files:info.files};}
   const fileIndex={};
   for(const [packId,meta] of Object.entries(nextPacks))for(const file of meta.files||[])
-    fileIndex[`${packId}/${file.path}`]={packId,revision:meta.revision,path:file.path};
+    fileIndex[`${packId}/${file.path}`]={packId,revision:meta.revision,path:file.path,
+      storageKey:file.storageKey||fileKey(packId,meta.revision,file.path),
+      nativePath:file.nativePath||nativePath(packId,meta.revision,file.path),
+      sizeBytes:file.sizeBytes,sha256:file.sha256,contentType:file.contentType};
   const active={version:'c15-active-resource-set-v1',stageKey,manifestDigest:manifest.manifestDigest,
-    activatedAtMs:Date.now(),packs:nextPacks,fileIndex,rollback:rollbackSnapshot(previous,stageKey)};
-  // Single metadata write is the activation boundary. Any failed download
-  // leaves the previous active set untouched.
+    activatedAtMs:Date.now(),storage:payloadStore.kind,packs:nextPacks,fileIndex,rollback:rollbackSnapshot(previous,stageKey)};
+  // Single metadata write is the activation boundary. A failed download leaves
+  // the previous active set untouched; immutable files remain safe to reuse.
   await store.put('meta',ACTIVE_KEY(stageKey),active);
-  return Object.freeze({selection,active});
+  safeProgress(onProgress,{version:'asset-download-progress-v1',phase:'ready',receivedBytes:selection.totalBytes,
+    totalBytes:selection.totalBytes,storage:payloadStore.kind});
+  return Object.freeze({selection,active,payloadStore});
 }
-export async function resolveC15ActiveResource({store,stageKey='alpha-stage-1',packId,path}){
-  const active=await store.get('meta',ACTIVE_KEY(stageKey));const index=active?.fileIndex?.[`${packId}/${path}`];
-  if(!index)return null;const saved=await store.get('files',fileKey(index.packId,index.revision,index.path));
-  if(!saved?.bytes)return null;const blob=new Blob([saved.bytes],{type:saved.contentType||'application/octet-stream'});
-  const url=URL.createObjectURL(blob);
-  return Object.freeze({url,revoke:()=>URL.revokeObjectURL(url),sha256:saved.sha256});
+export async function resolveC15ActiveResource({store,payloadStore=null,fetchImpl=fetch,stageKey='alpha-stage-1',packId,path}){
+  payloadStore=payloadStore||await createAutoAssetPayloadStore({store,fetchImpl});
+  assertAssetPayloadStore(payloadStore);
+  const active=await store.get('meta',ACTIVE_KEY(stageKey));
+  const index=active?.fileIndex?.[`${packId}/${path}`];
+  if(!index)return null;
+  return payloadStore.resolve({key:index.storageKey||fileKey(index.packId,index.revision,index.path),
+    nativePath:index.nativePath||nativePath(index.packId,index.revision,index.path),sizeBytes:index.sizeBytes,
+    sha256:index.sha256,contentType:index.contentType});
 }
-export {verifyManifestDigest,validateDescriptor,downloadResumable};
+
+// Backward-compatible export used by the frozen RC1B tests/evidence.
+export const downloadResumable=downloadAssetBytesResumable;
+export {verifyManifestDigest,validateDescriptor};

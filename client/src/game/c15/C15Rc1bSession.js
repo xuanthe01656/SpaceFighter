@@ -7,6 +7,7 @@
  */
 import {createC15BrowserStore,cloneC15PersistentValue} from './C15Rc1bStore.js';
 import {ensureC15StageResources,resolveC15ActiveResource} from './C15ResourceDelivery.js';
+import {createAutoAssetPayloadStore} from '../assets/AssetPayloadStoreV1.js';
 import {openC15LocalJournal,restoreC15LocalJournal,serializeC15LocalJournal} from '../combat/C15LocalJournal.js';
 import {createC15JournalUploader} from './C15JournalUploader.js';
 import {openC15KernelRuntime,replayC15KernelRuntime,advanceC15KernelRuntime,c15KernelRuntimeView} from './C15KernelRuntime.js';
@@ -92,10 +93,11 @@ function persisted({uid,requestId,envelope,frames,journal,phase,result=null,outc
 }
 
 export async function openOrResumeC15Rc1bSession({uid,quality='mobile-low',controlProfileId=defaultControlProfile(),
-  store=createC15BrowserStore(),online=()=>globalThis.navigator?.onLine!==false,onChange=()=>{},api=null,
-  fetchImpl=globalThis.fetch,clock=Date.now,uuidFactory=()=>crypto.randomUUID(),rc3Enabled=settlementClientBuildEnabled()}={}){
+  store=createC15BrowserStore(),online=()=>globalThis.navigator?.onLine!==false,onChange=()=>{},onResourceProgress=()=>{},
+  resourceSignal=null,api=null,fetchImpl=globalThis.fetch,clock=Date.now,uuidFactory=()=>crypto.randomUUID(),
+  rc3Enabled=settlementClientBuildEnabled()}={}){
   if(typeof uid!=='string'||uid.length<1||!['mobile-low','mobile-high'].includes(quality)
-    ||!store||typeof onChange!=='function'||typeof online!=='function'||typeof fetchImpl!=='function'
+    ||!store||typeof onChange!=='function'||typeof onResourceProgress!=='function'||typeof online!=='function'||typeof fetchImpl!=='function'
     ||typeof clock!=='function'||typeof uuidFactory!=='function')throw new TypeError('C15 client session configuration invalid');
   resolveC15ControlProfile(controlProfileId);
   api=api||await loadDefaultApi();
@@ -151,9 +153,14 @@ export async function openOrResumeC15Rc1bSession({uid,quality='mobile-low',contr
     journal=openC15LocalJournal({battleId:envelope.battleId,rulesVersion:envelope.runtime.snapshot.context.rulesVersion,
       loadoutHash:envelope.genesis.loadoutHash,issuedAtMs:envelope.genesis.issuedAtMs});phase='active';
   }
-  if(!resourcesReady){let manifest=envelope.resourceManifest;
-    try{if(online()){const current=await api.fetchManifest();if(current.manifestDigest===manifest.manifestDigest)manifest=current;}}catch(_){}
-    await ensureC15StageResources({manifest,stageKey:'alpha-stage-1',quality,store,fetchImpl});resourcesReady=true;}
+  const assetPayloadStore=await createAutoAssetPayloadStore({store,fetchImpl});
+  // Always re-check the immutable files, even when metadata says resources were
+  // ready. This migrates old IndexedDB sessions to native app-private storage
+  // and recovers from deleted/corrupt files without trusting stale metadata.
+  let manifest=envelope.resourceManifest;
+  try{if(online()){const current=await api.fetchManifest();if(current.manifestDigest===manifest.manifestDigest)manifest=current;}}catch(_){}
+  await ensureC15StageResources({manifest,stageKey:'alpha-stage-1',quality,store,payloadStore:assetPayloadStore,
+    fetchImpl,onProgress:onResourceProgress,signal:resourceSignal});resourcesReady=true;
   const subscribers=new Set([onChange]);let disposed=false,persistCounter=0,finalizePromise=null;let persistChain=Promise.resolve();
   const uploader=createC15JournalUploader({uid,battleId:envelope.battleId,journal,store,
     uploadChunk:api.uploadChunk,online,onUpdate:()=>publish()});
@@ -215,7 +222,8 @@ export async function openOrResumeC15Rc1bSession({uid,quality='mobile-low',contr
   async function abandon(){if(disposed)return;if(phase==='verified'){await clearLocalSession();return;}
     try{if(online())await api.abandon(uid,{battleId:envelope.battleId});}finally{await clearLocalSession();}}
   function subscribe(fn){if(typeof fn!=='function')throw new TypeError('C15 subscriber invalid');subscribers.add(fn);fn(view());return()=>subscribers.delete(fn);}
-  async function resolveResource(packId,path){return resolveC15ActiveResource({store,stageKey:'alpha-stage-1',packId,path});}
+  async function resolveResource(packId,path){return resolveC15ActiveResource({store,payloadStore:assetPayloadStore,
+    stageKey:'alpha-stage-1',packId,path});}
   await persistNow();publish();
   return Object.freeze({advance,finalizeWhenOnline,claimVerifiedReward,retryVerifiedRewardClaim,retryNetwork,suspend,completeVerified,abandon,subscribe,resolveResource,
     getView:view,getKernel:()=>kernel,getEnvelope:()=>envelope,getControlProfile:()=>envelope.controlProfile,

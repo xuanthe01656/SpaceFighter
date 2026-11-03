@@ -5,10 +5,11 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
-const read=relative=>fs.readFileSync(path.join(root,relative),'utf8');
+const read=relative=>fs.readFileSync(path.join(root,relative),'utf8').replace(/\r\n/g,'\n');
 const workflow=read('.github/workflows/android-release-candidate.yml');
 const rc6Gate=read('.github/workflows/c15-rc6-gate.yml');
 const rc5Gate=read('.github/workflows/c15-rc5-gate.yml');
+const rc7Gate=read('.github/workflows/c15-rc7-gate.yml');
 const debugWorkflow=read('.github/workflows/android-native-smoke.yml');
 const gradle=read('client/android/app/build.gradle');
 const manifest=read('client/android/app/src/main/AndroidManifest.xml');
@@ -88,10 +89,12 @@ test('release manifest hardening preserves app identity and disables Android bac
   assert.match(workflow,/package: name='com\.theIT\.spacefighter4'/);
 });
 
-test('RC6 is the only main-push C15 gate while RC5 and native workflows remain manual',()=>{
-  assert.match(rc6Gate,/push:\n\s+branches: \[main\]/);
-  assert.match(rc6Gate,/npm run gate:c15-rc6/);
-  assert.match(rc6Gate,/spacefighter-c15-rc6-gate-report/);
+test('RC6 is frozen manual while RC7 is the only main-push C15 gate',()=>{
+  assert.doesNotMatch(rc6Gate,/\n\s+push:/);
+  assert.match(rc6Gate,/Run frozen RC6 manual audit gate/);
+  assert.match(rc7Gate,/push:\n\s+branches: \[main\]/);
+  assert.match(rc7Gate,/npm run gate:c15-rc7/);
+  assert.match(rc7Gate,/spacefighter-c15-rc7-gate-report/);
   assert.doesNotMatch(rc5Gate,/\n\s+push:/);
   assert.match(rc5Gate,/Run frozen RC5 manual audit gate/);
   assert.doesNotMatch(debugWorkflow,/\n\s+push:/);

@@ -23,11 +23,11 @@ function main(){
     rc1b:read('.github/workflows/c15-rc1b-gate.yml'),rc1c:read('.github/workflows/c15-rc1c-rc2-gate.yml'),
     rc3:read('.github/workflows/c15-rc3-gate.yml'),rc4:read('.github/workflows/c15-rc4-gate.yml'),
     rc5:read('.github/workflows/c15-rc5-gate.yml'),rc6:read('.github/workflows/c15-rc6-gate.yml'),
-    phase:read('.github/workflows/phase0-ci.yml'),ios:read('.github/workflows/ios-build.yml'),
+    rc7:read('.github/workflows/c15-rc7-gate.yml'),phase:read('.github/workflows/phase0-ci.yml'),ios:read('.github/workflows/ios-build.yml'),
   };
-  const frozenGatesManualOnly=['rc1b','rc1c','rc3','rc4','rc5'].every(name=>!pushEnabled(workflows[name]));
-  const singleRc6PushGate=pushEnabled(workflows.rc6)&&/npm run gate:c15-rc6/.test(workflows.rc6)
-    &&!/npm run gate:c15-rc5/.test(workflows.rc6);
+  const frozenGatesManualOnly=['rc1b','rc1c','rc3','rc4','rc5','rc6'].every(name=>!pushEnabled(workflows[name]));
+  const rc7SupersedingPushGate=pushEnabled(workflows.rc7)&&/npm run gate:c15-rc7/.test(workflows.rc7)
+    &&!/npm run gate:c15-rc6/.test(workflows.rc7);
   const androidManualOnly=!pushEnabled(debugWorkflow)&&!pushEnabled(releaseWorkflow);
   const dedicatedUploadSigning=all(gradle,['spacefighterUpload','SF_ANDROID_RELEASE_SIGNING_ENABLED','SF_ANDROID_UPLOAD_KEYSTORE_PATH'])
     &&all(releaseWorkflow,['ANDROID_UPLOAD_KEYSTORE_BASE64','ANDROID_UPLOAD_CERT_SHA1','ANDROID_UPLOAD_CERT_SHA256','ANDROID_GOOGLE_SERVICES_JSON_BASE64','spacefighter-upload-key.jks'])
@@ -54,7 +54,8 @@ function main(){
       productionCloudRewards:false,c12Frozen:true,stagingKillSwitchExpected:true},
     release:{api36,dedicatedUploadSigning,versioned,releaseHardening,failClosed,bundletool,page16k,signatureVerification,
       provenance,noAutomaticPlay,appIdentity,releaseLane,artifact:'spacefighter-android-c15-rc6-upload-ready-candidate'},
-    pipeline:{frozenGatesManualOnly,phasePushDisabled:!pushEnabled(workflows.phase),singleRc6PushGate,androidManualOnly,
+    pipeline:{frozenGatesManualOnly,phasePushDisabled:!pushEnabled(workflows.phase),frozenRc6ManualOnly:!pushEnabled(workflows.rc6),
+      rc7SupersedingPushGate,androidManualOnly,
       iosManualOnly:!pushEnabled(workflows.ios)},
     safety:{productionSettlementEnabled:false,productionCloudRewards:false,c12Frozen:true,stagingKillSwitchExpected:true,
       firebaseRulesChanged:false,secretMaterialInArtifact:false,automaticPlayUpload:false}};
@@ -76,7 +77,8 @@ function main(){
   fs.mkdirSync(output,{recursive:true});
   fs.writeFileSync(path.join(output,'C15_RC6_GATE_REPORT.json'),JSON.stringify(report,null,2)+'\n');
   fs.writeFileSync(path.join(output,'C15_RC6_RELEASE_MANIFEST.json'),JSON.stringify(releaseManifest,null,2)+'\n');
-  fs.writeFileSync(path.join(output,'C15_RC6_GATE_REPORT.md'),`# SpaceFighter C15-RC6 Android Release Readiness Gate\n\n- Status: **PASS**\n- Git HEAD: \`${report.gitHead}\`\n- API 36 target/compile: **true**\n- Dedicated upload signing lane: **true**\n- R8 + resource shrinking: **true**\n- Release non-debuggable: **true**\n- AAB + universal APK validation: **true**\n- 16 KB page alignment checks: **true**\n- SHA/provenance/mapping/lint evidence: **true**\n- Automatic Google Play upload: **false**\n- RC6 is sole main-push C15 gate: **true**\n- Production settlement enabled: **false**\n- Production Cloud Rewards: **false**\n`);
+  fs.writeFileSync(path.join(output,'C15_RC6_GATE_REPORT.md'),`# SpaceFighter C15-RC6 Android Release Readiness Gate\n\n- Status: **PASS**\n- Git HEAD: \`${report.gitHead}\`\n- API 36 target/compile: **true**\n- Dedicated upload signing lane: **true**\n- R8 + resource shrinking: **true**\n- Release non-debuggable: **true**\n- AAB + universal APK validation: **true**\n- 16 KB page alignment checks: **true**\n- SHA/provenance/mapping/lint evidence: **true**\n- Automatic Google Play upload: **false**\n- RC6 frozen manual audit: **true**
+- RC7 superseding main-push gate: **true**\n- Production settlement enabled: **false**\n- Production Cloud Rewards: **false**\n`);
   console.log('C15_RC6_EVIDENCE_PASS',path.join(output,'C15_RC6_GATE_REPORT.json'));
 }
 try{main();}catch(error){console.error(error?.stack||error);process.exitCode=1;}

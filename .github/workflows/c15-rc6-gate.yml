@@ -1,25 +1,10 @@
 name: SpaceFighter C15-RC6 Android Release Readiness Gate
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'client/**'
-      - 'server/**'
-      - 'tools/**'
-      - 'security/**'
-      - 'Dockerfile'
-      - '.github/workflows/c15-rc6-gate.yml'
-      - '.github/workflows/c15-rc5-gate.yml'
-      - '.github/workflows/android-native-smoke.yml'
-      - '.github/workflows/android-release-candidate.yml'
-concurrency:
-  group: c15-rc6-${{ github.ref }}
-  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
-  gate:
+  frozen-rc6-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 50
     steps:
@@ -39,10 +24,10 @@ jobs:
       - name: Install exact server dependencies
         working-directory: server
         run: npm ci --no-audit --no-fund
-      - name: Run the only full C15 main-push gate
+      - name: Run frozen RC6 manual audit gate
         working-directory: client
         run: npm run gate:c15-rc6
-      - name: Upload RC6 Android release-readiness evidence
+      - name: Upload frozen RC6 evidence
         uses: actions/upload-artifact@v4
         with:
           name: spacefighter-c15-rc6-gate-report

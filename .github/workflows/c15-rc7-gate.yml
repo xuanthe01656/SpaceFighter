@@ -1,0 +1,49 @@
+name: SpaceFighter C15-RC7 Android Remote Asset Delivery Gate
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'client/**'
+      - 'server/**'
+      - 'tools/**'
+      - 'Dockerfile'
+      - '.github/workflows/c15-rc7-gate.yml'
+      - '.github/workflows/c15-rc6-gate.yml'
+      - '.github/workflows/android-native-smoke.yml'
+concurrency:
+  group: c15-rc7-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            client/package-lock.json
+            server/package-lock.json
+      - name: Install exact client dependencies
+        working-directory: client
+        run: npm ci --no-audit --no-fund
+      - name: Install exact server dependencies
+        working-directory: server
+        run: npm ci --no-audit --no-fund
+      - name: Run the only full C15 main-push gate
+        working-directory: client
+        run: npm run gate:c15-rc7
+      - name: Upload RC7 remote asset delivery evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: spacefighter-c15-rc7-gate-report
+          path: client/dist/c15-rc7/
+          if-no-files-found: error
+          retention-days: 30

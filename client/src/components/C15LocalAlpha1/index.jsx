@@ -34,7 +34,7 @@ export function formatC15Rc1bFault(error,fallback='C15_RC1B_ERROR'){
 
 export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=async()=>null}){
   const canvasRef=useRef(null),rendererRef=useRef(null),sessionRef=useRef(null),inputRef=useRef(null),telemetryRef=useRef(null);
-  const rafRef=useRef(null),pacerRef=useRef(null),pointerControllerRef=useRef(null),resourceRef=useRef(null),lastHudTick=useRef(-1),renderAlphaRef=useRef(0);
+  const rafRef=useRef(null),pacerRef=useRef(null),pointerControllerRef=useRef(null),resourceRefs=useRef([]),lastHudTick=useRef(-1),renderAlphaRef=useRef(0);
   const [profileId,setProfileId]=useState(()=>abQa()?null:envProfile());
   const [ui,setUi]=useState({status:abQa()?'profile-select':'opening',message:lang==='vi'?'Đang mở trận và chuẩn bị tài nguyên…':'Opening battle and resources…',
     view:null,fps:null,fault:null});
@@ -43,7 +43,7 @@ export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=
   const [retryingClaim,setRetryingClaim]=useState(false);
   useEffect(()=>{
     if(!profileId)return undefined;
-    let cancelled=false,unsubscribe=()=>{};
+    let cancelled=false,unsubscribe=()=>{};const resourceAbort=new AbortController();
     setUi(value=>({...value,status:'opening',message:lang==='vi'?'Đang mở trận và chuẩn bị tài nguyên…':'Opening battle and resources…',fault:null}));
     const stopLoop=()=>{if(rafRef.current!==null){cancelAnimationFrame(rafRef.current);rafRef.current=null;}
       renderAlphaRef.current=0;rendererRef.current?.clearPilotPreview?.();};
@@ -66,7 +66,13 @@ export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=
     const init=async()=>{
       const user=auth.currentUser;if(!user)throw new Error('C15 RC1B requires an authenticated account');
       const quality=(navigator.deviceMemory||0)>=6?'mobile-high':'mobile-low';
-      const session=await openOrResumeC15Rc1bSession({uid:user.uid,quality,controlProfileId:profileId,onChange:value=>{
+      const session=await openOrResumeC15Rc1bSession({uid:user.uid,quality,controlProfileId:profileId,
+        resourceSignal:resourceAbort.signal,onResourceProgress:progress=>{if(cancelled)return;const total=Number(progress?.totalBytes||0),received=Number(progress?.receivedBytes||0);
+          const percent=total>0?Math.max(0,Math.min(100,Math.round(received*100/total))):100;
+          const message=progress?.phase==='ready'
+            ?(lang==='vi'?'Tài nguyên đã sẵn sàng.':'Resources ready.')
+            :(lang==='vi'?`Đang tải tài nguyên… ${percent}%`:`Downloading resources… ${percent}%`);
+          setUi(old=>({...old,status:'opening',message}));},onChange:value=>{
         if(cancelled)return;rendererRef.current?.update(value.kernel);
         if(value.kernel.tick-lastHudTick.current>=5||value.phase!=='active'){
           lastHudTick.current=value.kernel.tick;setUi(old=>({...old,status:value.phase,view:value,message:null}));
@@ -75,8 +81,14 @@ export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=
       if(cancelled){session.dispose();return;}sessionRef.current=session;
       const profile=session.getControlProfile();telemetryRef.current=createC15ControlTelemetry({profileId:profile.id});
       pacerRef.current=createC15FramePacer({simulationHz:profile.simulationHz||30,maxCatchUpSteps:3,maxFrameDeltaMs:100});
-      resourceRef.current=await session.resolveResource('campaign-alpha-mobile-low','alpha_coast_low.webp');
-      const renderer=await createC15LocalRenderer({canvas:canvasRef.current,backgroundUrl:resourceRef.current?.url,
+      const [backgroundResource,pilotResource,enemyAtlasResource]=await Promise.all([
+        session.resolveResource('campaign-alpha-mobile-low','alpha_coast_low.webp'),
+        session.resolveResource('campaign-alpha-mobile-low','ship_xwing_top.png'),
+        session.resolveResource('campaign-alpha-mobile-low','p1_small_sheet.webp'),
+      ]);
+      resourceRefs.current=[backgroundResource,pilotResource,enemyAtlasResource].filter(Boolean);
+      const renderer=await createC15LocalRenderer({canvas:canvasRef.current,backgroundUrl:backgroundResource?.url,
+        pilotTextureUrl:pilotResource?.url,enemyAtlasUrl:enemyAtlasResource?.url,
         pilotResponseMs:profile.renderFollowMs,onFrame:metrics=>telemetryRef.current?.observePresentation(metrics),
         onMetrics:metrics=>{telemetryRef.current?.observePresentation(metrics);setUi(old=>({...old,fps:metrics.fps}));}});
       if(cancelled){renderer.dispose();return;}rendererRef.current=renderer;renderer.update(session.getView().kernel);
@@ -107,11 +119,11 @@ export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=
       else if(sessionRef.current?.getView().phase==='active')startLoop();};
     const online=()=>{void sessionRef.current?.retryNetwork().catch(()=>{});};
     window.addEventListener('resize',resize);window.addEventListener('online',online);document.addEventListener('visibilitychange',visibility);
-    return()=>{cancelled=true;stopLoop();pointerControllerRef.current?.dispose();pointerControllerRef.current=null;unsubscribe();
+    return()=>{cancelled=true;resourceAbort.abort();stopLoop();pointerControllerRef.current?.dispose();pointerControllerRef.current=null;unsubscribe();
       window.removeEventListener('resize',resize);window.removeEventListener('online',online);document.removeEventListener('visibilitychange',visibility);
       const session=sessionRef.current;sessionRef.current=null;inputRef.current=null;pacerRef.current=null;telemetryRef.current=null;
       if(session)void session.suspend().catch(()=>{}).finally(()=>session.dispose());
-      rendererRef.current?.dispose();rendererRef.current=null;resourceRef.current?.revoke?.();resourceRef.current=null;};
+      rendererRef.current?.dispose();rendererRef.current=null;for(const resource of resourceRefs.current){try{resource?.revoke?.();}catch(_){}}resourceRefs.current=[];};
   },[lang,profileId]);
   const retreat=async()=>{try{await sessionRef.current?.abandon();setScreen('stage_select');}catch(error){toast.error(error?.message||'Retreat failed');}};
   const retry=()=>{void sessionRef.current?.retryNetwork().catch(error=>toast.error(error?.message||'Verification retry failed'));};
