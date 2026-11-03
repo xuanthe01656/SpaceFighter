@@ -10,7 +10,9 @@ import { loadCampaignEngine, loadDungeonEngine } from './game/routing/BattleScre
 // Keep Portal eagerly loaded for fast first paint/login. Other screens are
 // route-level chunks: Babylon is downloaded only when battle/map opens.
 import Portal from './components/Portal';
+import StartupResourceGate from './components/ResourceDownloads/StartupResourceGate.jsx';
 const HQ = lazy(() => import('./components/HQ'));
+const ResourceManagerScreen = lazy(() => import('./components/ResourceDownloads/ResourceManagerScreen.jsx'));
 const Pilots = lazy(() => import('./components/Pilots'));
 const Inventory = lazy(() => import('./components/Inventory'));
 const CampaignEngine = lazy(loadCampaignEngine);
@@ -203,6 +205,10 @@ export default function Game() {
         />
       )}
       
+      {screen === 'resource_manager' && (
+        <ResourceManagerScreen setScreen={setScreen} lang={lang} />
+      )}
+
       {screen === 'hq' && (
         <HQ gameAction={gameAction} gsRef={gsRef} setScreen={setScreen} lang={lang} saveUserProfile={saveUserProfile} />
       )}
@@ -264,6 +270,8 @@ export default function Game() {
       
       </Suspense>
       </ScreenLoadBoundary>
+
+      <StartupResourceGate lang={lang} />
 
       {/* KHUNG THÔNG BÁO (TOAST) */}
       <Toaster 

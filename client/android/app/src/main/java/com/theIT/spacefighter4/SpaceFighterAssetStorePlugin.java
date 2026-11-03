@@ -79,11 +79,18 @@ public class SpaceFighterAssetStorePlugin extends Plugin {
     }
 
     private static long requireExpectedBytes(PluginCall call) {
-        Long value = call.getLong("expectedBytes");
-        if (value == null || value < 1L || value > MAX_FILE_BYTES) {
+        // Capacitor JSON numbers may arrive as Integer, Long or Double.
+        // PluginCall.getLong() is not reliable for small JSON integer values.
+        Object raw = call.getData().opt("expectedBytes");
+        if (!(raw instanceof Number)) {
             throw new IllegalArgumentException("Invalid expected asset byte length");
         }
-        return value;
+        double number = ((Number) raw).doubleValue();
+        if (!Double.isFinite(number) || number < 1 || number > MAX_FILE_BYTES
+                || number != Math.rint(number)) {
+            throw new IllegalArgumentException("Invalid expected asset byte length");
+        }
+        return ((Number) raw).longValue();
     }
 
     private static String requireSha256(PluginCall call) {

@@ -22,6 +22,7 @@ const abQa=()=>releaseChannel.qaControls&&String(import.meta.env?.VITE_C15_CONTR
 const envProfile=()=>String(import.meta.env?.VITE_C15_CONTROL_PROFILE_ID||C15_ARCADE_CONTROL_PROFILE_ID);
 const rc3Enabled=()=>releaseChannel.settlementClientEnabled;
 const rc5Enabled=()=>String(import.meta.env?.VITE_C15_RC5_CONTROL_ENABLED||'false')==='true';
+const rc7Enabled=()=>String(import.meta.env?.VITE_C15_RC7_ASSET_DELIVERY_ENABLED||'false')==='true';
 export function formatC15Rc1bFault(error,fallback='C15_RC1B_ERROR'){
   if(error?.code===25||error?.name==='DataCloneError')
     return 'C15_IDB_DATA_CLONE · Local session/resource cache could not be stored';
@@ -155,7 +156,7 @@ export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=
     <div style={{position:'absolute',top:'calc(env(safe-area-inset-top) + 10px)',left:10,right:10,display:'flex',gap:7,flexWrap:'wrap',fontSize:12,pointerEvents:'none'}}>
       <span style={chip}>{releaseChannel.qaControls
         ?(rc3Enabled()?'C15 RC3 · LOCAL 30Hz · STAGING ECONOMY':'C15 RC1C · LOCAL 30Hz · NON-ECONOMIC')
-        :(releaseChannel.production?'SPACEFIGHTER · VERIFIED':rc5Enabled()?'C15 RC5 · ANDROID CONTROL CANDIDATE':'C15 RC4 · RELEASE CANDIDATE')}</span>
+        :(releaseChannel.production?'SPACEFIGHTER · VERIFIED':rc7Enabled()?'C15 RC7 · ASSET DELIVERY CANDIDATE':rc5Enabled()?'C15 RC5 · ANDROID CONTROL CANDIDATE':'C15 RC4 · RELEASE CANDIDATE')}</span>
       {releaseChannel.qaControls&&profile&&<span style={chip}>{profile.id}</span>}
       {k&&<><span style={chip}>HP {Math.max(0,Math.round(k.hp))}/{Math.round(k.maxHp)}</span><span style={chip}>WAVE {k.wave}/{k.wavesTotal}</span>
         <span style={chip}>KILLS {k.kills}</span>{releaseChannel.showDiagnosticHud&&<span style={chip}>TICK {k.tick}</span>}</>}
