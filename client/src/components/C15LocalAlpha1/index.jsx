@@ -4,18 +4,24 @@ import {auth} from '../../firebase';
 import {openOrResumeC15Rc1bSession} from '../../game/c15/C15Rc1bSession.js';
 import {createC15LocalRenderer} from './C15LocalRenderer.js';
 import {openC15ControlIntent,addC15PointerDelta,sampleC15ControlTick,releaseC15ControlTarget,
-  reconfigureC15ControlViewport,c15ControlIntentView} from '../../game/c15/C15ControlIntent.js';
+  cancelC15ControlTarget,predictC15ControlRenderPosition,reconfigureC15ControlViewport,
+  c15ControlIntentView} from '../../game/c15/C15ControlIntent.js';
 import {createC15ControlTelemetry} from '../../game/c15/C15ControlTelemetry.js';
-import {C15_ARCADE_CONTROL_PROFILE_ID,C15_CURRENT_CONTROL_PROFILE_ID} from '../../game/c15/C15ControlProfilesV1.js';
+import {createC15FramePacer} from '../../game/c15/C15FramePacer.js';
+import {createC15PointerController} from '../../game/c15/C15PointerController.js';
+import {C15_ARCADE_CONTROL_PROFILE_ID,C15_CURRENT_CONTROL_PROFILE_ID,
+  C15_LEGACY_ARCADE_CONTROL_PROFILE_ID} from '../../game/c15/C15ControlProfilesV1.js';
 import {c15KernelInputConfig} from '../../game/c15/C15KernelRuntime.js';
 import {c15ReleaseChannelFromImportMeta} from '../../config/C15ReleaseChannel.js';
 
-const surface={position:'absolute',inset:0,background:'#020814',overflow:'hidden',zIndex:60};
+const surface={position:'absolute',inset:0,background:'#020814',overflow:'hidden',overscrollBehavior:'none',
+  touchAction:'none',userSelect:'none',WebkitUserSelect:'none',WebkitTouchCallout:'none',zIndex:60};
 const chip={background:'rgba(3,15,30,.78)',border:'1px solid #2a6680',borderRadius:8,padding:'6px 9px',color:'#d9fbff'};
 const releaseChannel=c15ReleaseChannelFromImportMeta();
 const abQa=()=>releaseChannel.qaControls&&String(import.meta.env?.VITE_C15_CONTROL_AB_QA||'false')==='true';
 const envProfile=()=>String(import.meta.env?.VITE_C15_CONTROL_PROFILE_ID||C15_ARCADE_CONTROL_PROFILE_ID);
 const rc3Enabled=()=>releaseChannel.settlementClientEnabled;
+const rc5Enabled=()=>String(import.meta.env?.VITE_C15_RC5_CONTROL_ENABLED||'false')==='true';
 export function formatC15Rc1bFault(error,fallback='C15_RC1B_ERROR'){
   if(error?.code===25||error?.name==='DataCloneError')
     return 'C15_IDB_DATA_CLONE · Local session/resource cache could not be stored';
@@ -28,7 +34,7 @@ export function formatC15Rc1bFault(error,fallback='C15_RC1B_ERROR'){
 
 export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=async()=>null}){
   const canvasRef=useRef(null),rendererRef=useRef(null),sessionRef=useRef(null),inputRef=useRef(null),telemetryRef=useRef(null);
-  const timerRef=useRef(null),pointerRef=useRef(null),resourceRef=useRef(null),lastHudTick=useRef(-1);
+  const rafRef=useRef(null),pacerRef=useRef(null),pointerControllerRef=useRef(null),resourceRef=useRef(null),lastHudTick=useRef(-1),renderAlphaRef=useRef(0);
   const [profileId,setProfileId]=useState(()=>abQa()?null:envProfile());
   const [ui,setUi]=useState({status:abQa()?'profile-select':'opening',message:lang==='vi'?'Đang mở trận và chuẩn bị tài nguyên…':'Opening battle and resources…',
     view:null,fps:null,fault:null});
@@ -39,13 +45,24 @@ export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=
     if(!profileId)return undefined;
     let cancelled=false,unsubscribe=()=>{};
     setUi(value=>({...value,status:'opening',message:lang==='vi'?'Đang mở trận và chuẩn bị tài nguyên…':'Opening battle and resources…',fault:null}));
-    const stopTimer=()=>{if(timerRef.current){clearInterval(timerRef.current);timerRef.current=null;}};
-    const startTimer=()=>{if(timerRef.current||!sessionRef.current||!inputRef.current)return;
-      timerRef.current=setInterval(()=>{try{const current=sessionRef.current?.getView();if(!current||current.phase!=='active'){stopTimer();return;}
-        const sampled=sampleC15ControlTick(inputRef.current);inputRef.current=sampled.state;
-        telemetryRef.current?.observeTick(c15ControlIntentView(sampled.state));
-        const advanced=sessionRef.current.advance(sampled.frame);rendererRef.current?.update(advanced.view.kernel);
-      }catch(error){stopTimer();setUi(value=>({...value,status:'error',fault:formatC15Rc1bFault(error,'C15_LOCAL_RUNTIME_ERROR')}));}},1000/30);};
+    const stopLoop=()=>{if(rafRef.current!==null){cancelAnimationFrame(rafRef.current);rafRef.current=null;}
+      renderAlphaRef.current=0;rendererRef.current?.clearPilotPreview?.();};
+    const runFrame=now=>{rafRef.current=null;if(cancelled||!sessionRef.current||!inputRef.current||!pacerRef.current)return;
+      try{const current=sessionRef.current.getView();if(!current||current.phase!=='active'){stopLoop();return;}
+        const pacing=pacerRef.current.advance(now);renderAlphaRef.current=pacing.alpha;telemetryRef.current?.observeFramePacing(pacing);
+        for(let step=0;step<pacing.steps;step++){
+          const sampled=sampleC15ControlTick(inputRef.current);inputRef.current=sampled.state;
+          telemetryRef.current?.observeTick(c15ControlIntentView(sampled.state));
+          const advanced=sessionRef.current.advance(sampled.frame);rendererRef.current?.update(advanced.view.kernel);
+          if(advanced.view.phase!=='active')break;
+        }
+        if(sessionRef.current?.getView().phase==='active'&&inputRef.current){
+          rendererRef.current?.previewPilot(predictC15ControlRenderPosition(inputRef.current,pacing.alpha));
+          rafRef.current=requestAnimationFrame(runFrame);
+        }else stopLoop();
+      }catch(error){stopLoop();setUi(value=>({...value,status:'error',fault:formatC15Rc1bFault(error,'C15_LOCAL_RUNTIME_ERROR')}));}};
+    const startLoop=()=>{if(rafRef.current!==null||!sessionRef.current||!inputRef.current||!pacerRef.current)return;
+      pacerRef.current.reset(performance.now());rafRef.current=requestAnimationFrame(runFrame);};
     const init=async()=>{
       const user=auth.currentUser;if(!user)throw new Error('C15 RC1B requires an authenticated account');
       const quality=(navigator.deviceMemory||0)>=6?'mobile-high':'mobile-low';
@@ -57,42 +74,45 @@ export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=
       }});
       if(cancelled){session.dispose();return;}sessionRef.current=session;
       const profile=session.getControlProfile();telemetryRef.current=createC15ControlTelemetry({profileId:profile.id});
+      pacerRef.current=createC15FramePacer({simulationHz:profile.simulationHz||30,maxCatchUpSteps:3,maxFrameDeltaMs:100});
       resourceRef.current=await session.resolveResource('campaign-alpha-mobile-low','alpha_coast_low.webp');
       const renderer=await createC15LocalRenderer({canvas:canvasRef.current,backgroundUrl:resourceRef.current?.url,
-        pilotResponseMs:profile.renderFollowMs,onFrame:metrics=>telemetryRef.current?.observeRender(metrics),
-        onMetrics:metrics=>{telemetryRef.current?.observeRender(metrics);setUi(old=>({...old,fps:metrics.fps}));}});
+        pilotResponseMs:profile.renderFollowMs,onFrame:metrics=>telemetryRef.current?.observePresentation(metrics),
+        onMetrics:metrics=>{telemetryRef.current?.observePresentation(metrics);setUi(old=>({...old,fps:metrics.fps}));}});
       if(cancelled){renderer.dispose();return;}rendererRef.current=renderer;renderer.update(session.getView().kernel);
       const rect=canvasRef.current.getBoundingClientRect();inputRef.current=openC15ControlIntent(c15KernelInputConfig(session.getKernel(),{
         canvasWidth:Math.max(1,rect.width),canvasHeight:Math.max(1,rect.height),halfHeight:15}),{profileId:profile.id});
       telemetryRef.current.observeTick(c15ControlIntentView(inputRef.current));
+      pointerControllerRef.current=createC15PointerController({element:canvasRef.current,
+        onDelta:delta=>{if(!inputRef.current)return;try{inputRef.current=addC15PointerDelta(inputRef.current,{deltaX:delta.deltaX,deltaY:delta.deltaY});
+            const view=c15ControlIntentView(inputRef.current);telemetryRef.current?.markTarget(view);
+            rendererRef.current?.previewPilot(predictC15ControlRenderPosition(inputRef.current,renderAlphaRef.current));}catch(_){}},
+        onRelease:()=>{try{if(inputRef.current)inputRef.current=releaseC15ControlTarget(inputRef.current);}catch(_){}},
+        onCancel:()=>{try{if(inputRef.current)inputRef.current=cancelC15ControlTarget(inputRef.current);}catch(_){}},
+        onMetric:name=>telemetryRef.current?.recordPointerEvent(name)});
       unsubscribe=session.subscribe(value=>{if(cancelled)return;renderer.update(value.kernel);
-        if(value.kernel.tick-lastHudTick.current>=5||value.phase!=='active'){lastHudTick.current=value.kernel.tick;setUi(old=>({...old,status:value.phase,view:value,message:null}));}
-        if(value.phase==='active')startTimer();else stopTimer();});
-      startTimer();
+        if(value.kernel.tick-lastHudTick.current>=5||value.phase!=='active'){
+          lastHudTick.current=value.kernel.tick;setUi(old=>({...old,status:value.phase,view:value,message:null}));}
+        if(value.phase==='active')startLoop();else stopLoop();});
+      startLoop();
     };
     init().catch(error=>{if(!cancelled)setUi(value=>({...value,status:'error',fault:formatC15Rc1bFault(error,'C15_RC1B_OPEN_FAILED')}));});
     const resize=()=>{rendererRef.current?.resize();if(!inputRef.current||!canvasRef.current)return;try{const rect=canvasRef.current.getBoundingClientRect();
-      inputRef.current=reconfigureC15ControlViewport(inputRef.current,{aspect:rect.width/Math.max(1,rect.height),canvasWidth:Math.max(1,rect.width),
-        canvasHeight:Math.max(1,rect.height),halfHeight:15,speedMultiplier:1});}catch(_){}};
-    const visibility=()=>{if(document.hidden){stopTimer();pointerRef.current=null;
-        try{if(inputRef.current)inputRef.current=releaseC15ControlTarget(inputRef.current);}catch(_){}
+      const controlView=c15ControlIntentView(inputRef.current);inputRef.current=reconfigureC15ControlViewport(inputRef.current,{
+        aspect:rect.width/Math.max(1,rect.height),canvasWidth:Math.max(1,rect.width),canvasHeight:Math.max(1,rect.height),
+        halfHeight:15,speedMultiplier:controlView.speedMultiplier});}catch(_){}};
+    const visibility=()=>{if(document.hidden){pointerControllerRef.current?.cancel('visibility-hidden');stopLoop();
+        try{if(inputRef.current)inputRef.current=cancelC15ControlTarget(inputRef.current);}catch(_){}
         void sessionRef.current?.suspend();}
-      else if(sessionRef.current?.getView().phase==='active')startTimer();};
+      else if(sessionRef.current?.getView().phase==='active')startLoop();};
     const online=()=>{void sessionRef.current?.retryNetwork().catch(()=>{});};
     window.addEventListener('resize',resize);window.addEventListener('online',online);document.addEventListener('visibilitychange',visibility);
-    return()=>{cancelled=true;stopTimer();unsubscribe();window.removeEventListener('resize',resize);window.removeEventListener('online',online);
-      document.removeEventListener('visibilitychange',visibility);const session=sessionRef.current;sessionRef.current=null;inputRef.current=null;telemetryRef.current=null;
+    return()=>{cancelled=true;stopLoop();pointerControllerRef.current?.dispose();pointerControllerRef.current=null;unsubscribe();
+      window.removeEventListener('resize',resize);window.removeEventListener('online',online);document.removeEventListener('visibilitychange',visibility);
+      const session=sessionRef.current;sessionRef.current=null;inputRef.current=null;pacerRef.current=null;telemetryRef.current=null;
       if(session)void session.suspend().catch(()=>{}).finally(()=>session.dispose());
       rendererRef.current?.dispose();rendererRef.current=null;resourceRef.current?.revoke?.();resourceRef.current=null;};
   },[lang,profileId]);
-  const pointerDown=event=>{if(!inputRef.current||pointerRef.current!==null)return;pointerRef.current={id:event.pointerId,x:event.clientX,y:event.clientY};
-    event.currentTarget.setPointerCapture?.(event.pointerId);};
-  const pointerMove=event=>{const prior=pointerRef.current;if(!prior||prior.id!==event.pointerId||!inputRef.current)return;
-    try{inputRef.current=addC15PointerDelta(inputRef.current,{deltaX:event.clientX-prior.x,deltaY:event.clientY-prior.y});
-      const view=c15ControlIntentView(inputRef.current);telemetryRef.current?.markTarget(view);
-      pointerRef.current={id:prior.id,x:event.clientX,y:event.clientY};}catch(_){}};
-  const pointerUp=event=>{if(pointerRef.current?.id!==event.pointerId)return;pointerRef.current=null;
-    try{if(inputRef.current)inputRef.current=releaseC15ControlTarget(inputRef.current);}catch(_){}};
   const retreat=async()=>{try{await sessionRef.current?.abandon();setScreen('stage_select');}catch(error){toast.error(error?.message||'Retreat failed');}};
   const retry=()=>{void sessionRef.current?.retryNetwork().catch(error=>toast.error(error?.message||'Verification retry failed'));};
   const continueVerified=async()=>{if(continuing)return;setContinuing(true);try{
@@ -118,12 +138,12 @@ export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=
     }catch(error){toast.error(error?.message||'Không thể xuất Control Feel JSON');}};
   const k=ui.view?.kernel,t=ui.view?.transport,profile=ui.view?.controlProfile,settlement=ui.view?.settlement;
   return <div style={surface}>
-    <canvas ref={canvasRef} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={pointerUp}
-      style={{width:'100%',height:'100%',display:'block',touchAction:'none'}}/>
+    <canvas ref={canvasRef} tabIndex={-1} style={{width:'100%',height:'100%',display:'block',touchAction:'none',overscrollBehavior:'none',
+      userSelect:'none',WebkitUserSelect:'none',WebkitTouchCallout:'none'}}/>
     <div style={{position:'absolute',top:'calc(env(safe-area-inset-top) + 10px)',left:10,right:10,display:'flex',gap:7,flexWrap:'wrap',fontSize:12,pointerEvents:'none'}}>
       <span style={chip}>{releaseChannel.qaControls
         ?(rc3Enabled()?'C15 RC3 · LOCAL 30Hz · STAGING ECONOMY':'C15 RC1C · LOCAL 30Hz · NON-ECONOMIC')
-        :(releaseChannel.production?'SPACEFIGHTER · VERIFIED':'C15 RC4 · RELEASE CANDIDATE')}</span>
+        :(releaseChannel.production?'SPACEFIGHTER · VERIFIED':rc5Enabled()?'C15 RC5 · ANDROID CONTROL CANDIDATE':'C15 RC4 · RELEASE CANDIDATE')}</span>
       {releaseChannel.qaControls&&profile&&<span style={chip}>{profile.id}</span>}
       {k&&<><span style={chip}>HP {Math.max(0,Math.round(k.hp))}/{Math.round(k.maxHp)}</span><span style={chip}>WAVE {k.wave}/{k.wavesTotal}</span>
         <span style={chip}>KILLS {k.kills}</span>{releaseChannel.showDiagnosticHud&&<span style={chip}>TICK {k.tick}</span>}</>}
@@ -137,7 +157,7 @@ export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=
     {releaseChannel.qaControls&&profileId===null&&<div style={{position:'absolute',inset:0,display:'grid',placeItems:'center',background:'rgba(1,6,15,.88)'}}>
       <div style={{...chip,maxWidth:430,textAlign:'center',fontSize:14,padding:18}}><b>RC1C CONTROL A/B</b><br/><br/>
         <button onClick={()=>setProfileId(C15_CURRENT_CONTROL_PROFILE_ID)}>A · CURRENT BALANCED</button>{' '}
-        <button onClick={()=>setProfileId(C15_ARCADE_CONTROL_PROFILE_ID)}>B · ARCADE RESPONSIVE</button><br/><br/>
+        <button onClick={()=>setProfileId(C15_LEGACY_ARCADE_CONTROL_PROFILE_ID)}>B · ARCADE RESPONSIVE V1</button><br/><br/>
         <small>{lang==='vi'?'Chọn một profile cho trận này. Kết quả server sẽ pin cùng profile.':'Choose one profile for this battle; the server pins the same profile.'}</small>
       </div>
     </div>}

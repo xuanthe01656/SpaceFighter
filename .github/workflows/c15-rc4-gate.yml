@@ -1,17 +1,6 @@
 name: SpaceFighter C15-RC4 Production Hardening Gate
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'client/**'
-      - 'server/**'
-      - 'tools/**'
-      - 'security/**'
-      - 'Dockerfile'
-      - '.github/workflows/c15-rc4-gate.yml'
-      - '.github/workflows/android-native-smoke.yml'
-      - '.github/workflows/ios-build.yml'
 concurrency:
   group: c15-rc4-${{ github.ref }}
   cancel-in-progress: true
@@ -36,7 +25,7 @@ jobs:
       - name: Install exact server dependencies
         working-directory: server
         run: npm ci --no-audit --no-fund
-      - name: Run the only full C15 main-push gate
+      - name: Run frozen RC4 manual audit gate
         working-directory: client
         run: npm run gate:c15-rc4
       - name: Upload RC4 release evidence

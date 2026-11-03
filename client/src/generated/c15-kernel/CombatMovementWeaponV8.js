@@ -24,6 +24,7 @@ const POLICY_VERSION = 'v8b2c2-keyboard-preview-v1';
 const BALLISTIC_POLICY_VERSION = 'v8c6a-ballistic-preview-v2';
 const PIERCE_BURST_POLICY_VERSION = 'v8c6b-pierce-burst-preview-v3';
 const ARCADE_POLICY_VERSION = 'v8c6b-pierce-burst-preview-v4-arcade';
+const RC5_ARCADE_POLICY_VERSION = 'v8c6b-pierce-burst-preview-v5-arcade-rc5';
 // Isolated QA allowlists, pinned to current client catalog descriptors.
 // Homing, splash, wave, charge, ion and all auxiliaries remain UNSUPPORTED.
 // These are NOT production loadout catalog resolvers.
@@ -57,8 +58,8 @@ const freeze = obj => {
 /** Server-pinned keyboard policy. No default pilot radius is invented. */
 function previewFromTrustedSnapshot(snapshot, policy) {
   if (!exact(policy, ['version', 'keyboardUnitsPer60HzFrame', 'pilotHitRadiusUnits', 'projectileHitRadiusUnits'])
-    || ![POLICY_VERSION,BALLISTIC_POLICY_VERSION,PIERCE_BURST_POLICY_VERSION,ARCADE_POLICY_VERSION].includes(policy.version)
-    || !finite(policy.keyboardUnitsPer60HzFrame, 0.01, 0.5)
+    || ![POLICY_VERSION,BALLISTIC_POLICY_VERSION,PIERCE_BURST_POLICY_VERSION,ARCADE_POLICY_VERSION,RC5_ARCADE_POLICY_VERSION].includes(policy.version)
+    || !finite(policy.keyboardUnitsPer60HzFrame, 0.01, 1.5)
     || !safeInt(policy.pilotHitRadiusUnits, 100, 2500)
     || !safeInt(policy.projectileHitRadiusUnits, 10, 1500)) {
     deny('FOUNDATION_POLICY_INVALID', 'Expected pinned server-only keyboard policy');
@@ -105,8 +106,9 @@ function previewFromTrustedSnapshot(snapshot, policy) {
   }
   const speed = air.speed * (1 + movementBonus);
   const speedMultiplier = clamp(speed / 6, 0.15, 3);
-  const movePerTickUnits = Math.round(policy.keyboardUnitsPer60HzFrame * UNITS_PER_WORLD * 2 * speedMultiplier);
-  if (!safeInt(movePerTickUnits, 1, 3000)) {
+  const rawMovePerTickUnits = Math.round(policy.keyboardUnitsPer60HzFrame * UNITS_PER_WORLD * 2 * speedMultiplier);
+  const movePerTickUnits = policy.version === RC5_ARCADE_POLICY_VERSION ? Math.min(3600,rawMovePerTickUnits) : rawMovePerTickUnits;
+  if (!safeInt(movePerTickUnits, 1, policy.version === RC5_ARCADE_POLICY_VERSION ? 3600 : 3000)) {
     deny('FOUNDATION_MOVEMENT_UNSUPPORTED', 'Movement exceeds core tick limits');
   }
   // Same main-gun progression formula as client fireIntervalMs(seconds).
@@ -124,7 +126,7 @@ function previewFromTrustedSnapshot(snapshot, policy) {
     || (pattern === 'single' && projectileType === 'plasma')
     || (policy.version === BALLISTIC_POLICY_VERSION && Object.hasOwn(BALLISTIC_PAIRS,pattern)
       && BALLISTIC_PAIRS[pattern] === projectileType)
-    || ([PIERCE_BURST_POLICY_VERSION,ARCADE_POLICY_VERSION].includes(policy.version)
+    || ([PIERCE_BURST_POLICY_VERSION,ARCADE_POLICY_VERSION,RC5_ARCADE_POLICY_VERSION].includes(policy.version)
       && Object.hasOwn(PIERCE_BURST_PAIRS,pattern)
       && PIERCE_BURST_PAIRS[pattern] === projectileType);
   if (!supported) deny('FOUNDATION_WEAPON_PATTERN_UNMODELED', 'Weapon needs a separate verified projectile rule');
@@ -140,7 +142,7 @@ function previewFromTrustedSnapshot(snapshot, policy) {
   if (!safeInt(projectileAtk, 0, 1000000)) deny('FOUNDATION_DAMAGE_UNSUPPORTED', 'Main gun damage exceeds core bounds');
   return freeze({
     version: FOUNDATION_VERSION, previewOnly: true, safeForCloudBattle: false,
-    ...([BALLISTIC_POLICY_VERSION,PIERCE_BURST_POLICY_VERSION,ARCADE_POLICY_VERSION].includes(policy.version)
+    ...([BALLISTIC_POLICY_VERSION,PIERCE_BURST_POLICY_VERSION,ARCADE_POLICY_VERSION,RC5_ARCADE_POLICY_VERSION].includes(policy.version)
       ? {ballisticPolicyVersion:policy.version} : {}),
     rulesVersion: snapshot.context.rulesVersion, loadoutHash: snapshot.loadoutHash,
     arena: {halfWidthUnits:arena.halfWidthUnits, halfHeightUnits:arena.halfHeightUnits},
@@ -222,4 +224,4 @@ function advanceFireClock(clock, throughTick) {
   return freeze({clock:{version:TIMER_VERSION, periodUs:clock.periodUs,
     processedThroughTick:throughTick, nextShotIndex:index}, shotTicks:due});
 }
-export {FOUNDATION_VERSION,POLICY_VERSION,ARCADE_POLICY_VERSION,TIMER_VERSION,MovementWeaponError,previewFromTrustedSnapshot,advancePreviewMovement,previewMainProjectile,openFireClock,advanceFireClock};
+export {FOUNDATION_VERSION,POLICY_VERSION,ARCADE_POLICY_VERSION,RC5_ARCADE_POLICY_VERSION,TIMER_VERSION,MovementWeaponError,previewFromTrustedSnapshot,advancePreviewMovement,previewMainProjectile,openFireClock,advanceFireClock};

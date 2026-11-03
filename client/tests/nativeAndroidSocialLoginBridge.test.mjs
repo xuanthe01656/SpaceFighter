@@ -48,10 +48,10 @@ test('Existing immersive mobile experience remains enabled', () => {
     assert.ok(java.includes(marker), 'Missing: ' + marker);
   }
 });
-test('Android native build is explicit manual-only after the single RC4 full gate', () => {
+test('Android native build is explicit manual-only after the single RC5 full gate', () => {
   assert.match(workflow, /^on:\s*\n  workflow_dispatch:/m);
   assert.doesNotMatch(workflow, /^  (?:push|pull_request|schedule):/m);
-  assert.match(workflow, /npm run gate:c15-rc4:fast/);
+  assert.match(workflow, /npm run gate:c15-rc5:fast/);
   assert.match(workflow, /permissions:\s*\n\s*contents: read/);
 });
 test('Android native smoke uses locked dependencies, sync and actual Gradle compile', () => {

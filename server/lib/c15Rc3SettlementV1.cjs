@@ -14,12 +14,15 @@ const {assertAccountActive}=require('./accountDeletion.cjs');
 const {verifyC15CommercialOriginV1}=require('./c15CommercialGenesisV1.cjs');
 const {verifyC15CommercialReplayResultV1}=require('./c15CommercialReplayV1.cjs');
 const {journalRoot,verifyC15TrustedOutcomeV1}=require('./c15TrustedOutcomeV1.cjs');
+const {LEGACY_ARCADE_PROFILE_ID,ARCADE_PROFILE_ID}=require('./c15ControlProfilesV1.cjs');
 
 const VERSION='c15-rc3-settlement-v1';
 const RECEIPT_VERSION='c15-rc3-settlement-receipt-v1';
 const PURPOSE='staging-trusted-outcome-settlement-rc3';
 const REWARD_POLICY_VERSION='c15-alpha1-reward-policy-v1';
-const SELECTED_CONTROL_PROFILE='arcade-responsive-v1';
+const SELECTED_CONTROL_PROFILE=LEGACY_ARCADE_PROFILE_ID;
+const SETTLEMENT_CONTROL_PROFILES=Object.freeze([LEGACY_ARCADE_PROFILE_ID,ARCADE_PROFILE_ID]);
+const settlementControlProfiles=new Set(SETTLEMENT_CONTROL_PROFILES);
 const MAX_VALUE=1_000_000_000;
 const MAX_CHUNKS=256;
 const MAX_OUTCOME_AGE_MS=24*60*60*1000;
@@ -134,7 +137,7 @@ function verifyC15Rc3SettlementReceiptV1(receipt,keyRing,expected={}){
     ||typeof receipt.uid!=='string'||receipt.uid.length<1||receipt.uid.length>128||!REQUEST.test(receipt.requestId||'')
     ||!HEX.test(receipt.requestDigest||'')||!HEX.test(receipt.outcomeDigest||'')||!HEX.test(receipt.journalRootDigest||'')
     ||!HEX.test(receipt.replayDigest||'')||!HEX.test(receipt.stateDigest||'')||!HEX.test(receipt.resourceManifestDigest||'')
-    ||receipt.controlProfileId!==SELECTED_CONTROL_PROFILE||!['rc2-trusted-clear','rc2-trusted-defeat'].includes(receipt.outcomePhase)
+    ||!settlementControlProfiles.has(receipt.controlProfileId)||!['rc2-trusted-clear','rc2-trusted-defeat'].includes(receipt.outcomePhase)
     ||receipt.rewardPolicyVersion!==REWARD_POLICY_VERSION||!nonnegative(receipt.coins)||!nonnegative(receipt.experience)
     ||![0,1].includes(receipt.stars)||!exact(receipt.missionDeltas,['d_play_3','m_clear_planet'])
     ||!nonnegative(receipt.missionDeltas.d_play_3)||!nonnegative(receipt.missionDeltas.m_clear_planet)
@@ -204,10 +207,12 @@ async function createC15Rc3SettlementV1({db,enabled=false,allowedUids=[],genesis
         deny('C15_RC3_SESSION_INVALID','Finalized C15 session context invalid');
       verifyC15CommercialOriginV1(origin,genesisRing);
       verifyC15CommercialReplayResultV1(result,{uid,sessionId,battleId});
+      if(!settlementControlProfiles.has(outcome.controlProfileId))
+        deny('C15_RC3_CONTROL_PROFILE_UNSUPPORTED','Outcome control profile is not approved for settlement');
       verifyC15TrustedOutcomeV1(outcome,outcomeRing,{uid,sessionId,battleId,outcomeDigest,
         originDigest:origin.originDigest,replayDigest:result.replayDigest,stateDigest:result.stateDigest,
         traceDigest:result.traceDigest,resourceManifestDigest:origin.genesis.resourceManifestDigest,
-        controlProfileId:SELECTED_CONTROL_PROFILE});
+        controlProfileId:outcome.controlProfileId});
       if(outcome.issuedAtMs>at||outcome.issuedAtMs<at-MAX_OUTCOME_AGE_MS)
         deny('C15_RC3_OUTCOME_EXPIRED','RC2 outcome is outside the RC3 settlement window',410);
       if(traceSnap.docs.length!==session.chunkCount||traceSnap.docs.length<1||traceSnap.docs.length>MAX_CHUNKS)
@@ -262,5 +267,5 @@ async function createC15Rc3StagingSettlement({db,env={},catalogModule,schemaModu
     receiptVerificationKeys:new Map([[config.receipt.keyId,config.receipt.key]]),
     catalogModule,schemaModule,now});
 }
-module.exports=freeze({VERSION,RECEIPT_VERSION,PURPOSE,REWARD_POLICY_VERSION,SELECTED_CONTROL_PROFILE,
+module.exports=freeze({VERSION,RECEIPT_VERSION,PURPOSE,REWARD_POLICY_VERSION,SELECTED_CONTROL_PROFILE,SETTLEMENT_CONTROL_PROFILES,
   parseC15Rc3SettlementConfig,verifyC15Rc3SettlementReceiptV1,createC15Rc3SettlementV1,createC15Rc3StagingSettlement});

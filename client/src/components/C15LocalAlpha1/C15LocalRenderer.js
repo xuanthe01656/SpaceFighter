@@ -2,6 +2,7 @@
 import * as BABYLON from '@babylonjs/core';
 
 const world=position=>new BABYLON.Vector3(position.xUnits/1000,.12,position.zUnits/1000);
+const units=position=>Object.freeze({xUnits:Math.round(position.x*1000),zUnits:Math.round(position.z*1000)});
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 function material(scene,name,color,alpha=1){const mat=new BABYLON.StandardMaterial(name,scene);
   mat.emissiveColor=BABYLON.Color3.FromHexString(color);mat.diffuseColor=mat.emissiveColor;
@@ -24,7 +25,7 @@ export async function createC15LocalRenderer({canvas,backgroundUrl=null,pilotRes
   const bossMat=material(scene,'c15-boss','#ffbd4a');const shotMat=material(scene,'c15-shot','#72ffe1');
   const enemyShotMat=material(scene,'c15-enemy-shot','#ff925c');
   const pilot=BABYLON.MeshBuilder.CreateCylinder('c15-pilot',{diameterTop:0,diameterBottom:1.2,height:2.1,tessellation:3},scene);
-  pilot.rotation.x=Math.PI/2;pilot.material=pilotMat;
+  pilot.rotation.x=Math.PI/2;pilot.material=pilotMat;pilot.metadata={authoritativeTarget:pilot.position.clone(),previewTarget:null};
   if(backgroundUrl){
     const bgMat=new BABYLON.StandardMaterial('c15-background',scene);const texture=new BABYLON.Texture(backgroundUrl,scene,false,false);
     texture.wrapU=texture.wrapV=BABYLON.Texture.WRAP_ADDRESSMODE;bgMat.diffuseTexture=texture;bgMat.emissiveTexture=texture;
@@ -44,17 +45,24 @@ export async function createC15LocalRenderer({canvas,backgroundUrl=null,pilotRes
     for(const [id,mesh] of map){if(!alive.has(id)){mesh.dispose();map.delete(id);}}
   }
   function update(view){
-    if(disposed||!view||view.version!=='c15-local-world-view-v1')return;latest=view;target(pilot,view.pilot);
+    if(disposed||!view||view.version!=='c15-local-world-view-v1')return;latest=view;
+    pilot.metadata.authoritativeTarget=world(view.pilot);
     syncMap(enemies,view.enemies,{prefix:'c15-enemy',mat:enemyMat,size:1.25,enemy:true});
     syncMap(shots,view.projectiles,{prefix:'c15-shot',mat:shotMat,size:.34});
     syncMap(enemyShots,view.enemyProjectiles,{prefix:'c15-enemy-shot',mat:enemyShotMat,size:.42});
   }
+  function previewPilot(position){if(disposed||!position||!Number.isFinite(position.xUnits)||!Number.isFinite(position.zUnits))return;
+    pilot.metadata.previewTarget=world(position);}
+  function clearPilotPreview(){if(!disposed)pilot.metadata.previewTarget=null;}
   engine.runRenderLoop(()=>{if(disposed)return;const dt=engine.getDeltaTime();
-    follow(pilot,pilot.metadata?.target||pilot.position,dt,pilotResponseMs);
+    const pilotTarget=pilot.metadata?.previewTarget||pilot.metadata?.authoritativeTarget||pilot.position;
+    follow(pilot,pilotTarget,dt,pilotResponseMs);
     for(const map of [enemies,shots,enemyShots])for(const mesh of map.values())follow(mesh,mesh.metadata?.target||mesh.position,dt,24);
-    scene.render();frames++;try{onFrame({frameMs:dt,tick:latest?.tick||0});}catch(_){}
+    scene.render();frames++;try{onFrame({frameMs:dt,tick:latest?.tick||0,pilotPosition:units(pilot.position)});}catch(_){}
     const now=performance.now();if(now-lastMetricAt>=1000){try{onMetrics({fps:Math.round(frames*1000/(now-lastMetricAt)),
       frameMs:dt,renderWidth:engine.getRenderWidth(),renderHeight:engine.getRenderHeight(),tick:latest?.tick||0,
-      enemies:enemies.size,shots:shots.size,enemyShots:enemyShots.size,pilotResponseMs});}catch(_){}frames=0;lastMetricAt=now;}});
-  return Object.freeze({update,resize:()=>engine.resize(),dispose:()=>{if(disposed)return;disposed=true;engine.stopRenderLoop();scene.dispose();engine.dispose();}});
+      enemies:enemies.size,shots:shots.size,enemyShots:enemyShots.size,pilotResponseMs,pilotPosition:units(pilot.position)});}catch(_){}
+      frames=0;lastMetricAt=now;}});
+  return Object.freeze({update,previewPilot,clearPilotPreview,resize:()=>engine.resize(),dispose:()=>{if(disposed)return;disposed=true;
+    engine.stopRenderLoop();scene.dispose();engine.dispose();}});
 }

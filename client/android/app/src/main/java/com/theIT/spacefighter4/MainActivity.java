@@ -1,6 +1,9 @@
 package com.theIT.spacefighter4;
 
 import android.os.Bundle;
+import android.os.Build;
+import android.view.Display;
+import android.view.WindowManager;
 import androidx.activity.EdgeToEdge;
 
 // 👇 1. IMPORT THÊM 3 THƯ VIỆN NÀY ĐỂ ĐIỀU KHIỂN HỆ THỐNG GIAO DIỆN ANDROID
@@ -24,6 +27,7 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
 
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
+        applyGameDisplayPolicy();
 
         // 👇 2. CƠ CHẾ ẨN THANH ĐIỀU HƯỚNG & TRẠNG THÁI (IMMERSIVE MODE)
         WindowInsetsControllerCompat windowInsetsController =
@@ -37,6 +41,53 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
             // Ra lệnh ẨN toàn bộ các thanh hệ thống (systemBars = Navigation Bar + Status Bar)
             windowInsetsController.hide(WindowInsetsCompat.Type.systemBars());
         }
+    }
+
+    private Display resolveGameDisplay() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            return getDisplay();
+        }
+        return getWindowManager().getDefaultDisplay();
+    }
+
+    private float selectGameRefreshRate() {
+        Display display = resolveGameDisplay();
+        if (display == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return 60.0f;
+        }
+        Display.Mode current = display.getMode();
+        Display.Mode best = null;
+        for (Display.Mode candidate : display.getSupportedModes()) {
+            boolean sameResolution = candidate.getPhysicalWidth() == current.getPhysicalWidth()
+                    && candidate.getPhysicalHeight() == current.getPhysicalHeight();
+            boolean supportedGameRate = candidate.getRefreshRate() >= 59.0f
+                    && candidate.getRefreshRate() <= 144.5f;
+            if (sameResolution && supportedGameRate
+                    && (best == null || candidate.getRefreshRate() > best.getRefreshRate())) {
+                best = candidate;
+            }
+        }
+        return best == null ? current.getRefreshRate() : best.getRefreshRate();
+    }
+
+    private void applyGameDisplayPolicy() {
+        WindowManager.LayoutParams attributes = getWindow().getAttributes();
+        float targetRefreshRate = selectGameRefreshRate();
+        attributes.preferredRefreshRate = targetRefreshRate;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            attributes.preferMinimalPostProcessing = true;
+        }
+        if (Build.VERSION.SDK_INT >= 35) {
+            attributes.setFrameRateBoostOnTouchEnabled(true);
+        }
+        getWindow().setAttributes(attributes);
+        Log.i("SpaceFighterDisplay", "Requested game refresh rate: " + targetRefreshRate + "Hz");
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        applyGameDisplayPolicy();
     }
 
     @Override

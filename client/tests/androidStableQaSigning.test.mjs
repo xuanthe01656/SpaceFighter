@@ -90,7 +90,8 @@ test('manual native candidates share stable QA signing without automatic deliver
   assert.doesNotMatch(workflow, /^  push:/m);
   assert.match(workflow, /cloud_qa_ui:\s*\n[\s\S]*default: false/);
   assert.match(workflow, /c15_rc4:\s*\n[\s\S]*default: false/);
-  assert.match(workflow, /npm run gate:c15-rc4:fast/);
+  assert.match(workflow, /c15_rc5:\s*\n[\s\S]*default: false/);
+  assert.match(workflow, /npm run gate:c15-rc5:fast/);
   assert.doesNotMatch(workflow, /gradle[^\n]*publish/);
   assert.doesNotMatch(workflow, /firebase appdistribution|play\/publish|google-play/);
 });

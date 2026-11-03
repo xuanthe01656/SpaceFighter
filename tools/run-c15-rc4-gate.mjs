@@ -30,7 +30,8 @@ const report=JSON.parse(fs.readFileSync(path.join(output,'C15_RC4_GATE_REPORT.js
 const releaseManifest=JSON.parse(fs.readFileSync(path.join(output,'C15_RC4_RELEASE_MANIFEST.json'),'utf8'));
 if(releaseManifest.version!=='c15-rc4-release-manifest-v1'||releaseManifest.defaultProductionFlags?.settlementEnabled!==false
   ||releaseManifest.defaultProductionFlags?.cloudRewards!==false||releaseManifest.validation?.ci!=='gate:c15-rc4')throw new Error('RC4 release manifest failed');
-if(report.status!=='PASS'||report.pipeline?.singleRc4PushGate!==true||report.pipeline?.frozenGatesManualOnly!==true||report.pipeline?.androidManualOnly!==true
+if(report.status!=='PASS'||report.pipeline?.rc4ManualAuditOnly!==true||report.pipeline?.rc5SupersedingPushGate!==true
+  ||report.pipeline?.frozenGatesManualOnly!==true||report.pipeline?.androidManualOnly!==true
   ||report.releaseGate?.killSwitchBlocked!==true||report.releaseGate?.rawIdentityLogged!==false||report.reconciliation?.mismatchDetected!==true
   ||report.safety?.productionSettlementEnabled!==false||report.safety?.productionCloudRewards!==false||report.safety?.c12Frozen!==true)
   throw new Error('RC4 integrated report failed');

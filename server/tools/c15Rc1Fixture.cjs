@@ -57,7 +57,9 @@ function generateC15VictoryFrames(fixture){
     const choices=run.state.enemies.filter(e=>e.zUnits<8000&&e.zUnits>-19000);
     const enemy=(choices.length?choices:run.state.enemies).slice().sort((a,b)=>b.zUnits-a.zUnits)[0];
     const dx=(enemy?.xUnits??0)-me.xUnits;
-    let x=dx>60?-127:dx< -60?127:0;
+    const rc5=fixture.policy.version==='v8c6b-pierce-burst-preview-v5-arcade-rc5';
+    const step=Math.max(1,run.foundation.preview.movePerTickUnits);
+    let x=rc5?Math.max(-127,Math.min(127,Math.round(-dx*127/step))):dx>60?-127:dx< -60?127:0;
     let threat=null;
     for(const b of run.state.enemyProjectiles){
       if(b.vzUnits<=0)continue;
@@ -66,7 +68,7 @@ function generateC15VictoryFrames(fixture){
       const projectedX=b.xUnits+ticks*b.vxUnits;
       if(Math.abs(projectedX-me.xUnits)<2100&&(!threat||ticks<threat.ticks))threat={projectedX,ticks};
     }
-    if(threat)x=me.xUnits>threat.projectedX?-127:127;
+    if(threat&&!rc5)x=me.xUnits>threat.projectedX?-127:127;
     const input={x,z:0};run=pushOne(fixture,run,input);frames.push(input);
   }
   if(run.state.phase!=='lab-clear')throw new Error(`C15 victory oracle failed: ${run.state.phase}`);

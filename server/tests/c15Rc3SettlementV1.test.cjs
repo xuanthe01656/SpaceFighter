@@ -7,7 +7,7 @@ const {createC15Rc1Fixture,generateC15VictoryFrames,generateC15DefeatFrames,chun
 const {replayC15CommercialFoundationV1}=require('../lib/c15CommercialReplayV1.cjs');
 const {validateChunk}=require('../lib/combatInputJournalV8.cjs');
 const {createC15TrustedOutcomeV1}=require('../lib/c15TrustedOutcomeV1.cjs');
-const {ARCADE_PROFILE_ID}=require('../lib/c15ControlProfilesV1.cjs');
+const {ARCADE_PROFILE_ID,LEGACY_ARCADE_PROFILE_ID}=require('../lib/c15ControlProfilesV1.cjs');
 const {createC15Rc3SettlementV1,parseC15Rc3SettlementConfig,verifyC15Rc3SettlementReceiptV1,
   REWARD_POLICY_VERSION}=require('../lib/c15Rc3SettlementV1.cjs');
 
@@ -31,13 +31,13 @@ class FakeDb{constructor(seed){this.data=new Map([...seed].map(([k,v])=>[k,struc
     if(pending.some(([kind,p])=>kind==='create'&&this.data.has(p)))throw Error('DUPLICATE_CREATE');
     for(const [kind,p,v] of pending){this.data.set(p,v);this.ops.push({kind,path:p});}return result;};
     const run=this.tail.then(task,task);this.tail=run.catch(()=>{});return run;}}
-let catalog,schema,clearSeed,defeatSeed,clearAt,defeatAt;
+let catalog,schema,clearSeed,defeatSeed,legacyClearSeed,clearAt,defeatAt,legacyClearAt;
 const userPath=`users/${UID}`,sessionPath=`${userPath}/c15Rc1bSessions/current`;
 const receiptPath=`${userPath}/c15Rc3Settlements/${BID}`;
 const opPath=request=>`${userPath}/operations/${request}`;
 function storedChunks(chunks){return chunks.map(chunk=>{const checked=validateChunk(chunk);return {version:'c15-rc1b-chunk-v1',battleId:BID,
   startTick:chunk.startTick,endTick:checked.endTick,frames:chunk.frames.map(frame=>({...frame})),chunkDigest:checked.chunkDigest,receivedAtMs:T0+checked.endTick*34};});}
-async function buildSeed(kind){const fixture=await createC15Rc1Fixture({profileId:ARCADE_PROFILE_ID,battleId:BID,seed:kind==='clear'?11335577:11335578});
+async function buildSeed(kind,profileId=ARCADE_PROFILE_ID){const fixture=await createC15Rc1Fixture({profileId,battleId:BID,seed:kind==='clear'?11335577:11335578});
   const generated=kind==='clear'?generateC15VictoryFrames(fixture):generateC15DefeatFrames(fixture),chunks=chunkC15Frames(generated.frames,BID);
   const at=T0+Math.ceil(generated.frames.length*1000/30)+5000;
   const result=replayC15CommercialFoundationV1({origin:fixture.origin,chunks,nowMs:at,keyRing:fixture.keyRing});
@@ -52,7 +52,8 @@ async function buildSeed(kind){const fixture=await createC15Rc1Fixture({profileI
   return {seed,fixture,result,outcome,at};}
 test.before(async()=>{[catalog,schema]=await Promise.all([import(pathToFileURL(path.resolve(__dirname,'../../client/src/constants.js')).href),
   import(pathToFileURL(path.resolve(__dirname,'../../client/src/utils/profileSchema.js')).href)]);
-  const clear=await buildSeed('clear'),defeat=await buildSeed('defeat');clearSeed=clear.seed;defeatSeed=defeat.seed;clearAt=clear.at;defeatAt=defeat.at;});
+  const clear=await buildSeed('clear'),defeat=await buildSeed('defeat'),legacy=await buildSeed('clear',LEGACY_ARCADE_PROFILE_ID);
+  clearSeed=clear.seed;defeatSeed=defeat.seed;legacyClearSeed=legacy.seed;clearAt=clear.at;defeatAt=defeat.at;legacyClearAt=legacy.at;});
 function service(seed,at,{enabled=true,allowedUids=[UID]}={}){const db=new FakeDb(seed);let clock=at+1000;
   const create=()=>createC15Rc3SettlementV1({db,enabled,allowedUids,genesisVerificationKeys:new Map([[KEY_ID,KEY]]),
     outcomeVerificationKeys:new Map([[OUTCOME_KEY_ID,OUTCOME_KEY]]),receiptSigningKeyId:RECEIPT_KEY_ID,receiptSigningKey:RECEIPT_KEY,
@@ -80,6 +81,13 @@ test('RC3 clear atomically grants server policy and HMAC-signed immutable receip
   assert.equal(user.profile.customProperty,'keep');assert.deepEqual(f.db.ops.map(x=>x.path),[userPath,receiptPath,opPath(REQUEST)]);
   assert.equal(out.receipt.rewardPolicyVersion,REWARD_POLICY_VERSION);assert.equal(out.productionSettlementEnabled,false);assert.equal(out.productionCloudRewards,false);
 });
+test('RC5 settlement accepts new V2 outcomes and preserves legacy arcade V1 receipt verification',async()=>{
+  const modern=service(clearSeed,clearAt),modernService=await modern.create(),modernOut=await modernService.settle(UID,SID,body());
+  assert.equal(modernOut.receipt.controlProfileId,ARCADE_PROFILE_ID);
+  const legacy=service(legacyClearSeed,legacyClearAt),legacyService=await legacy.create(),legacyOut=await legacyService.settle(UID,SID,body(REQUEST,legacyClearSeed));
+  assert.equal(legacyOut.receipt.controlProfileId,LEGACY_ARCADE_PROFILE_ID);
+  assert.equal(verifyC15Rc3SettlementReceiptV1(legacyOut.receipt,{[RECEIPT_KEY_ID]:RECEIPT_KEY},{uid:UID,battleId:BID}),true);
+});
 test('RC3 defeat settles once with zero economy and one verified play mission',async()=>{const f=service(defeatSeed,defeatAt),svc=await f.create();
   const out=await svc.settle(UID,SID,body(REQUEST,defeatSeed));assert.equal(out.receipt.coins,0);assert.equal(out.receipt.experience,0);assert.equal(out.receipt.stars,0);
   const user=f.db.data.get(userPath);assert.equal(user.wallet.coins,100);assert.equal(user.progress.exp,0);assert.equal(user.missions.progress.d_play_3,1);
@@ -98,7 +106,7 @@ test('RC3 rejects wrong user/session, deletion, stale outcome and unselected con
   f.db.data.set(`accountDeletionJobs/${UID}`,{status:'pending'});await assert.rejects(svc.settle(UID,SID,body()),failCode('ACCOUNT_DELETION_PENDING'));
   f.db.data.delete(`accountDeletionJobs/${UID}`);f.setTime(clearAt+24*60*60*1000+1);await assert.rejects(svc.settle(UID,SID,body()),failCode('C15_RC3_OUTCOME_EXPIRED'));
   const g=service(clearSeed,clearAt),outcome=g.db.data.get(`${userPath}/c15Rc2Outcomes/${BID}`);outcome.controlProfileId='current-balanced-v1';g.db.data.set(`${userPath}/c15Rc2Outcomes/${BID}`,outcome);
-  const gsvc=await g.create();await assert.rejects(gsvc.settle(UID,SID,body()),/signature|context mismatch|digest mismatch/i);
+  const gsvc=await g.create();await assert.rejects(gsvc.settle(UID,SID,body()),error=>error?.code==='C15_RC3_CONTROL_PROFILE_UNSUPPORTED');
 });
 test('RC3 rejects outcome, journal, result, origin and stored receipt tamper',async()=>{
   for(const mutate of [

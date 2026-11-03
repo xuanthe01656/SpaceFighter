@@ -39,6 +39,7 @@ const SLICE_V5_VERSION = 'pve-lab-vertical-slice-v5';
 const ENCOUNTER_V5_VERSION = 'pve-server-encounter-qa-v5';
 const PIERCE_BURST_POLICY_VERSION = 'v8c6b-pierce-burst-preview-v3';
 const ARCADE_PIERCE_BURST_POLICY_VERSION = 'v8c6b-pierce-burst-preview-v4-arcade';
+const RC5_ARCADE_PIERCE_BURST_POLICY_VERSION = 'v8c6b-pierce-burst-preview-v5-arcade-rc5';
 const PIERCE_BURST_PAIRS = Object.freeze({pierce:'rail',burst:'pulse'});
 // C6-C is a stage-specific, server-pinned offline QA contract. No Cloud authority.
 const SLICE_V6_VERSION = 'pve-lab-vertical-slice-v6';
@@ -155,7 +156,7 @@ function ballisticSalvoFromPreview(preview,position) {
  */
 function pierceBurstSalvoFromPreview(preview,position,tick) {
   if (!record(preview) || preview.version!==FOUNDATION_VERSION
-    || ![PIERCE_BURST_POLICY_VERSION,ARCADE_PIERCE_BURST_POLICY_VERSION].includes(preview.ballisticPolicyVersion)
+    || ![PIERCE_BURST_POLICY_VERSION,ARCADE_PIERCE_BURST_POLICY_VERSION,RC5_ARCADE_PIERCE_BURST_POLICY_VERSION].includes(preview.ballisticPolicyVersion)
     || preview.previewOnly!==true || preview.safeForCloudBattle!==false
     || !exact(position,['xUnits','zUnits'])
     || !int(position.xUnits,-preview.arena.halfWidthUnits,preview.arena.halfWidthUnits)
@@ -301,7 +302,7 @@ function openCombatVerticalSlice(args) {
   const v4=encounter.version===ENCOUNTER_V4_VERSION;
   const v3=encounter.version===ENCOUNTER_V3_VERSION;
   const defensive=v3||v4||v5;
-  const wanted=v5?[PIERCE_BURST_POLICY_VERSION,ARCADE_PIERCE_BURST_POLICY_VERSION]
+  const wanted=v5?[PIERCE_BURST_POLICY_VERSION,ARCADE_PIERCE_BURST_POLICY_VERSION,RC5_ARCADE_PIERCE_BURST_POLICY_VERSION]
     :v4?[BALLISTIC_POLICY_VERSION]:[undefined];
   if (!wanted.includes(foundation.preview.ballisticPolicyVersion))
     deny('SLICE_POLICY_VERSION_MISMATCH','QA ballistic policy cannot cross encounter versions');

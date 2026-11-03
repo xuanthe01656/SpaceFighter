@@ -44,6 +44,11 @@ on:
         required: false
         type: boolean
         default: false
+      c15_rc5:
+        description: 'Build C15-RC5 Android production input and frame-pacing candidate'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -78,13 +83,14 @@ jobs:
       VITE_C8_CLOUD_QA_UI: ${{ github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && 'true' || 'false' }}
       VITE_C9_BABYLON_QA_UI: ${{ github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && inputs.c9_babylon_qa == true && 'true' || 'false' }}
       VITE_C12_CANDIDATE_QA_UI: ${{ github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && inputs.c9_babylon_qa == true && inputs.c12_candidate_qa == true && 'true' || 'false' }}
-      VITE_C15_RC1B_ENABLED: ${{ inputs.c15_rc1b == true || inputs.c15_rc1c == true || inputs.c15_rc3 == true || inputs.c15_rc4 == true }}
+      VITE_C15_RC1B_ENABLED: ${{ inputs.c15_rc1b == true || inputs.c15_rc1c == true || inputs.c15_rc3 == true || inputs.c15_rc4 == true || inputs.c15_rc5 == true }}
       VITE_C15_CONTROL_AB_QA: ${{ github.event_name == 'workflow_dispatch' && inputs.c15_rc1c == true && 'true' || 'false' }}
       VITE_C15_RC3_ENABLED: ${{ inputs.c15_rc3 == true && 'true' || 'false' }}
-      VITE_C15_RC4_CANARY_SETTLEMENT_ENABLED: ${{ inputs.c15_rc4 == true && 'true' || 'false' }}
-      VITE_SF_BUILD_CHANNEL: ${{ inputs.c15_rc4 == true && 'release-candidate' || 'staging-qa' }}
-      VITE_APP_VERSION: '1.2.1'
-      VITE_C15_CONTROL_PROFILE_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.c15_rc1c == true && 'arcade-responsive-v1' || 'arcade-responsive-v1' }}
+      VITE_C15_RC4_CANARY_SETTLEMENT_ENABLED: ${{ (inputs.c15_rc4 == true || inputs.c15_rc5 == true) && 'true' || 'false' }}
+      VITE_C15_RC5_CONTROL_ENABLED: ${{ inputs.c15_rc5 == true && 'true' || 'false' }}
+      VITE_SF_BUILD_CHANNEL: ${{ (inputs.c15_rc4 == true || inputs.c15_rc5 == true) && 'release-candidate' || 'staging-qa' }}
+      VITE_APP_VERSION: ${{ inputs.c15_rc5 == true && '1.2.2' || '1.2.1' }}
+      VITE_C15_CONTROL_PROFILE_ID: ${{ inputs.c15_rc5 == true && 'arcade-responsive-v2' || 'arcade-responsive-v1' }}
 
     steps:
       - name: Check out only current revision
@@ -182,16 +188,20 @@ jobs:
           ! grep -q 'com.codetrixstudio.capacitor.GoogleAuth' android/app/src/main/java/com/theIT/spacefighter4/MainActivity.java
           grep -q 'ModifiedMainActivityForSocialLoginPlugin' android/app/src/main/java/com/theIT/spacefighter4/MainActivity.java
           grep -q 'handleGoogleLoginIntent' android/app/src/main/java/com/theIT/spacefighter4/MainActivity.java
+          grep -q 'selectGameRefreshRate' android/app/src/main/java/com/theIT/spacefighter4/MainActivity.java
+          grep -q 'android:appCategory="game"' android/app/src/main/AndroidManifest.xml
+          grep -q 'preferredRefreshRate = targetRefreshRate' android/app/src/main/java/com/theIT/spacefighter4/MainActivity.java
+          grep -q 'attributes.setFrameRateBoostOnTouchEnabled(true)' android/app/src/main/java/com/theIT/spacefighter4/MainActivity.java
 
       - name: Install exact locked dependencies
         run: |
           set -euo pipefail
           npm ci --no-audit --no-fund
 
-      - name: Run RC4 fast source gate once
+      - name: Run RC5 fast source gate once
         run: |
           set -euo pipefail
-          npm run gate:c15-rc4:fast
+          npm run gate:c15-rc5:fast
           npm audit --omit=dev --audit-level=high
 
       - name: Build real mobile WebView payload
@@ -224,10 +234,14 @@ jobs:
             [[ "$GITHUB_EVENT_NAME" == 'workflow_dispatch' ]] || { echo 'C15 local runtime is manual-only' >&2; exit 1; }
             [[ "$VITE_SF_NATIVE_TOUCH_QA" == '0' && "$VITE_C8_CLOUD_QA_UI" == 'false' && "$VITE_C9_BABYLON_QA_UI" == 'false' && "$VITE_C12_CANDIDATE_QA_UI" == 'false' ]] || { echo 'C15 local runtime must be built separately from legacy QA modes' >&2; exit 1; }
             [[ "$VITE_GAME_API_ENABLED" == 'false' ]] || exit 1
-            if [[ "${{ inputs.c15_rc4 }}" == 'true' ]]; then
-              [[ "${{ inputs.c15_rc1b }}" != 'true' && "${{ inputs.c15_rc1c }}" != 'true' && "${{ inputs.c15_rc3 }}" != 'true' ]] || { echo 'RC1B, RC1C, RC3 and RC4 inputs are mutually exclusive' >&2; exit 1; }
-              [[ "$VITE_SF_BUILD_CHANNEL" == 'release-candidate' && "$VITE_C15_RC4_CANARY_SETTLEMENT_ENABLED" == 'true' && "$VITE_C15_RC3_ENABLED" == 'false' && "$VITE_C15_CONTROL_AB_QA" == 'false' ]] || exit 1
-              echo 'Building RC4 release-candidate UI; QA controls removed, canary settlement only'
+            if [[ "${{ inputs.c15_rc5 }}" == 'true' ]]; then
+              [[ "${{ inputs.c15_rc1b }}" != 'true' && "${{ inputs.c15_rc1c }}" != 'true' && "${{ inputs.c15_rc3 }}" != 'true' && "${{ inputs.c15_rc4 }}" != 'true' ]] || { echo 'RC1B, RC1C, RC3, RC4 and RC5 inputs are mutually exclusive' >&2; exit 1; }
+              [[ "$VITE_SF_BUILD_CHANNEL" == 'release-candidate' && "$VITE_C15_RC4_CANARY_SETTLEMENT_ENABLED" == 'true' && "$VITE_C15_RC5_CONTROL_ENABLED" == 'true' && "$VITE_C15_RC3_ENABLED" == 'false' && "$VITE_C15_CONTROL_AB_QA" == 'false' && "$VITE_C15_CONTROL_PROFILE_ID" == 'arcade-responsive-v2' && "$VITE_APP_VERSION" == '1.2.2' ]] || exit 1
+              echo 'Building RC5 Android production input + variable-refresh frame pacing candidate'
+            elif [[ "${{ inputs.c15_rc4 }}" == 'true' ]]; then
+              [[ "${{ inputs.c15_rc1b }}" != 'true' && "${{ inputs.c15_rc1c }}" != 'true' && "${{ inputs.c15_rc3 }}" != 'true' && "${{ inputs.c15_rc5 }}" != 'true' ]] || { echo 'RC1B, RC1C, RC3, RC4 and RC5 inputs are mutually exclusive' >&2; exit 1; }
+              [[ "$VITE_SF_BUILD_CHANNEL" == 'release-candidate' && "$VITE_C15_RC4_CANARY_SETTLEMENT_ENABLED" == 'true' && "$VITE_C15_RC5_CONTROL_ENABLED" == 'false' && "$VITE_C15_RC3_ENABLED" == 'false' && "$VITE_C15_CONTROL_AB_QA" == 'false' ]] || exit 1
+              echo 'Building frozen RC4 release-candidate UI; QA controls removed, canary settlement only'
             elif [[ "${{ inputs.c15_rc3 }}" == 'true' ]]; then
               [[ "${{ inputs.c15_rc1b }}" != 'true' && "${{ inputs.c15_rc1c }}" != 'true' ]] || { echo 'RC1B, RC1C and RC3 inputs are mutually exclusive' >&2; exit 1; }
               [[ "$VITE_C15_RC3_ENABLED" == 'true' && "$VITE_C15_CONTROL_AB_QA" == 'false' && "$VITE_C15_CONTROL_PROFILE_ID" == 'arcade-responsive-v1' ]] || exit 1
@@ -301,10 +315,35 @@ jobs:
           print('SIGNED_APK_SHA_MATCH: exact registered QA signing certificate verified')
           PY
 
+      - name: Select manual Android artifact name
+        run: |
+          set -euo pipefail
+          name='spacefighter-android-debug-not-for-release'
+          if [[ "${{ inputs.c15_rc5 }}" == 'true' ]]; then
+            name='spacefighter-android-c15-rc5-internal-candidate'
+          elif [[ "${{ inputs.c15_rc4 }}" == 'true' ]]; then
+            name='spacefighter-android-c15-rc4-internal-candidate'
+          elif [[ "${{ inputs.c15_rc3 }}" == 'true' ]]; then
+            name='spacefighter-android-c15-rc3-debug-not-for-release'
+          elif [[ "${{ inputs.c15_rc1c }}" == 'true' ]]; then
+            name='spacefighter-android-c15-rc1c-debug-not-for-release'
+          elif [[ "${{ inputs.c15_rc1b }}" == 'true' ]]; then
+            name='spacefighter-android-c15-rc1b-debug-not-for-release'
+          elif [[ "${{ inputs.cloud_qa_ui }}" == 'true' && "${{ inputs.c9_babylon_qa }}" == 'true' && "${{ inputs.c12_candidate_qa }}" == 'true' ]]; then
+            name='spacefighter-android-c12-candidate-debug-not-for-release'
+          elif [[ "${{ inputs.cloud_qa_ui }}" == 'true' && "${{ inputs.c9_babylon_qa }}" == 'true' ]]; then
+            name='spacefighter-android-c9-babylon-qa-debug-not-for-release'
+          elif [[ "${{ inputs.cloud_qa_ui }}" == 'true' ]]; then
+            name='spacefighter-android-cloud-qa-c8-debug-not-for-release'
+          elif [[ "${{ inputs.touch_qa }}" == 'true' ]]; then
+            name='spacefighter-android-touch-qa-debug-not-for-release'
+          fi
+          echo "SF_ANDROID_ARTIFACT_NAME=$name" >> "$GITHUB_ENV"
+
       - name: Preserve debug APK for manual device QA
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.c15_rc4 == true && 'spacefighter-android-c15-rc4-internal-candidate' || (inputs.c15_rc3 == true && 'spacefighter-android-c15-rc3-debug-not-for-release' || (inputs.c15_rc1c == true && 'spacefighter-android-c15-rc1c-debug-not-for-release' || (inputs.c15_rc1b == true && 'spacefighter-android-c15-rc1b-debug-not-for-release' || (inputs.cloud_qa_ui == true && inputs.c9_babylon_qa == true && inputs.c12_candidate_qa == true && 'spacefighter-android-c12-candidate-debug-not-for-release' || (inputs.cloud_qa_ui == true && inputs.c9_babylon_qa == true && 'spacefighter-android-c9-babylon-qa-debug-not-for-release' || (inputs.cloud_qa_ui == true && 'spacefighter-android-cloud-qa-c8-debug-not-for-release' || (inputs.touch_qa == true && 'spacefighter-android-touch-qa-debug-not-for-release' || 'spacefighter-android-debug-not-for-release'))))))) }}
+          name: ${{ env.SF_ANDROID_ARTIFACT_NAME }}
           path: |
             client/android/app/build/outputs/apk/debug/app-debug.apk
             client/android/app/build/outputs/bundle/debug/app-debug.aab
