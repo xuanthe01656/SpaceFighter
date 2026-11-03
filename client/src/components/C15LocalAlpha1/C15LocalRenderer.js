@@ -1,5 +1,14 @@
-/** Local-only Babylon renderer for C15 deterministic Campaign Alpha. */
+/**
+ * C15 deterministic Campaign presentation adapter.
+ * Guest and C15 now share the ship factory, engine FX and scrolling background.
+ * Every transform is driven by C15's verified world view, never by artwork.
+ */
 import * as BABYLON from '@babylonjs/core';
+import {AIRCRAFTS} from '../../game/catalog/aircraft.js';
+import {createPlayerShipVisual} from '../../game/rendering/ShipVisualFactory.js';
+import {createShipEngineFx} from '../../game/rendering/ShipEngineFx.js';
+import {createScrollingBattleBackground} from '../../game/rendering/ScrollingBackgroundRenderer.js';
+import {resolveBattleBackground} from '../../game/catalog/BackgroundCatalog.js';
 
 const world=position=>new BABYLON.Vector3(position.xUnits/1000,.12,position.zUnits/1000);
 const units=position=>Object.freeze({xUnits:Math.round(position.x*1000),zUnits:Math.round(position.z*1000)});
@@ -7,9 +16,6 @@ const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 function material(scene,name,color,alpha=1){const mat=new BABYLON.StandardMaterial(name,scene);
   mat.emissiveColor=BABYLON.Color3.FromHexString(color);mat.diffuseColor=mat.emissiveColor;
   mat.disableLighting=true;mat.specularColor=BABYLON.Color3.Black();mat.alpha=alpha;return mat;}
-function textureMaterial(scene,name,url){const mat=new BABYLON.StandardMaterial(name,scene);const texture=new BABYLON.Texture(url,scene,false,false);
-  texture.hasAlpha=true;mat.diffuseTexture=texture;mat.emissiveTexture=texture;mat.opacityTexture=texture;
-  mat.useAlphaFromDiffuseTexture=true;mat.disableLighting=true;mat.backFaceCulling=false;mat.specularColor=BABYLON.Color3.Black();return mat;}
 function follow(mesh,target,dt,responseMs){const alpha=responseMs<=0?1:1-Math.exp(-Math.max(0,dt)/responseMs);
   BABYLON.Vector3.LerpToRef(mesh.position,target,alpha,mesh.position);}
 
@@ -22,27 +28,36 @@ export async function createC15LocalRenderer({canvas,backgroundUrl=null,pilotTex
   engine.setHardwareScalingLevel(Math.max(1,Math.min(2,globalThis.devicePixelRatio||1)));
   const scene=new BABYLON.Scene(engine);scene.clearColor=new BABYLON.Color4(.006,.015,.04,1);
   const camera=new BABYLON.FreeCamera('c15-camera',new BABYLON.Vector3(0,50,0),scene);
-  camera.upVector=new BABYLON.Vector3(0,0,-1);camera.setTarget(BABYLON.Vector3.Zero());camera.mode=BABYLON.Camera.ORTHOGRAPHIC_CAMERA;
-  camera.orthoLeft=-13.2;camera.orthoRight=13.2;camera.orthoTop=15;camera.orthoBottom=-15;scene.activeCamera=camera;
-  const pilotMat=pilotTextureUrl?textureMaterial(scene,'c15-pilot-texture',pilotTextureUrl):material(scene,'c15-pilot','#56f2ff');
-  const enemyMat=material(scene,'c15-enemy','#ff5f78');const bossMat=material(scene,'c15-boss','#ffbd4a');
-  const shotMat=material(scene,'c15-shot','#72ffe1');const enemyShotMat=material(scene,'c15-enemy-shot','#ff925c');
-  let pilot;
-  if(pilotTextureUrl){pilot=BABYLON.MeshBuilder.CreatePlane('c15-pilot',{width:1.8,height:2.4},scene);pilot.rotation.x=Math.PI/2;}
-  else{pilot=BABYLON.MeshBuilder.CreateCylinder('c15-pilot',{diameterTop:0,diameterBottom:1.2,height:2.1,tessellation:3},scene);pilot.rotation.x=Math.PI/2;}
-  pilot.material=pilotMat;pilot.metadata={authoritativeTarget:pilot.position.clone(),previewTarget:null,remoteAsset:Boolean(pilotTextureUrl)};
+  camera.upVector=new BABYLON.Vector3(0,0,-1);camera.setTarget(BABYLON.Vector3.Zero());
+  camera.mode=BABYLON.Camera.ORTHOGRAPHIC_CAMERA;scene.activeCamera=camera;
+  // Same aspect-correct 30-world-unit viewport as legacy Campaign.
+  // This is visual projection only: input/world coordinates stay authoritative.
+  const syncCamera=()=>{const aspect=Math.max(.2,engine.getRenderWidth()/Math.max(1,engine.getRenderHeight()));
+    camera.orthoLeft=-15*aspect;camera.orthoRight=15*aspect;camera.orthoTop=15;camera.orthoBottom=-15;};
+  syncCamera();engine.onResizeObservable.add(syncCamera);
   if(backgroundUrl){
-    const bgMat=new BABYLON.StandardMaterial('c15-background',scene);const texture=new BABYLON.Texture(backgroundUrl,scene,false,false);
-    texture.wrapU=texture.wrapV=BABYLON.Texture.WRAP_ADDRESSMODE;bgMat.diffuseTexture=texture;bgMat.emissiveTexture=texture;
-    bgMat.disableLighting=true;bgMat.specularColor=BABYLON.Color3.Black();
-    const background=BABYLON.MeshBuilder.CreateGround('c15-background',{width:26.4,height:30},scene);
-    background.position.y=-.35;background.material=bgMat;
+    const config=resolveBattleBackground({mode:'campaign',planetId:1,stage:1});
+    if(config)createScrollingBattleBackground({BABYLON,scene,engine,config,qualityId:'mobileLow',worldHalfHeight:15,
+      // URL comes only from session.resolveResource() after SHA-256 verification.
+      layerUrlResolver:()=>backgroundUrl});
   }
+  const aircraft=AIRCRAFTS.find(a=>a.id==='ship_xwing');
+  const pilot=new BABYLON.TransformNode('c15-pilot',scene);
+  const shipVisual=createPlayerShipVisual(scene,pilot,{aircraftId:'ship_xwing',aircraftCatalog:AIRCRAFTS,
+    quality:'sprite',presentationTopSrc:pilotTextureUrl});
+  const engineFx=createShipEngineFx({scene,BABYLON,playerRoot:pilot,aircraft,
+    quality:{particleFraction:.65}});
+  pilot.metadata={authoritativeTarget:pilot.position.clone(),previewTarget:null,remoteAsset:Boolean(pilotTextureUrl)};
+  const enemyMat=material(scene,'c15-enemy','#ff5f78'),bossMat=material(scene,'c15-boss','#ffbd4a');
+  const shotMat=material(scene,'c15-shot','#72ffe1'),enemyShotMat=material(scene,'c15-enemy-shot','#ff925c');
   const enemySpriteManager=enemyAtlasUrl?new BABYLON.SpriteManager('c15-enemy-atlas',enemyAtlasUrl,96,
     {width:128,height:128},scene,.01,BABYLON.Texture.TRILINEAR_SAMPLINGMODE):null;
   const enemies=new Map(),shots=new Map(),enemyShots=new Map();let latest=null,disposed=false,lastMetricAt=performance.now(),frames=0;
   const target=(mesh,pos)=>{mesh.metadata={...(mesh.metadata||{}),target:world(pos)};};
-  const createSphere=(name,mat,diameter)=>{const mesh=BABYLON.MeshBuilder.CreateSphere(name,{diameter,segments:6},scene);mesh.material=mat;
+  const createBolt=(name,mat,size)=>{const mesh=BABYLON.MeshBuilder.CreateBox(name,
+    {width:size*.65,height:.08,depth:size*2.5},scene);mesh.material=mat;
+    mesh.metadata={baseSize:size,remoteAsset:false};return mesh;};
+  const createSphere=(name,mat,diameter)=>{const mesh=BABYLON.MeshBuilder.CreateSphere(name,{diameter,segments:8},scene);mesh.material=mat;
     mesh.metadata={baseSize:diameter,remoteAsset:false};return mesh;};
   const createEnemy=(id,value,size)=>{
     if(enemySpriteManager&&value.kind!=='boss'){
@@ -53,10 +68,11 @@ export async function createC15LocalRenderer({canvas,backgroundUrl=null,pilotTex
   };
   function resizeVisual(visual,scale){const base=Number(visual.metadata?.baseSize||1);
     if(visual.scaling?.setAll)visual.scaling.setAll(scale);else{visual.width=base*scale;visual.height=base*scale;}}
-  function syncMap(map,values,{prefix,mat,size,enemy=false}={}){
+  function syncMap(map,values,{prefix,mat,size,enemy=false,bolt=false}={}){
     const alive=new Set();
     for(const value of values){const id=String(value.id);alive.add(id);let visual=map.get(id);
-      if(!visual){visual=enemy?createEnemy(id,value,size):createSphere(`${prefix}-${id}`,mat,size);visual.position.copyFrom(world(value));map.set(id,visual);}
+      if(!visual){visual=enemy?createEnemy(id,value,size):bolt?createBolt(`${prefix}-${id}`,mat,size)
+        :createSphere(`${prefix}-${id}`,mat,size);visual.position.copyFrom(world(value));map.set(id,visual);}
       target(visual,value);if(enemy&&Number.isFinite(value.hp)&&Number.isFinite(value.maxHp))
         resizeVisual(visual,clamp(.35+.65*value.hp/Math.max(1,value.maxHp),.25,1));
     }
@@ -66,8 +82,9 @@ export async function createC15LocalRenderer({canvas,backgroundUrl=null,pilotTex
     if(disposed||!view||view.version!=='c15-local-world-view-v1')return;latest=view;
     pilot.metadata.authoritativeTarget=world(view.pilot);
     syncMap(enemies,view.enemies,{prefix:'c15-enemy',mat:enemyMat,size:1.25,enemy:true});
-    syncMap(shots,view.projectiles,{prefix:'c15-shot',mat:shotMat,size:.34});
-    syncMap(enemyShots,view.enemyProjectiles,{prefix:'c15-enemy-shot',mat:enemyShotMat,size:.42});
+    syncMap(shots,view.projectiles,{prefix:'c15-shot',mat:shotMat,size:.34,bolt:true});
+    syncMap(enemyShots,view.enemyProjectiles,{prefix:'c15-enemy-shot',mat:enemyShotMat,size:.42,bolt:true});
+    if(view.terminal)engineFx.stop();
   }
   function previewPilot(position){if(disposed||!position||!Number.isFinite(position.xUnits)||!Number.isFinite(position.zUnits))return;
     pilot.metadata.previewTarget=world(position);}
@@ -80,8 +97,9 @@ export async function createC15LocalRenderer({canvas,backgroundUrl=null,pilotTex
     const now=performance.now();if(now-lastMetricAt>=1000){try{onMetrics({fps:Math.round(frames*1000/(now-lastMetricAt)),
       frameMs:dt,renderWidth:engine.getRenderWidth(),renderHeight:engine.getRenderHeight(),tick:latest?.tick||0,
       enemies:enemies.size,shots:shots.size,enemyShots:enemyShots.size,pilotResponseMs,pilotPosition:units(pilot.position),
-      remotePilot:Boolean(pilotTextureUrl),remoteEnemyAtlas:Boolean(enemyAtlasUrl)});}catch(_){}
+      remotePilot:Boolean(pilotTextureUrl),remoteEnemyAtlas:Boolean(enemyAtlasUrl),sharedShipVisual:true,
+      sharedBackground:Boolean(backgroundUrl),sharedThruster:true});}catch(_){}
       frames=0;lastMetricAt=now;}});
   return Object.freeze({update,previewPilot,clearPilotPreview,resize:()=>engine.resize(),dispose:()=>{if(disposed)return;disposed=true;
-    engine.stopRenderLoop();scene.dispose();engine.dispose();}});
+    engine.stopRenderLoop();engineFx.dispose();shipVisual.dispose();scene.dispose();engine.dispose();}});
 }

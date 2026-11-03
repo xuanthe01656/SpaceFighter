@@ -54,6 +54,11 @@ function createProceduralMesh(scene, parent, visual) {
  */
 export function createPlayerShipVisual(scene, playerRoot, options) {
   const visual = resolveShipVisual(options.aircraftId, options.aircraftCatalog);
+  // A C15 pack is verified by its manifest + per-file SHA before this URL is passed.
+  // Never override catalog identity, collision geometry, or gameplay attributes.
+  const verifiedPresentationTopSrc = typeof options.presentationTopSrc === 'string'
+    && options.presentationTopSrc.trim() ? options.presentationTopSrc : null;
+  const presentationTopSrc = verifiedPresentationTopSrc || visual.topSrc;
   const quality = options.quality || chooseShipRenderQuality(visual); // 'auto' | 'sprite' | 'procedural'
   const tiltNode = new BABYLON.TransformNode(`ship:${visual.id}:tilt`, scene);
   tiltNode.parent = playerRoot;
@@ -105,7 +110,7 @@ export function createPlayerShipVisual(scene, playerRoot, options) {
   };
 
   // Avoid any missing-asset HTTP requests: manifest is generated from public/.
-  if (quality !== 'procedural' && visual.topSrc) {
+  if (quality !== 'procedural' && presentationTopSrc) {
     sprite = BABYLON.MeshBuilder.CreatePlane(`ship:${visual.id}:sprite`, {
       width: 2.4, height: 2.4,
     }, scene);
@@ -114,7 +119,7 @@ export function createPlayerShipVisual(scene, playerRoot, options) {
     sprite.isVisible = false;
     spriteMaterial = new BABYLON.StandardMaterial(`ship:${visual.id}:spriteMat`, scene);
     const texture = new BABYLON.Texture(
-      visual.topSrc, scene, false, visual.spriteInvertY, BABYLON.Texture.BILINEAR_SAMPLINGMODE,
+      presentationTopSrc, scene, false, visual.spriteInvertY, BABYLON.Texture.BILINEAR_SAMPLINGMODE,
       () => { if (!disposed && active !== 'model') activate('sprite'); },
       (msg) => { if (!disposed) warn('TOP_TEXTURE_FAILED', msg); },
     );

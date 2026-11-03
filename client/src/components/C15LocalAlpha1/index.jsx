@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import {auth} from '../../firebase';
 import {openOrResumeC15Rc1bSession} from '../../game/c15/C15Rc1bSession.js';
 import {createC15LocalRenderer} from './C15LocalRenderer.js';
+import styles from './C15Presentation.module.css';
 import {openC15ControlIntent,addC15PointerDelta,sampleC15ControlTick,releaseC15ControlTarget,
   cancelC15ControlTarget,predictC15ControlRenderPosition,reconfigureC15ControlViewport,
   c15ControlIntentView} from '../../game/c15/C15ControlIntent.js';
@@ -150,54 +151,94 @@ export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=
       await navigator.clipboard.writeText(JSON.stringify(report,null,2));toast.success('Đã sao chép Control Feel JSON');
     }catch(error){toast.error(error?.message||'Không thể xuất Control Feel JSON');}};
   const k=ui.view?.kernel,t=ui.view?.transport,profile=ui.view?.controlProfile,settlement=ui.view?.settlement;
+  const hpRatio=k?Math.max(0,Math.min(1,Number(k.hp||0)/Math.max(1,Number(k.maxHp||1)))):1;
+  const boss=Array.isArray(k?.enemies)?k.enemies.find(enemy=>enemy.kind==='boss'&&Number(enemy.maxHp)>0):null;
+  const bossRatio=boss?Math.max(0,Math.min(1,Number(boss.hp||0)/Number(boss.maxHp))):0;
+  const vi=lang==='vi';
   return <div style={surface}>
     <canvas ref={canvasRef} tabIndex={-1} style={{width:'100%',height:'100%',display:'block',touchAction:'none',overscrollBehavior:'none',
       userSelect:'none',WebkitUserSelect:'none',WebkitTouchCallout:'none'}}/>
-    <div style={{position:'absolute',top:'calc(env(safe-area-inset-top) + 10px)',left:10,right:10,display:'flex',gap:7,flexWrap:'wrap',fontSize:12,pointerEvents:'none'}}>
-      <span style={chip}>{releaseChannel.qaControls
-        ?(rc3Enabled()?'C15 RC3 · LOCAL 30Hz · STAGING ECONOMY':'C15 RC1C · LOCAL 30Hz · NON-ECONOMIC')
-        :(releaseChannel.production?'SPACEFIGHTER · VERIFIED':rc7Enabled()?'C15 RC7 · ASSET DELIVERY CANDIDATE':rc5Enabled()?'C15 RC5 · ANDROID CONTROL CANDIDATE':'C15 RC4 · RELEASE CANDIDATE')}</span>
-      {releaseChannel.qaControls&&profile&&<span style={chip}>{profile.id}</span>}
-      {k&&<><span style={chip}>HP {Math.max(0,Math.round(k.hp))}/{Math.round(k.maxHp)}</span><span style={chip}>WAVE {k.wave}/{k.wavesTotal}</span>
-        <span style={chip}>KILLS {k.kills}</span>{releaseChannel.showDiagnosticHud&&<span style={chip}>TICK {k.tick}</span>}</>}
-      {releaseChannel.showDiagnosticHud&&ui.fps&&<span style={chip}>{ui.fps} FPS</span>}
-      {releaseChannel.showDiagnosticHud&&t&&<span style={chip}>UPLOAD {t.summary.uploadedThroughTick}/{t.summary.ticks}{t.online?'':' · OFFLINE'}</span>}
-    </div>
-    <button onClick={retreat} style={{position:'absolute',left:14,bottom:'calc(env(safe-area-inset-bottom) + 15px)',zIndex:5,
-      padding:'9px 14px',borderRadius:7,border:'1px solid #5de8ff',background:'rgba(0,0,0,.65)',color:'#bdf9ff'}}>◀ {lang==='vi'?'RÚT LUI':'RETREAT'}</button>
-    {releaseChannel.showControlExport&&profile&&<button onClick={exportTelemetry} style={{position:'absolute',right:14,bottom:'calc(env(safe-area-inset-bottom) + 15px)',zIndex:5,
-      padding:'9px 12px',borderRadius:7,border:'1px solid #5de8ff',background:'rgba(0,0,0,.65)',color:'#bdf9ff'}}>CONTROL JSON</button>}
-    {releaseChannel.qaControls&&profileId===null&&<div style={{position:'absolute',inset:0,display:'grid',placeItems:'center',background:'rgba(1,6,15,.88)'}}>
-      <div style={{...chip,maxWidth:430,textAlign:'center',fontSize:14,padding:18}}><b>RC1C CONTROL A/B</b><br/><br/>
-        <button onClick={()=>setProfileId(C15_CURRENT_CONTROL_PROFILE_ID)}>A · CURRENT BALANCED</button>{' '}
-        <button onClick={()=>setProfileId(C15_LEGACY_ARCADE_CONTROL_PROFILE_ID)}>B · ARCADE RESPONSIVE V1</button><br/><br/>
-        <small>{lang==='vi'?'Chọn một profile cho trận này. Kết quả server sẽ pin cùng profile.':'Choose one profile for this battle; the server pins the same profile.'}</small>
+    <header className={styles.hud} aria-label={vi?'Thông tin trận chiến':'Battle status'}>
+      <div className={styles.hudTop}>
+        <div className={styles.mode}>
+          <span className={styles.modeLabel}>{vi?'Chiến dịch Alpha':'Alpha Campaign'}</span>
+          <span className={styles.modeSub}>{vi?'Màn 01 · Đã xác minh':'Stage 01 · Verified battle'}</span>
+        </div>
+        <div className={styles.wave}>
+          <small>{vi?'Đợt':'Wave'}</small>
+          <strong>{k?.wave||1}/{k?.wavesTotal||5}</strong>
+        </div>
+      </div>
+      <div className={styles.hp}>
+        <span className={styles.hpTitle}>{vi?'GIÁP':'ARMOR'}</span>
+        <div className={styles.hpBlocks} role="meter" aria-label={vi?'Giáp còn lại':'Remaining armor'}
+          aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(hpRatio*100)}>
+          {Array.from({length:10},(_,i)=><div key={i} aria-hidden="true"
+            className={`${styles.hpSegment} ${hpRatio*10>i?styles.hpSegmentOn:''}`}/>)}
+        </div>
+        <span className={styles.hpValue}>{k?`${Math.max(0,Math.round(k.hp))}/${Math.round(k.maxHp)}`:'--/--'}</span>
+      </div>
+      <div className={styles.hudStats}>
+        <span className={styles.stat}>{vi?'HẠ GỤC':'KILLS'} <strong>{k?.kills||0}</strong></span>
+        {releaseChannel.showDiagnosticHud&&ui.fps&&<span className={styles.stat}>{ui.fps} FPS</span>}
+        {releaseChannel.showDiagnosticHud&&t&&<span className={styles.stat}>UPLOAD {t.summary.uploadedThroughTick}/{t.summary.ticks}{t.online?'':' · OFFLINE'}</span>}
+        {releaseChannel.qaControls&&profile&&<span className={styles.stat}>{profile.id}</span>}
+        {releaseChannel.qaControls&&<span className={styles.stat}>{rc7Enabled()?'C15 RC7':rc5Enabled()?'C15 RC5':'C15 QA'}</span>}
+      </div>
+      {boss&&<div className={styles.boss}><span className={styles.bossLabel}>BOSS</span>
+        <div className={styles.bossRail}><div className={styles.bossFill} style={{width:`${bossRatio*100}%`}}/></div></div>}
+    </header>
+    <button onClick={retreat} className={styles.retreat}>◀ {vi?'RÚT LUI':'RETREAT'}</button>
+    {releaseChannel.showControlExport&&profile&&<button onClick={exportTelemetry} style={{position:'absolute',right:14,
+      bottom:'calc(env(safe-area-inset-bottom) + 15px)',zIndex:8,padding:'9px 12px',borderRadius:7,
+      border:'1px solid #5de8ff',background:'rgba(0,0,0,.65)',color:'#bdf9ff'}}>CONTROL JSON</button>}
+    {releaseChannel.qaControls&&profileId===null&&<div className={styles.overlay}>
+      <div className={styles.panel}>
+        <div className={styles.panelTitle}>RC1C CONTROL A/B</div>
+        <span className={styles.panelSub}>{vi?'Chọn profile điều khiển kiểm thử.':'Choose QA control profile.'}</span>
+        <button className={styles.resultButton} onClick={()=>setProfileId(C15_CURRENT_CONTROL_PROFILE_ID)}>A · CURRENT BALANCED</button>
+        <button className={`${styles.resultButton} ${styles.resultButtonSecondary}`} onClick={()=>setProfileId(C15_LEGACY_ARCADE_CONTROL_PROFILE_ID)}>B · ARCADE RESPONSIVE V1</button>
       </div>
     </div>}
-    {profileId!==null&&(ui.status==='opening'||ui.status==='verifying'||ui.status==='provisional-terminal'||ui.status==='verified'||ui.status==='error')&&
-      <div style={{position:'absolute',inset:0,display:'grid',placeItems:'center',pointerEvents:'none'}}>
-        <div style={{...chip,maxWidth:430,textAlign:'center',fontSize:14,padding:16,pointerEvents:'auto'}}>
-          {ui.status==='opening'&&ui.message}
-          {ui.status==='verifying'&&(lang==='vi'?'Đang tải journal và replay độc lập trên server…':'Uploading journal and verifying server replay…')}
-          {ui.status==='provisional-terminal'&&<><b>{k?.provisionalPhase==='local-clear'?'LOCAL CLEAR':'LOCAL DEFEAT'}</b><br/>
-            {lang==='vi'?'Kết quả tạm thời; cần mạng để server xác minh.':'Provisional result; network is required for server verification.'}<br/>
-            <button onClick={retry}>RETRY VERIFY</button></>}
-          {ui.status==='verified'&&<><b>{ui.view?.result?.phase==='rc1-verified-clear'?'SERVER VERIFIED CLEAR':'SERVER VERIFIED DEFEAT'}</b><br/>
-            {ui.view?.outcome&&<><b>{releaseChannel.qaControls?'RC2 SIGNED OUTCOME':'SERVER RESULT VERIFIED'}</b><br/>
-              {releaseChannel.showDigestPrefixes&&<><small>{ui.view.outcome.outcomeDigest.slice(0,16)}…</small><br/></>}</>}
-            {settlement?<><b>{releaseChannel.qaControls?'RC3 SETTLEMENT VERIFIED':'REWARD RECEIVED'}</b><br/>
-              <small>+{settlement.receipt.coins} coins · +{settlement.receipt.experience} XP · +{settlement.receipt.stars} star</small><br/>
-              {releaseChannel.showDigestPrefixes&&<><small>{settlement.receipt.receiptDigest.slice(0,16)}…</small><br/></>}
-              {releaseChannel.qaControls&&settlement.duplicate===true&&<><small>DUPLICATE CLAIM VERIFIED · NO SECOND REWARD</small><br/></>}
-              {releaseChannel.showDuplicateButton&&<><button disabled={claiming||retryingClaim} onClick={retryDuplicateClaim}>{retryingClaim?'RETRYING…':'CHECK DUPLICATE CLAIM'}</button><br/></>}</>
-              :rc3Enabled()?<><button disabled={claiming} onClick={claimVerifiedReward}>{claiming?'CLAIMING…':(releaseChannel.qaControls?'CLAIM VERIFIED REWARD':'RECEIVE REWARD')}</button><br/>
-                {releaseChannel.qaControls&&<><small>{lang==='vi'?'Chỉ staging allowlist; production rewards vẫn tắt.':'Staging allowlist only; production rewards remain off.'}</small><br/></>}</>
-              :<>{releaseChannel.production
-                ?(lang==='vi'?'Phần thưởng trực tuyến hiện đang tạm khóa.':'Online rewards are currently unavailable.')
-                :(lang==='vi'?'Ứng viên phát hành chưa bật cấp thưởng.':'Release candidate rewards are not enabled.')}<br/></>}
-            <button disabled={continuing||claiming||retryingClaim} onClick={continueVerified}>{continuing?'CLOSING…':'CONTINUE'}</button></>}
-          {ui.status==='error'&&<><b>{releaseChannel.qaControls?(rc3Enabled()?'RC3 ERROR':'RC1C ERROR'):'BATTLE ERROR'}</b><br/>{ui.fault}</>}
-        </div>
+    {profileId!==null&&['opening','verifying','provisional-terminal','verified','error'].includes(ui.status)&&
+      <div className={styles.overlay}>
+        <section className={styles.panel} role="status" aria-live="polite">
+          <div className={styles.panelAccent}/>
+          {ui.status==='opening'&&<><div className={styles.panelTitle}>{vi?'Đang chuẩn bị trận':'Preparing battle'}</div>
+            <span className={styles.panelSub}>{ui.message}</span></>}
+          {ui.status==='verifying'&&<><div className={styles.panelTitle}>{vi?'Đang xác minh':'Verifying battle'}</div>
+            <span className={styles.panelSub}>{vi?'Đang tải journal và replay độc lập trên server…':'Uploading journal and verifying server replay…'}</span></>}
+          {ui.status==='provisional-terminal'&&<>
+            <div className={styles.panelTitle}>{k?.provisionalPhase==='local-clear'?'LOCAL CLEAR':'LOCAL DEFEAT'}</div>
+            <span className={styles.panelSub}>{vi?'Kết quả tạm thời; cần mạng để server xác minh.':'Provisional result; network is required for server verification.'}</span>
+            <button className={styles.resultButton} onClick={retry}>RETRY VERIFY</button></>}
+          {ui.status==='verified'&&<>
+            <div className={styles.panelTitle}>{ui.view?.result?.phase==='rc1-verified-clear'
+              ?(vi?'CHIẾN THẮNG ĐƯỢC XÁC MINH':'SERVER VERIFIED CLEAR')
+              :(vi?'THẤT BẠI ĐƯỢC XÁC MINH':'SERVER VERIFIED DEFEAT')}</div>
+            {ui.view?.outcome&&<div className={styles.panelSub}>{releaseChannel.qaControls?'RC2 SIGNED OUTCOME':'SERVER RESULT VERIFIED'}
+              {releaseChannel.showDigestPrefixes&&<div className={styles.qa}>{ui.view.outcome.outcomeDigest.slice(0,16)}…</div>}</div>}
+            {settlement?<>
+              <div className={styles.resultMetrics}>{releaseChannel.qaControls?'RC3 SETTLEMENT VERIFIED':'REWARD RECEIVED'}
+                <div>+{settlement.receipt.coins} coins · +{settlement.receipt.experience} XP · +{settlement.receipt.stars} star</div></div>
+              {releaseChannel.showDigestPrefixes&&<span className={styles.qa}>{settlement.receipt.receiptDigest.slice(0,16)}…</span>}
+              {releaseChannel.qaControls&&settlement.duplicate===true&&<span className={styles.qa}>DUPLICATE CLAIM VERIFIED · NO SECOND REWARD</span>}
+              {releaseChannel.showDuplicateButton&&<button className={styles.resultButton} disabled={claiming||retryingClaim}
+                onClick={retryDuplicateClaim}>{retryingClaim?'RETRYING…':'CHECK DUPLICATE CLAIM'}</button>}
+            </>:rc3Enabled()?<>
+              <button className={styles.resultButton} disabled={claiming} onClick={claimVerifiedReward}>
+                {claiming?'CLAIMING…':(releaseChannel.qaControls?'CLAIM VERIFIED REWARD':'RECEIVE REWARD')}</button>
+              {releaseChannel.qaControls&&<span className={styles.qa}>{vi?'Chỉ staging allowlist; production rewards vẫn tắt.':'Staging allowlist only; production rewards remain off.'}</span>}
+            </>:<span className={styles.panelSub}>{releaseChannel.production
+              ?(vi?'Phần thưởng trực tuyến hiện đang tạm khóa.':'Online rewards are currently unavailable.')
+              :(vi?'Ứng viên phát hành chưa bật cấp thưởng.':'Release candidate rewards are not enabled.')}</span>}
+            <button className={`${styles.resultButton} ${styles.resultButtonSecondary}`} disabled={continuing||claiming||retryingClaim}
+              onClick={continueVerified}>{continuing?'CLOSING…':(vi?'TIẾP TỤC':'CONTINUE')}</button>
+          </>}
+          {ui.status==='error'&&<><div className={styles.panelTitle}>{releaseChannel.qaControls
+            ?(rc3Enabled()?'RC3 ERROR':'RC1C ERROR'):(vi?'Lỗi trận chiến':'Battle error')}</div>
+            <span className={styles.errorText}>{ui.fault}</span></>}
+        </section>
       </div>}
   </div>;
 }

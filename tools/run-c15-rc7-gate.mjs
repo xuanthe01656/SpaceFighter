@@ -18,6 +18,7 @@ if(fast){
   requireZeroSkip('RC7 TARGETED CLIENT TEST',process.execPath,['--test',
     'tests/resourceManifestV1.test.mjs','tests/c15Rc1bResourceDelivery.test.mjs','tests/c15Rc1bIndexedDbSafety.test.mjs',
     'tests/c15Rc7AssetPayloadStore.test.mjs','tests/c15Rc7StartupDownloads.test.mjs',
+    'tests/c15Rc7CommercialPresentation.test.mjs',
     'tests/c15Rc7RemoteAssetDeliveryProduction.test.mjs','tests/c15Rc1bSessionLifecycle.test.mjs',
     'tests/c15Rc1bRuntimeGate.test.mjs','tests/c15Rc4WorkflowTopology.test.mjs','tests/c15Rc5AndroidProduction.test.mjs',
     'tests/c15Rc6AndroidRelease.test.mjs','tests/nativeAndroidSocialLoginBridge.test.mjs'],path.join(root,'client'));

@@ -73,7 +73,7 @@ function canvasSizeCss(engine) {
  */
 export function createScrollingBattleBackground({
   BABYLON, scene, engine, config, qualityId = 'desktop',
-  worldHalfHeight, baseUrl = '/', onFallback = null,
+  worldHalfHeight, baseUrl = '/', onFallback = null, layerUrlResolver = null,
 }) {
   if (!BABYLON || !scene || !engine || !config) throw new Error('INVALID_BATTLE_BACKGROUND_ARGS');
   const layers = selectBackgroundLayers(config, qualityId);
@@ -96,7 +96,10 @@ export function createScrollingBattleBackground({
   };
 
   for (const [i, layer] of layers.entries()) {
-    const url = resolveBackgroundAssetUrl(layer.src, baseUrl);
+    // Only C15's verified resource resolver should supply layerUrlResolver.
+    // Legacy scenes retain the existing catalog-only path validation.
+    const url = typeof layerUrlResolver === 'function'
+      ? layerUrlResolver(layer, config) : resolveBackgroundAssetUrl(layer.src, baseUrl);
     if (!url) { doFallback('invalid-asset-url'); break; }
     const mesh = BABYLON.MeshBuilder.CreateGround(`battleBg_${config.id}_${layer.id}`, {
       width: 1, height: 1, subdivisions: 1,

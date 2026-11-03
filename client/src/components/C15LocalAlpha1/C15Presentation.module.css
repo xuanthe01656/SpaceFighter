@@ -1,0 +1,37 @@
+/* Shared commercial Campaign HUD identity for deterministic C15. Visual only. */
+.hud{position:absolute;top:calc(env(safe-area-inset-top) + 14px);left:max(13px,env(safe-area-inset-left));right:max(13px,env(safe-area-inset-right));z-index:4;pointer-events:none;color:#e9fcff;font-family:'Barlow Condensed','Arial Narrow',sans-serif}
+.hudTop{display:flex;align-items:center;gap:8px;min-width:0}
+.mode{padding:8px 11px;border:1px solid rgba(67,201,232,.62);border-radius:11px;background:linear-gradient(115deg,rgba(7,35,60,.91),rgba(4,17,31,.84));box-shadow:inset 0 1px rgba(163,243,255,.12);display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+.modeLabel{font-size:clamp(13px,3.7vw,18px);font-weight:800;text-transform:uppercase;letter-spacing:1.4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.modeSub{color:#71d8ed;font:10px/1.4 'Share Tech Mono',monospace;letter-spacing:.8px;text-transform:uppercase}
+.wave{padding:8px 10px;border:1px solid rgba(88,171,219,.46);border-radius:11px;background:rgba(7,24,43,.87);min-width:67px;text-align:center}
+.wave strong{display:block;font-size:21px;line-height:1.1;letter-spacing:.4px}
+.wave small{display:block;color:#98bad1;font:10px/1.4 'Share Tech Mono',monospace;text-transform:uppercase}
+.hp{margin-top:8px;padding:9px 11px;border:1px solid rgba(80,190,227,.36);border-radius:11px;background:rgba(5,20,37,.88);display:flex;gap:11px;align-items:center}
+.hpTitle{font:700 13px 'Barlow Condensed',sans-serif;letter-spacing:1.3px;min-width:46px;color:#dff9ff}
+.hpBlocks{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:3px;flex:1;min-width:0}
+.hpSegment{height:11px;background:#152d40;border:1px solid rgba(45,105,138,.32);box-shadow:inset 0 1px 3px rgba(0,0,0,.23)}
+.hpSegmentOn{background:linear-gradient(180deg,#72f7fa,#12b7df);border-color:#6ce2f3;box-shadow:0 0 8px rgba(49,207,235,.23)}
+.hpValue{color:#e5ffff;font:700 clamp(11px,3vw,13px) 'Share Tech Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+.hudStats{display:flex;gap:9px;align-items:center;margin-top:7px}
+.stat{padding:5px 10px;border:1px solid rgba(92,171,204,.29);border-radius:8px;background:rgba(3,18,32,.68);font:12px/1.2 'Share Tech Mono',monospace;color:#b9d7e8}
+.stat strong{color:#fbfcff}
+.boss{margin-top:8px;border:1px solid rgba(255,148,93,.53);background:rgba(53,22,29,.85);padding:7px 11px;border-radius:9px;display:flex;align-items:center;gap:10px}
+.bossLabel{color:#ffc1a9;font:700 11px/1.25 'Share Tech Mono',monospace;letter-spacing:1px}
+.bossRail{height:7px;background:#341b20;flex:1;border-radius:99px;overflow:hidden}
+.bossFill{height:100%;background:linear-gradient(90deg,#ff8b48,#ff425e)}
+.retreat{position:absolute;left:max(16px,env(safe-area-inset-left));bottom:calc(env(safe-area-inset-bottom) + 17px);z-index:6;min-height:49px;padding:11px 19px;border-radius:12px;border:1px solid #52bedc;background:linear-gradient(140deg,rgba(13,52,78,.90),rgba(7,25,45,.92));color:#e4f9fc;font:700 18px 'Barlow Condensed','Arial Narrow',sans-serif;letter-spacing:.7px;cursor:pointer;touch-action:manipulation;box-shadow:0 4px 15px rgba(0,0,0,.32)}
+.retreat:focus-visible,.resultButton:focus-visible{outline:2px solid #e0ffff;outline-offset:3px}
+.overlay{position:absolute;inset:0;z-index:7;display:grid;place-items:center;pointer-events:none;padding:calc(env(safe-area-inset-top) + 20px) 20px calc(env(safe-area-inset-bottom) + 20px);background:linear-gradient(180deg,rgba(3,11,27,.20),rgba(4,13,26,.45))}
+.panel{pointer-events:auto;width:min(100%,420px);max-height:90%;overflow-y:auto;border:1px solid rgba(87,215,243,.59);border-radius:17px;background:linear-gradient(145deg,rgba(15,45,72,.96),rgba(4,14,31,.97));box-shadow:0 18px 65px rgba(0,0,0,.55),inset 0 1px 0 rgba(154,232,255,.17);padding:22px;text-align:center;color:#e5faff;display:flex;flex-direction:column;align-items:stretch;gap:12px;font:14px/1.5 'Share Tech Mono',monospace}
+.panelTitle{font:800 clamp(23px,6vw,32px)/1.1 'Barlow Condensed','Arial Narrow',sans-serif;letter-spacing:.6px;color:#f5ffff}
+.panelAccent{width:58px;height:3px;background:linear-gradient(90deg,#1ecada,#74f2f7);margin:0 auto;border-radius:5px}
+.panelSub{font:13px/1.6 'Share Tech Mono',monospace;color:#bbd8e9}
+.resultButton{min-height:46px;border-radius:10px;background:linear-gradient(100deg,#0bb8d3,#247bd2);color:#fff;border:1px solid #80ddeb;font:700 18px 'Barlow Condensed',sans-serif;letter-spacing:.7px;cursor:pointer;touch-action:manipulation}
+.resultButton:disabled{opacity:.5;cursor:not-allowed}
+.resultButtonSecondary{background:rgba(18,42,68,.88);border-color:rgba(94,184,215,.49)}
+.resultMetrics{padding:10px;border:1px solid rgba(119,188,214,.25);border-radius:10px;background:rgba(3,18,32,.75);font:13px/1.5 'Share Tech Mono',monospace;color:#baf3d9}
+.errorText{overflow-wrap:anywhere;color:#ffc4d3;font:12px/1.6 'Share Tech Mono',monospace}
+.qa{color:#c4c4e9;font:10px/1.4 'Share Tech Mono',monospace;overflow-wrap:anywhere}
+@media(max-width:370px){.hudTop{gap:5px}.mode{padding:7px}.wave{padding:7px;min-width:57px}.wave strong{font-size:18px}.hp{gap:5px;padding:8px}.hpBlocks{gap:2px}.hpTitle{min-width:37px}.hpValue{font-size:10px}.modeLabel{font-size:12px}}
+@media(prefers-reduced-motion:reduce){.retreat,.resultButton{transition:none}}
