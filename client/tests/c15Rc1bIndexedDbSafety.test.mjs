@@ -48,12 +48,16 @@ test('C15 memory store mirrors browser clone-safe persistence semantics',async()
   assert.equal((await store.get('files','pack:v1:file')).meta.sha256,'a'.repeat(64));
 });
 
-test('RC1B resource/session source stores clone-safe copies instead of transient buffers',()=>{
+test('RC1B/RC7 resource/session source stores clone-safe copies instead of transient buffers',()=>{
   const resource=source('src/game/c15/C15ResourceDelivery.js');
+  const payload=source('src/game/assets/AssetPayloadStoreV1.js');
   const session=source('src/game/c15/C15Rc1bSession.js');
-  assert.match(resource,/c15StandaloneArrayBuffer\(merged\)/);
-  assert.match(resource,/c15StandaloneArrayBuffer\(bytes\)/);
-  assert.doesNotMatch(resource,/store\.put\([^\n]+bytes:bytes\.buffer/);
+  assert.match(resource,/createAutoAssetPayloadStore/);
+  assert.match(resource,/payloadStore\.download/);
+  assert.match(resource,/payloadStore\.verify/);
+  assert.match(payload,/c15StandaloneArrayBuffer\(merged\)/);
+  assert.match(payload,/c15StandaloneArrayBuffer\(bytes\)/);
+  assert.doesNotMatch(payload,/store\.put\([^\n]+bytes:bytes\.buffer/);
   assert.match(session,/envelope:cloneC15PersistentValue\(envelope\)/);
   assert.doesNotMatch(session,/envelope:structuredClone\(envelope\)/);
 });
