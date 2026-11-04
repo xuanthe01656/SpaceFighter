@@ -23,18 +23,21 @@ test('C15 and Guest use distinct gameplay lanes, but C15 delegates visual-only s
   assert.doesNotMatch(renderer,/claimSettlement|wallet|awardCoins|calculateDamage|setHp/);
 });
 
-test('C15 battle uses production-facing HUD, not a permanent RC7 debug banner',()=>{
-  const src=read('src/components/C15LocalAlpha1/index.jsx');
-  const css=read('src/components/C15LocalAlpha1/C15Presentation.module.css');
-  assert.match(src,/Chiến dịch Alpha/);
-  assert.match(src,/styles\.hpBlocks/);
-  assert.match(src,/styles\.boss/);
-  assert.match(src,/styles\.resultButton/);
-  assert.match(src,/releaseChannel\.qaControls&&/);
-  assert.match(css,/safe-area-inset-top/);
-  assert.match(css,/focus-visible/);
-  assert.match(src,/claimVerifiedReward\(/);
-  assert.match(src,/completeVerified\(/);
+test('C15 and Guest render the same battle HUD primitives, without an early VERIFIED label',()=>{
+  const c15=read('src/components/C15LocalAlpha1/index.jsx');
+  const guest=read('src/components/Campaign/CampaignEngine.jsx');
+  const scene=read('src/components/Campaign/CampaignScene.js');
+  const hud=read('src/ui-system/BattleHud.jsx');
+  const css=read('src/ui-system/BattleHud.module.css');
+  assert.match(c15,/BattleHud/);assert.match(c15,/bossHp=/);
+  assert.match(guest,/<BattleHud/);assert.match(scene,/onHudUpdate/);
+  assert.match(scene,/topBar\.isVisible=!externalHud/);
+  assert.match(hud,/styles\.hpBlocks/);assert.match(hud,/styles\.boss/);
+  assert.doesNotMatch(hud,/ĐÃ XÁC MINH|Verified battle|Đã xác minh/);
+  assert.match(css,/safe-top/);assert.match(css,/pointer-events:none/);
+  assert.match(c15,/releaseChannel\.qaControls&&/);
+  assert.match(c15,/claimVerifiedReward\(/);
+  assert.match(c15,/completeVerified\(/);
 });
 
 test('Resource UI is a functional accessible content manager with verified status, no invented packs',()=>{
@@ -51,5 +54,5 @@ test('Resource UI is a functional accessible content manager with verified statu
   assert.doesNotMatch(coordinator,/dungeon-nereus-mobile-low/);
   assert.match(css,/prefers-reduced-motion/);
   assert.match(css,/safe-area-inset-bottom/);
-  assert.match(css,/min-height:47px/);
+  assert.match(read('src/ui-system/GameButton.module.css'),/min-height:var\(--sf-ui-touch-target\)/);
 });

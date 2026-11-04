@@ -1,6 +1,8 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {getSharedResourceDownloadCoordinator} from '../../game/assets/ResourceDownloadCoordinatorV1.js';
 import styles from './ResourceDownloads.module.css';
+import GameButton from '../../ui-system/GameButton.jsx';
+import GamePanel from '../../ui-system/GamePanel.jsx';
 
 const formatBytes=value=>{
   const bytes=Math.max(0,Number(value||0));
@@ -70,12 +72,12 @@ export default function ResourceManagerScreen({setScreen,lang='vi'}){
   return <main className={styles.manager}>
     <div className={styles.managerBody}>
       <nav className={styles.managerNav} aria-label={vi?'Điều hướng tải tài nguyên':'Content navigation'}>
-        <button className={`${styles.btn} ${styles.btnGhost}`} disabled={busy} onClick={()=>setScreen('campaign_portal')}>
-          <Symbol kind="back"/>{vi?'Trở về':'Back'}</button>
-        <button className={`${styles.btn} ${styles.btnGhost}`} disabled={busy} onClick={()=>{
+        <GameButton variant="ghost" disabled={busy} onClick={()=>setScreen('campaign_portal')}>
+          <Symbol kind="back"/>{vi?'Trở về':'Back'}</GameButton>
+        <GameButton variant="ghost" disabled={busy} onClick={()=>{
           setRemoveConfirm(false);setState(old=>({...old,status:'loading',error:''}));
           refresh().catch(error=>{if(mounted.current)setState(old=>({...old,status:'error',error:String(error?.message||error)}));});
-        }}><Symbol kind="refresh"/>{vi?'Làm mới':'Refresh'}</button>
+        }}><Symbol kind="refresh"/>{vi?'Làm mới':'Refresh'}</GameButton>
       </nav>
       <header className={styles.managerHero}>
         <span className={styles.eyebrow}>SPACEFIGHTER / CONTENT HUB</span>
@@ -96,7 +98,7 @@ export default function ResourceManagerScreen({setScreen,lang='vi'}){
       {state.packs.map(pack=>{
         const isAlpha=pack.id==='campaign-alpha-mobile-low';
         const downloading=isAlpha&&state.status==='downloading';
-        return <section key={pack.id} className={styles.pack}>
+        return <GamePanel as="section" variant="standard" key={pack.id} className={styles.pack}>
           <div className={styles.packTop}>
             <div className={styles.packSymbol}><Symbol kind={pack.removable?'campaign':'core'}/></div>
             <div className={styles.packHeading}><div className={styles.packTitle}>{vi?pack.labelVi:pack.labelEn}</div>
@@ -119,19 +121,19 @@ export default function ResourceManagerScreen({setScreen,lang='vi'}){
             <div className={styles.metricRow}><span>{formatBytes(p?.receivedBytes)} / {formatBytes(p?.totalBytes)}</span></div>
           </div>}
           {pack.removable&&<div className={styles.actionBar}>
-            {downloading?<button className={`${styles.btn} ${styles.btnGhost}`} onClick={()=>current.current?.abort()}>
-              {vi?'Tạm dừng':'Pause'}</button>:
-              pack.installed?<button className={`${styles.btn} ${styles.btnDanger}`} disabled={busy} onClick={()=>setRemoveConfirm(true)}>
-                {vi?'Xóa gói đã tải':'Remove downloaded pack'}</button>:
-                <button className={`${styles.btn} ${styles.btnPrimary}`} disabled={busy} onClick={start}>
-                  <Symbol kind="download"/>{vi?'Tải tài nguyên':'Download pack'}</button>}
+            {downloading?<GameButton variant="ghost" onClick={()=>current.current?.abort()}>
+              {vi?'Tạm dừng':'Pause'}</GameButton>:
+              pack.installed?<GameButton variant="danger" disabled={busy} onClick={()=>setRemoveConfirm(true)}>
+                {vi?'Xóa gói đã tải':'Remove downloaded pack'}</GameButton>:
+                <GameButton variant="primary" disabled={busy} onClick={start}>
+                  <Symbol kind="download"/>{vi?'Tải tài nguyên':'Download pack'}</GameButton>}
           </div>}
           {pack.removable&&pack.installed&&removeConfirm&&<div className={styles.confirmation}>
             <p>{vi?'Xóa tài nguyên Alpha trên thiết bị? Game sẽ cần tải lại khi vào màn này.':'Remove Alpha resources from this device? You will need to download them again.'}</p>
-            <button className={`${styles.btn} ${styles.btnGhost}`} onClick={()=>setRemoveConfirm(false)}>{vi?'Hủy':'Cancel'}</button>
-            <button className={`${styles.btn} ${styles.btnDanger}`} onClick={remove}>{vi?'Xác nhận xóa':'Confirm removal'}</button>
+            <GameButton variant="ghost" onClick={()=>setRemoveConfirm(false)}>{vi?'Hủy':'Cancel'}</GameButton>
+            <GameButton variant="danger" onClick={remove}>{vi?'Xác nhận xóa':'Confirm removal'}</GameButton>
           </div>}
-        </section>;
+        </GamePanel>;
       })}
       {state.status==='paused'&&<p className={styles.note}>{vi
         ?'Đã tạm dừng. Phần dữ liệu tải dở được giữ lại để thử tiếp.'

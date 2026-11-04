@@ -1,0 +1,18 @@
+.button{appearance:none;display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  min-height:var(--sf-ui-touch-target);padding:10px 17px;border:1px solid var(--sf-ui-stroke);
+  border-radius:var(--sf-ui-radius-standard);font:700 16px/1.1 var(--sf-ui-title-font);
+  letter-spacing:.65px;color:var(--sf-ui-text);cursor:pointer;touch-action:manipulation;
+  user-select:none;background:linear-gradient(145deg,#173850,#0a243c);
+  transition:transform 130ms ease,border-color 130ms ease,filter 130ms ease}
+.button svg{height:18px;width:18px;flex-shrink:0}
+.button:focus-visible{outline:2px solid #efffff;outline-offset:3px}
+.button:active:not(:disabled){transform:scale(.98)}
+.button:disabled{opacity:.48;cursor:not-allowed}
+.primary{background:linear-gradient(115deg,#079cb8,#185ba6);border-color:var(--sf-ui-accent)}
+.secondary{background:linear-gradient(140deg,#153b58,#0b2239);border-color:var(--sf-ui-stroke)}
+.ghost{background:rgba(5,20,35,.8);border-color:rgba(100,180,209,.34);color:var(--sf-ui-text)}
+.danger{background:rgba(96,32,48,.43);border-color:rgba(255,128,145,.65);color:#ffdae1}
+.wide{flex:1}
+.dockBottomLeft{position:absolute;left:max(16px,env(safe-area-inset-left,0px));
+ bottom:calc(env(safe-area-inset-bottom,0px) + 17px);z-index:6}
+@media(prefers-reduced-motion:reduce){.button{transition:none}}

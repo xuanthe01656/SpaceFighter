@@ -5,6 +5,8 @@ import { createCampaignScene } from './CampaignScene';
 import { auth } from '../../firebase';
 import toast from 'react-hot-toast';
 import C15LocalAlpha1 from '../C15LocalAlpha1/index.jsx';
+import BattleHud from '../../ui-system/BattleHud.jsx';
+import GameButton from '../../ui-system/GameButton.jsx';
 
 export default function CampaignEngine(props) {
   const data=props.gsRef?.current?.campaignData;
@@ -28,6 +30,7 @@ function LegacyCampaignEngine({ gsRef, setScreen, lang, saveUserProfile, getReal
   const sceneRef  = useRef(null);
   const retreatLockRef = useRef(false);
   const [retreating, setRetreating] = React.useState(false);
+  const [battleHud, setBattleHud] = React.useState({stage:1,wave:1,wavesTotal:5,hp:1,maxHp:1,kills:0,score:0});
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -58,6 +61,12 @@ function LegacyCampaignEngine({ gsRef, setScreen, lang, saveUserProfile, getReal
       getRealTime,
       gameAction,
       isCloud: Boolean(auth.currentUser),
+      // Presentation only: Babylon publishes compact HUD snapshots to the same
+      // React component used by C15. No extra gameplay state or rewards.
+      onHudUpdate: next => setBattleHud(previous => {
+        const keys=['stage','wave','wavesTotal','hp','maxHp','kills','score','bossHp','bossMaxHp'];
+        return keys.every(key=>previous?.[key]===next[key])?previous:next;
+      }),
 
       /** Chiến thắng → quay về màn chọn ải */
       onVictory: () => {
@@ -104,8 +113,9 @@ function LegacyCampaignEngine({ gsRef, setScreen, lang, saveUserProfile, getReal
         }}
       />
 
-      {/* Nút Rút Lui */}
-      <button
+      <BattleHud lang={lang} {...battleHud}/>
+      {/* The same button surface as authenticated C15; keep the original abandon action. */}
+      <GameButton variant="secondary" dock="bottom-left"
         disabled={retreating}
         onClick={async () => {
           if (retreatLockRef.current) return;
@@ -124,23 +134,9 @@ function LegacyCampaignEngine({ gsRef, setScreen, lang, saveUserProfile, getReal
             setRetreating(false);
           }
         }}
-        style={{
-          position: 'absolute',
-          top: 'calc(env(safe-area-inset-top) + 40px)',
-          left: '20px',
-          padding: '8px 15px',
-          background: 'rgba(0,0,0,0.5)',
-          color: '#64ffda',
-          border: '1px solid #64ffda',
-          borderRadius: '5px',
-          zIndex: 100,
-          fontFamily: 'inherit',
-          cursor: 'pointer',
-          textTransform: 'uppercase',
-        }}
       >
         ◀ {retreating ? (lang === 'vi' ? 'ĐANG ĐÓNG TRẬN…' : 'CLOSING…') : (lang === 'vi' ? 'RÚT LUI' : 'RETREAT')}
-      </button>
+      </GameButton>
     </div>
   );
 }

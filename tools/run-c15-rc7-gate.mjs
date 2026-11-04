@@ -19,6 +19,8 @@ if(fast){
     'tests/resourceManifestV1.test.mjs','tests/c15Rc1bResourceDelivery.test.mjs','tests/c15Rc1bIndexedDbSafety.test.mjs',
     'tests/c15Rc7AssetPayloadStore.test.mjs','tests/c15Rc7StartupDownloads.test.mjs',
     'tests/c15Rc7CommercialPresentation.test.mjs',
+    'tests/g1g2C15VisualViewport.test.mjs','tests/g1g2UnifiedUi.test.mjs',
+    'tests/c15ControlIntent.test.mjs','tests/c15PointerController.test.mjs',
     'tests/c15Rc7RemoteAssetDeliveryProduction.test.mjs','tests/c15Rc1bSessionLifecycle.test.mjs',
     'tests/c15Rc1bRuntimeGate.test.mjs','tests/c15Rc4WorkflowTopology.test.mjs','tests/c15Rc4ReleaseChannel.test.mjs',
     'tests/missionSync212.test.mjs','tests/c15Rc5AndroidProduction.test.mjs',

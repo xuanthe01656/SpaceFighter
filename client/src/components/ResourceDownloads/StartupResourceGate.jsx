@@ -3,6 +3,8 @@ import {Capacitor} from '@capacitor/core';
 import {getSharedResourceDownloadCoordinator,rc7StartupDownloadEnabled}
   from '../../game/assets/ResourceDownloadCoordinatorV1.js';
 import styles from './ResourceDownloads.module.css';
+import GameButton from '../../ui-system/GameButton.jsx';
+import GamePanel from '../../ui-system/GamePanel.jsx';
 
 const shouldRun=()=>rc7StartupDownloadEnabled()&&Capacitor.isNativePlatform()&&Capacitor.getPlatform()==='android';
 const progressInitial={receivedBytes:0,totalBytes:0,phase:'checking'};
@@ -56,7 +58,7 @@ export default function StartupResourceGate({lang='vi'}){
     state.status==='error'?(vi?'Cần thử lại':'Retry required'):
     progress.phase==='ready'?(vi?'Đang kích hoạt':'Activating'):(vi?'Đang tải và xác minh':'Downloading and verifying');
   return <div className={styles.fullScreen} role="dialog" aria-modal="true" aria-label={vi?'Chuẩn bị tài nguyên trò chơi':'Preparing game resources'}>
-    <section className={styles.card} aria-live="polite">
+    <GamePanel as="section" variant="modal" className={styles.card} aria-live="polite">
       <span className={styles.eyebrow}>SF / SYSTEM BOOT · CONTENT DELIVERY</span>
       <div className={styles.heroArt} aria-hidden="true"><div className={styles.orbit}/><div className={styles.orbitGlyph}><DownloadSymbol/></div></div>
       <div>
@@ -77,14 +79,14 @@ export default function StartupResourceGate({lang='vi'}){
       </div>
       {state.error&&<div className={styles.error} role="alert">{state.error}</div>}
       <div className={styles.actionBar}>
-        {loading&&<button type="button" className={`${styles.btn} ${styles.btnGhost} ${styles.btnWide}`}
-          onClick={()=>controller.current?.abort()}>{vi?'Tạm dừng':'Pause'}</button>}
-        {(state.status==='error'||state.status==='paused')&&<button type="button" className={`${styles.btn} ${styles.btnPrimary} ${styles.btnWide}`}
-          onClick={start}>{vi?'Tiếp tục / Thử lại':'Resume / Retry'}</button>}
+        {loading&&<GameButton variant="ghost" wide
+          onClick={()=>controller.current?.abort()}>{vi?'Tạm dừng':'Pause'}</GameButton>}
+        {(state.status==='error'||state.status==='paused')&&<GameButton variant="primary" wide
+          onClick={start}>{vi?'Tiếp tục / Thử lại':'Resume / Retry'}</GameButton>}
       </div>
       <div className={styles.securityNote}><ShieldSymbol/><span>{vi
         ?'Tải lại chỉ khi thiếu hoặc sai dữ liệu. Nội dung đã xác minh được sử dụng lại khi có thể.'
         :'Verified files are reused; only missing or invalid content is fetched again.'}</span></div>
-    </section>
+    </GamePanel>
   </div>;
 }

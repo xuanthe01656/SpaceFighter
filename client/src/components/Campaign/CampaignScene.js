@@ -219,6 +219,9 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   // ══════════════════════════════════════════════════════════════════════════
 
   const ui  = GUI.AdvancedDynamicTexture.CreateFullscreenUI('CampaignUI', true, scene);
+  // During the G1/G2 migration we keep Babylon GUI damage labels, enemy mini
+  // bars and announcements. The fixed top HUD moves to one shared React view.
+  const externalHud=typeof data.onHudUpdate==='function';
 
   // ── SVG HUD top-bar (hexagon shape – planet theme colour) ─────────────────
    const topBar = new GUI.Image('topBar', '');
@@ -226,6 +229,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   topBar.verticalAlignment  = GUI.Control.VERTICAL_ALIGNMENT_TOP;
   topBar.stretch            = GUI.Image.STRETCH_NONE;
   ui.addControl(topBar);
+  topBar.isVisible=!externalHud;
 
   // ── Score (left) ──────────────────────────────────────────────────────────
   const scoreText = new GUI.TextBlock('scoreText');
@@ -237,6 +241,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   scoreText.left                    = `15px`;
   scoreText.top                     = `10px`;
   ui.addControl(scoreText);
+  scoreText.isVisible=!externalHud;
 
   // ── Wave info (right) ─────────────────────────────────────────────────────
   const waveText = new GUI.TextBlock('waveText');
@@ -248,6 +253,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   waveText.left                    = `-15px`;
   waveText.top                     = `10px`;
   ui.addControl(waveText);
+  waveText.isVisible=!externalHud;
   // ── HP system label (center) ──────────────────────────────────────────────
   const hpLabel = new GUI.TextBlock('hpLabel');
   hpLabel.text                   = lang === 'vi' ? 'HỆ THỐNG GIÁP' : 'ARMOR SYSTEM';
@@ -255,6 +261,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   hpLabel.fontFamily             = '"VT323", monospace';
   hpLabel.textVerticalAlignment  = GUI.Control.VERTICAL_ALIGNMENT_TOP;
   ui.addControl(hpLabel);
+  hpLabel.isVisible=!externalHud;
 
    // ── Rebuild SVG whenever resolution changes ───────────────────────────────
   const drawHudSvg = () => {
@@ -289,6 +296,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   hpBarContainer.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP;
   hpBarContainer.top               = `40px`;
   ui.addControl(hpBarContainer);
+  hpBarContainer.isVisible=!externalHud;
 
   const hpSegments = [];
   for (let i = 0; i < 10; i++) {
@@ -735,7 +743,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     bossVisual = attachBattleEntityVisual(scene, BABYLON, bossMesh, 'boss', bossCfg.id);
 
     bossNameText.text = `⚠ ${lang==='vi' ? `TRÙM ẢI ${currentStage}` : `STAGE ${currentStage} BOSS`}`;
-    bossHpFill.width  = '100%'; bossPanel.isVisible = true;
+    bossHpFill.width  = '100%'; bossPanel.isVisible = !externalHud;
     showAnnouncement(
       lang==='vi' ? '⚠ CẢNH BÁO: TRÙM CUỐI ⚠' : '⚠ BOSS APPROACHING ⚠',
       '#ff4757', 3000);
@@ -1236,6 +1244,17 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       applyPlayerDamageToEnemy(other, damage * .4);
     });
   };
+
+  // Exactly one shared HUD for Guest and C15. This observer reads legacy
+  // gameplay data but never writes it; emission is capped at 10 Hz to protect
+  // mobile React performance and the 60Hz Babylon render loop.
+  let lastHudPublishAt=-Infinity;
+  if(externalHud)scene.onBeforeRenderObservable.add(()=>{
+    const now=Date.now();if(now-lastHudPublishAt<100)return;lastHudPublishAt=now;
+    try{data.onHudUpdate({stage:currentStage,wave:Math.max(1,currentWave),wavesTotal:MAX_WAVES,
+      hp:stats.hp,maxHp:stats.maxHp,kills:verifiedClientKills,score,
+      bossHp:bossMesh&&bossHp>0?bossHp:null,bossMaxHp:bossMesh&&bossMaxHp>0?bossMaxHp:null});}catch(_){}
+  });
 
   // Kick off first wave
   scheduleBattleTimer(() => startWave(1), 1000);

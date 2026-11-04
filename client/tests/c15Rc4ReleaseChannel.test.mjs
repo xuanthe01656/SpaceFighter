@@ -28,10 +28,10 @@ test('RC4 release UI hides diagnostic controls while staging retains explicit QA
   assert.match(screen,/REWARD RECEIVED/);
   // RC7 replaces the permanent RC4 release banner with a QA-only indicator.
   // Keep diagnostics gated and verify the old public banner cannot regress.
-  assert.match(screen,/releaseChannel\.qaControls&&<span className=\{styles\.stat\}>/);
-  assert.match(screen,/rc7Enabled\(\)\?'C15 RC7'/);
+  // Diagnostics moved into shared BattleHud.qa; only release-channel QA may show the profile.
+  assert.match(screen,/releaseChannel\.qaControls\?profile\?\.id:null/);
   assert.doesNotMatch(screen,/C15 RC4 · RELEASE CANDIDATE/);
-  assert.match(screen,/releaseChannel\.showDiagnosticHud&&/);
+  assert.match(screen,/releaseChannel\.showDiagnosticHud/);
   assert.match(screen,/releaseChannel\.qaControls&&profileId===null/);
   assert.match(api,/'X-SF-App-Version':releaseChannel\.appVersion/);
   assert.match(api,/'X-SF-Build-Channel':releaseChannel\.id/);

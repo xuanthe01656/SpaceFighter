@@ -1,0 +1,7 @@
+.base{position:relative;min-width:0;color:var(--sf-ui-text);
+  background:linear-gradient(140deg,rgba(14,42,66,.96),rgba(4,15,30,.98));
+  border:1px solid var(--sf-ui-stroke);box-shadow:inset 0 1px 0 rgba(193,245,255,.09)}
+.compact{border-radius:var(--sf-ui-radius-compact);padding:8px 11px}
+.standard{border-radius:var(--sf-ui-radius-standard);padding:15px}
+.modal{border-radius:var(--sf-ui-radius-modal);padding:22px;
+  box-shadow:0 20px 65px rgba(0,0,0,.5),inset 0 1px 0 rgba(193,245,255,.1)}

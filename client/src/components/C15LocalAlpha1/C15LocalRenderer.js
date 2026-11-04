@@ -9,9 +9,8 @@ import {createPlayerShipVisual} from '../../game/rendering/ShipVisualFactory.js'
 import {createShipEngineFx} from '../../game/rendering/ShipEngineFx.js';
 import {createScrollingBattleBackground} from '../../game/rendering/ScrollingBackgroundRenderer.js';
 import {resolveBattleBackground} from '../../game/catalog/BackgroundCatalog.js';
+import {createC15VisualViewportV1} from '../../game/c15/C15VisualViewportV1.js';
 
-const world=position=>new BABYLON.Vector3(position.xUnits/1000,.12,position.zUnits/1000);
-const units=position=>Object.freeze({xUnits:Math.round(position.x*1000),zUnits:Math.round(position.z*1000)});
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 function material(scene,name,color,alpha=1){const mat=new BABYLON.StandardMaterial(name,scene);
   mat.emissiveColor=BABYLON.Color3.FromHexString(color);mat.diffuseColor=mat.emissiveColor;
@@ -19,7 +18,7 @@ function material(scene,name,color,alpha=1){const mat=new BABYLON.StandardMateri
 function follow(mesh,target,dt,responseMs){const alpha=responseMs<=0?1:1-Math.exp(-Math.max(0,dt)/responseMs);
   BABYLON.Vector3.LerpToRef(mesh.position,target,alpha,mesh.position);}
 
-export async function createC15LocalRenderer({canvas,backgroundUrl=null,pilotTextureUrl=null,enemyAtlasUrl=null,pilotResponseMs=24,
+export async function createC15LocalRenderer({canvas,backgroundUrl=null,pilotTextureUrl=null,enemyAtlasUrl=null,arenaVisualBounds=null,pilotResponseMs=24,
   onMetrics=()=>{},onFrame=()=>{}}={}){
   if(!canvas)throw new TypeError('C15 renderer canvas required');
   if(!(Number.isFinite(pilotResponseMs)&&pilotResponseMs>=0&&pilotResponseMs<=250))
@@ -30,11 +29,22 @@ export async function createC15LocalRenderer({canvas,backgroundUrl=null,pilotTex
   const camera=new BABYLON.FreeCamera('c15-camera',new BABYLON.Vector3(0,50,0),scene);
   camera.upVector=new BABYLON.Vector3(0,0,-1);camera.setTarget(BABYLON.Vector3.Zero());
   camera.mode=BABYLON.Camera.ORTHOGRAPHIC_CAMERA;scene.activeCamera=camera;
-  // Same aspect-correct 30-world-unit viewport as legacy Campaign.
-  // This is visual projection only: input/world coordinates stay authoritative.
-  const syncCamera=()=>{const aspect=Math.max(.2,engine.getRenderWidth()/Math.max(1,engine.getRenderHeight()));
-    camera.orthoLeft=-15*aspect;camera.orthoRight=15*aspect;camera.orthoTop=15;camera.orthoBottom=-15;};
-  syncCamera();engine.onResizeObservable.add(syncCamera);
+  // Keep the legacy camera's natural 30-world-unit vertical projection.
+  // Adapt only C15 *visual* world coordinates, not the deterministic arena.
+  const createViewport=()=>createC15VisualViewportV1({
+    ...arenaVisualBounds,
+    width:Math.max(200,canvas.getBoundingClientRect().width||engine.getRenderWidth()),
+    height:Math.max(300,canvas.getBoundingClientRect().height||engine.getRenderHeight()),
+  });
+  let viewport=createViewport();
+  const syncCamera=()=>{
+    viewport=createViewport();
+    camera.orthoLeft=-viewport.halfWidth;camera.orthoRight=viewport.halfWidth;
+    camera.orthoTop=viewport.worldHalfHeight;camera.orthoBottom=-viewport.worldHalfHeight;
+  };
+  syncCamera();
+  const world=position=>{const p=viewport.project(position);return new BABYLON.Vector3(p.x,.12,p.z);};
+  const units=position=>Object.freeze(viewport.unproject({x:position.x,z:position.z}));
   if(backgroundUrl){
     const config=resolveBattleBackground({mode:'campaign',planetId:1,stage:1});
     if(config)createScrollingBattleBackground({BABYLON,scene,engine,config,qualityId:'mobileLow',worldHalfHeight:15,
@@ -53,7 +63,19 @@ export async function createC15LocalRenderer({canvas,backgroundUrl=null,pilotTex
   const enemySpriteManager=enemyAtlasUrl?new BABYLON.SpriteManager('c15-enemy-atlas',enemyAtlasUrl,96,
     {width:128,height:128},scene,.01,BABYLON.Texture.TRILINEAR_SAMPLINGMODE):null;
   const enemies=new Map(),shots=new Map(),enemyShots=new Map();let latest=null,disposed=false,lastMetricAt=performance.now(),frames=0;
-  const target=(mesh,pos)=>{mesh.metadata={...(mesh.metadata||{}),target:world(pos)};};
+  const target=(mesh,pos)=>{mesh.metadata={...(mesh.metadata||{}),worldPosition:pos,target:world(pos)};};
+  const reproject=()=>{
+    if(disposed)return;
+    syncCamera();
+    for(const map of [enemies,shots,enemyShots])for(const visual of map.values()){
+      if(visual.metadata?.worldPosition){const next=world(visual.metadata.worldPosition);
+        visual.metadata.target=next;visual.position.copyFrom(next);}
+    }
+    if(latest?.pilot){const next=world(latest.pilot);pilot.metadata.authoritativeTarget=next;
+      pilot.position.copyFrom(next);}
+    if(pilot.metadata.previewWorld)pilot.metadata.previewTarget=world(pilot.metadata.previewWorld);
+  };
+  engine.onResizeObservable.add(reproject);
   const createBolt=(name,mat,size)=>{const mesh=BABYLON.MeshBuilder.CreateBox(name,
     {width:size*.65,height:.08,depth:size*2.5},scene);mesh.material=mat;
     mesh.metadata={baseSize:size,remoteAsset:false};return mesh;};
@@ -87,8 +109,8 @@ export async function createC15LocalRenderer({canvas,backgroundUrl=null,pilotTex
     if(view.terminal)engineFx.stop();
   }
   function previewPilot(position){if(disposed||!position||!Number.isFinite(position.xUnits)||!Number.isFinite(position.zUnits))return;
-    pilot.metadata.previewTarget=world(position);}
-  function clearPilotPreview(){if(!disposed)pilot.metadata.previewTarget=null;}
+    pilot.metadata.previewWorld=position;pilot.metadata.previewTarget=world(position);}
+  function clearPilotPreview(){if(!disposed){pilot.metadata.previewWorld=null;pilot.metadata.previewTarget=null;}}
   engine.runRenderLoop(()=>{if(disposed)return;const dt=engine.getDeltaTime();
     const pilotTarget=pilot.metadata?.previewTarget||pilot.metadata?.authoritativeTarget||pilot.position;
     follow(pilot,pilotTarget,dt,pilotResponseMs);

@@ -4,6 +4,9 @@ import {auth} from '../../firebase';
 import {openOrResumeC15Rc1bSession} from '../../game/c15/C15Rc1bSession.js';
 import {createC15LocalRenderer} from './C15LocalRenderer.js';
 import styles from './C15Presentation.module.css';
+import BattleHud from '../../ui-system/BattleHud.jsx';
+import GameButton from '../../ui-system/GameButton.jsx';
+import GamePanel from '../../ui-system/GamePanel.jsx';
 import {openC15ControlIntent,addC15PointerDelta,sampleC15ControlTick,releaseC15ControlTarget,
   cancelC15ControlTarget,predictC15ControlRenderPosition,reconfigureC15ControlViewport,
   c15ControlIntentView} from '../../game/c15/C15ControlIntent.js';
@@ -17,13 +20,10 @@ import {c15ReleaseChannelFromImportMeta} from '../../config/C15ReleaseChannel.js
 
 const surface={position:'absolute',inset:0,background:'#020814',overflow:'hidden',overscrollBehavior:'none',
   touchAction:'none',userSelect:'none',WebkitUserSelect:'none',WebkitTouchCallout:'none',zIndex:60};
-const chip={background:'rgba(3,15,30,.78)',border:'1px solid #2a6680',borderRadius:8,padding:'6px 9px',color:'#d9fbff'};
 const releaseChannel=c15ReleaseChannelFromImportMeta();
 const abQa=()=>releaseChannel.qaControls&&String(import.meta.env?.VITE_C15_CONTROL_AB_QA||'false')==='true';
 const envProfile=()=>String(import.meta.env?.VITE_C15_CONTROL_PROFILE_ID||C15_ARCADE_CONTROL_PROFILE_ID);
 const rc3Enabled=()=>releaseChannel.settlementClientEnabled;
-const rc5Enabled=()=>String(import.meta.env?.VITE_C15_RC5_CONTROL_ENABLED||'false')==='true';
-const rc7Enabled=()=>String(import.meta.env?.VITE_C15_RC7_ASSET_DELIVERY_ENABLED||'false')==='true';
 export function formatC15Rc1bFault(error,fallback='C15_RC1B_ERROR'){
   if(error?.code===25||error?.name==='DataCloneError')
     return 'C15_IDB_DATA_CLONE · Local session/resource cache could not be stored';
@@ -89,13 +89,19 @@ export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=
         session.resolveResource('campaign-alpha-mobile-low','p1_small_sheet.webp'),
       ]);
       resourceRefs.current=[backgroundResource,pilotResource,enemyAtlasResource].filter(Boolean);
+      // Use the SAME server-pinned arena geometry for control and rendering.
+      // Only the renderer projects that geometry to screen; input/replay remain unchanged.
+      const rect=canvasRef.current.getBoundingClientRect();
+      const controlConfig=c15KernelInputConfig(session.getKernel(),{
+        canvasWidth:Math.max(1,rect.width),canvasHeight:Math.max(1,rect.height),halfHeight:15});
       const renderer=await createC15LocalRenderer({canvas:canvasRef.current,backgroundUrl:backgroundResource?.url,
         pilotTextureUrl:pilotResource?.url,enemyAtlasUrl:enemyAtlasResource?.url,
+        arenaVisualBounds:{arenaHalfWidth:controlConfig.arenaHalfWidth,arenaHalfHeight:controlConfig.arenaHalfHeight,
+          hitRadius:controlConfig.hitRadius},
         pilotResponseMs:profile.renderFollowMs,onFrame:metrics=>telemetryRef.current?.observePresentation(metrics),
         onMetrics:metrics=>{telemetryRef.current?.observePresentation(metrics);setUi(old=>({...old,fps:metrics.fps}));}});
       if(cancelled){renderer.dispose();return;}rendererRef.current=renderer;renderer.update(session.getView().kernel);
-      const rect=canvasRef.current.getBoundingClientRect();inputRef.current=openC15ControlIntent(c15KernelInputConfig(session.getKernel(),{
-        canvasWidth:Math.max(1,rect.width),canvasHeight:Math.max(1,rect.height),halfHeight:15}),{profileId:profile.id});
+      inputRef.current=openC15ControlIntent(controlConfig,{profileId:profile.id});
       telemetryRef.current.observeTick(c15ControlIntentView(inputRef.current));
       pointerControllerRef.current=createC15PointerController({element:canvasRef.current,
         onDelta:delta=>{if(!inputRef.current)return;try{inputRef.current=addC15PointerDelta(inputRef.current,{deltaX:delta.deltaX,deltaY:delta.deltaY});
@@ -151,58 +157,33 @@ export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=
       await navigator.clipboard.writeText(JSON.stringify(report,null,2));toast.success('Đã sao chép Control Feel JSON');
     }catch(error){toast.error(error?.message||'Không thể xuất Control Feel JSON');}};
   const k=ui.view?.kernel,t=ui.view?.transport,profile=ui.view?.controlProfile,settlement=ui.view?.settlement;
-  const hpRatio=k?Math.max(0,Math.min(1,Number(k.hp||0)/Math.max(1,Number(k.maxHp||1)))):1;
   const boss=Array.isArray(k?.enemies)?k.enemies.find(enemy=>enemy.kind==='boss'&&Number(enemy.maxHp)>0):null;
-  const bossRatio=boss?Math.max(0,Math.min(1,Number(boss.hp||0)/Number(boss.maxHp))):0;
   const vi=lang==='vi';
   return <div style={surface}>
     <canvas ref={canvasRef} tabIndex={-1} style={{width:'100%',height:'100%',display:'block',touchAction:'none',overscrollBehavior:'none',
       userSelect:'none',WebkitUserSelect:'none',WebkitTouchCallout:'none'}}/>
-    <header className={styles.hud} aria-label={vi?'Thông tin trận chiến':'Battle status'}>
-      <div className={styles.hudTop}>
-        <div className={styles.mode}>
-          <span className={styles.modeLabel}>{vi?'Chiến dịch Alpha':'Alpha Campaign'}</span>
-          <span className={styles.modeSub}>{vi?'Màn 01 · Đã xác minh':'Stage 01 · Verified battle'}</span>
-        </div>
-        <div className={styles.wave}>
-          <small>{vi?'Đợt':'Wave'}</small>
-          <strong>{k?.wave||1}/{k?.wavesTotal||5}</strong>
-        </div>
-      </div>
-      <div className={styles.hp}>
-        <span className={styles.hpTitle}>{vi?'GIÁP':'ARMOR'}</span>
-        <div className={styles.hpBlocks} role="meter" aria-label={vi?'Giáp còn lại':'Remaining armor'}
-          aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(hpRatio*100)}>
-          {Array.from({length:10},(_,i)=><div key={i} aria-hidden="true"
-            className={`${styles.hpSegment} ${hpRatio*10>i?styles.hpSegmentOn:''}`}/>)}
-        </div>
-        <span className={styles.hpValue}>{k?`${Math.max(0,Math.round(k.hp))}/${Math.round(k.maxHp)}`:'--/--'}</span>
-      </div>
-      <div className={styles.hudStats}>
-        <span className={styles.stat}>{vi?'HẠ GỤC':'KILLS'} <strong>{k?.kills||0}</strong></span>
-        {releaseChannel.showDiagnosticHud&&ui.fps&&<span className={styles.stat}>{ui.fps} FPS</span>}
-        {releaseChannel.showDiagnosticHud&&t&&<span className={styles.stat}>UPLOAD {t.summary.uploadedThroughTick}/{t.summary.ticks}{t.online?'':' · OFFLINE'}</span>}
-        {releaseChannel.qaControls&&profile&&<span className={styles.stat}>{profile.id}</span>}
-        {releaseChannel.qaControls&&<span className={styles.stat}>{rc7Enabled()?'C15 RC7':rc5Enabled()?'C15 RC5':'C15 QA'}</span>}
-      </div>
-      {boss&&<div className={styles.boss}><span className={styles.bossLabel}>BOSS</span>
-        <div className={styles.bossRail}><div className={styles.bossFill} style={{width:`${bossRatio*100}%`}}/></div></div>}
-    </header>
-    <button onClick={retreat} className={styles.retreat}>◀ {vi?'RÚT LUI':'RETREAT'}</button>
+    <BattleHud lang={lang} stage={1} wave={k?.wave||1} wavesTotal={k?.wavesTotal||5}
+      hp={k?.hp||0} maxHp={k?.maxHp||1} kills={k?.kills||0}
+      bossHp={boss?.hp??null} bossMaxHp={boss?.maxHp??null}
+      qa={releaseChannel.showDiagnosticHud
+        ?[ui.fps?`${ui.fps} FPS`:null,
+          t?.summary?`UPLOAD ${t.summary.uploadedThroughTick}/${t.summary.ticks}${t.online?'':' · OFFLINE'}`:null,
+          releaseChannel.qaControls?profile?.id:null].filter(Boolean).join(' · '):null}/>
+    <GameButton onClick={retreat} variant="secondary" dock="bottom-left">◀ {vi?'RÚT LUI':'RETREAT'}</GameButton>
     {releaseChannel.showControlExport&&profile&&<button onClick={exportTelemetry} style={{position:'absolute',right:14,
       bottom:'calc(env(safe-area-inset-bottom) + 15px)',zIndex:8,padding:'9px 12px',borderRadius:7,
       border:'1px solid #5de8ff',background:'rgba(0,0,0,.65)',color:'#bdf9ff'}}>CONTROL JSON</button>}
     {releaseChannel.qaControls&&profileId===null&&<div className={styles.overlay}>
-      <div className={styles.panel}>
+      <GamePanel variant="modal" className={styles.panel}>
         <div className={styles.panelTitle}>RC1C CONTROL A/B</div>
         <span className={styles.panelSub}>{vi?'Chọn profile điều khiển kiểm thử.':'Choose QA control profile.'}</span>
-        <button className={styles.resultButton} onClick={()=>setProfileId(C15_CURRENT_CONTROL_PROFILE_ID)}>A · CURRENT BALANCED</button>
-        <button className={`${styles.resultButton} ${styles.resultButtonSecondary}`} onClick={()=>setProfileId(C15_LEGACY_ARCADE_CONTROL_PROFILE_ID)}>B · ARCADE RESPONSIVE V1</button>
-      </div>
+        <GameButton variant="primary" onClick={()=>setProfileId(C15_CURRENT_CONTROL_PROFILE_ID)}>A · CURRENT BALANCED</GameButton>
+        <GameButton variant="secondary" onClick={()=>setProfileId(C15_LEGACY_ARCADE_CONTROL_PROFILE_ID)}>B · ARCADE RESPONSIVE V1</GameButton>
+      </GamePanel>
     </div>}
     {profileId!==null&&['opening','verifying','provisional-terminal','verified','error'].includes(ui.status)&&
       <div className={styles.overlay}>
-        <section className={styles.panel} role="status" aria-live="polite">
+        <GamePanel as="section" variant="modal" className={styles.panel} role="status" aria-live="polite">
           <div className={styles.panelAccent}/>
           {ui.status==='opening'&&<><div className={styles.panelTitle}>{vi?'Đang chuẩn bị trận':'Preparing battle'}</div>
             <span className={styles.panelSub}>{ui.message}</span></>}
@@ -211,7 +192,7 @@ export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=
           {ui.status==='provisional-terminal'&&<>
             <div className={styles.panelTitle}>{k?.provisionalPhase==='local-clear'?'LOCAL CLEAR':'LOCAL DEFEAT'}</div>
             <span className={styles.panelSub}>{vi?'Kết quả tạm thời; cần mạng để server xác minh.':'Provisional result; network is required for server verification.'}</span>
-            <button className={styles.resultButton} onClick={retry}>RETRY VERIFY</button></>}
+            <GameButton variant="primary" onClick={retry}>RETRY VERIFY</GameButton></>}
           {ui.status==='verified'&&<>
             <div className={styles.panelTitle}>{ui.view?.result?.phase==='rc1-verified-clear'
               ?(vi?'CHIẾN THẮNG ĐƯỢC XÁC MINH':'SERVER VERIFIED CLEAR')
@@ -223,22 +204,22 @@ export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=
                 <div>+{settlement.receipt.coins} coins · +{settlement.receipt.experience} XP · +{settlement.receipt.stars} star</div></div>
               {releaseChannel.showDigestPrefixes&&<span className={styles.qa}>{settlement.receipt.receiptDigest.slice(0,16)}…</span>}
               {releaseChannel.qaControls&&settlement.duplicate===true&&<span className={styles.qa}>DUPLICATE CLAIM VERIFIED · NO SECOND REWARD</span>}
-              {releaseChannel.showDuplicateButton&&<button className={styles.resultButton} disabled={claiming||retryingClaim}
-                onClick={retryDuplicateClaim}>{retryingClaim?'RETRYING…':'CHECK DUPLICATE CLAIM'}</button>}
+              {releaseChannel.showDuplicateButton&&<GameButton variant="primary" disabled={claiming||retryingClaim}
+                onClick={retryDuplicateClaim}>{retryingClaim?'RETRYING…':'CHECK DUPLICATE CLAIM'}</GameButton>}
             </>:rc3Enabled()?<>
-              <button className={styles.resultButton} disabled={claiming} onClick={claimVerifiedReward}>
-                {claiming?'CLAIMING…':(releaseChannel.qaControls?'CLAIM VERIFIED REWARD':'RECEIVE REWARD')}</button>
+              <GameButton variant="primary" disabled={claiming} onClick={claimVerifiedReward}>
+                {claiming?'CLAIMING…':(releaseChannel.qaControls?'CLAIM VERIFIED REWARD':'RECEIVE REWARD')}</GameButton>
               {releaseChannel.qaControls&&<span className={styles.qa}>{vi?'Chỉ staging allowlist; production rewards vẫn tắt.':'Staging allowlist only; production rewards remain off.'}</span>}
             </>:<span className={styles.panelSub}>{releaseChannel.production
               ?(vi?'Phần thưởng trực tuyến hiện đang tạm khóa.':'Online rewards are currently unavailable.')
               :(vi?'Ứng viên phát hành chưa bật cấp thưởng.':'Release candidate rewards are not enabled.')}</span>}
-            <button className={`${styles.resultButton} ${styles.resultButtonSecondary}`} disabled={continuing||claiming||retryingClaim}
-              onClick={continueVerified}>{continuing?'CLOSING…':(vi?'TIẾP TỤC':'CONTINUE')}</button>
+            <GameButton variant="secondary" disabled={continuing||claiming||retryingClaim}
+              onClick={continueVerified}>{continuing?'CLOSING…':(vi?'TIẾP TỤC':'CONTINUE')}</GameButton>
           </>}
           {ui.status==='error'&&<><div className={styles.panelTitle}>{releaseChannel.qaControls
             ?(rc3Enabled()?'RC3 ERROR':'RC1C ERROR'):(vi?'Lỗi trận chiến':'Battle error')}</div>
             <span className={styles.errorText}>{ui.fault}</span></>}
-        </section>
+        </GamePanel>
       </div>}
   </div>;
 }

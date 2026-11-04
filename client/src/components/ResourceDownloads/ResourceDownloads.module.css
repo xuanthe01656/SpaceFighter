@@ -1,5 +1,5 @@
 /* SpaceFighter Content UI v2 — presentation-only. No remote fonts or boot assets. */
-.fullScreen,.manager{--sf-cyan:#55e9f5;--sf-blue:#2689e8;--sf-text:#e5f7ff;--sf-muted:#9db5c8;--sf-surface:rgba(11,27,47,.95);--sf-stroke:rgba(104,194,244,.28);font-family:'Barlow Condensed','Arial Narrow',Arial,sans-serif;color:var(--sf-text);background:radial-gradient(ellipse at 50% 22%,rgba(20,89,133,.36),transparent 49%),radial-gradient(ellipse at 82% 92%,rgba(40,35,111,.27),transparent 48%),linear-gradient(160deg,#020812,#07182a 57%,#020916);isolation:isolate}
+.fullScreen,.manager{--sf-cyan:var(--sf-ui-accent);--sf-blue:#2689e8;--sf-text:var(--sf-ui-text);--sf-muted:var(--sf-ui-muted);--sf-surface:var(--sf-ui-panel);--sf-stroke:var(--sf-ui-stroke);font-family:'Barlow Condensed','Arial Narrow',Arial,sans-serif;color:var(--sf-text);background:radial-gradient(ellipse at 50% 22%,rgba(20,89,133,.36),transparent 49%),radial-gradient(ellipse at 82% 92%,rgba(40,35,111,.27),transparent 48%),linear-gradient(160deg,#020812,#07182a 57%,#020916);isolation:isolate}
 .fullScreen::before,.manager::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:-1;opacity:.22;background-image:linear-gradient(rgba(72,175,212,.2) 1px,transparent 1px),linear-gradient(90deg,rgba(72,175,212,.2) 1px,transparent 1px);background-size:55px 55px;mask-image:linear-gradient(to bottom,transparent,black 32%,black 80%,transparent)}
 .fullScreen::after,.manager::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:-1;background-image:radial-gradient(1px 1px at 12% 17%,#9ce5ff 65%,transparent),radial-gradient(1px 1px at 73% 28%,#c7dcff 65%,transparent),radial-gradient(1px 1px at 83% 78%,#72dafe 65%,transparent),radial-gradient(2px 2px at 29% 66%,#80cfff 55%,transparent);background-size:520px 720px;opacity:.36}
 .fullScreen{position:fixed;inset:0;z-index:300;display:flex;align-items:center;justify-content:center;overflow-y:auto;overscroll-behavior:contain;padding:calc(env(safe-area-inset-top) + 24px) max(18px,env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 24px) max(18px,env(safe-area-inset-left))}
@@ -23,15 +23,6 @@
 .progressFill{height:100%;border-radius:inherit;background:linear-gradient(90deg,#05c4d5,#40e7ef 63%,#92f9ff);box-shadow:0 0 14px rgba(28,214,242,.45);transition:width 180ms ease-out}
 .progressGroup{display:flex;flex-direction:column;gap:9px}
 .actionBar{display:flex;flex-wrap:wrap;gap:11px;align-items:center}
-.btn{appearance:none;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:47px;padding:11px 17px;border:1px solid rgba(84,201,241,.55);border-radius:12px;background:linear-gradient(145deg,#16334c,#0b2238);font:700 16px/1.05 'Barlow Condensed','Arial Narrow',sans-serif;letter-spacing:.7px;color:#e5fbff;cursor:pointer;touch-action:manipulation;transition:transform .15s ease,background .15s ease,border-color .15s ease;user-select:none}
-.btn svg{width:17px;height:17px;flex-shrink:0}
-.btn:focus-visible{outline:2px solid #aaf7ff;outline-offset:3px}
-.btn:active:not(:disabled){transform:scale(.975)}
-.btn:disabled{opacity:.43;cursor:not-allowed}
-.btnPrimary{border-color:#66e8f6;background:linear-gradient(115deg,#07aec9,#1764b8);box-shadow:inset 0 1px 0 rgba(255,255,255,.26),0 5px 22px rgba(16,119,196,.22)}
-.btnDanger{border-color:rgba(240,126,138,.52);background:rgba(97,35,51,.18);color:#ffc4ca}
-.btnGhost{background:rgba(8,22,40,.62);border-color:rgba(111,161,193,.32);color:#cfe9f3}
-.btnWide{flex:1}
 .error{border:1px solid rgba(255,132,150,.55);border-radius:12px;background:rgba(107,29,45,.28);padding:12px 14px;color:#ffd9dd;overflow-wrap:anywhere;font:13px/1.6 'Share Tech Mono',ui-monospace,monospace}
 .securityNote{display:flex;align-items:center;gap:9px;border-top:1px solid rgba(93,180,220,.17);padding-top:13px;color:#9ec4d9;font:12px/1.6 'Share Tech Mono',ui-monospace,monospace}
 .securityNote svg{width:19px;height:19px;flex:0 0 19px;color:var(--sf-cyan)}
@@ -64,5 +55,5 @@
 .confirmation{display:flex;flex-wrap:wrap;gap:10px;align-items:center;border:1px solid rgba(238,128,143,.33);border-radius:12px;padding:12px;background:rgba(82,24,40,.19)}
 .confirmation p{width:100%;margin:0;color:#ffd3d7;font:13px/1.55 'Share Tech Mono',monospace}
 .footer{padding:16px;border:1px solid rgba(81,180,211,.17);border-radius:12px;background:rgba(11,29,44,.58)}
-@media(max-width:480px){.managerBody{gap:15px}.managerHero{padding:19px 16px}.pack{padding:17px 15px}.summary{padding:11px 12px}.summaryNumber{font-size:21px}.btn{font-size:15px;padding:10px 13px}.card{padding:23px 20px}}
-@media(prefers-reduced-motion:reduce){.progressFill,.btn{transition:none}}
+@media(max-width:480px){.managerBody{gap:15px}.managerHero{padding:19px 16px}.pack{padding:17px 15px}.summary{padding:11px 12px}.summaryNumber{font-size:21px}.card{padding:23px 20px}}
+@media(prefers-reduced-motion:reduce){.progressFill{transition:none}}
