@@ -19,6 +19,23 @@ import { createShipEngineFx } from '../../game/rendering/ShipEngineFx';
 import { createShipInputController } from '../../game/combat/ShipInputController';
 import { describeMainSalvo, describeWingSalvo, describeDroneSalvo, pickWeaponTarget, enemySpeedFactor, shieldDamageFactor, repairAmount, projectileHitsPoint } from '../../game/combat/PlayerWeapons';
 import { createProjectileEmitter } from '../../game/combat/ProjectileEmitter';
+import { createGuestAbilityRuntimeV2 } from '../../game/combat/GuestAbilityRuntimeV2.js';
+import { deriveGuestAbilityActivationGateV2 } from '../../game/combat/GuestAbilityActivationGateV2.js';
+import { resolveGuestCombatQaRuntimeFromViteEnv } from '../../game/combat/GuestCombatQaBuildGateV2.js';
+import { resolveGuestCombatQaLoadoutV2 } from '../../game/combat/GuestCombatQaLoadoutV2.js';
+import {
+  createGuestAbilityActivationFeedbackV2,
+  createGuestAbilityRejectedFeedbackV2,
+  createGuestArmorProcFeedbackV2,
+  getGuestAbilitySkillV2,
+  localizeGuestFeedbackV2,
+} from '../../game/combat/GuestAbilityFeedbackV2.js';
+import {
+  guestCounterMultiplierV2,
+  GUN_DAMAGE_TYPES_V2,
+  legacyTierDefenseClass,
+} from '../../game/combat/GuestAbilityCatalogV2.js';
+import { createGuestAbilityVisualFeedbackV2 } from '../../game/rendering/GuestAbilityVisualFeedbackV2.js';
 import { canAutoLoadModel } from '../../game/config/PerformanceProfiles';
 import { resolveBattleBackground, legacyBattleBackgroundRequested, previewBg4Variant } from '../../game/catalog/BackgroundCatalog';
 import { createScrollingBattleBackground } from '../../game/rendering/ScrollingBackgroundRenderer';
@@ -28,6 +45,14 @@ import { recordGuestBattle, recordGuestEventKill, activeCoinMultiplier } from '.
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
 const clamp  = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const stableSeed = (...parts) => {
+  let hash = 2166136261;
+  for (const char of parts.join('|')) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0 || 1;
+};
 
 /** Tạo StandardMaterial với màu phát sáng, không bị ảnh hưởng ánh sáng scene */
 const makeMat = (scene, emissive) => {
@@ -109,11 +134,42 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
 
   // One ruleset for HQ, Campaign and Dungeon: catalog fire rates are mixed
   // (main gun = seconds, wing/drone = milliseconds). See combatStats.js.
-  const combat = deriveBattleLoadout(gsRef.current.campaignData, { PILOTS, AIRCRAFTS, GEAR_CATALOG },
-    { mode: 'campaign', location: planetConfig });
+  const guestAbilityQa=Boolean(data.guestAbilitiesQa)&&resolveGuestCombatQaRuntimeFromViteEnv(import.meta.env,{
+    authenticated:Boolean(isCloud),
+    cloudBattle:Boolean(isCloud),
+  });
+  const requestedQa=guestAbilityQa
+    ?new URLSearchParams(globalThis.location?.search||''):null;
+  const mobileQaLoadout=guestAbilityQa&&import.meta.env.VITE_SF_GUEST_COMBAT_V2_QA==='true'
+    ?resolveGuestCombatQaLoadoutV2(globalThis.location?.search||''):null;
+  const requestedShip=requestedQa?.get('sfGuestShip')||mobileQaLoadout?.shipId;
+  const requestedArmor=requestedQa?.get('sfGuestArmor')||mobileQaLoadout?.armorId;
+  const forceNextProjectileEvadeQa=requestedQa?.get('sfArmorQa')==='force-next-projectile';
+  const previewShip=AIRCRAFTS.some(a=>a.id===requestedShip)?requestedShip:null;
+  const previewArmor=GEAR_CATALOG.armor.some(a=>a.id===requestedArmor)?requestedArmor:null;
+  const previewArmorKey='__sf_guest_lab_armor__';
+  const qaBattleData=(previewShip||previewArmor)
+    ?{...gsRef.current.campaignData,
+      loadout:{...loadout,...(previewShip?{aircraft:previewShip}:{}),
+        ...(previewArmor?{armor:previewArmorKey}:{})},
+      ...(previewArmor?{items:{...items,[previewArmorKey]:{baseId:previewArmor,level:1,rarity:1}}}:{})}
+    :gsRef.current.campaignData;
+  const combat = deriveBattleLoadout(qaBattleData, { PILOTS, AIRCRAFTS, GEAR_CATALOG },
+    { mode: 'campaign', location: planetConfig,
+      armorPassivePolicy:guestAbilityQa?'none':'legacy',
+      combatRatingVersion:guestAbilityQa?'v2':'legacy' });
   const passives = createBattlePassiveState(combat.stats, Date.now());
   const activeEffects = createActiveEffects(combat.stats);
   const { stats, pilotBase, aircraftBase } = combat;
+  const guestAbilities=guestAbilityQa?createGuestAbilityRuntimeV2({
+    aircraftId:aircraftBase.id,armorId:combat.gear.armor.base?.id||null,maxHp:stats.maxHp,
+    seed:stableSeed(currentPlanetId,currentStage,aircraftBase.id,combat.gear.armor.base?.id||'none'),
+    mode:'pve',baseArmor:stats.armor,baseDamageReduction:stats.dmgReduce,
+    pilotDodgePermille:Math.round((stats.dodgeRate||0)*1000),
+    pilotNovaDamage:stats.novaExplosionDamage||0,
+    qaForceNextProjectileEvade:forceNextProjectileEvadeQa,
+  }):null;
+
   const wingmanBase = combat.gear.wingman.base;
   const droneBase = combat.gear.drone.base;
   const wingmanArt = wingmanBase ? resolveAssetVisual('equipment', wingmanBase.id)?.topSrc : null;
@@ -371,6 +427,11 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
 
   let annAnim = null;
   const showAnnouncement = (text, colorHex = '#66fcf1', duration = 2000) => {
+    // In unified presentation mode all announcements use one React overlay.
+    // Preserve Babylon announcement implementation for non-migrated consumers.
+    if(externalHud&&typeof data.onAnnouncement==='function'){
+      data.onAnnouncement({text,colorHex,duration});return;
+    }
     annText.text = text; annText.color = colorHex; annPanel.color = colorHex;
     if (annAnim) { clearInterval(annAnim); annAnim = null; }
     let step = 0;
@@ -421,12 +482,37 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   // appears immediately; GLB takes its place only after successful import.
   // Visuals never control the combat hitbox or server-issued battle rewards.
   const shipVisual = createPlayerShipVisual(scene, playerRoot, {
-    aircraftId: loadout.aircraft, aircraftCatalog: AIRCRAFTS, glowLayer: glow,
+    aircraftId: aircraftBase.id, aircraftCatalog: AIRCRAFTS, glowLayer: glow,
   });
   const playerPlane = shipVisual.tiltNode; // tilt animation lives on visual root
 
   // Shared aircraft-aware engine VFX (same mount, colors, particles, texture as Dungeon).
   const engineFx = createShipEngineFx({ scene, BABYLON, playerRoot, aircraft: aircraftBase, quality });
+
+  // One presentation-only feedback bridge for all 16 Guest V2 ship skills and
+  // automatic armor procs. It never changes combat state or trusted outcomes.
+  let guestFeedbackSequence = 0;
+  const guestVisualFeedback = guestAbilities ? createGuestAbilityVisualFeedbackV2({
+    scene, BABYLON, playerRoot, shipVisual, getTick: () => guestAbilities.tick,
+  }) : null;
+  const publishGuestFeedback = (feedback, { worldText = true } = {}) => {
+    if (!feedback) return;
+    data.onAbilityFeedback?.(feedback);
+    if (feedback.status !== 'rejected') guestVisualFeedback?.play(feedback);
+    if (worldText) {
+      const label = localizeGuestFeedbackV2(feedback.name, lang);
+      if (label) showTextEffect(playerRoot.position.x, playerRoot.position.z - .9, label, feedback.color || '#5be5f3');
+    }
+  };
+  const publishArmorFeedback = (proc, amount = 0, { worldText = true } = {}) => {
+    if (!guestAbilities) return null;
+    const armorId = guestAbilities.snapshot().armor?.id || null;
+    const feedback = createGuestArmorProcFeedbackV2({
+      armorId, proc, amount, tick: guestAbilities.tick, sequence: ++guestFeedbackSequence,
+    });
+    publishGuestFeedback(feedback, { worldText });
+    return feedback;
+  };
 
   // ── Wingman drones ────────────────────────────────────────────────────────
   const drones = [];
@@ -583,7 +669,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   const shots = createProjectileEmitter({ scene, BABYLON, bullets: playerBullets, scheduleBattleTimer });
   const liveTargets = () => [
     ...enemies.filter(e => !e._dead && !e.mesh.isDisposed?.()),
-    ...(bossMesh && !bossMesh.isDisposed?.() ? [{ mesh: bossMesh }] : []),
+    ...(bossMesh && !bossMesh.isDisposed?.() ? [{ mesh: bossMesh, isBoss: true }] : []),
   ];
   const fireEnemyBullet = (pos, vx = 0, vz = 0.24) => {
     const b = BABYLON.MeshBuilder.CreateSphere(`eb_${Date.now()}_${Math.random()}`, { diameter: 0.44 }, scene);
@@ -594,7 +680,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
 
   const fireWeapons = () => {
     const target = pickWeaponTarget(liveTargets(), playerRoot.position);
-    const salvo = describeMainSalvo(mainGunBase, playerRoot.position, stats.atk, target);
+    const abilityDamage=guestAbilities?.modifiers().damageMultiplier||1;
+    const salvo = describeMainSalvo(mainGunBase, playerRoot.position, stats.atk*abilityDamage, target);
     shots.fire(salvo);
     if (salvo.length && shouldEchoShot(stats, passives, Date.now())) {
       // One extra shot per cooldown, even for spread/shotgun (no exponential fanout).
@@ -782,7 +869,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   let lastSpawn     = 0;
   let spawnInterval = 1200;
   let gameOver      = false;
-  let gameState     = 'TRANSITION';  // PLAYING | BOSS_FIGHT | TRANSITION | GAMEOVER | CLEAR
+  let gameState     = 'TRANSITION';  // PLAYING | BOSS_INTRO | BOSS_FIGHT | TRANSITION | GAMEOVER | CLEAR
   let score         = 0;
   let verifiedClientKills = 0;
   let collectedCoins = 0;
@@ -791,13 +878,28 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   const INV_DUR     = 1500;
   let tick          = 0;
 
+  const getGuestAbilityActivationGate=()=>deriveGuestAbilityActivationGateV2({gameState,gameOver});
+  const getGuestAbilityHudSnapshot=()=>{
+    if(!guestAbilities)return null;
+    return Object.freeze({...guestAbilities.snapshot(),activationGate:getGuestAbilityActivationGate()});
+  };
+  const publishGuestAbilityState=()=>{
+    const snapshot=getGuestAbilityHudSnapshot();
+    if(snapshot)data.onAbilityState?.(snapshot);
+    return snapshot;
+  };
+  const setGameState=next=>{
+    gameState=String(next||'TRANSITION');
+    publishGuestAbilityState();
+  };
+
   const updateScore = delta => {
     score += delta;
     scoreText.text = `${lang==='vi'?'ĐIỂM':'SCORE'}: ${score}`;
   };
   const trackEventKill = () => {
     verifiedClientKills++;
-    if (isCloud) return; // Cloud kill milestones await trusted combat telemetry.
+    if (isCloud||guestAbilityQa) return; // QA kills never update a saved guest event.
     recordGuestEventKill(gsRef.current.campaignData, EVENT_CONFIG, getRealTime?.() || Date.now());
   };
   const startWave = n => {
@@ -815,46 +917,88 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       showAnnouncement(
         lang==='vi' ? 'CẢNH BÁO:\nTRÙM CUỐI XUẤT HIỆN!' : 'WARNING:\nBOSS APPROACHING!',
         '#ff4757', 3000);
-      gameState = 'BOSS_FIGHT';
-      scheduleBattleTimer(() => spawnBoss(), 3500);
+      setGameState('BOSS_INTRO');
+      scheduleBattleTimer(() => {
+        spawnBoss();
+        setGameState('BOSS_FIGHT');
+      }, 3500);
       return;
     }
     showAnnouncement(
       `${lang==='vi'?'TIẾN VÀO ĐỢT':'ENTERING WAVE'} ${n}`, '#66fcf1');
-    gameState = 'PLAYING';
+    setGameState('PLAYING');
   };
 
   // ══════════════════════════════════════════════════════════════════════════
   // 13. PLAYER DAMAGE / DEATH
   // ══════════════════════════════════════════════════════════════════════════
 
-  const damagePlayer = (rawDmg, source = 'contact') => {
-    rawDmg *= shieldDamageFactor(droneBase);
+  const damagePlayer = (rawDmg, source = 'contact', damageType = 'kinetic') => {
     const nowMs = Date.now();
-    if (nowMs < invincibleUntil) return;
-    const impact = receiveBattleHit(stats, passives, rawDmg, { source, nowMs });
-    if (impact.dodged) {
-      showAnnouncement(lang==='vi'?'NÉ TRÁNH!':'DODGED!', '#4ade80', 900);
-      return;
+    const applyRetaliation=(reflection=0,nova=0)=>{
+      const total=Math.max(0,reflection)+Math.max(0,nova);
+      if(total<=0)return;
+      const radiusSquared=nova>0?25:9;
+      for(const enemy of [...enemies]){
+        if(!enemy.mesh?.position||enemy._dead)continue;
+        const dx=enemy.mesh.position.x-playerRoot.position.x;
+        const dz=enemy.mesh.position.z-playerRoot.position.z;
+        if(dx*dx+dz*dz<=radiusSquared)applyPlayerDamageToEnemy(enemy,total);
+      }
+      if(bossMesh&&!bossMesh.isDisposed?.()){
+        const dx=bossMesh.position.x-playerRoot.position.x;
+        const dz=bossMesh.position.z-playerRoot.position.z;
+        if(dx*dx+dz*dz<=radiusSquared)applyPlayerDamageToBoss(total);
+      }
+    };
+    // Normal hits retain the legacy overlap guard. A one-shot DEV QA evade is
+    // allowed through so the next eligible projectile reliably exercises the
+    // Light Armor path even if a previous contact briefly started an i-frame.
+    const forceProjectileEvadePending=source==='projectile'
+      &&guestAbilities?.snapshot().qa?.forceNextProjectileEvadePending===true;
+    if (nowMs < invincibleUntil&&!forceProjectileEvadePending) return;
+    rawDmg *= shieldDamageFactor(droneBase);
+    let impact;
+    if(guestAbilities){
+      const guestHit=guestAbilities.resolveIncomingHit({damage:rawDmg,source,damageType});
+      if(guestHit.dodged){
+        invincibleUntil=nowMs+450;
+        publishArmorFeedback(guestHit.dodgeSource==='armor'?'evade':'pilot_evade');
+        publishGuestAbilityState();
+        return;
+      }
+      const crystalProc=guestHit.events?.some(event=>event.type==='crystal_prism');
+      const reactiveProc=!crystalProc&&guestHit.reflected>0
+        &&guestAbilities.snapshot().armor?.id==='armor_reactive_plating';
+      if(crystalProc)publishArmorFeedback('crystal_prism',guestHit.reflected||0);
+      else if(reactiveProc)publishArmorFeedback('reactive_reflect',guestHit.reflected||0);
+      if(guestHit.absorbed>0)invincibleUntil=nowMs+INV_DUR;
+      if(guestHit.remaining<=0){
+        applyRetaliation(guestHit.reflected||0,guestHit.novaDamage||0);
+        publishGuestAbilityState();
+        return;
+      }
+      stats.hp=clamp(stats.hp-guestHit.remaining,0,stats.maxHp);
+      impact={dodged:false,damage:guestHit.remaining,absorbed:guestHit.absorbed||0,
+        reflected:guestHit.reflected||0,novaDamage:guestHit.novaDamage||0};
+      publishGuestAbilityState();
+    }else{
+      impact = receiveBattleHit(stats, passives, rawDmg, { source, nowMs });
+      if (impact.dodged) {
+        showAnnouncement(lang==='vi'?'NÉ TRÁNH!':'DODGED!', '#4ade80', 900);
+        return;
+      }
     }
     invincibleUntil = nowMs + INV_DUR;
     // Retaliation hits enemies near the player. This is purely battle-local.
-    if (impact.reflected || impact.novaDamage) {
-      for (const enemy of [...enemies]) {
-        if (!enemy.mesh?.position || enemy._dead) continue;
-        const dx=enemy.mesh.position.x-playerRoot.position.x;
-        const dz=enemy.mesh.position.z-playerRoot.position.z;
-        if (dx*dx+dz*dz <= (impact.novaDamage ? 25 : 9)) {
-          applyPlayerDamageToEnemy(enemy, impact.reflected+impact.novaDamage);
-        }
-      }
-    }
+    applyRetaliation(impact.reflected,impact.novaDamage);
     updateHpBar();
     explode(playerRoot.position, 2);
     shakeCamera();
 
     if (stats.hp <= 0) {
-      gameOver = true; gameState = 'GAMEOVER';
+      gameOver = true; setGameState('GAMEOVER');
+      guestVisualFeedback?.dispose();
       engineFx.stop(); playerRoot.isVisible = false;
       explode(playerRoot.position, 4);
       showAnnouncement(lang==='vi'?'THẤT BẠI!':'MISSION FAILED!', '#ff0000', 3000);
@@ -865,6 +1009,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
             onDefeat();
           } catch(error) {console.error('Battle settlement failed',error);showAnnouncement(lang==='vi'?'LỖI MÁY CHỦ - HÃY RÚT LUI':'SERVER ERROR - PLEASE RETREAT', '#ff4757');}
         } else {
+          if(guestAbilityQa){onDefeat();return;} // No local QA rewards or progress writes.
           const coinMult = activeCoinMultiplier(EVENT_CONFIG, getRealTime?.() || Date.now());
           gsRef.current.coins = (Number(gsRef.current.coins)||0) + score + (collectedCoins * coinMult);
           recordGuestBattle(gsRef.current.campaignData,{mode:"campaign",victory:false,kills:verifiedClientKills}, getRealTime?.() ?? Date.now());
@@ -880,8 +1025,13 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   // ══════════════════════════════════════════════════════════════════════════
 
   const stageCleared = () => {
-    gameState = 'CLEAR'; engineFx.stop();
+    setGameState('CLEAR'); guestVisualFeedback?.dispose(); engineFx.stop();
     showAnnouncement(lang==='vi'?'HOÀN THÀNH\nCHIẾN DỊCH!':'CAMPAIGN\nCLEARED!', '#2ecc71', 2000);
+    if(guestAbilityQa){
+      showAnnouncement(lang==='vi'?'GUEST LAB · KHÔNG LƯU THƯỞNG':'GUEST LAB · NO REWARDS','#57e6ed',2100);
+      scheduleBattleTimer(()=>onVictory(),2600);
+      return;
+    }
     scheduleBattleTimer(() => showRewardSummary(), 2600);
   };
 
@@ -1212,6 +1362,9 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   // retains only its own scoring, drop and enemy-health UI callbacks.
   const applyPlayerDamageToEnemy = (enemy, damage) => {
     if (!enemy || enemy._dead || enemy.mesh.isDisposed?.()) return false;
+    // Mark applies only in the local Guest ability experiment.
+    if(guestAbilities&&enemy._guestMarkUntilTick>guestAbilities.tick)
+      damage*=1+(enemy._guestMarkBonus||0);
     enemy.hp -= damage;
     enemy.visual?.setState('hit');
     showTextEffect(enemy.mesh.position.x, enemy.mesh.position.z, `-${Math.round(damage)}`, '#ff4757');
@@ -1234,6 +1387,37 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     if (index >= 0) enemies.splice(index, 1);
     return true;
   };
+  const applyPlayerDamageToBoss = damage => {
+    if(!bossMesh||bossMesh.isDisposed?.()||bossHp<=0)return false;
+    if(guestAbilities&&bossMesh._guestMarkUntilTick>guestAbilities.tick)
+      damage*=1+(bossMesh._guestMarkBonus||0);
+    bossHp-=Math.max(0,damage);
+    bossVisual?.setState('hit');
+    showTextEffect(bossMesh.position.x,bossMesh.position.z,`-${Math.round(damage)}`,'#ff4757');
+    bossHpFill.width=`${Math.max(0,Math.round(bossHp/bossMaxHp*100))}%`;
+    if(bossMesh.material?.emissiveColor){
+      const original=bossMesh.material.emissiveColor.clone();
+      bossMesh.material.emissiveColor=new BABYLON.Color3(1,1,1);
+      scheduleBattleTimer(()=>{if(bossMesh?.material)bossMesh.material.emissiveColor=original;},60);
+    }
+    if(!bossEnraged&&bossHp<=bossMaxHp*.3&&bossHp>0){
+      bossEnraged=true;
+      bossVisual?.setState('enrage');
+      showAnnouncement(lang==='vi'?'CẢNH BÁO: TRÙM NỔI ĐIÊN!':'WARNING: BOSS ENRAGED!','#ff0000',3000);
+      bossVelX*=1.6;
+      if(bossMesh.material)bossMesh.material.emissiveColor=new BABYLON.Color3(1,.3,.3);
+    }
+    if(bossHp>0)return false;
+    explode(bossMesh.position,5);
+    updateScore(bossPts);
+    trackEventKill();
+    bossPanel.isVisible=false;
+    deathVisuals.capture(bossVisual);
+    bossVisual=null;
+    safeDispose(bossMesh);bossMesh=null;
+    stageCleared();
+    return true;
+  };
   const applyCampaignSplash = (bullet, impact, damage, primary) => {
     if (!bullet._splashRadius) return;
     explode(new BABYLON.Vector3(impact.x, 0, impact.z), bullet._splashRadius * .45);
@@ -1245,12 +1429,126 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     });
   };
 
+  // One ship activation command for the DEV Guest lane only. Armor effects
+  // are automatic/passive and never consume a second touch control.
+  // C15/cloud never creates this controller; no ability result is sent to API.
+  let guestAbilityAccumulator=0;
+  let guestNanoFeedbackAmount=0;
+  let guestNanoFeedbackAt=-Infinity;
+  const activateGuestAbility=slot=>{
+    if(!guestAbilities||slot!=='ship_skill')return false;
+    const before=guestAbilities.snapshot();
+    const activationGate=getGuestAbilityActivationGate();
+    if(!activationGate.canActivate){
+      publishGuestFeedback(createGuestAbilityRejectedFeedbackV2({
+        abilityId:before.ship?.id,reason:activationGate.lockReason||'UNAVAILABLE',tick:guestAbilities.tick,
+        sequence:++guestFeedbackSequence,
+      }),{worldText:false});
+      return false;
+    }
+    const definition=getGuestAbilitySkillV2(before.ship?.id);
+    let selectedMarkTarget=null;
+    if(before.ship?.kind==='mark'){
+      selectedMarkTarget=pickWeaponTarget(liveTargets(),playerRoot.position);
+      const range=Number(definition?.params?.range||0);
+      const dx=selectedMarkTarget?.mesh?.position?.x-playerRoot.position.x;
+      const dz=selectedMarkTarget?.mesh?.position?.z-playerRoot.position.z;
+      if(!selectedMarkTarget||!Number.isFinite(dx)||!Number.isFinite(dz)||Math.hypot(dx,dz)>range){
+        publishGuestFeedback(createGuestAbilityRejectedFeedbackV2({
+          abilityId:before.ship.id,reason:'NO_TARGET',tick:guestAbilities.tick,
+          sequence:++guestFeedbackSequence,
+        }),{worldText:false});
+        return false;
+      }
+    }
+    const result=guestAbilities.activate(slot);
+    if(!result.ok){
+      publishGuestFeedback(createGuestAbilityRejectedFeedbackV2({
+        abilityId:before.ship?.id,reason:result.reason,tick:guestAbilities.tick,
+        sequence:++guestFeedbackSequence,
+      }),{worldText:false});
+      return false;
+    }
+    const feedback=createGuestAbilityActivationFeedbackV2({
+      abilityId:result.abilityId,tick:result.tick,sequence:++guestFeedbackSequence,
+    });
+    publishGuestFeedback(feedback);
+    for(const event of result.events){
+      if(event.type==='heal'){
+        const beforeHp=stats.hp;
+        stats.hp=clamp(stats.hp+event.amount,0,stats.maxHp);
+        const restored=Math.max(0,Math.round(stats.hp-beforeHp));
+        if(restored>0)showTextEffect(playerRoot.position.x,playerRoot.position.z-.45,`+${restored} HP`,'#69f0a9');
+      }
+      if(event.type==='pierce'){
+        const target=pickWeaponTarget(liveTargets(),playerRoot.position);
+        const salvo=describeMainSalvo(GEAR_CATALOG.mainGun.find(g=>g.id==='gun_rail'),
+          playerRoot.position,stats.atk*event.damageMultiplier,target);
+        shots.fire(salvo.map(shot=>({...shot,penetration:event.penetration,projectileType:'rail'})));
+      }
+      if(event.type==='mark'){
+        const target=selectedMarkTarget;
+        if(target){
+          const marked=target.isBoss?target.mesh:target;
+          marked._guestMarkUntilTick=guestAbilities.tick+event.durationTicks;
+          marked._guestMarkBonus=event.bonus;
+          target.isBoss?bossVisual?.setState('hit'):target.visual?.setState('hit');
+          guestVisualFeedback?.markTarget(target.mesh,feedback,event.durationTicks);
+          showTextEffect(target.mesh.position.x,target.mesh.position.z-.6,
+            lang==='vi'?`ĐÁNH DẤU +${Math.round(event.bonus*100)}%`:`MARK +${Math.round(event.bonus*100)}%`,
+            feedback?.color||'#ffd166');
+        }
+      }
+      if(event.type==='burst'){
+        const target=pickWeaponTarget(liveTargets(),playerRoot.position);
+        const base=describeMainSalvo(mainGunBase,playerRoot.position,
+          stats.atk*event.damageMultiplier,target)[0];
+        if(base){
+          const center=(event.shots-1)/2;
+          shots.fire(Array.from({length:event.shots},(_,index)=>({
+            ...base,x:base.x+(index-center)*event.spread,delayMs:index*70,
+          })));
+        }
+      }
+      if(event.type==='area'||event.type==='pull'){
+        for(const enemy of [...enemies]){
+          if(enemy._dead||enemy.mesh?.isDisposed?.())continue;
+          const dx=enemy.mesh.position.x-playerRoot.position.x;
+          const dz=enemy.mesh.position.z-playerRoot.position.z;
+          const distance=Math.hypot(dx,dz);
+          if(distance>event.radius)continue;
+          if(event.type==='area')applyPlayerDamageToEnemy(enemy,stats.atk*event.damageMultiplier);
+          else if(distance>.001){
+            const n=Math.min(event.distance,distance);
+            enemy.mesh.position.x-=dx/distance*n;
+            enemy.mesh.position.z-=dz/distance*n;
+          }
+          if(event.slowTicks)enemy._slowUntil=Date.now()+event.slowTicks*1000/30;
+        }
+        if(event.type==='area'&&bossMesh&&!bossMesh.isDisposed?.()){
+          const dx=bossMesh.position.x-playerRoot.position.x;
+          const dz=bossMesh.position.z-playerRoot.position.z;
+          if(Math.hypot(dx,dz)<=event.radius)
+            applyPlayerDamageToBoss(stats.atk*event.damageMultiplier*.65);
+        }
+      }
+    }
+    updateHpBar();
+    publishGuestAbilityState();
+    return true;
+  };
+  if(guestAbilities){
+    data.onAbilityController?.(activateGuestAbility);
+    publishGuestAbilityState();
+  }
+
   // Exactly one shared HUD for Guest and C15. This observer reads legacy
   // gameplay data but never writes it; emission is capped at 10 Hz to protect
   // mobile React performance and the 60Hz Babylon render loop.
   let lastHudPublishAt=-Infinity;
   if(externalHud)scene.onBeforeRenderObservable.add(()=>{
     const now=Date.now();if(now-lastHudPublishAt<100)return;lastHudPublishAt=now;
+    if(guestAbilities)publishGuestAbilityState();
     try{data.onHudUpdate({stage:currentStage,wave:Math.max(1,currentWave),wavesTotal:MAX_WAVES,
       hp:stats.hp,maxHp:stats.maxHp,kills:verifiedClientKills,score,
       bossHp:bossMesh&&bossHp>0?bossHp:null,bossMaxHp:bossMesh&&bossMaxHp>0?bossMaxHp:null});}catch(_){}
@@ -1265,6 +1563,33 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     activeEffects.update(now);
     const frameFactor = frameScale(engine.getDeltaTime());
     tick += frameFactor;
+    if(guestAbilities){
+      guestAbilityAccumulator+=Math.min(100,Math.max(0,engine.getDeltaTime()));
+      const steps=Math.min(3,Math.floor(guestAbilityAccumulator/(1000/30)));
+      if(steps>0){
+        guestAbilities.advanceTicks(steps);
+        guestAbilityAccumulator-=steps*1000/30;
+        let healed=false;
+        for(const event of guestAbilities.drainEvents()){
+          if(event.type==='heal'&&event.amount>0){
+            const before=stats.hp;
+            stats.hp=clamp(stats.hp+event.amount,0,stats.maxHp);
+            const restored=Math.max(0,Math.round(stats.hp-before));
+            healed=healed||restored>0;
+            if(event.source==='armor_nano'&&restored>0)guestNanoFeedbackAmount+=restored;
+          }
+        }
+        if(healed)updateHpBar();
+        if(guestNanoFeedbackAmount>0&&guestAbilities.tick-guestNanoFeedbackAt>=30){
+          publishArmorFeedback('nano_repair',guestNanoFeedbackAmount,{worldText:false});
+          showTextEffect(playerRoot.position.x,playerRoot.position.z-.45,`+${guestNanoFeedbackAmount} HP`,'#69f0a9');
+          guestNanoFeedbackAmount=0;
+          guestNanoFeedbackAt=guestAbilities.tick;
+        }
+      }
+      if(!Number.isFinite(guestAbilityAccumulator))guestAbilityAccumulator=0;
+      guestVisualFeedback?.update();
+    }
     // Regen normalized to elapsed simulation time; paused tabs cannot heal instantly.
     if (stats.hpRegenRate > 0 && stats.hp > 0 && stats.hp < stats.maxHp) {
       stats.hp = Math.min(stats.maxHp, stats.hp + stats.maxHp * stats.hpRegenRate * frameFactor / 60);
@@ -1284,7 +1609,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     });
     
     // ── Auto-fire ──
-    if (now > lastFire + stats.fireRate)       { fireWeapons();  lastFire      = now; }
+    const mainInterval=stats.fireRate*(guestAbilities?.modifiers().fireIntervalMultiplier||1);
+    if (now > lastFire + mainInterval)       { fireWeapons();  lastFire      = now; }
     if (stats.wingmanId && now > nextWingFire) { fireWingman();  nextWingFire  = now + stats.wingFireRate; }
     if (stats.droneId   && now > nextDroneFire){ fireDrones();   nextDroneFire = now + stats.droneFireRate; }
 
@@ -1315,7 +1641,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       const dx = b.position.x - playerRoot.position.x;
       const dz = b.position.z - playerRoot.position.z;
       if (dx*dx + dz*dz < 1.44) {   // hit radius 1.2
-        damagePlayer(200, 'projectile'); safeDispose(b); enemyBullets.splice(i,1);
+        damagePlayer(200, 'projectile', 'energy'); safeDispose(b); enemyBullets.splice(i,1);
       }
     }
 
@@ -1344,7 +1670,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         if (Math.abs(e.mesh.position.x) > bx) {
           e.velX *= -1; e.mesh.position.x = clamp(e.mesh.position.x, -bx, bx);
         }
-        if (now > e.lastShoot + e.shootMs) {
+        if (!guestAbilities?.modifiers().cloaked&&now > e.lastShoot + e.shootMs) {
           const dx = playerRoot.position.x - e.mesh.position.x;
           const dz = playerRoot.position.z - e.mesh.position.z;
           const dn = Math.sqrt(dx*dx + dz*dz) || 1;
@@ -1362,7 +1688,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         const dx = e.mesh.position.x - playerRoot.position.x;
         const dz = e.mesh.position.z - playerRoot.position.z;
         if (dx*dx + dz*dz < 3.24) {   // hit radius 1.8
-          damagePlayer(e.tier===4 ? 400 : 200);
+          damagePlayer(e.tier===4 ? 400 : 200, 'contact', 'kinetic');
           explode(e.mesh.position, 1.5);
           cleanEnemy(e); enemies.splice(i,1); continue;
         }
@@ -1376,7 +1702,13 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         const hit = shots.registerHit(bullet, e);
         if (!hit.accepted) continue; // pierced target already hit: never double damage
         const impact = { x: e.mesh.position.x, z: e.mesh.position.z };
-        const damage = calculateProjectileDamage(bullet.atk, stats.critDamageBoost);
+        const rawProjectileDamage=calculateProjectileDamage(bullet.atk, stats.critDamageBoost);
+        const damage=guestAbilities&&bullet._kind==='main'
+          ?rawProjectileDamage*guestCounterMultiplierV2({
+            damageType:GUN_DAMAGE_TYPES_V2[stats.mainGunId],
+            targetDefense:legacyTierDefenseClass(e.tier),
+          })
+          :rawProjectileDamage;
         if (bullet._slowMs) e._slowUntil = now + bullet._slowMs;
         killed = applyPlayerDamageToEnemy(e, damage);
         if (bullet._splashRadius) applyCampaignSplash(bullet, impact, damage, e);
@@ -1437,49 +1769,22 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         const hit = shots.registerHit(b, { mesh: bossMesh });
         if (!hit.accepted) continue;
 
-        const dmg = calculateProjectileDamage(b.atk, stats.critDamageBoost);
-        bossHp -= dmg;
-        bossVisual?.setState('hit');
-        showTextEffect(bossMesh.position.x, bossMesh.position.z, `-${Math.round(dmg)}`, '#ff4757');
-        bossHpFill.width = `${Math.max(0, Math.round(bossHp/bossMaxHp*100))}%`;
-
-        // Flash boss
-        if (bossMesh.material?.emissiveColor) {
-          const orig = bossMesh.material.emissiveColor.clone();
-          bossMesh.material.emissiveColor = new BABYLON.Color3(1,1,1);
-          scheduleBattleTimer(()=>{ if (bossMesh?.material) bossMesh.material.emissiveColor=orig; }, 60);
-        }
+        const rawBossDamage = calculateProjectileDamage(b.atk, stats.critDamageBoost);
+        const bossDamage = guestAbilities && b._kind === 'main'
+          ? rawBossDamage * guestCounterMultiplierV2({
+              damageType:GUN_DAMAGE_TYPES_V2[stats.mainGunId],targetDefense:'boss',
+            })
+          : rawBossDamage;
+        const bossKilled=applyPlayerDamageToBoss(bossDamage);
         if (hit.consumed || b._splashRadius) { safeDispose(b); playerBullets.splice(j,1); }
-
-        // Enrage at 30%
-        if (!bossEnraged && bossHp <= bossMaxHp*.3) {
-          bossEnraged = true;
-          bossVisual?.setState('enrage');
-          showAnnouncement(lang==='vi'?'CẢNH BÁO: TRÙM NỔI ĐIÊN!':'WARNING: BOSS ENRAGED!', '#ff0000', 3000);
-          bossVelX *= 1.6;
-          // Change boss color to red
-          if (bossMesh.material) {
-            bossMesh.material.emissiveColor = new BABYLON.Color3(1, 0.3, 0.3);
-          }
-        }
-
-        if (bossHp <= 0) {
-          explode(bossMesh.position, 5);
-          updateScore(bossPts);
-          trackEventKill();
-          bossPanel.isVisible = false;
-          deathVisuals.capture(bossVisual);
-          bossVisual = null;
-          safeDispose(bossMesh); bossMesh = null; // stop all collisions immediately
-          stageCleared(); break;
-        }
+        if(bossKilled)break;
       }
 
       // Boss ↔ player collision
       if (bossMesh) {
         const dx = bossMesh.position.x - playerRoot.position.x;
         const dz = bossMesh.position.z - playerRoot.position.z;
-        if (dx*dx + dz*dz < 10.24) damagePlayer(400);   // hit radius 3.2
+        if (dx*dx + dz*dz < 10.24) damagePlayer(400, 'contact', 'kinetic');   // hit radius 3.2
       }
     }
 
@@ -1517,7 +1822,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         const alive = enemies.filter(e => !e._dead).length;
         if (alive===0) {
           if (currentWave < MAX_WAVES) {
-            gameState = 'TRANSITION';
+            setGameState('TRANSITION');
             showAnnouncement(lang==='vi'?'DỌN SẠCH!':'SECTOR CLEARED!', '#2ecc71', 1000);
             scheduleBattleTimer(() => startWave(currentWave+1), 2000);
           } else if (!stageConfig.hasBoss) {

@@ -5,8 +5,11 @@ import { createCampaignScene } from './CampaignScene';
 import { auth } from '../../firebase';
 import toast from 'react-hot-toast';
 import C15LocalAlpha1 from '../C15LocalAlpha1/index.jsx';
+import GuestC15Alpha1QA from './GuestC15Alpha1QA.jsx';
 import BattleHud from '../../ui-system/BattleHud.jsx';
-import GameButton from '../../ui-system/GameButton.jsx';
+import GuestAbilityControls from '../../ui-system/GuestAbilityControls.jsx';
+import { resolveGuestCombatQaRuntimeFromViteEnv } from '../../game/combat/GuestCombatQaBuildGateV2.js';
+import { cycleGuestCombatQaLoadoutV2 } from '../../game/combat/GuestCombatQaLoadoutV2.js';
 
 export default function CampaignEngine(props) {
   const data=props.gsRef?.current?.campaignData;
@@ -19,7 +22,15 @@ export default function CampaignEngine(props) {
   // Campaign engine before the player explicitly presses CONTINUE.
   const c15LaneRef=useRef(c15Eligible);
   const c15Enabled=c15LaneRef.current;
-  return c15Enabled
+  // Explicit local-development parity lab only: never runs in production builds.
+  // Same deterministic C15 kernel/visual renderer, no Firebase or rewards.
+  const guestAlpha1ParityQa=import.meta.env.DEV===true
+    &&import.meta.env.VITE_GUEST_C15_ALPHA1_PARITY_QA==='true'
+    &&!auth.currentUser&&Number(progress.currentPlanet||1)===1
+    &&Number(progress.selectedStage||1)===1;
+  return guestAlpha1ParityQa
+    ? <GuestC15Alpha1QA setScreen={props.setScreen} lang={props.lang}/>
+    : c15Enabled
     ? <C15LocalAlpha1 setScreen={props.setScreen} lang={props.lang} refreshCloudProfile={props.refreshCloudProfile}/>
     : <LegacyCampaignEngine {...props}/>;
 }
@@ -31,6 +42,22 @@ function LegacyCampaignEngine({ gsRef, setScreen, lang, saveUserProfile, getReal
   const retreatLockRef = useRef(false);
   const [retreating, setRetreating] = React.useState(false);
   const [battleHud, setBattleHud] = React.useState({stage:1,wave:1,wavesTotal:5,hp:1,maxHp:1,kills:0,score:0});
+  const [battleNotice,setBattleNotice]=React.useState(null);
+  const noticeSeq=useRef(0);
+  const guestAbilityQa=resolveGuestCombatQaRuntimeFromViteEnv(import.meta.env,{
+    authenticated:Boolean(auth.currentUser),
+    cloudBattle:Boolean(auth.currentUser),
+  });
+  const abilityActionRef=useRef(null);
+  const [abilityHud,setAbilityHud]=React.useState(null);
+  const [abilityFeedback,setAbilityFeedback]=React.useState(null);
+  const [qaLoadoutRevision,setQaLoadoutRevision]=React.useState(0);
+  const cycleQaLoadout=React.useCallback(kind=>{
+    if(import.meta.env.VITE_SF_GUEST_COMBAT_V2_QA!=='true'||typeof window==='undefined')return;
+    const next=cycleGuestCombatQaLoadoutV2(window.location.search,kind);
+    window.history.replaceState(null,'',`${window.location.pathname}${next.search}${window.location.hash}`);
+    setQaLoadoutRevision(value=>value+1);
+  },[]);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -61,8 +88,16 @@ function LegacyCampaignEngine({ gsRef, setScreen, lang, saveUserProfile, getReal
       getRealTime,
       gameAction,
       isCloud: Boolean(auth.currentUser),
+      // Only in development Guest, intentionally isolated from trusted online play.
+      guestAbilitiesQa:guestAbilityQa,
+      onAbilityState:guestAbilityQa?setAbilityHud:null,
+      onAbilityFeedback:guestAbilityQa?setAbilityFeedback:null,
+      onAbilityController:guestAbilityQa?(activate=>{abilityActionRef.current=activate;}):null,
+
       // Presentation only: Babylon publishes compact HUD snapshots to the same
       // React component used by C15. No extra gameplay state or rewards.
+      // Announcements are presentation-only and share the C15 React banner.
+      onAnnouncement: notice=>setBattleNotice({...notice,id:`guest-notice-${++noticeSeq.current}`}),
       onHudUpdate: next => setBattleHud(previous => {
         const keys=['stage','wave','wavesTotal','hp','maxHp','kills','score','bossHp','bossMaxHp'];
         return keys.every(key=>previous?.[key]===next[key])?previous:next;
@@ -93,12 +128,25 @@ function LegacyCampaignEngine({ gsRef, setScreen, lang, saveUserProfile, getReal
     // ── Cleanup ───────────────────────────────────────────────────────────
     return () => {
       window.removeEventListener('resize', onResize);
+      abilityActionRef.current=null;
       performance.dispose();
       scene.dispose();
       engine.dispose();
     };
-  }, [gsRef, lang, setScreen, saveUserProfile]);
+  }, [gsRef, lang, setScreen, saveUserProfile, guestAbilityQa, qaLoadoutRevision]);
 
+  const retreat=async()=>{
+    if(retreatLockRef.current)return;
+    retreatLockRef.current=true;
+    setRetreating(true);
+    try{
+      if(auth.currentUser&&gsRef.current.activeBattleId)
+        await gameAction('battle.abandon',{ticketId:gsRef.current.activeBattleId});
+      setScreen('stage_select');
+    }catch(error){
+      toast.error(error?.message||(lang==='vi'?'Không thể rút lui, thử lại.':'Retreat failed; retry.'));
+    }finally{retreatLockRef.current=false;setRetreating(false);}
+  };
   return (
     <div style={{
       position: 'absolute', top: 0, left: 0,
@@ -113,30 +161,12 @@ function LegacyCampaignEngine({ gsRef, setScreen, lang, saveUserProfile, getReal
         }}
       />
 
-      <BattleHud lang={lang} {...battleHud}/>
-      {/* The same button surface as authenticated C15; keep the original abandon action. */}
-      <GameButton variant="secondary" dock="bottom-left"
-        disabled={retreating}
-        onClick={async () => {
-          if (retreatLockRef.current) return;
-          retreatLockRef.current = true;
-          setRetreating(true);
-          try {
-            if (auth.currentUser && gsRef.current.activeBattleId) {
-              // Never leave gameplay while the authoritative ticket is still open.
-              await gameAction('battle.abandon',{ticketId:gsRef.current.activeBattleId});
-            }
-            setScreen('stage_select');
-          } catch (error) {
-            toast.error(error?.message || (lang === 'vi' ? 'Không thể rút lui, thử lại.' : 'Retreat failed; retry.'));
-          } finally {
-            retreatLockRef.current = false;
-            setRetreating(false);
-          }
-        }}
-      >
-        ◀ {retreating ? (lang === 'vi' ? 'ĐANG ĐÓNG TRẬN…' : 'CLOSING…') : (lang === 'vi' ? 'RÚT LUI' : 'RETREAT')}
-      </GameButton>
+      {/* Guest shows its actual local score. C15 never invents a trusted score. */}
+      <BattleHud lang={lang} {...battleHud} announcement={battleNotice} onRetreat={retreat} retreating={retreating}/>
+      {guestAbilityQa&&abilityHud&&<GuestAbilityControls lang={lang} state={abilityHud}
+        feedback={abilityFeedback} onActivate={slot=>abilityActionRef.current?.(slot)}
+        onQaCycle={cycleQaLoadout}/>}
+
     </div>
   );
 }

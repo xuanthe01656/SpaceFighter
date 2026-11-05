@@ -3,6 +3,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import styles from './ItemModal.module.css';
 import { GEAR_CATALOG, AIRCRAFTS, PILOTS } from '../../constants';
 import ShipImage from '../ShipImage/ShipImage';
+import {
+  ARMOR_TRAITS_V2,
+  SHIP_ACTIVE_SKILLS_V2,
+} from '../../game/combat/GuestAbilityCatalogV2.js';
+import {
+  describeGuestArmorV2,
+  getGuestAbilityFeedbackProfileV2,
+  getGuestArmorFeedbackProfileV2,
+  localizeGuestFeedbackV2,
+} from '../../game/combat/GuestAbilityFeedbackV2.js';
 
 // ── Radar max values ──────────────────────────────────────────────
 const MAX_VALS = { atk: 1500, hp: 4000, armor: 400, speed: 12, fireRate: 0.1 };
@@ -126,6 +136,40 @@ export default function ItemModal({
     selectedSacrifices.length === (starUpInfo?.reqDupes || 0);
 
   const rarityColor = RARITY_COLOR[item.rarity] || '#94a3b8';
+
+  // Combat rules are displayed before battle from the same catalog that drives
+  // the Guest V2 runtime. The battle HUD can therefore remain icon-only without
+  // duplicating or drifting from ship / armor descriptions.
+  const shipSkill = item.type === 'aircraft' ? SHIP_ACTIVE_SKILLS_V2[item.id] : null;
+  const armorCatalogId = item.type === 'armor' ? (baseInfo?.id || item.baseId || item.id) : null;
+  const armorTrait = armorCatalogId ? ARMOR_TRAITS_V2[armorCatalogId] : null;
+  const shipFeedback = shipSkill ? getGuestAbilityFeedbackProfileV2(shipSkill.id) : null;
+  const armorFeedback = armorTrait ? getGuestArmorFeedbackProfileV2(armorCatalogId) : null;
+  const combatFeature = shipSkill ? {
+    kind: 'ship',
+    icon: shipFeedback?.icon || '✦',
+    color: shipFeedback?.color || '#5be5f3',
+    label: lang === 'vi' ? 'KỸ NĂNG TÀU' : 'SHIP SKILL',
+    name: localizeGuestFeedbackV2(shipSkill.name, lang),
+    detail: localizeGuestFeedbackV2(shipFeedback?.detail, lang),
+    meta: shipSkill.durationTicks > 0
+      ? (lang === 'vi'
+          ? `Hiệu lực ${(shipSkill.durationTicks / 30).toFixed(1)}s · Hồi ${(shipSkill.cooldownTicks / 30).toFixed(0)}s`
+          : `Duration ${(shipSkill.durationTicks / 30).toFixed(1)}s · Cooldown ${(shipSkill.cooldownTicks / 30).toFixed(0)}s`)
+      : (lang === 'vi'
+          ? `Tức thời · Hồi ${(shipSkill.cooldownTicks / 30).toFixed(0)}s`
+          : `Instant · Cooldown ${(shipSkill.cooldownTicks / 30).toFixed(0)}s`),
+  } : armorTrait ? {
+    kind: 'armor',
+    icon: armorFeedback?.icon || '◇',
+    color: armorFeedback?.color || '#67ef9f',
+    label: lang === 'vi' ? 'NỘI TẠI GIÁP · TỰ ĐỘNG' : 'ARMOR PASSIVE · AUTOMATIC',
+    name: localizeGuestFeedbackV2(armorTrait.name, lang),
+    detail: localizeGuestFeedbackV2(describeGuestArmorV2(armorTrait), lang),
+    meta: lang === 'vi'
+      ? 'Tự kích hoạt theo điều kiện · không dùng nút trong trận'
+      : 'Triggers automatically · no manual battle button',
+  } : null;
 
   // CSS custom property for rarity accent
   const modalStyle = {
@@ -339,6 +383,24 @@ export default function ItemModal({
                    baseInfo?.skillDesc?.[lang]   ||
                    item?.desc?.[lang]             || '…'}
                 </div>
+
+                {combatFeature && (
+                  <section
+                    className={styles.combatFeature}
+                    style={{ '--feature-color': combatFeature.color }}
+                    aria-label={`${combatFeature.label}: ${combatFeature.name}`}
+                  >
+                    <span className={styles.combatFeatureIcon} aria-hidden="true">
+                      {combatFeature.icon}
+                    </span>
+                    <span className={styles.combatFeatureCopy}>
+                      <small>{combatFeature.label}</small>
+                      <strong>{combatFeature.name}</strong>
+                      <span>{combatFeature.detail}</span>
+                      <em>{combatFeature.meta}</em>
+                    </span>
+                  </section>
+                )}
               </div>
 
               {/* Radar + stat bars */}

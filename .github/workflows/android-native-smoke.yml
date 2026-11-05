@@ -9,6 +9,11 @@ on:
         required: false
         type: boolean
         default: false
+      guest_combat_v2_qa:
+        description: 'Build local-only Guest Combat V2 skills/armor QA debug APK'
+        required: false
+        type: boolean
+        default: false
       cloud_qa_ui:
         description: 'Build NON-ECONOMIC server-authoritative Cloud Alpha1 QA cockpit (manual only)'
         required: false
@@ -84,7 +89,9 @@ jobs:
       VITE_FIREBASE_MEASUREMENT_ID: G-Y5CS812JKF
       VITE_GAME_API_URL: https://spacefighter-api-staging-528039759292.asia-southeast1.run.app/api/v1
       VITE_GAME_API_ENABLED: 'false'
-      VITE_SF_NATIVE_TOUCH_QA: ${{ github.event_name == 'workflow_dispatch' && inputs.touch_qa == true && '1' || '0' }}
+      VITE_SF_NATIVE_TOUCH_QA: ${{ github.event_name == 'workflow_dispatch' && (inputs.touch_qa == true || inputs.guest_combat_v2_qa == true) && '1' || '0' }}
+      VITE_SF_GUEST_ABILITIES_QA: ${{ github.event_name == 'workflow_dispatch' && inputs.guest_combat_v2_qa == true && 'true' || 'false' }}
+      VITE_SF_GUEST_COMBAT_V2_QA: ${{ github.event_name == 'workflow_dispatch' && inputs.guest_combat_v2_qa == true && 'true' || 'false' }}
       VITE_C8_CLOUD_QA_UI: ${{ github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && 'true' || 'false' }}
       VITE_C9_BABYLON_QA_UI: ${{ github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && inputs.c9_babylon_qa == true && 'true' || 'false' }}
       VITE_C12_CANDIDATE_QA_UI: ${{ github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && inputs.c9_babylon_qa == true && inputs.c12_candidate_qa == true && 'true' || 'false' }}
@@ -209,7 +216,7 @@ jobs:
       - name: Run current Android candidate fast source gate once
         run: |
           set -euo pipefail
-          if [[ "${{ inputs.c15_rc7_assets }}" == 'true' ]]; then
+          if [[ "${{ inputs.c15_rc7_assets }}" == 'true' || "${{ inputs.guest_combat_v2_qa }}" == 'true' ]]; then
             npm run gate:c15-rc7:fast
           else
             npm run gate:c15-rc5:fast
@@ -219,6 +226,15 @@ jobs:
       - name: Build real mobile WebView payload
         run: |
           set -euo pipefail
+          if [[ "$VITE_SF_GUEST_COMBAT_V2_QA" == 'true' ]]; then
+            [[ "$GITHUB_EVENT_NAME" == 'workflow_dispatch' ]] || { echo 'Guest Combat V2 QA is manual-only' >&2; exit 1; }
+            [[ "$VITE_SF_NATIVE_TOUCH_QA" == '1' ]] || { echo 'Guest Combat V2 QA requires native touch QA isolation' >&2; exit 1; }
+            [[ "$VITE_SF_GUEST_ABILITIES_QA" == 'true' ]] || exit 1
+            [[ "$VITE_GAME_API_ENABLED" == 'false' ]] || { echo 'Guest Combat V2 QA must not enable Game API' >&2; exit 1; }
+            [[ "$VITE_SF_BUILD_CHANNEL" == 'staging-qa' ]] || { echo 'Guest Combat V2 QA may not use a release channel' >&2; exit 1; }
+            [[ "$VITE_C8_CLOUD_QA_UI" == 'false' && "$VITE_C15_RC1B_ENABLED" == 'false' ]] || { echo 'Guest Combat V2 QA must be isolated from Cloud/C15 modes' >&2; exit 1; }
+            echo 'Building local-only Guest Combat V2 skills/armor QA payload; NO CLOUD, NO REWARDS, NOT FOR RELEASE'
+          fi
           if [[ "$VITE_SF_NATIVE_TOUCH_QA" == '1' ]]; then
             [[ "$GITHUB_EVENT_NAME" == 'workflow_dispatch' ]] || { echo 'Touch QA is manual-only' >&2; exit 1; }
             [[ "$VITE_GAME_API_ENABLED" == 'false' ]] || { echo 'Touch QA must not enable Cloud Game API' >&2; exit 1; }
@@ -335,7 +351,9 @@ jobs:
         run: |
           set -euo pipefail
           name='spacefighter-android-debug-not-for-release'
-          if [[ "${{ inputs.c15_rc7_assets }}" == 'true' ]]; then
+          if [[ "${{ inputs.guest_combat_v2_qa }}" == 'true' ]]; then
+            name='spacefighter-android-guest-combat-v2-qa-debug-not-for-release'
+          elif [[ "${{ inputs.c15_rc7_assets }}" == 'true' ]]; then
             name='spacefighter-android-c15-rc7-asset-delivery-candidate'
           elif [[ "${{ inputs.c15_rc5 }}" == 'true' ]]; then
             name='spacefighter-android-c15-rc5-internal-candidate'

@@ -1,0 +1,98 @@
+/* Compact combat HUD: only the ship icon accepts input; every other layer is transparent to touch. */
+.controls{
+  position:absolute;z-index:75;top:58%;right:max(10px,env(safe-area-inset-right,0px));
+  display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;
+  font-family:Rajdhani,system-ui,sans-serif;user-select:none;color:#e8fbff;
+}
+.action{
+  --ability-color:#5be5f3;--ability-angle:360deg;
+  position:relative;display:grid;place-items:center;width:56px;height:56px;padding:0;overflow:hidden;isolation:isolate;
+  border:0;background:transparent;color:#e8fbff;
+  clip-path:polygon(22% 0,78% 0,100% 22%,100% 78%,78% 100%,22% 100%,0 78%,0 22%);
+  filter:drop-shadow(0 0 8px color-mix(in srgb,var(--ability-color) 35%,transparent));
+  pointer-events:auto;touch-action:manipulation;-webkit-tap-highlight-color:transparent;cursor:pointer;
+  transition:transform 120ms ease,filter 120ms ease,opacity 120ms ease;
+}
+.action:active:not(:disabled){transform:scale(.93);filter:brightness(1.25) drop-shadow(0 0 10px var(--ability-color))}
+.action:focus-visible{outline:3px solid #fff1a8;outline-offset:4px}
+.action:disabled{cursor:not-allowed}
+.actionCooling{opacity:.86;filter:saturate(.72) drop-shadow(0 0 5px rgba(80,150,174,.32))}
+.actionActive{filter:brightness(1.14) drop-shadow(0 0 12px color-mix(in srgb,var(--ability-color) 65%,transparent))}
+.radialRing,.actionCore,.armorRing,.armorCore{position:absolute;pointer-events:none;clip-path:inherit}
+.radialRing{inset:0;background:conic-gradient(from 0deg,var(--ability-color) 0 var(--ability-angle),rgba(75,115,132,.28) var(--ability-angle) 360deg);z-index:0}
+.actionCore{inset:4px;background:linear-gradient(145deg,rgba(12,48,68,.98),rgba(2,13,23,.98) 78%);box-shadow:inset 0 0 10px rgba(49,174,208,.18);z-index:1}
+.icon{font-size:24px;line-height:1;color:var(--ability-color);text-shadow:0 0 8px var(--ability-color);z-index:2;transition:opacity 120ms ease,transform 120ms ease}
+.actionCooling .icon{opacity:.23;transform:scale(.88)}
+.timer{position:absolute;inset:0;display:grid;place-items:center;font-size:19px;line-height:1;font-weight:900;font-variant-numeric:tabular-nums;color:#fff;text-shadow:0 1px 3px #000,0 0 7px var(--ability-color);z-index:3}
+.activePulse{position:absolute;inset:2px;border:1px solid var(--ability-color);clip-path:inherit;z-index:4;pointer-events:none;animation:sf-guest-active-pulse 850ms ease-in-out infinite alternate}
+.rejectedBadge{position:absolute;top:2px;right:2px;display:grid;place-items:center;width:15px;height:15px;border:1px solid #fff0c2;background:#ff9c3d;color:#071019;font-size:11px;font-weight:900;z-index:6;clip-path:polygon(50% 0,100% 100%,0 100%)}
+.actionRejected{animation:sf-guest-icon-reject 240ms ease-out both;filter:drop-shadow(0 0 10px #ff9c3d)}
+
+.passive{
+  --armor-color:#67ef9f;--armor-angle:360deg;
+  position:relative;display:grid;place-items:center;width:40px;height:40px;overflow:hidden;isolation:isolate;
+  color:#eaffff;clip-path:polygon(22% 0,78% 0,100% 22%,100% 78%,78% 100%,22% 100%,0 78%,0 22%);
+  filter:drop-shadow(0 0 6px color-mix(in srgb,var(--armor-color) 34%,transparent));
+}
+.armorRing{inset:0;background:conic-gradient(from 0deg,var(--armor-color) 0 var(--armor-angle),rgba(73,104,118,.25) var(--armor-angle) 360deg);z-index:0}
+.armorCore{inset:3px;background:linear-gradient(145deg,rgba(7,35,46,.98),rgba(1,10,17,.98) 80%);box-shadow:inset 0 0 8px color-mix(in srgb,var(--armor-color) 16%,transparent);z-index:1}
+.armorIcon{font-size:18px;line-height:1;color:var(--armor-color);text-shadow:0 0 7px var(--armor-color);z-index:2}
+.armorTimer{position:absolute;inset:0;display:grid;place-items:center;font-size:12px;font-weight:900;font-variant-numeric:tabular-nums;color:#fff;text-shadow:0 1px 2px #000,0 0 5px var(--armor-color);z-index:3}
+.armorTimer+.armorBadge{display:none}
+.armorBadge{position:absolute;right:0;bottom:0;min-width:17px;padding:1px 2px;background:rgba(0,7,13,.92);border:1px solid var(--armor-color);font-size:7px;line-height:1.15;font-variant-numeric:tabular-nums;color:#fff;z-index:4}
+.passiveProc{filter:brightness(1.3) drop-shadow(0 0 11px var(--armor-color))}
+.passiveExhausted{opacity:.42;filter:grayscale(.55)}
+.passivePulse{position:absolute;inset:-45%;background:linear-gradient(110deg,transparent 38%,rgba(255,255,255,.82) 50%,transparent 62%);transform:translateX(-75%);animation:sf-guest-passive-flash 650ms ease-out both;z-index:5}
+
+.debugReadout{
+  position:absolute;right:66px;top:0;width:min(250px,58vw);display:flex;flex-direction:column;gap:2px;
+  padding:6px 8px;border:1px solid rgba(91,229,243,.45);background:rgba(0,8,17,.94);color:#ccecf2;
+  font:8px/1.25 ui-monospace,SFMono-Regular,Consolas,monospace;text-align:left;pointer-events:none;
+}
+.debugReadout b{color:#fff;font-size:9px}.debugReadout span{display:block}
+.qaSwitcher{display:flex;gap:4px;pointer-events:none}
+.qaSwitcher button{
+  min-width:36px;height:22px;padding:0 4px;border:1px solid rgba(91,229,243,.55);border-radius:3px;
+  background:rgba(0,13,23,.92);color:#dffaff;font:700 9px/1 ui-monospace,SFMono-Regular,Consolas,monospace;
+  pointer-events:auto;touch-action:manipulation;-webkit-tap-highlight-color:transparent;
+}
+.qaSwitcher button:active{transform:scale(.94);filter:brightness(1.3)}
+
+@keyframes sf-guest-active-pulse{from{opacity:.35;filter:drop-shadow(0 0 2px var(--ability-color))}to{opacity:1;filter:drop-shadow(0 0 7px var(--ability-color))}}
+@keyframes sf-guest-passive-flash{to{transform:translateX(75%)}}
+@keyframes sf-guest-icon-reject{0%{transform:translateX(0)}30%{transform:translateX(-3px)}60%{transform:translateX(3px)}100%{transform:translateX(0)}}
+
+@media(max-width:360px){
+  .controls{right:max(7px,env(safe-area-inset-right,0px));top:59%;gap:7px}
+  .action{width:52px;height:52px}.icon{font-size:22px}.timer{font-size:18px}
+  .passive{width:36px;height:36px}.armorIcon{font-size:16px}.armorTimer{font-size:11px}
+  .debugReadout{right:60px;width:min(220px,calc(100vw - 84px))}
+}
+@media(min-width:700px){
+  .controls{right:24px;top:59%;gap:10px}.action{width:62px;height:62px}.passive{width:44px;height:44px}
+  .icon{font-size:27px}.timer{font-size:21px}.armorIcon{font-size:20px}
+  .debugReadout{right:72px;width:280px}
+}
+@media(orientation:landscape) and (max-height:560px){
+  .controls{top:49%;right:max(12px,env(safe-area-inset-right,0px))}
+}
+@media(prefers-reduced-motion:reduce){
+  .action,.icon{transition:none}.activePulse,.passivePulse,.actionRejected{animation:none}
+}
+
+/* Scene-authoritative battle-phase lock. It appears only when the skill is
+   otherwise ready, so active/cooldown timers remain readable during transitions. */
+.actionLocked{
+  opacity:.42;filter:grayscale(.72) saturate(.35) drop-shadow(0 0 4px rgba(90,125,140,.25));
+  pointer-events:none;cursor:not-allowed;
+}
+.actionLocked .icon{opacity:.36;transform:scale(.86);text-shadow:none}
+.actionLocked .radialRing{background:conic-gradient(from 0deg,rgba(102,142,158,.42) 0 360deg,rgba(102,142,158,.42) 360deg)}
+.lockBadge{
+  position:absolute;right:3px;bottom:3px;width:14px;height:11px;border:1px solid #d8edf3;
+  border-radius:2px;background:rgba(2,14,22,.94);box-shadow:0 0 5px rgba(146,205,222,.35);z-index:7;
+}
+.lockBadge::before{
+  content:"";position:absolute;left:3px;top:-7px;width:6px;height:7px;border:2px solid #d8edf3;
+  border-bottom:0;border-radius:7px 7px 0 0;box-sizing:border-box;
+}

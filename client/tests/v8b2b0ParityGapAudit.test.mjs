@@ -152,7 +152,8 @@ test('V8B-2B0 BLOCKER: current weapon catalog has multi-shot that kernel cannot 
 test('V8B-2B0 BLOCKER: current ms-based fireRate cannot always equal integer 30Hz tick', () => {
   assert.equal(fireIntervalMs(0.35, 1, 400, 'seconds'), 350);
   assert.equal(fixture().state.pilot.fireEveryTicks * 1000 / TICK_HZ, 400);
-  assert.match(campaignSrc, /now\s*>\s*lastFire\s*\+\s*stats\.fireRate/);
+  assert.match(campaignSrc, /const\s+mainInterval\s*=\s*stats\.fireRate/);
+  assert.match(campaignSrc, /now\s*>\s*lastFire\s*\+\s*mainInterval/);
   assert.match(dungeonSrc, /now\s*>\s*lastFire\s*\+\s*stats\.fireRate/);
 });
 

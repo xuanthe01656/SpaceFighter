@@ -74,7 +74,7 @@ test('C6-D client code oracle has distinct melee chase and shooter sine/patrol b
   assert.match(src,/e\.mesh\.position\.z\s*>\s*ZOOM\s*\*\s*\.65/);
   assert.match(src,/e\.mesh\.position\.z\s*<\s*-ZOOM\s*\+\s*1/);
   assert.match(src,/lastShoot:\s*0\s*,\s*shootMs:\s*tier===3\s*\?\s*1400\s*:\s*2200/);
-  assert.match(src,/if\s*\(now\s*>\s*e\.lastShoot\s*\+\s*e\.shootMs\)/);
+  assert.match(src,/if\s*\(\s*!guestAbilities\?\.modifiers\(\)\.cloaked\s*&&\s*now\s*>\s*e\.lastShoot\s*\+\s*e\.shootMs\s*\)/);
 });
 test('C6-D version is opt-in and leaves all 70 C6-C QA-v6 enemies unchanged',()=>{
   const a=setup(),c=resolveCampaignAlphaStage1C6C({snapshot:a.snapshot});

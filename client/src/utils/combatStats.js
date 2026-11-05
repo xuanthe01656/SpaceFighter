@@ -4,6 +4,8 @@
  * Catalogs are supplied by caller so server-side validation can use its own copies.
  */
 import { applyBattleModifiers, getBattleEnvironment } from '../game/config/BattleRules.js';
+import { ARMOR_TRAITS_V2, SHIP_ACTIVE_SKILLS_V2 } from '../game/combat/GuestAbilityCatalogV2.js';
+import { calculateCombatRatingV2 } from '../game/combat/CombatRatingV2.js';
 
 const finite = (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -28,7 +30,8 @@ export function fireIntervalMs(value, level = 1, fallback = 400, unit = 'legacy'
 export function calculateHitDamage(rawDamage, stats, rng = Math.random) {
   const dodgeRate = clamp(finite(stats?.dodgeRate, 0), 0, 0.9);
   if (dodgeRate > 0 && rng() < dodgeRate) return { dodged: true, damage: 0 };
-  const armorReduction = clamp(finite(stats?.armor, 0) / 100, 0, 0.9);
+  const armorCap = clamp(finite(stats?.armorCap, 0.9), 0, 0.9);
+  const armorReduction = clamp(finite(stats?.armor, 0) / 100, 0, armorCap);
   const pilotReduction = clamp(finite(stats?.dmgReduce, 0), 0, 0.9);
   const damage = Math.max(1, Math.floor(Math.max(0, finite(rawDamage, 0)) * (1 - armorReduction) * (1 - pilotReduction)));
   return { dodged: false, damage };
@@ -40,7 +43,10 @@ export function calculateProjectileDamage(atk, critBoost = 0, rng = Math.random)
   return base * (boost > 0 && rng() < 0.15 ? 1 + boost : 1);
 }
 
-export function deriveCombatLoadout(campaignData, { PILOTS, AIRCRAFTS, GEAR_CATALOG }) {
+export function deriveCombatLoadout(campaignData, { PILOTS, AIRCRAFTS, GEAR_CATALOG }, {
+  armorPassivePolicy = 'legacy',
+  combatRatingVersion = 'legacy',
+} = {}) {
   const c = campaignData || {};
   const loadout = c.loadout || {};
   const items = c.items || {};
@@ -86,10 +92,13 @@ export function deriveCombatLoadout(campaignData, { PILOTS, AIRCRAFTS, GEAR_CATA
     wingmanId: gear.wingman.base?.id || null,
     droneId: gear.drone.base?.id || null,
     hpRegenRate, dmgReduce, dodgeRate, critDamageBoost,
+    // Production candidate uses a lower cap so extreme armor values cannot
+    // approach immunity. Legacy callers keep the previous 90% behavior.
+    armorCap: combatRatingVersion === 'v2' ? 0.75 : 0.9,
   };
   // All equipped armor passives are resolved from catalog IDs, not stored in
   // the player profile. Only active battle runtime owns their mutable state.
-  const armorPassive = gear.armor.base?.passive || 'none';
+  const armorPassive = armorPassivePolicy === 'legacy' ? gear.armor.base?.passive || 'none' : 'none';
   stats.armorPassive = armorPassive;
   stats.passiveShieldMax = armorPassive === 'shield' ? Math.round(stats.maxHp * 0.20) : 0;
   stats.reflectRate = armorPassive === 'reactive' ? 0.15 : armorPassive === 'crystal' ? 0.20 : 0;
@@ -101,13 +110,29 @@ export function deriveCombatLoadout(campaignData, { PILOTS, AIRCRAFTS, GEAR_CATA
   stats.echoCount = pilotBase?.passive === 'bullet_duplicate' ? clamp(Math.floor(finite(value?.count, 1)), 1, 3) : 0;
   const effectiveHp = stats.maxHp / Math.max(0.1, (1 - stats.dmgReduce));
   const pilotBonus = ['nova_shield', 'bullet_duplicate'].includes(pilotBase?.passive) ? (pilotBase.rarity || 1) * 500 : 0;
-  const cp = Math.floor((stats.atk + stats.wingAtk + stats.droneAtk) * 3 + effectiveHp * 0.5 + stats.armor * 10 + pilotBonus);
-  return { stats, cp, pilotBase, aircraftBase, gear, aircraftLevel: level };
+  const legacyCp = Math.floor((stats.atk + stats.wingAtk + stats.droneAtk) * 3 + effectiveHp * 0.5 + stats.armor * 10 + pilotBonus);
+  const combatRatingV2 = calculateCombatRatingV2({
+    stats,
+    mainGun: gear.mainGun.base,
+    wingman: gear.wingman.base,
+    drone: gear.drone.base,
+    aircraft: aircraftBase,
+    shipSkill: SHIP_ACTIVE_SKILLS_V2[aircraftBase?.id] || null,
+    armorTrait: ARMOR_TRAITS_V2[gear.armor.base?.id] || null,
+  });
+  const cp = combatRatingVersion === 'v2' ? combatRatingV2.total : legacyCp;
+  return { stats, cp, legacyCp, combatRatingV2, pilotBase, aircraftBase, gear, aircraftLevel: level };
 }
 
 /** Battle-local effective loadout; safe to recompute without saving profile. */
-export function deriveBattleLoadout(campaignData, catalogs, { mode, location, nowMs = 0 }) {
-  const base = deriveCombatLoadout(campaignData, catalogs);
+export function deriveBattleLoadout(campaignData, catalogs, {
+  mode,
+  location,
+  nowMs = 0,
+  armorPassivePolicy = 'legacy',
+  combatRatingVersion = 'legacy',
+}) {
+  const base = deriveCombatLoadout(campaignData, catalogs, { armorPassivePolicy, combatRatingVersion });
   const environment = getBattleEnvironment(mode, location);
   const stats = applyBattleModifiers(base.stats, environment.playerModifiers, nowMs);
   if (stats.armorPassive === 'shield') stats.passiveShieldMax = Math.round(stats.maxHp * .20);
