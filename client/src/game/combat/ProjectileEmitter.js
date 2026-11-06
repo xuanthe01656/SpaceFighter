@@ -7,7 +7,7 @@ import { projectileFxProfile } from '../rendering/PlayerFxProfiles.js';
  * A small cached Canvas texture provides a glowing center AND a dark contour:
  * weapon colors remain legible on both a dark planet and bright-blue Nereus.
  */
-function drawProjectileTexture(ctx, appearance) {
+export function drawProjectileTexture(ctx, appearance) {
   const { style, color } = appearance;
   const hex = `#${color.toString(16).padStart(6, '0')}`;
   ctx.clearRect(0, 0, 64, 128);

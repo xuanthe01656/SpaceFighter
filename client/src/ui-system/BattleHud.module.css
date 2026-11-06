@@ -1,27 +1,95 @@
-/* Same screen-space HUD in Guest and authenticated C15. Pointer transparent. */
-.hud{position:absolute;top:calc(var(--sf-ui-safe-top) + 13px);
- left:max(13px,env(safe-area-inset-left,0px));right:max(13px,env(safe-area-inset-right,0px));
- z-index:5;pointer-events:none;color:var(--sf-ui-text);font-family:var(--sf-ui-title-font)}
-.hudTop{display:flex;align-items:center;gap:8px;min-width:0}
-.mode{padding:8px 11px;border:1px solid var(--sf-ui-stroke);border-radius:var(--sf-ui-radius-standard);
- background:linear-gradient(115deg,rgba(7,35,60,.93),rgba(4,17,31,.87));display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
-.modeLabel{font-size:clamp(13px,3.7vw,18px);font-weight:800;text-transform:uppercase;letter-spacing:1.1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.modeSub{color:var(--sf-ui-accent);font:10px/1.4 var(--sf-ui-data-font);letter-spacing:.5px;text-transform:uppercase}
-.wave{padding:8px 10px;border:1px solid var(--sf-ui-stroke);border-radius:var(--sf-ui-radius-standard);background:rgba(7,24,43,.87);min-width:64px;text-align:center}
-.wave strong{display:block;font-size:21px;line-height:1.1}.wave small{display:block;color:var(--sf-ui-muted);font:10px/1.4 var(--sf-ui-data-font)}
-.hp{margin-top:8px;padding:9px 11px;border:1px solid var(--sf-ui-stroke);border-radius:var(--sf-ui-radius-standard);
- background:rgba(5,20,37,.91);display:flex;gap:9px;align-items:center}
-.hpTitle{font:700 13px var(--sf-ui-title-font);letter-spacing:1.1px;min-width:43px}
-.hpBlocks{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:3px;flex:1;min-width:0}
-.hpSegment{height:11px;background:#152d40;border:1px solid rgba(45,105,138,.32)}
-.hpSegmentOn{background:linear-gradient(180deg,#72f7fa,#12b7df);border-color:#6ce2f3}
-.hpValue{font:700 clamp(11px,3vw,13px) var(--sf-ui-data-font);white-space:nowrap;font-variant-numeric:tabular-nums}
-.hudStats{display:flex;gap:8px;align-items:center;margin-top:7px;flex-wrap:wrap}
-.stat{padding:5px 9px;border:1px solid rgba(92,171,204,.29);border-radius:8px;background:rgba(3,18,32,.74);font:12px/1.2 var(--sf-ui-data-font);color:var(--sf-ui-muted)}
-.stat strong{color:var(--sf-ui-text)}
-.boss{margin-top:8px;border:1px solid rgba(255,148,93,.53);background:rgba(53,22,29,.85);padding:7px 11px;border-radius:9px;display:flex;align-items:center;gap:10px}
-.bossLabel{color:var(--sf-ui-warning);font:700 11px/1.25 var(--sf-ui-data-font)}
-.bossRail{height:7px;background:#341b20;flex:1;border-radius:99px;overflow:hidden}
-.bossFill{height:100%;background:linear-gradient(90deg,#ff8b48,#ff425e)}
-@media(max-width:370px){.hudTop{gap:5px}.mode{padding:7px}.wave{padding:7px;min-width:57px}
- .wave strong{font-size:18px}.hp{gap:5px;padding:8px}.hpBlocks{gap:2px}.hpTitle{min-width:37px}.hpValue{font-size:10px}.modeLabel{font-size:12px}}
+/* SpaceFighter shared battle HUD: real top-center notch clearance.
+ * No pointer consumption except the retreat button. All status is real state. */
+.hud {
+  position:absolute;
+  /* F12/Android: anchor to the real viewport safe inset; do not add the old
+   * 28/44px coarse-pointer spacer. The top-centre notch remains physically open. */
+  top:calc(max(var(--sf-ui-safe-top, 0px), var(--sf-ui-hud-top-guard, 2px)) + 1px);
+  left:max(5px, env(safe-area-inset-left, 0px));
+  right:max(5px, env(safe-area-inset-right, 0px));
+  z-index:5;
+  height:clamp(126px, 36vw, 142px);
+  min-width:0;
+  pointer-events:none;
+  isolation:isolate;
+  color:var(--sf-ui-text);
+  font-family:var(--sf-ui-title-font);
+  filter:drop-shadow(0 4px 9px rgba(0,3,10,.72));
+}
+.hud::before {
+  content:'';
+  position:absolute;
+  inset:0;
+  background:linear-gradient(180deg,rgba(3,18,32,.93),rgba(2,15,29,.90) 58%,rgba(2,19,35,.94));
+  /* Central cutout begins at x 32% and stays EMPTY down to y 41px (29%). */
+  clip-path:polygon(0 20%,5% 0,30% 0,36.5% 33%,63.5% 33%,70% 0,95% 0,100% 20%,100% 75%,94% 100%,6% 100%,0 75%);
+  pointer-events:none;
+}
+.frameArt {position:absolute;inset:0;width:100%;height:100%;z-index:1;overflow:visible;pointer-events:none;filter:drop-shadow(0 0 4px rgba(8,205,236,.3))}
+.cockpit{position:absolute;inset:0;z-index:3;pointer-events:none}
+/* Top notch area must never be covered by a button, logo or metrics. */
+.cutoutClearance{position:absolute;left:36%;right:36%;top:0;height:34%;background:transparent;pointer-events:none}
+.retreatAction{
+  position:absolute;left:2%;top:11%;width:clamp(39px,11vw,48px);height:clamp(38px,10.5vw,46px);
+  display:grid;place-items:center;cursor:pointer;pointer-events:auto;
+  border:1px solid rgba(56,236,255,.68);padding:4px;
+  background:linear-gradient(125deg,rgba(8,81,108,.8),rgba(0,20,44,.86));
+  color:#e0feff;
+  clip-path:polygon(18% 0,78% 0,100% 35%,100% 70%,80% 100%,10% 100%,0 82%,0 20%);
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation;
+}
+.retreatAction svg{width:clamp(25px,7vw,32px);height:clamp(25px,7vw,32px);filter:drop-shadow(0 0 4px rgba(25,234,255,.75))}
+.retreatAction:focus-visible{outline:3px solid #ffde8a;outline-offset:3px}
+.retreatAction:hover:not(:disabled){filter:brightness(1.2)}
+.retreatAction:disabled{opacity:.45;cursor:progress}
+.leftPod,.rightPod{
+  position:absolute;top:39%;height:34%;z-index:2;min-width:0;
+  display:flex;flex-direction:column;justify-content:center;align-items:center;gap:2px;
+  text-shadow:0 1px 3px #000,0 0 7px rgba(13,226,244,.36);
+}
+.leftPod{left:3%;width:20%}.rightPod{right:3%;width:20%}
+.podLabel{color:#68e5f3;font:800 clamp(9px,2.6vw,12px)/1 var(--sf-ui-data-font);letter-spacing:.3px;white-space:nowrap}
+.rightPod .podLabel{color:#ffc65e}
+.podValue{font:900 clamp(19px,5.4vw,29px)/1 var(--sf-ui-title-font);font-variant-numeric:tabular-nums;color:#f3fdff}
+.fraction{font-size:.78em;color:#c6e6ee}
+.shieldCenter{
+  position:absolute;top:40%;bottom:8%;left:25%;right:25%;z-index:2;
+  display:flex;flex-direction:column;align-items:center;justify-content:space-around;min-width:0;
+  padding:1px clamp(3px,1vw,6px);text-align:center;
+}
+.shieldHeading{font:900 clamp(10px,2.9vw,14px)/1.1 var(--sf-ui-title-font);color:#f4fbff;white-space:nowrap;letter-spacing:.05em;text-shadow:0 0 7px rgba(37,203,235,.36)}
+.shieldSegments{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:clamp(1px,.45vw,3px);width:100%;min-width:0}
+.shieldSegment{position:relative;display:block;min-width:0;height:clamp(8px,2.15vw,11px);overflow:hidden;border:1px solid #15718a;background:linear-gradient(180deg,#154050,#071e32);box-shadow:inset 0 1px 2px #051322}
+.shieldSegment::before{content:'';position:absolute;inset:0;right:auto;width:var(--sf-fill);background:linear-gradient(#c1ffff,#3eeeff 45%,#04a8d4);box-shadow:0 0 6px rgba(0,241,255,.5)}
+.shieldValue{font:800 clamp(9px,2.5vw,12px)/1 var(--sf-ui-data-font);font-variant-numeric:tabular-nums;color:#d7faff;white-space:nowrap}
+.shieldValue span{color:#8abcca}
+.missionSubtitle{font:800 clamp(8px,2.3vw,11px)/1 var(--sf-ui-data-font);color:#54dbe9;white-space:nowrap;letter-spacing:.01em}
+.lowShield .shieldSegment::before{background:linear-gradient(#ffe7ac,#ff7440)}
+.lowShield .shieldValue,.lowShield .shieldHeading{color:#ffca8f}
+.telemetry{position:absolute;top:103%;left:3%;display:flex;gap:5px;pointer-events:none}
+.qaTag{padding:3px 6px;background:rgba(2,18,33,.85);border:1px solid rgba(65,175,200,.3);font:600 10px/1.2 var(--sf-ui-data-font);color:var(--sf-ui-muted)}
+.boss{position:absolute;top:103%;left:4%;right:4%;height:27px;padding:5px 8px;display:flex;gap:6px;align-items:center;background:rgba(43,8,22,.86);border:1px solid rgba(255,120,131,.7);clip-path:polygon(0 0,calc(100% - 10px) 0,100% 10px,100% 100%,10px 100%,0 calc(100% - 10px))}
+.bossLabel{color:#ffc089;font:800 10px var(--sf-ui-data-font);white-space:nowrap}
+.bossRail{height:8px;background:#2c101b;flex:1;min-width:0;overflow:hidden;border:1px solid rgba(255,141,108,.5)}
+.bossFill{height:100%;background:linear-gradient(90deg,#ff9956,#ff3d71)}
+.bossPercent{font:700 10px var(--sf-ui-data-font);color:#ffdce1}
+.notice{position:absolute;left:0;right:0;top:31%;z-index:7;pointer-events:none;display:flex;gap:12px;align-items:center;justify-content:center;padding:12px max(16px,env(safe-area-inset-left,0px));text-align:center;color:var(--sf-ui-accent);background:linear-gradient(90deg,rgba(2,13,26,.92),rgba(8,43,62,.96),rgba(2,13,26,.92));border-block:1px solid currentColor;font:900 clamp(19px,5.5vw,28px)/1.2 var(--sf-ui-title-font);letter-spacing:1px;text-shadow:0 0 12px rgba(40,201,234,.4);animation:sf-cockpit-notice 220ms ease-out both}
+.noticeLine{flex:1;max-width:46px;height:2px;background:currentColor;opacity:.55}
+.notice_accent{color:var(--sf-ui-accent)}.notice_success{color:#71efbd}.notice_danger{color:var(--sf-ui-danger)}
+@keyframes sf-cockpit-notice{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:translateY(0)}}
+/* The OS reports real safe area via env(safe-area-inset-top). Screen width
+ * alone must NOT impose an extra 28/44px vertical gap on touch phones. */
+@media(pointer:coarse){.hud{--sf-ui-hud-top-guard:2px}}
+@media(pointer:coarse) and (max-width:379px){.hud{--sf-ui-hud-top-guard:2px}}
+@media(max-width:359px){
+ .hud{height:126px}
+ .leftPod,.rightPod{width:21%}
+ .shieldCenter{left:24%;right:24%}
+ .shieldHeading{font-size:10px}
+ .shieldValue{font-size:9px}
+ .missionSubtitle{font-size:8px}
+}
+@media(orientation:landscape) and (max-height:560px){
+ .hud{top:max(5px,env(safe-area-inset-top,0px));width:min(490px,calc(100% - 16px));left:max(8px,env(safe-area-inset-left,0px));right:auto;height:clamp(110px,23vw,135px)}
+}
+@media(prefers-reduced-motion:reduce){.notice{animation:none}}

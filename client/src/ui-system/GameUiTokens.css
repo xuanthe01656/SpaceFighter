@@ -1,19 +1,20 @@
-/* SpaceFighter UI foundation v1. Tokens are shared by Portal/Downloads/Battle,
- * not by gameplay rules. These variables do not alter Babylon transforms. */
+/* SpaceFighter Tactical Command UI. Reuse these tokens across HUD, Portal and Resource Manager.
+ * Visual-only. Never change gameplay, collision, journal or settlement in UI modules. */
 :root{
   --sf-ui-bg:#030a16;
-  --sf-ui-panel:#0c1f32;
-  --sf-ui-panel-raised:#122d47;
-  --sf-ui-accent:#55dded;
-  --sf-ui-accent-strong:#1cb8d7;
-  --sf-ui-warning:#f5c476;
-  --sf-ui-danger:#ff8091;
-  --sf-ui-text:#e9f9ff;
-  --sf-ui-muted:#a6c5d7;
-  --sf-ui-stroke:rgba(96,198,227,.42);
-  --sf-ui-radius-compact:8px;
-  --sf-ui-radius-standard:13px;
-  --sf-ui-radius-modal:18px;
+  --sf-ui-panel:#081b2c;
+  --sf-ui-panel-raised:#11334b;
+  --sf-ui-accent:#4beaf4;
+  --sf-ui-accent-strong:#0db9d7;
+  --sf-ui-warning:#ffc26d;
+  --sf-ui-danger:#ff6b88;
+  --sf-ui-success:#80efbc;
+  --sf-ui-text:#edfcff;
+  --sf-ui-muted:#a9cad8;
+  --sf-ui-stroke:rgba(84,224,239,.48);
+  --sf-ui-radius-compact:5px;
+  --sf-ui-radius-standard:8px;
+  --sf-ui-radius-modal:12px;
   --sf-ui-title-font:'Barlow Condensed','Arial Narrow',Arial,sans-serif;
   --sf-ui-data-font:'Share Tech Mono',ui-monospace,Consolas,monospace;
   --sf-ui-touch-target:48px;

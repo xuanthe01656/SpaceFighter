@@ -1,10 +1,12 @@
 import React,{useEffect,useRef,useState} from 'react';
 import toast from 'react-hot-toast';
 import {auth} from '../../firebase';
+import {getC15Rc1bStatus,abandonC15Rc1bBattle} from '../../services/gameApi.js';
 import {openOrResumeC15Rc1bSession} from '../../game/c15/C15Rc1bSession.js';
 import {createC15LocalRenderer} from './C15LocalRenderer.js';
 import styles from './C15Presentation.module.css';
 import BattleHud from '../../ui-system/BattleHud.jsx';
+import {c15WaveNotice} from '../../ui-system/BattleNoticeModel.js';
 import GameButton from '../../ui-system/GameButton.jsx';
 import GamePanel from '../../ui-system/GamePanel.jsx';
 import {openC15ControlIntent,addC15PointerDelta,sampleC15ControlTick,releaseC15ControlTarget,
@@ -24,6 +26,9 @@ const releaseChannel=c15ReleaseChannelFromImportMeta();
 const abQa=()=>releaseChannel.qaControls&&String(import.meta.env?.VITE_C15_CONTROL_AB_QA||'false')==='true';
 const envProfile=()=>String(import.meta.env?.VITE_C15_CONTROL_PROFILE_ID||C15_ARCADE_CONTROL_PROFILE_ID);
 const rc3Enabled=()=>releaseChannel.settlementClientEnabled;
+// Staging-qa instrumentation remains available, but is opt-in when visually
+// comparing the commercial Guest/C15 HUD in browser. Cannot enable in release.
+const visibleQaHud=releaseChannel.qaControls&&String(import.meta.env?.VITE_C15_QA_HUD_VISIBLE||'false')==='true';
 export function formatC15Rc1bFault(error,fallback='C15_RC1B_ERROR'){
   if(error?.code===25||error?.name==='DataCloneError')
     return 'C15_IDB_DATA_CLONE · Local session/resource cache could not be stored';
@@ -43,10 +48,24 @@ export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=
   const [continuing,setContinuing]=useState(false);
   const [claiming,setClaiming]=useState(false);
   const [retryingClaim,setRetryingClaim]=useState(false);
+  const [battleNotice,setBattleNotice]=useState(null);
+  const [retreating,setRetreating]=useState(false);
+  const retreatLockRef=useRef(false);
+  const [conflictConfirm,setConflictConfirm]=useState(false);
+  const [conflictPending,setConflictPending]=useState(false);
+  const lastWaveNotified=useRef(null);
+  const activeWave=ui.status==='active'?Number(ui.view?.kernel?.wave):null;
+  useEffect(()=>{
+    if(!Number.isInteger(activeWave)||activeWave<1)return;
+    const previous=lastWaveNotified.current;
+    if(previous===activeWave)return;
+    lastWaveNotified.current=activeWave;
+    if(previous===null||activeWave>previous)setBattleNotice(c15WaveNotice(activeWave,lang));
+  },[activeWave,lang]);
   useEffect(()=>{
     if(!profileId)return undefined;
     let cancelled=false,unsubscribe=()=>{};const resourceAbort=new AbortController();
-    setUi(value=>({...value,status:'opening',message:lang==='vi'?'Đang mở trận và chuẩn bị tài nguyên…':'Opening battle and resources…',fault:null}));
+    setUi(value=>({...value,status:'opening',message:lang==='vi'?'Đang mở trận và chuẩn bị tài nguyên…':'Opening battle and resources…',fault:null,errorCode:null}));
     const stopLoop=()=>{if(rafRef.current!==null){cancelAnimationFrame(rafRef.current);rafRef.current=null;}
       renderAlphaRef.current=0;rendererRef.current?.clearPilotPreview?.();};
     const runFrame=now=>{rafRef.current=null;if(cancelled||!sessionRef.current||!inputRef.current||!pacerRef.current)return;
@@ -116,7 +135,7 @@ export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=
         if(value.phase==='active')startLoop();else stopLoop();});
       startLoop();
     };
-    init().catch(error=>{if(!cancelled)setUi(value=>({...value,status:'error',fault:formatC15Rc1bFault(error,'C15_RC1B_OPEN_FAILED')}));});
+    init().catch(error=>{if(!cancelled)setUi(value=>({...value,status:'error',errorCode:typeof error?.code==='string'?error.code:null,fault:formatC15Rc1bFault(error,'C15_RC1B_OPEN_FAILED')}));});
     const resize=()=>{rendererRef.current?.resize();if(!inputRef.current||!canvasRef.current)return;try{const rect=canvasRef.current.getBoundingClientRect();
       const controlView=c15ControlIntentView(inputRef.current);inputRef.current=reconfigureC15ControlViewport(inputRef.current,{
         aspect:rect.width/Math.max(1,rect.height),canvasWidth:Math.max(1,rect.width),canvasHeight:Math.max(1,rect.height),
@@ -133,7 +152,31 @@ export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=
       if(session)void session.suspend().catch(()=>{}).finally(()=>session.dispose());
       rendererRef.current?.dispose();rendererRef.current=null;for(const resource of resourceRefs.current){try{resource?.revoke?.();}catch(_){}}resourceRefs.current=[];};
   },[lang,profileId]);
-  const retreat=async()=>{try{await sessionRef.current?.abandon();setScreen('stage_select');}catch(error){toast.error(error?.message||'Retreat failed');}};
+  // A failed open has NO local session object. Back must never pretend to abandon a
+  // server battle; a server-active conflict is resolved separately and explicitly.
+  const retreat=async()=>{if(retreatLockRef.current)return;retreatLockRef.current=true;setRetreating(true);
+    try{if(sessionRef.current)await sessionRef.current.abandon();setScreen('stage_select');}
+    catch(error){toast.error(error?.message||'Retreat failed');}
+    finally{retreatLockRef.current=false;setRetreating(false);}};
+  const hasActiveConflict=ui.status==='error'&&ui.errorCode==='C15_RC1B_ACTIVE';
+  const discardPreviousQaBattle=async()=>{
+    if(!releaseChannel.qaControls||!hasActiveConflict||!conflictConfirm||conflictPending)return;
+    setConflictPending(true);
+    try{
+      const uid=auth.currentUser?.uid;
+      if(!uid)throw new Error('QA login is required');
+      const status=await getC15Rc1bStatus(uid);
+      if(status?.phase!=='active'||typeof status.battleId!=='string'
+        ||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(status.battleId))
+        throw new Error('No matching active C15 battle to close; reload and inspect status');
+      // Only the authenticated server endpoint can abandon this exact battleId.
+      await abandonC15Rc1bBattle(uid,{battleId:status.battleId});
+      setConflictConfirm(false);
+      toast.success(lang==='vi'?'Đã đóng phiên QA cũ. Có thể mở trận mới.':'Previous QA battle closed.');
+      setScreen('stage_select');
+    }catch(error){toast.error(error?.message||'Unable to close previous QA battle');}
+    finally{setConflictPending(false);}
+  };
   const retry=()=>{void sessionRef.current?.retryNetwork().catch(error=>toast.error(error?.message||'Verification retry failed'));};
   const continueVerified=async()=>{if(continuing)return;setContinuing(true);try{
       await sessionRef.current?.completeVerified();setScreen('stage_select');
@@ -162,15 +205,15 @@ export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=
   return <div style={surface}>
     <canvas ref={canvasRef} tabIndex={-1} style={{width:'100%',height:'100%',display:'block',touchAction:'none',overscrollBehavior:'none',
       userSelect:'none',WebkitUserSelect:'none',WebkitTouchCallout:'none'}}/>
-    <BattleHud lang={lang} stage={1} wave={k?.wave||1} wavesTotal={k?.wavesTotal||5}
-      hp={k?.hp||0} maxHp={k?.maxHp||1} kills={k?.kills||0}
+    {k&&<BattleHud lang={lang} stage={1} wave={k.wave||1} wavesTotal={k.wavesTotal||5}
+      hp={k.hp??0} maxHp={k.maxHp||1} kills={k.kills||0}
       bossHp={boss?.hp??null} bossMaxHp={boss?.maxHp??null}
-      qa={releaseChannel.showDiagnosticHud
+      announcement={battleNotice} onRetreat={retreat} retreating={retreating}
+      qa={visibleQaHud&&releaseChannel.showDiagnosticHud
         ?[ui.fps?`${ui.fps} FPS`:null,
           t?.summary?`UPLOAD ${t.summary.uploadedThroughTick}/${t.summary.ticks}${t.online?'':' · OFFLINE'}`:null,
-          releaseChannel.qaControls?profile?.id:null].filter(Boolean).join(' · '):null}/>
-    <GameButton onClick={retreat} variant="secondary" dock="bottom-left">◀ {vi?'RÚT LUI':'RETREAT'}</GameButton>
-    {releaseChannel.showControlExport&&profile&&<button onClick={exportTelemetry} style={{position:'absolute',right:14,
+          releaseChannel.qaControls?profile?.id:null].filter(Boolean).join(' · '):null}/> }
+    {releaseChannel.showControlExport&&profile&&visibleQaHud&&<button onClick={exportTelemetry} style={{position:'absolute',right:14,
       bottom:'calc(env(safe-area-inset-bottom) + 15px)',zIndex:8,padding:'9px 12px',borderRadius:7,
       border:'1px solid #5de8ff',background:'rgba(0,0,0,.65)',color:'#bdf9ff'}}>CONTROL JSON</button>}
     {releaseChannel.qaControls&&profileId===null&&<div className={styles.overlay}>
@@ -216,9 +259,33 @@ export default function C15LocalAlpha1({setScreen,lang='vi',refreshCloudProfile=
             <GameButton variant="secondary" disabled={continuing||claiming||retryingClaim}
               onClick={continueVerified}>{continuing?'CLOSING…':(vi?'TIẾP TỤC':'CONTINUE')}</GameButton>
           </>}
-          {ui.status==='error'&&<><div className={styles.panelTitle}>{releaseChannel.qaControls
-            ?(rc3Enabled()?'RC3 ERROR':'RC1C ERROR'):(vi?'Lỗi trận chiến':'Battle error')}</div>
-            <span className={styles.errorText}>{ui.fault}</span></>}
+          {ui.status==='error'&&<>
+            <div className={styles.panelTitle}>{hasActiveConflict
+              ?(vi?'TRẬN C15 ĐANG MỞ':'C15 BATTLE ALREADY ACTIVE')
+              :(releaseChannel.qaControls?(rc3Enabled()?'RC3 ERROR':'RC1C ERROR'):(vi?'Lỗi trận chiến':'Battle error'))}</div>
+            {hasActiveConflict?<span className={styles.panelSub}>{vi
+              ?'Server còn ghi nhận trận C15 trước đó. Hãy trở lại trình duyệt cũ nếu muốn tiếp tục. Đừng xóa dữ liệu trình duyệt khi chưa kiểm tra journal.'
+              :'The server still has an active C15 battle. Resume in the original browser if possible; do not clear saved journal data.'}</span>
+              :<span className={styles.errorText}>{ui.fault}</span>}
+            {hasActiveConflict&&releaseChannel.qaControls&&<div className={styles.recoveryActions}>
+              {conflictConfirm?<>
+                <span className={styles.recoveryWarning}>{vi
+                  ?'Xác nhận hủy trận QA đang mở? Tiến trình chưa xác minh sẽ không được cấp thưởng.'
+                  :'Close the current QA battle? Unverified progress will not receive rewards.'}</span>
+                <GameButton variant="danger" disabled={conflictPending} onClick={discardPreviousQaBattle}>
+                  {conflictPending?(vi?'ĐANG KIỂM TRA…':'CHECKING…'):(vi?'XÁC NHẬN ĐÓNG PHIÊN':'CONFIRM CLOSE')}
+                </GameButton>
+                <GameButton variant="ghost" disabled={conflictPending} onClick={()=>setConflictConfirm(false)}>
+                  {vi?'GIỮ PHIÊN CŨ':'KEEP SESSION'}
+                </GameButton>
+              </>:<GameButton variant="danger" onClick={()=>setConflictConfirm(true)}>
+                {vi?'ĐÓNG PHIÊN QA CŨ…':'CLOSE OLD QA SESSION…'}
+              </GameButton>}
+            </div>}
+            <GameButton variant="secondary" disabled={conflictPending} onClick={()=>setScreen('stage_select')}>
+              {vi?'TRỞ VỀ CHỌN MÀN':'BACK TO STAGE SELECT'}
+            </GameButton>
+          </>}
         </GamePanel>
       </div>}
   </div>;

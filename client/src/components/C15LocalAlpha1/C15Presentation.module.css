@@ -9,3 +9,7 @@
 .resultMetrics{padding:10px;border:1px solid rgba(119,188,214,.25);border-radius:10px;background:rgba(3,18,32,.75);font:13px/1.5 'Share Tech Mono',monospace;color:#baf3d9}
 .errorText{overflow-wrap:anywhere;color:#ffc4d3;font:12px/1.6 'Share Tech Mono',monospace}
 .qa{color:#c4c4e9;font:10px/1.4 'Share Tech Mono',monospace;overflow-wrap:anywhere}
+
+/* C15 conflict recovery: no automatic abandonment of a remote active battle. */
+.recoveryActions{display:flex;flex-direction:column;gap:8px;margin-top:5px}
+.recoveryWarning{font:12px/1.5 var(--sf-ui-data-font);color:#ffd2ae;overflow-wrap:anywhere}

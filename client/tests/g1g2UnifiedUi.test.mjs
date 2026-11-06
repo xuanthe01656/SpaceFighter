@@ -6,7 +6,7 @@ const read=path=>fs.readFileSync(new URL(`../${path}`,import.meta.url),'utf8');
 test('G1: one CSS/SVG game UI system is imported from both gameplay lanes and resource screens',()=>{
   const paths=['src/components/Campaign/CampaignEngine.jsx','src/components/C15LocalAlpha1/index.jsx',
     'src/components/ResourceDownloads/StartupResourceGate.jsx','src/components/ResourceDownloads/ResourceManagerScreen.jsx'];
-  for(const name of paths)assert.match(read(name),/ui-system\/Game(Button|Panel|BattleHud)/,name);
+  for(const name of paths)assert.match(read(name),/ui-system\/(GameButton|GamePanel|BattleHud)/,name);
   assert.match(read('src/components/Campaign/CampaignEngine.jsx'),/<BattleHud/);
   assert.match(read('src/components/C15LocalAlpha1/index.jsx'),/<BattleHud/);
   assert.match(read('src/ui-system/BattleHud.module.css'),/pointer-events:none/);

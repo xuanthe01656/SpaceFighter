@@ -32,7 +32,7 @@ test('C15 and Guest render the same battle HUD primitives, without an early VERI
   assert.match(c15,/BattleHud/);assert.match(c15,/bossHp=/);
   assert.match(guest,/<BattleHud/);assert.match(scene,/onHudUpdate/);
   assert.match(scene,/topBar\.isVisible=!externalHud/);
-  assert.match(hud,/styles\.hpBlocks/);assert.match(hud,/styles\.boss/);
+  assert.match(hud,/styles\.shieldSegments/);assert.match(hud,/role="meter"/);assert.match(hud,/styles\.boss/);
   assert.doesNotMatch(hud,/ĐÃ XÁC MINH|Verified battle|Đã xác minh/);
   assert.match(css,/safe-top/);assert.match(css,/pointer-events:none/);
   assert.match(c15,/releaseChannel\.qaControls&&/);
