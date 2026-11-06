@@ -79,10 +79,21 @@ function ShipAction({ slot, activationGate, lang, onActivate, feedback, currentT
     aria-label={`${localized(slot.name, lang)} · ${stateText}${timeText ? ` ${timeText}s` : ''}`}
     title={phaseLocked ? `${localized(slot.name, lang)} · ${phaseLockText}` : localized(slot.name, lang)}
     disabled={!slot.ready || phaseLocked}
-    onPointerDown={event => event.stopPropagation()}
+    onPointerDown={event => {
+      event.stopPropagation();
+      if (event.cancelable) event.preventDefault();
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
+      if (!phaseLocked) onActivate?.('ship_skill');
+    }}
     onPointerUp={event => event.stopPropagation()}
     onPointerCancel={event => event.stopPropagation()}
-    onClick={event => { event.stopPropagation(); if (!phaseLocked) onActivate?.('ship_skill'); }}
+    onClick={event => {
+      event.stopPropagation();
+      // Pointer input activates on pointerdown so a second finger still works
+      // while the movement pointer remains captured by the canvas. Keep click
+      // only for keyboard/accessibility activation (detail === 0).
+      if (event.detail === 0 && !phaseLocked) onActivate?.('ship_skill');
+    }}
     style={{
       '--ability-color': toneColor,
       '--ability-angle': `${Math.round(progress * 360)}deg`,
@@ -188,16 +199,36 @@ function MobileQaLoadoutSwitcher({ activationGate, onQaCycle, lang }) {
   const enabled = import.meta.env.VITE_SF_GUEST_COMBAT_V2_QA === 'true'
     && typeof window !== 'undefined'
     && typeof onQaCycle === 'function';
-  if (!enabled || activationGate?.canActivate !== false) return null;
+  if (!enabled) return null;
   const current = resolveGuestCombatQaLoadoutV2(window.location.search);
   const shipIndex = GUEST_COMBAT_QA_SHIP_IDS.indexOf(current.shipId) + 1;
   const armorIndex = GUEST_COMBAT_QA_ARMOR_IDS.indexOf(current.armorId) + 1;
-  return <div className={styles.qaSwitcher} aria-label={lang === 'vi' ? 'Đổi loadout QA' : 'Change QA loadout'}>
-    <button type="button" onClick={() => onQaCycle('ship')}
-      onPointerDown={event => event.stopPropagation()} onPointerUp={event => event.stopPropagation()}
+  const cycleOnPointerDown = (event, kind) => {
+    event.stopPropagation();
+    if (event.cancelable) event.preventDefault();
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    onQaCycle(kind);
+  };
+  const cycleOnAccessibleClick = (event, kind) => {
+    event.stopPropagation();
+    if (event.detail === 0) onQaCycle(kind);
+  };
+  return <div
+    className={styles.qaSwitcher}
+    aria-label={lang === 'vi' ? 'Đổi loadout QA' : 'Change QA loadout'}
+    data-qa-battle-phase={activationGate?.battlePhase || 'UNKNOWN'}
+  >
+    <button type="button"
+      onPointerDown={event => cycleOnPointerDown(event, 'ship')}
+      onPointerUp={event => event.stopPropagation()}
+      onPointerCancel={event => event.stopPropagation()}
+      onClick={event => cycleOnAccessibleClick(event, 'ship')}
       title={current.shipId}>{`S ${shipIndex}/${GUEST_COMBAT_QA_SHIP_IDS.length}`}</button>
-    <button type="button" onClick={() => onQaCycle('armor')}
-      onPointerDown={event => event.stopPropagation()} onPointerUp={event => event.stopPropagation()}
+    <button type="button"
+      onPointerDown={event => cycleOnPointerDown(event, 'armor')}
+      onPointerUp={event => event.stopPropagation()}
+      onPointerCancel={event => event.stopPropagation()}
+      onClick={event => cycleOnAccessibleClick(event, 'armor')}
       title={current.armorId}>{`A ${armorIndex}/${GUEST_COMBAT_QA_ARMOR_IDS.length}`}</button>
   </div>;
 }

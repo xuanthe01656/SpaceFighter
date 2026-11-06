@@ -20,7 +20,6 @@ const root = path.resolve(here, '../..');
 const mobileQa = overrides => ({
   guestAbilitiesQa: true,
   mobileQaBuild: true,
-  nativeTouchQa: true,
   buildChannel: 'staging-qa',
   gameApiEnabled: false,
   authenticated: false,
@@ -37,7 +36,7 @@ test('Guest Combat V2 browser QA remains DEV-only and guest-only', () => {
 
 test('manual staging Android QA can enable Guest Combat V2 in a production-mode Vite build', () => {
   assert.equal(isGuestCombatQaRuntimeEnabled(mobileQa()), true);
-  assert.equal(isGuestCombatQaRuntimeEnabled(mobileQa({ nativeTouchQa: '1', mobileQaBuild: 'true' })), true);
+  assert.equal(isGuestCombatQaRuntimeEnabled(mobileQa({ mobileQaBuild: 'true' })), true);
 });
 
 test('release, Cloud, authenticated and Game API builds cannot enable Guest Combat V2', () => {
@@ -46,7 +45,6 @@ test('release, Cloud, authenticated and Game API builds cannot enable Guest Comb
   assert.equal(isGuestCombatQaRuntimeEnabled(mobileQa({ authenticated: true })), false);
   assert.equal(isGuestCombatQaRuntimeEnabled(mobileQa({ cloudBattle: true })), false);
   assert.equal(isGuestCombatQaRuntimeEnabled(mobileQa({ mobileQaBuild: false })), false);
-  assert.equal(isGuestCombatQaRuntimeEnabled(mobileQa({ nativeTouchQa: false })), false);
 });
 
 test('Vite environment adapter applies the same explicit mobile QA contract', () => {
@@ -54,7 +52,6 @@ test('Vite environment adapter applies the same explicit mobile QA contract', ()
     DEV: false,
     VITE_SF_GUEST_ABILITIES_QA: 'true',
     VITE_SF_GUEST_COMBAT_V2_QA: 'true',
-    VITE_SF_NATIVE_TOUCH_QA: '1',
     VITE_SF_BUILD_CHANNEL: 'staging-qa',
     VITE_GAME_API_ENABLED: 'false',
   };
@@ -70,6 +67,9 @@ test('Android workflow exposes a manual isolated Guest Combat V2 QA artifact', (
   assert.match(workflow, /Guest Combat V2 QA is manual-only/);
   assert.match(workflow, /spacefighter-android-guest-combat-v2-qa-debug-not-for-release/);
   assert.match(workflow, /inputs\.guest_combat_v2_qa == true/);
+  assert.match(workflow, /VITE_SF_NATIVE_TOUCH_QA:.*inputs\.touch_qa == true/);
+  assert.doesNotMatch(workflow, /VITE_SF_NATIVE_TOUCH_QA:.*guest_combat_v2_qa/);
+  assert.doesNotMatch(workflow, /Guest Combat V2 QA requires native touch QA isolation/);
 });
 
 
@@ -98,4 +98,16 @@ test('Campaign runtime uses the centralized Guest Combat QA build gate', () => {
   assert.match(scene, /resolveGuestCombatQaLoadoutV2/);
   assert.doesNotMatch(engine, /guestAbilityQa=import\.meta\.env\.DEV===true/);
   assert.doesNotMatch(scene, /guestAbilitiesQa\)\&\&!isCloud\&\&import\.meta\.env\.DEV===true/);
+});
+
+test('Android combat QA uses pointerdown multi-touch controls and keeps S/A persistent', () => {
+  const controls = fs.readFileSync(path.join(root, 'client/src/ui-system/GuestAbilityControls.jsx'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'client/src/ui-system/GuestAbilityControls.module.css'), 'utf8');
+  assert.match(controls, /onPointerDown=\{event => \{/);
+  assert.match(controls, /event\.preventDefault\(\)/);
+  assert.match(controls, /event\.detail === 0/);
+  assert.doesNotMatch(controls, /if \(!enabled \|\| activationGate\?\.canActivate !== false\) return null/);
+  assert.match(controls, /data-qa-battle-phase/);
+  assert.match(css, /\.action\{[\s\S]*touch-action:none/);
+  assert.match(css, /\.qaSwitcher button\{[\s\S]*touch-action:none/);
 });

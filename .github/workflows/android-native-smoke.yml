@@ -89,7 +89,7 @@ jobs:
       VITE_FIREBASE_MEASUREMENT_ID: G-Y5CS812JKF
       VITE_GAME_API_URL: https://spacefighter-api-staging-528039759292.asia-southeast1.run.app/api/v1
       VITE_GAME_API_ENABLED: 'false'
-      VITE_SF_NATIVE_TOUCH_QA: ${{ github.event_name == 'workflow_dispatch' && (inputs.touch_qa == true || inputs.guest_combat_v2_qa == true) && '1' || '0' }}
+      VITE_SF_NATIVE_TOUCH_QA: ${{ github.event_name == 'workflow_dispatch' && inputs.touch_qa == true && '1' || '0' }}
       VITE_SF_GUEST_ABILITIES_QA: ${{ github.event_name == 'workflow_dispatch' && inputs.guest_combat_v2_qa == true && 'true' || 'false' }}
       VITE_SF_GUEST_COMBAT_V2_QA: ${{ github.event_name == 'workflow_dispatch' && inputs.guest_combat_v2_qa == true && 'true' || 'false' }}
       VITE_C8_CLOUD_QA_UI: ${{ github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && 'true' || 'false' }}
@@ -228,7 +228,6 @@ jobs:
           set -euo pipefail
           if [[ "$VITE_SF_GUEST_COMBAT_V2_QA" == 'true' ]]; then
             [[ "$GITHUB_EVENT_NAME" == 'workflow_dispatch' ]] || { echo 'Guest Combat V2 QA is manual-only' >&2; exit 1; }
-            [[ "$VITE_SF_NATIVE_TOUCH_QA" == '1' ]] || { echo 'Guest Combat V2 QA requires native touch QA isolation' >&2; exit 1; }
             [[ "$VITE_SF_GUEST_ABILITIES_QA" == 'true' ]] || exit 1
             [[ "$VITE_GAME_API_ENABLED" == 'false' ]] || { echo 'Guest Combat V2 QA must not enable Game API' >&2; exit 1; }
             [[ "$VITE_SF_BUILD_CHANNEL" == 'staging-qa' ]] || { echo 'Guest Combat V2 QA may not use a release channel' >&2; exit 1; }

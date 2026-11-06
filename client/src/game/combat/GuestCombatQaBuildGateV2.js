@@ -13,7 +13,6 @@ export function isGuestCombatQaRuntimeEnabled({
   isDev = false,
   guestAbilitiesQa = false,
   mobileQaBuild = false,
-  nativeTouchQa = false,
   buildChannel = '',
   gameApiEnabled = false,
   authenticated = false,
@@ -22,7 +21,6 @@ export function isGuestCombatQaRuntimeEnabled({
   if (authenticated || cloudBattle || !enabled(guestAbilitiesQa)) return false;
   if (isDev === true) return true;
   return enabled(mobileQaBuild)
-    && enabled(nativeTouchQa)
     && String(buildChannel || '') === 'staging-qa'
     && !enabled(gameApiEnabled);
 }
@@ -32,7 +30,6 @@ export function resolveGuestCombatQaRuntimeFromViteEnv(env = {}, context = {}) {
     isDev: env.DEV === true,
     guestAbilitiesQa: env.VITE_SF_GUEST_ABILITIES_QA,
     mobileQaBuild: env.VITE_SF_GUEST_COMBAT_V2_QA,
-    nativeTouchQa: env.VITE_SF_NATIVE_TOUCH_QA,
     buildChannel: env.VITE_SF_BUILD_CHANNEL,
     gameApiEnabled: env.VITE_GAME_API_ENABLED,
     authenticated: Boolean(context.authenticated),
