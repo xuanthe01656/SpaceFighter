@@ -27,18 +27,25 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         applyGameDisplayPolicy();
+        applyImmersiveMode();
+    }
 
-        // 👇 2. CƠ CHẾ ẨN THANH ĐIỀU HƯỚNG & TRẠNG THÁI (IMMERSIVE MODE)
-        WindowInsetsControllerCompat windowInsetsController =
+    private void applyImmersiveMode() {
+        // Keep the WebView edge-to-edge. Android may restore status/navigation
+        // bars after resume, focus changes, keyboard/login activities or a
+        // transient edge swipe, so this policy is deliberately idempotent.
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        WindowInsetsControllerCompat controller =
                 WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
-
-        if (windowInsetsController != null) {
-            // Cài đặt hành vi: Vuốt mép để hiện tạm thời (sẽ tự động ẩn lại sau vài giây)
-            windowInsetsController.setSystemBarsBehavior(
+        if (controller != null) {
+            controller.setSystemBarsBehavior(
                     WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             );
-            // Ra lệnh ẨN toàn bộ các thanh hệ thống (systemBars = Navigation Bar + Status Bar)
-            windowInsetsController.hide(WindowInsetsCompat.Type.systemBars());
+            controller.hide(WindowInsetsCompat.Type.systemBars());
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            getWindow().setStatusBarContrastEnforced(false);
+            getWindow().setNavigationBarContrastEnforced(false);
         }
     }
 
@@ -87,6 +94,18 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
     public void onResume() {
         super.onResume();
         applyGameDisplayPolicy();
+        applyImmersiveMode();
+        // Some OEM WebViews restore bars one frame after resume. Re-assert once
+        // after the window is attached without blocking startup.
+        getWindow().getDecorView().postDelayed(this::applyImmersiveMode, 250);
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            applyImmersiveMode();
+        }
     }
 
     @Override

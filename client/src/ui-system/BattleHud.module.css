@@ -1,13 +1,13 @@
 /* SpaceFighter shared battle HUD: real top-center notch clearance.
  * No pointer consumption except the retreat button. All status is real state. */
 .hud {
-  position:absolute;
+  position:fixed;
   /* F12/Android: anchor to the real viewport safe inset; do not add the old
    * 28/44px coarse-pointer spacer. The top-centre notch remains physically open. */
   top:calc(max(var(--sf-ui-safe-top, 0px), var(--sf-ui-hud-top-guard, 2px)) + 1px);
   left:max(5px, env(safe-area-inset-left, 0px));
   right:max(5px, env(safe-area-inset-right, 0px));
-  z-index:5;
+  z-index:70;
   height:clamp(126px, 36vw, 142px);
   min-width:0;
   pointer-events:none;

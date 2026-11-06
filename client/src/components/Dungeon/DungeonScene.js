@@ -462,7 +462,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     const shipInput = createShipInputController({
         canvas: engine.getRenderingCanvas(), scene, engine, playerRoot, tiltNode: playerPlane,
         halfHeight: ZOOM, aspect: getAspect,
-        speedMultiplier: battleSpeedMultiplier(stats),
+        speedMultiplier: battleSpeedMultiplier(stats), pointerSpeedMultiplier: 1,
         enabled: () => !gameOver,
     });
 

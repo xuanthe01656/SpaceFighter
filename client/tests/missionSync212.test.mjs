@@ -5,13 +5,15 @@ import { AIRCRAFTS, DEFAULT_CAMPAIGN_DATA } from '../src/constants.js';
 import { resolveShipVisual, chooseShipRenderQuality } from '../src/game/rendering/ShipVisualCatalog.js';
 import { recordGuestAttendance, ensureGuestMissions } from '../src/utils/guestProgress.js';
 const at=s=>Date.parse(s);
-test('X-Wing sprite UV correction is aircraft-specific, with mobile sprite render quality',()=>{
+test('all canonical top sprites share nose-up UV correction, with mobile sprite render quality',()=>{
  const x=resolveShipVisual('ship_xwing',AIRCRAFTS);
  assert.equal(x.spriteInvertY,true);
  assert.equal(chooseShipRenderQuality(x,'Mozilla/5.0 (Linux; Android 16; Pixel 10) Mobile'), 'sprite');
  assert.equal(chooseShipRenderQuality(x,'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'), 'sprite');
- const other=resolveShipVisual(AIRCRAFTS.find(a=>a.id!=='ship_xwing').id,AIRCRAFTS);
- assert.equal(other.spriteInvertY,false,'do not silently flip other ship art');
+ for(const aircraft of AIRCRAFTS){
+  const visual=resolveShipVisual(aircraft.id,AIRCRAFTS);
+  assert.equal(visual.spriteInvertY,true,`${aircraft.id} must use the shared nose-up top-art contract`);
+ }
  const factory=fs.readFileSync(new URL('../src/game/rendering/ShipVisualFactory.js',import.meta.url),'utf8');
  // RC7 may supply an integrity-verified sprite; the catalogue sprite remains fallback.
  assert.match(factory,/const presentationTopSrc = verifiedPresentationTopSrc \|\| visual\.topSrc/);

@@ -41,10 +41,13 @@ test('Google callback is forwarded only once, without exposing credentials', () 
 test('Required marker interface method is implemented', () => {
   assert.match(java, /void IHaveModifiedTheMainActivityForTheUseWithSocialLoginPlugin\(\)/);
 });
-test('Existing immersive mobile experience remains enabled', () => {
-  for (const marker of ['EdgeToEdge.enable(this)', 'WindowCompat.getInsetsController',
-    'setSystemBarsBehavior', 'BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE',
-    'windowInsetsController.hide(WindowInsetsCompat.Type.systemBars())']) {
+test('Immersive mobile experience is re-applied after resume and focus changes', () => {
+  for (const marker of ['EdgeToEdge.enable(this)', 'WindowCompat.setDecorFitsSystemWindows',
+    'WindowCompat.getInsetsController', 'setSystemBarsBehavior',
+    'BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE',
+    'controller.hide(WindowInsetsCompat.Type.systemBars())',
+    'applyImmersiveMode();', 'onWindowFocusChanged(boolean hasFocus)',
+    'postDelayed(this::applyImmersiveMode, 250)']) {
     assert.ok(java.includes(marker), 'Missing: ' + marker);
   }
 });

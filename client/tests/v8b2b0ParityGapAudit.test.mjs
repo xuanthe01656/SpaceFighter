@@ -84,15 +84,18 @@ test('V8B-2B0 BLOCKER: touch drag permits large event delta, journal only allows
   assert.ok(Math.abs(dragged.x) > Math.abs(r.state.pilot.x / UNITS_PER_WORLD));
 });
 
-test('V8B-2B0 BLOCKER: speed multiplier comes from equipment and pilot, not fixed 600', () => {
+test('V8B-2B0 CONTROL: pointer gain is stable while ship speed remains a trusted stat', () => {
   assert.equal(battleSpeedMultiplier({ speed: 18 }), 3);
   assert.equal(battleSpeedMultiplier({ speed: 6 }), 1);
-  const fastDrag = worldDragDelta(5, 0, 500, 500, 15, 1, 3);
-  assert.ok(Math.abs(fastDrag.x + 0.9) < 1e-12);
-  assert.equal(fastDrag.z, 0);
+  // The projection helper still supports explicit gains for diagnostics, but
+  // the player controller uses pointerSpeedMultiplier=1 for direct touch.
+  const explicitGain = worldDragDelta(5, 0, 500, 500, 15, 1, 3);
+  assert.ok(Math.abs(explicitGain.x + 0.9) < 1e-12);
   assert.equal(fixture().state.pilot.movePerTick, 600);
-  assert.match(campaignSrc, /speedMultiplier:\s*speedMod/);
-  assert.match(dungeonSrc, /speedMultiplier:\s*battleSpeedMultiplier\(stats\)/);
+  assert.match(inputSrc, /pointerSpeedMultiplier\s*=\s*1/);
+  assert.match(inputSrc, /aspect\(\), pointerSpeedMultiplier\)/);
+  assert.match(campaignSrc, /speedMultiplier:\s*speedMod,\s*pointerSpeedMultiplier:\s*1/);
+  assert.match(dungeonSrc, /speedMultiplier:\s*battleSpeedMultiplier\(stats\),\s*pointerSpeedMultiplier:\s*1/);
 });
 
 test('V8B-2B0 BLOCKER: scene spawn is z=12.5, prototype fixture currently z=7', () => {

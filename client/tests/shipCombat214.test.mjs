@@ -99,6 +99,25 @@ test('controller rejects secondary mouse and second touch pointer',()=>{
   callbacks.forEach(f=>f());
 });
 
+
+test('direct pointer tracking is stable across slow and fast aircraft stats',()=>{
+  const run=speedMultiplier=>{
+    const browser=fakeEventTarget();
+    const canvas=Object.assign(fakeEventTarget(),{ownerDocument:{defaultView:browser},style:{touchAction:'auto'},tabIndex:0,
+      getAttribute:()=>null,setAttribute(){},removeAttribute(){},setPointerCapture(){},hasPointerCapture:()=>false,
+      releasePointerCapture(){},getBoundingClientRect:()=>({width:500,height:500}),focus(){}});
+    const observers=new Set();
+    const scene={onBeforeRenderObservable:{add:f=>{observers.add(f);return f;},remove:f=>observers.delete(f)},
+      onDisposeObservable:{addOnce(){}}};
+    const root={position:{x:0,y:0,z:0}};
+    createShipInputController({canvas,scene,playerRoot:root,halfHeight:15,aspect:()=>1,speedMultiplier});
+    canvas.send('pointerdown',{pointerType:'touch',pointerId:4,clientX:100,clientY:100});
+    canvas.send('pointermove',{pointerType:'touch',pointerId:4,clientX:200,clientY:150});
+    return {x:root.position.x,z:root.position.z};
+  };
+  assert.deepEqual(run(.45),run(1.8));
+});
+
 test('all catalog main guns produce known explicit projectile paths',()=>{
   const center={x:0,z:10};const t=enemy('t',1,-4);
   const expected={beam:1,single:1,spread3:3,pierce:1,burst:3,explosive:1,spread5:5,wave:2,homing:1,shotgun:7,charge:1};

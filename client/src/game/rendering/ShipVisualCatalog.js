@@ -70,8 +70,10 @@ export function resolveShipVisual(aircraftId, aircraftCatalog = []) {
     modelBytes: officialModel ? 16 * 1024 * 1024 : hasModel ? asset.modelBytes : 0,
     modelTriangles: officialModel ? 150001 : hasModel ? asset.modelTriangles : 0,
     topSrc: hasTop ? (officialTop || aircraft.imgTop) : null,
-    // X-Wing-specific UV correction. Other aircraft keep their 2.1.1 orientation.
-    spriteInvertY: aircraft?.spriteInvertY === true,
+    // Canonical top art is authored nose-up (combat -Z). Babylon's plane
+    // texture upload must invert Y for every ship sprite, not only X-Wing.
+    // A future pre-flipped asset may opt out explicitly with spriteInvertY:false.
+    spriteInvertY: Boolean(aircraft) && aircraft?.spriteInvertY !== false,
     hqSrc: hasHQ ? (officialHQ || aircraft.imgHq) : null,
     previewTopSrc: hasTop ? (officialTop || aircraft.imgTop) : placeholder,
     previewHQSrc: hasHQ ? (officialHQ || aircraft.imgHq) : hasTop ? (officialTop || aircraft.imgTop) : placeholder,

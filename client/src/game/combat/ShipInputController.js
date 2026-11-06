@@ -31,8 +31,8 @@ export function keyboardVector(keys) {
 }
 
 export function createShipInputController({ canvas, scene, engine, playerRoot, tiltNode,
-  halfHeight = 15, aspect, speedMultiplier = 1, enabled = () => true, inset = 1.8,
-  keyboardUnitsPerFrame = 0.30 }) {
+  halfHeight = 15, aspect, speedMultiplier = 1, pointerSpeedMultiplier = 1,
+  enabled = () => true, inset = 1.8, keyboardUnitsPerFrame = 0.30 }) {
   if (!canvas || !scene || !playerRoot || typeof aspect !== 'function') {
     throw new Error('ShipInputController: canvas, scene, playerRoot and aspect are required');
   }
@@ -75,8 +75,12 @@ export function createShipInputController({ canvas, scene, engine, playerRoot, t
   const move = e => {
     if (!usable() || e.pointerId !== pointerId) return;
     const rect = canvas.getBoundingClientRect();
+    // Direct touch/mouse drag is a screen-to-world mapping, not a ship-stat gain.
+    // Applying aircraft speed here made heavy ships fall behind the finger and
+    // fast ships overshoot it. Ship speed still affects keyboard movement and
+    // remains available to the deterministic combat/rating layers.
     const { x, z } = worldDragDelta(e.clientX - lastX, e.clientY - lastY,
-      rect.width, rect.height, halfHeight, aspect(), speedMultiplier);
+      rect.width, rect.height, halfHeight, aspect(), pointerSpeedMultiplier);
     applyDelta(x, z);
     lastX = e.clientX;
     lastY = e.clientY;

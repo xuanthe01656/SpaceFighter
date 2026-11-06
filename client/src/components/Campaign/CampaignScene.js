@@ -603,7 +603,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   const speedMod = battleSpeedMultiplier(stats);
   const shipInput = createShipInputController({
     canvas: engine.getRenderingCanvas(), scene, engine, playerRoot, tiltNode: playerPlane,
-    halfHeight: ZOOM, aspect: getAspect, speedMultiplier: speedMod,
+    halfHeight: ZOOM, aspect: getAspect, speedMultiplier: speedMod, pointerSpeedMultiplier: 1,
     enabled: () => !gameOver && gameState !== 'CLEAR' && gameState !== 'GAMEOVER',
   });
 

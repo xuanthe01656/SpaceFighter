@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 const css=fs.readFileSync(new URL('../src/ui-system/BattleHud.module.css',import.meta.url),'utf8');
 const jsx=fs.readFileSync(new URL('../src/ui-system/BattleHud.jsx',import.meta.url),'utf8');
-test('F12/Coarse pointer HUD has no artificial 28px or 44px top spacer',()=>{
+test('F12/Coarse pointer HUD is fixed to the native viewport with no artificial spacer',()=>{
+  assert.match(css,/\.hud\s*\{[^}]*position:fixed/);
+  assert.match(css,/\.hud\s*\{[^}]*z-index:70/);
   assert.match(css,/top:calc\(max\(var\(--sf-ui-safe-top, 0px\), var\(--sf-ui-hud-top-guard, 2px\)\) \+ 1px\)/);
   assert.match(css,/@media\(pointer:coarse\)\{\.hud\{--sf-ui-hud-top-guard:2px\}\}/);
   assert.doesNotMatch(css,/--sf-ui-hud-top-guard:(28|44)px/);

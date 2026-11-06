@@ -149,8 +149,8 @@ function LegacyCampaignEngine({ gsRef, setScreen, lang, saveUserProfile, getReal
   };
   return (
     <div style={{
-      position: 'absolute', top: 0, left: 0,
-      width: '100%', height: '100%',
+      position: 'fixed', inset: 0,
+      width: '100dvw', height: '100dvh',
       backgroundColor: '#020c1b', zIndex: 50, overflow: 'hidden',
     }}>
       <canvas
