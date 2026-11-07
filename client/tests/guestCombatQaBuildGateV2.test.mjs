@@ -9,10 +9,19 @@ import {
 } from '../src/game/combat/GuestCombatQaBuildGateV2.js';
 import {
   GUEST_COMBAT_QA_ARMOR_IDS,
+  GUEST_COMBAT_QA_EQUIPMENT_PRESETS,
+  GUEST_COMBAT_QA_EQUIPMENT_PRESET_IDS,
   GUEST_COMBAT_QA_SHIP_IDS,
+  createGuestCombatQaBattleDataV26A1,
   cycleGuestCombatQaLoadoutV2,
   resolveGuestCombatQaLoadoutV2,
 } from '../src/game/combat/GuestCombatQaLoadoutV2.js';
+import { DEFAULT_CAMPAIGN_DATA } from '../src/game/catalog/profileDefaults.js';
+import { GEAR_CATALOG } from '../src/game/catalog/gear.js';
+import { AIRCRAFTS } from '../src/game/catalog/aircraft.js';
+import { PILOTS } from '../src/game/catalog/pilots.js';
+import { PLANET_CONFIG } from '../src/game/catalog/worlds.js';
+import { deriveBattleLoadout } from '../src/utils/combatStats.js';
 import {
   GUEST_BATTLE_QA_BOSS_STAGE_IDS,
   GUEST_BATTLE_QA_PLANET_IDS,
@@ -82,19 +91,79 @@ test('Android workflow exposes a manual isolated Guest Combat V2 QA artifact', (
 });
 
 
-test('mobile QA loadout switcher covers all 16 ships and seven armors without losing other query flags', () => {
+test('mobile QA switcher covers 16 ships, seven armors and four equipment presets without losing query flags', () => {
   assert.equal(GUEST_COMBAT_QA_SHIP_IDS.length, 16);
   assert.equal(GUEST_COMBAT_QA_ARMOR_IDS.length, 7);
-  assert.deepEqual(resolveGuestCombatQaLoadoutV2(''), {
-    shipId: 'ship_xwing',
-    armorId: 'armor_light',
-  });
+  assert.deepEqual(GUEST_COMBAT_QA_EQUIPMENT_PRESET_IDS, ['profile', 'field', 'elite', 'boss']);
+  const initial = resolveGuestCombatQaLoadoutV2('');
+  assert.equal(initial.shipId, 'ship_xwing');
+  assert.equal(initial.armorId, 'armor_light');
+  assert.equal(initial.equipmentPresetId, 'profile');
+  assert.equal(initial.equipmentPresetIndex, 1);
+  assert.equal(initial.equipmentPresetTotal, 4);
   const ship = cycleGuestCombatQaLoadoutV2('?sfAbilityDebug=1&sfArmorQa=force-next-projectile', 'ship');
   assert.equal(ship.value, 'ship_scout');
   assert.match(ship.search, /sfAbilityDebug=1/);
   assert.match(ship.search, /sfArmorQa=force-next-projectile/);
   const armor = cycleGuestCombatQaLoadoutV2(ship.search, 'armor');
   assert.equal(armor.value, 'armor_heavy');
+  const equipment = cycleGuestCombatQaLoadoutV2(armor.search, 'equipment');
+  assert.equal(equipment.value, 'field');
+  assert.match(equipment.search, /sfQaGear=field/);
+  assert.match(equipment.search, /sfGuestShip=ship_scout/);
+  assert.match(equipment.search, /sfGuestArmor=armor_heavy/);
+});
+
+test('QA equipment presets use real catalog gear and create isolated battle-local inventory only', () => {
+  const catalogIds = slot => new Set(GEAR_CATALOG[slot].map(item => item.id));
+  for (const preset of GUEST_COMBAT_QA_EQUIPMENT_PRESETS.filter(value => value.equipment)) {
+    assert.equal(catalogIds('mainGun').has(preset.equipment.mainGunId), true, preset.id);
+    assert.equal(catalogIds('wingman').has(preset.equipment.wingmanId), true, preset.id);
+    assert.equal(catalogIds('drone').has(preset.equipment.droneId), true, preset.id);
+    assert.ok(preset.aircraftLevel >= 1 && preset.aircraftLevel <= 100);
+    assert.ok(preset.gearLevel >= 1 && preset.gearLevel <= 100);
+    assert.ok(preset.rarity >= 1 && preset.rarity <= 5);
+  }
+  const source = structuredClone(DEFAULT_CAMPAIGN_DATA);
+  const before = structuredClone(source);
+  const battle = createGuestCombatQaBattleDataV26A1(source, {
+    shipId: 'ship_tank', armorId: 'armor_heavy', equipmentPresetId: 'elite',
+    planetId: 3, stageId: 8,
+  });
+  assert.deepEqual(source, before, 'QA builder must not mutate the profile');
+  assert.equal(battle.progress.currentPlanet, 3);
+  assert.equal(battle.progress.selectedStage, 8);
+  assert.equal(battle.loadout.aircraft, 'ship_tank');
+  assert.equal(battle.items[battle.loadout.mainGun].baseId, 'gun_neutron');
+  assert.equal(battle.items[battle.loadout.wingman].baseId, 'wing_homing');
+  assert.equal(battle.items[battle.loadout.drone].baseId, 'drone_laser');
+  assert.equal(battle.items[battle.loadout.armor].baseId, 'armor_heavy');
+  assert.equal(battle.items[battle.loadout.mainGun].level, 45);
+  assert.equal(battle.items[battle.loadout.armor].rarity, 4);
+  assert.equal(battle.ownedAircrafts.ship_tank.level, 45);
+});
+
+test('Boss QA preset materially increases offense and survivability without granting profile ownership', () => {
+  const base = createGuestCombatQaBattleDataV26A1(DEFAULT_CAMPAIGN_DATA, {
+    shipId: 'ship_xwing', armorId: 'armor_heavy', equipmentPresetId: 'profile',
+    planetId: 3, stageId: 10,
+  });
+  const boss = createGuestCombatQaBattleDataV26A1(DEFAULT_CAMPAIGN_DATA, {
+    shipId: 'ship_xwing', armorId: 'armor_heavy', equipmentPresetId: 'boss',
+    planetId: 3, stageId: 10,
+  });
+  const catalogs = { PILOTS, AIRCRAFTS, GEAR_CATALOG };
+  const baseCombat = deriveBattleLoadout(base, catalogs, {
+    mode: 'campaign', location: PLANET_CONFIG[3], armorPassivePolicy: 'none', combatRatingVersion: 'v2',
+  });
+  const bossCombat = deriveBattleLoadout(boss, catalogs, {
+    mode: 'campaign', location: PLANET_CONFIG[3], armorPassivePolicy: 'none', combatRatingVersion: 'v2',
+  });
+  assert.ok(bossCombat.combatRatingV2.breakdown.offenseDps > baseCombat.combatRatingV2.breakdown.offenseDps * 20);
+  assert.ok(bossCombat.combatRatingV2.breakdown.effectiveHp > baseCombat.combatRatingV2.breakdown.effectiveHp * 5);
+  assert.ok(bossCombat.gear.wingman.base);
+  assert.ok(bossCombat.gear.drone.base);
+  assert.deepEqual(DEFAULT_CAMPAIGN_DATA.items, { item_start_gun: { baseId: 'gun_laser', rarity: 1, level: 1, type: 'mainGun' } });
 });
 
 
@@ -113,6 +182,8 @@ test('V2.6A combines planet, stage and boss navigation while preserving QA query
   assert.match(boss.search, /sfGuestShip=ship_tank/);
   assert.match(boss.search, /sfGuestArmor=armor_heavy/);
   assert.match(boss.search, /sfAbilityDebug=1/);
+  const gearedBoss = cycleGuestBattleQaSelectionV26A(`${boss.search}&sfQaGear=boss`, 'replay');
+  assert.match(gearedBoss.search, /sfQaGear=boss/);
   const nextBoss = cycleGuestBattleQaSelectionV26A(boss.search, 'boss');
   assert.equal(nextBoss.selection.stageId, 10);
   const nextPlanet = cycleGuestBattleQaSelectionV26A('?sfQaPlanet=3&sfQaStage=10', 'next');
@@ -148,7 +219,9 @@ test('V2.6A Campaign wiring keeps QA result/navigation isolated from real progre
   assert.match(engine, /resolveGuestBattleQaResultActionV26A/);
   assert.match(engine, /onQaResult:guestAbilityQa/);
   assert.match(engine, /qaResult=\{qaResult\}/);
-  assert.match(scene, /progress:\{\.\.\.progress,currentPlanet:currentPlanetId,selectedStage:currentStage\}/);
+  assert.match(scene, /createGuestCombatQaBattleDataV26A1\(campaignData/);
+  assert.match(scene, /planetId:currentPlanetId/);
+  assert.match(scene, /stageId:currentStage/);
   assert.match(scene, /publishGuestBattleQaResult\('victory'\)/);
   assert.match(scene, /publishGuestBattleQaResult\('defeat'\)/);
   assert.match(scene, /if\(guestAbilityQa\)\{[\s\S]*KHÔNG LƯU THƯỞNG[\s\S]*publishGuestBattleQaResult\('victory'\)/);
@@ -167,6 +240,8 @@ test('Campaign runtime uses the centralized Guest Combat QA build gate', () => {
   assert.match(engine, /cycleGuestCombatQaLoadoutV2/);
   assert.match(scene, /mobileQaLoadout=guestAbilityQa&&import\.meta\.env\.VITE_SF_GUEST_COMBAT_V2_QA/);
   assert.match(scene, /resolveGuestCombatQaLoadoutV2/);
+  assert.match(scene, /createGuestCombatQaBattleDataV26A1/);
+  assert.match(scene, /equipmentPresetId:requestedEquipmentPreset/);
   assert.doesNotMatch(engine, /guestAbilityQa=import\.meta\.env\.DEV===true/);
   assert.doesNotMatch(scene, /guestAbilitiesQa\)\&\&!isCloud\&\&import\.meta\.env\.DEV===true/);
 });
@@ -179,6 +254,8 @@ test('Android combat QA uses pointerdown multi-touch controls and keeps S/A pers
   assert.match(controls, /event\.detail === 0/);
   assert.doesNotMatch(controls, /if \(!enabled \|\| activationGate\?\.canActivate !== false\) return null/);
   assert.match(controls, /data-qa-battle-phase/);
+  assert.match(controls, /E \$\{current\.equipmentPresetIndex\}\/\$\{current\.equipmentPresetTotal\}/);
+  assert.match(controls, /onQaCycle, 'equipment'/);
   assert.match(css, /\.action\{[\s\S]*touch-action:none/);
   assert.match(css, /\.qaSwitcher button\{[\s\S]*touch-action:none/);
 });

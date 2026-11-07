@@ -17,6 +17,7 @@ import {
 import {
   GUEST_COMBAT_QA_ARMOR_IDS,
   GUEST_COMBAT_QA_SHIP_IDS,
+  describeGuestCombatQaEquipmentPresetV2,
   resolveGuestCombatQaLoadoutV2,
 } from '../game/combat/GuestCombatQaLoadoutV2.js';
 import styles from './GuestAbilityControls.module.css';
@@ -231,6 +232,8 @@ function MobileQaLoadoutSwitcher({ activationGate, qaSelection, onQaCycle, onQaN
       lang === 'vi' ? 'Đổi ải QA' : 'Change QA stage', onQaNavigate, 'stage')}
     {qaSelection && button('boss', 'B',
       lang === 'vi' ? 'Nhảy tới ải Boss kế tiếp' : 'Jump to next boss stage', onQaNavigate, 'boss')}
+    {button('equipment', `E ${current.equipmentPresetIndex}/${current.equipmentPresetTotal}`,
+      describeGuestCombatQaEquipmentPresetV2(current.equipmentPreset, lang), onQaCycle, 'equipment')}
     {button('ship', `S ${shipIndex}/${GUEST_COMBAT_QA_SHIP_IDS.length}`, current.shipId, onQaCycle, 'ship')}
     {button('armor', `A ${armorIndex}/${GUEST_COMBAT_QA_ARMOR_IDS.length}`, current.armorId, onQaCycle, 'armor')}
   </div>;
@@ -307,12 +310,18 @@ function DebugReadout({ state, feedback, qaSelection, lang }) {
       ? (lang === 'vi' ? 'QA NÉ ĐẠN: ĐÃ NẠP' : 'QA PROJECTILE EVADE: ARMED')
       : (lang === 'vi' ? 'QA NÉ ĐẠN: ĐÃ KÍCH HOẠT' : 'QA PROJECTILE EVADE: CONSUMED')
     : null;
+  const qaEquipmentText = state.qaEquipment
+    ? `QA E${state.qaEquipment.presetIndex}/${state.qaEquipment.presetTotal}: `
+      + `${describeGuestCombatQaEquipmentPresetV2(state.qaEquipment.presetId, lang)}`
+      + ` · CR ${Number(state.qaEquipment.combatRating || 0).toLocaleString('en-US')}`
+    : null;
   return <output className={styles.debugReadout} aria-live="polite">
     <b>{localizeGuestFeedbackV2(profile?.name, lang)}</b>
     <span>{localizeGuestFeedbackV2(profile?.detail, lang)}</span>
     <span>{localizeGuestFeedbackV2(armorProfile?.name, lang)} · {feedbackText}</span>
     {gateText && <span>{gateText}</span>}
     {qaForceText && <span>{qaForceText}</span>}
+    {qaEquipmentText && <span>{qaEquipmentText}</span>}
     {qaSelection && <span>{`QA P${qaSelection.planetId} · T${qaSelection.stageId}${qaSelection.isBoss ? ' · BOSS' : ''}`}</span>}
   </output>;
 }

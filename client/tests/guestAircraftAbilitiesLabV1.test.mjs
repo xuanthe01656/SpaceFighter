@@ -83,6 +83,7 @@ test('QA source wiring uses the explicit Guest-only browser/mobile build gate wi
  const engine=fs.readFileSync(new URL('../src/components/Campaign/CampaignEngine.jsx',import.meta.url),'utf8');
  const scene=fs.readFileSync(new URL('../src/components/Campaign/CampaignScene.js',import.meta.url),'utf8');
  const gate=fs.readFileSync(new URL('../src/game/combat/GuestCombatQaBuildGateV2.js',import.meta.url),'utf8');
+ const qaLoadout=fs.readFileSync(new URL('../src/game/combat/GuestCombatQaLoadoutV2.js',import.meta.url),'utf8');
  assert.match(engine,/resolveGuestCombatQaRuntimeFromViteEnv\(import\.meta\.env/);
  assert.match(scene,/resolveGuestCombatQaRuntimeFromViteEnv\(import\.meta\.env/);
  assert.match(gate,/VITE_SF_GUEST_ABILITIES_QA/);
@@ -95,5 +96,7 @@ test('QA source wiring uses the explicit Guest-only browser/mobile build gate wi
  assert.match(scene,/if\(guestAbilityQa\)\{[\s\S]{0,400}?publishGuestBattleQaResult\('victory'\)[\s\S]{0,120}?return;/);
  assert.doesNotMatch(scene,/if\(guestAbilityQa\)\{onDefeat\(\);return;\}/);
  assert.doesNotMatch(scene,/scheduleBattleTimer\(\(\)=>onVictory\(\),2600\)/);
- assert.match(scene,/__sf_guest_lab_armor__/);
+ assert.match(scene,/createGuestCombatQaBattleDataV26A1/);
+ assert.match(qaLoadout,/__sf_guest_lab_armor__/);
+ assert.match(qaLoadout,/GUEST_COMBAT_QA_EQUIPMENT_PRESETS/);
 });

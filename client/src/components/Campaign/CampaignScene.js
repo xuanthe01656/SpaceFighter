@@ -23,7 +23,10 @@ import { createPlayerDamageGateV25, createPlayerDamageOutcomeV25 } from '../../g
 import { createGuestAbilityRuntimeV2 } from '../../game/combat/GuestAbilityRuntimeV2.js';
 import { deriveGuestAbilityActivationGateV2 } from '../../game/combat/GuestAbilityActivationGateV2.js';
 import { resolveGuestCombatQaRuntimeFromViteEnv } from '../../game/combat/GuestCombatQaBuildGateV2.js';
-import { resolveGuestCombatQaLoadoutV2 } from '../../game/combat/GuestCombatQaLoadoutV2.js';
+import {
+  createGuestCombatQaBattleDataV26A1,
+  resolveGuestCombatQaLoadoutV2,
+} from '../../game/combat/GuestCombatQaLoadoutV2.js';
 import {
   createGuestBattleQaResultV26A,
   resolveGuestBattleQaSelectionV26A,
@@ -153,20 +156,24 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   const isReplay        = guestAbilityQa ? false
     : currentStage < (progress.planets?.[currentPlanetId]?.highestStage ?? 1);
   const stageConfig     = STAGE_CONFIG[currentStage] || STAGE_CONFIG[1];
-  const mobileQaLoadout=guestAbilityQa&&import.meta.env.VITE_SF_GUEST_COMBAT_V2_QA==='true'
+  const qaLoadoutSelection=guestAbilityQa
     ?resolveGuestCombatQaLoadoutV2(globalThis.location?.search||''):null;
+  const mobileQaLoadout=guestAbilityQa&&import.meta.env.VITE_SF_GUEST_COMBAT_V2_QA==='true'
+    ?qaLoadoutSelection:null;
   const requestedShip=requestedQa?.get('sfGuestShip')||mobileQaLoadout?.shipId;
   const requestedArmor=requestedQa?.get('sfGuestArmor')||mobileQaLoadout?.armorId;
+  const requestedEquipmentPreset=qaLoadoutSelection?.equipmentPresetId||'profile';
   const forceNextProjectileEvadeQa=requestedQa?.get('sfArmorQa')==='force-next-projectile';
   const previewShip=AIRCRAFTS.some(a=>a.id===requestedShip)?requestedShip:null;
   const previewArmor=GEAR_CATALOG.armor.some(a=>a.id===requestedArmor)?requestedArmor:null;
-  const previewArmorKey='__sf_guest_lab_armor__';
-  const qaBattleData=(guestAbilityQa||previewShip||previewArmor)
-    ?{...campaignData,
-      progress:{...progress,currentPlanet:currentPlanetId,selectedStage:currentStage},
-      loadout:{...loadout,...(previewShip?{aircraft:previewShip}:{}),
-        ...(previewArmor?{armor:previewArmorKey}:{})},
-      ...(previewArmor?{items:{...items,[previewArmorKey]:{baseId:previewArmor,level:1,rarity:1}}}:{})}
+  const qaBattleData=guestAbilityQa
+    ?createGuestCombatQaBattleDataV26A1(campaignData,{
+      shipId:previewShip,
+      armorId:previewArmor,
+      equipmentPresetId:requestedEquipmentPreset,
+      planetId:currentPlanetId,
+      stageId:currentStage,
+    })
     :campaignData;
   const combat = deriveBattleLoadout(qaBattleData, { PILOTS, AIRCRAFTS, GEAR_CATALOG },
     { mode: 'campaign', location: planetConfig,
@@ -182,6 +189,31 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     pilotDodgePermille:Math.round((stats.dodgeRate||0)*1000),
     pilotNovaDamage:stats.novaExplosionDamage||0,
     qaForceNextProjectileEvade:forceNextProjectileEvadeQa,
+  }):null;
+  const qaEquipmentInfo=guestAbilityQa?Object.freeze({
+    version:'guest-combat-qa-equipment-v2.6a1',
+    presetId:qaLoadoutSelection?.equipmentPresetId||'profile',
+    presetIndex:qaLoadoutSelection?.equipmentPresetIndex||1,
+    presetTotal:qaLoadoutSelection?.equipmentPresetTotal||1,
+    aircraftLevel:combat.aircraftLevel,
+    mainGunId:combat.gear.mainGun.base?.id||null,
+    mainGunLevel:combat.gear.mainGun.item?.level||0,
+    wingmanId:combat.gear.wingman.base?.id||null,
+    droneId:combat.gear.drone.base?.id||null,
+    armorId:combat.gear.armor.base?.id||null,
+    gearLevel:Math.max(
+      combat.gear.mainGun.item?.level||0,
+      combat.gear.wingman.item?.level||0,
+      combat.gear.armor.item?.level||0,
+      combat.gear.drone.item?.level||0,
+    ),
+    rarity:Math.max(
+      combat.gear.mainGun.item?.rarity||0,
+      combat.gear.wingman.item?.rarity||0,
+      combat.gear.armor.item?.rarity||0,
+      combat.gear.drone.item?.rarity||0,
+    ),
+    combatRating:combat.cp,
   }):null;
 
   const wingmanBase = combat.gear.wingman.base;
@@ -919,7 +951,11 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   const getGuestAbilityActivationGate=()=>deriveGuestAbilityActivationGateV2({gameState,gameOver});
   const getGuestAbilityHudSnapshot=()=>{
     if(!guestAbilities)return null;
-    return Object.freeze({...guestAbilities.snapshot(),activationGate:getGuestAbilityActivationGate()});
+    return Object.freeze({
+      ...guestAbilities.snapshot(),
+      activationGate:getGuestAbilityActivationGate(),
+      qaEquipment:qaEquipmentInfo,
+    });
   };
   const publishGuestAbilityState=()=>{
     const snapshot=getGuestAbilityHudSnapshot();
