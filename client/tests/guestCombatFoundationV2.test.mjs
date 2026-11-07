@@ -13,6 +13,11 @@ import {
   legacyTierDefenseClass,
 } from '../src/game/combat/GuestAbilityCatalogV2.js';
 import { createGuestAbilityRuntimeV2 } from '../src/game/combat/GuestAbilityRuntimeV2.js';
+import {
+  createEnemyEntryReadabilityPolicyV26A2,
+  createReadableFastEnemyProfileV26A2,
+  resolveBattleHudOcclusionRatioV26A2,
+} from '../src/game/combat/EnemyEntryReadabilityV26A2.js';
 import { calculateCombatRatingV2 } from '../src/game/combat/CombatRatingV2.js';
 import { armorMitigationV2, resolveIncomingDamageV2 } from '../src/game/combat/CombatMathV2.js';
 import { deriveBattleLoadout } from '../src/utils/combatStats.js';
@@ -24,6 +29,70 @@ test('V2 catalog has 16 basic ship actions, seven automatic armors and no dash',
   assert.equal(Object.keys(ARMOR_TRAITS_V2).length, 7);
   assert.equal(Object.values(SHIP_ACTIVE_SKILLS_V2).some(value => value.kind === 'dash'), false);
   assert.equal(Object.values(ARMOR_TRAITS_V2).some(value => value.trigger === 'manual'), false);
+});
+
+
+test('armor trigger contract uses chance only for Light Armor', () => {
+  assert.equal(ARMOR_TRAITS_V2.armor_light.trigger, 'on_eligible_hit');
+  assert.equal(ARMOR_TRAITS_V2.armor_light.params.chancePermillePve, 80);
+  assert.equal(ARMOR_TRAITS_V2.armor_light.params.chancePermillePvp, 50);
+  assert.deepEqual(ARMOR_TRAITS_V2.armor_light.params.eligibleSources, ['projectile']);
+  assert.equal(ARMOR_TRAITS_V2.armor_heavy.trigger, 'always');
+  assert.equal(ARMOR_TRAITS_V2.armor_shield.trigger, 'always');
+  assert.equal(ARMOR_TRAITS_V2.armor_void.trigger, 'always');
+  assert.equal(ARMOR_TRAITS_V2.armor_reactive.trigger, 'on_projectile_hit');
+  assert.equal(ARMOR_TRAITS_V2.armor_nano.trigger, 'out_of_combat');
+  assert.equal(ARMOR_TRAITS_V2.armor_crystal.params.hitsPerProc, 5);
+});
+
+test('enemy entry policy clears the top HUD and grants a readable reveal window', () => {
+  const ratio = resolveBattleHudOcclusionRatioV26A2({ viewportWidth: 393, viewportHeight: 852 });
+  assert.ok(ratio > .18 && ratio < .20);
+  const policy = createEnemyEntryReadabilityPolicyV26A2({
+    worldHalfHeight: 15, viewportWidth: 393, viewportHeight: 852,
+  });
+  assert.ok(policy.engagementLineZ > -10 && policy.engagementLineZ < -9);
+  const fast = policy.createState({ tier: 4 });
+  policy.update(fast, { positionZ: policy.engagementLineZ - .01, nowMs: 1000 });
+  assert.equal(policy.isEngageable(fast), false);
+  policy.update(fast, { positionZ: policy.engagementLineZ, nowMs: 1000 });
+  assert.equal(fast.phase, 'reveal');
+  policy.update(fast, { positionZ: policy.engagementLineZ + 1, nowMs: 1649 });
+  assert.equal(policy.isEngageable(fast), false);
+  policy.update(fast, { positionZ: policy.engagementLineZ + 1, nowMs: 1650 });
+  assert.equal(policy.isEngageable(fast), true);
+  assert.equal(policy.entrySpeed(.42, 4), .11);
+  assert.equal(policy.entrySpeed(.12, 1), .09);
+});
+
+test('fast-enemy atlas starts on a readable frame without mutating the asset catalog', () => {
+  const profile = Object.freeze({
+    atlasSrc: '/enemy.webp',
+    visual: Object.freeze({
+      animations: Object.freeze({
+        spawn: Object.freeze({ frames: Object.freeze([0, 1, 2]), fps: 10, durationMs: 300 }),
+        idle: Object.freeze({ frames: Object.freeze([3, 4]), fps: 7, loop: true, durationMs: 0 }),
+      }),
+    }),
+  });
+  const readable = createReadableFastEnemyProfileV26A2(profile, { tier: 4 });
+  assert.notEqual(readable, profile);
+  assert.deepEqual(readable.visual.animations.spawn.frames, [3]);
+  assert.equal(readable.visual.animations.spawn.durationMs, 0);
+  assert.deepEqual(profile.visual.animations.spawn.frames, [0, 1, 2]);
+  assert.equal(createReadableFastEnemyProfileV26A2(profile, { tier: 3 }), profile);
+});
+
+test('Campaign keeps entering enemies visible but untargetable until the readability gate opens', () => {
+  const scene = fs.readFileSync(new URL('../src/components/Campaign/CampaignScene.js', import.meta.url), 'utf8');
+  assert.match(scene, /createEnemyEntryReadabilityPolicyV26A2/);
+  assert.match(scene, /enemyEntryPolicy\.isEngageable\(e\._entryState\)/);
+  assert.match(scene, /miniHpBg\.isVisible = false/);
+  assert.match(scene, /createReadableFastEnemyProfileV26A2/);
+  assert.match(scene, /diameterTop:\.35,diameterBottom:1\.9,height:\.45,tessellation:3/);
+  assert.doesNotMatch(scene, /CreateTorus\(`ef4_/);
+  assert.match(scene, /CreateTorus\(`entry_\$\{mesh\.uniqueId\}`/);
+  assert.match(scene, /entry ring communicates temporary spawn protection/);
 });
 
 test('runtime exposes one ship action; armor_active is intentionally unavailable', () => {

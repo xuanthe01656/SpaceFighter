@@ -20,6 +20,10 @@ import { createShipInputController } from '../../game/combat/ShipInputController
 import { describeMainSalvo, describeWingSalvo, describeDroneSalvo, pickWeaponTarget, enemySpeedFactor, shieldDamageFactor, repairAmount, projectileHitsPoint } from '../../game/combat/PlayerWeapons';
 import { createProjectileEmitter } from '../../game/combat/ProjectileEmitter';
 import { createPlayerDamageGateV25, createPlayerDamageOutcomeV25 } from '../../game/combat/PlayerDamagePipelineV25.js';
+import {
+  createEnemyEntryReadabilityPolicyV26A2,
+  createReadableFastEnemyProfileV26A2,
+} from '../../game/combat/EnemyEntryReadabilityV26A2.js';
 import { createGuestAbilityRuntimeV2 } from '../../game/combat/GuestAbilityRuntimeV2.js';
 import { deriveGuestAbilityActivationGateV2 } from '../../game/combat/GuestAbilityActivationGateV2.js';
 import { resolveGuestCombatQaRuntimeFromViteEnv } from '../../game/combat/GuestCombatQaBuildGateV2.js';
@@ -324,6 +328,14 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   // During the G1/G2 migration we keep Babylon GUI damage labels, enemy mini
   // bars and announcements. The fixed top HUD moves to one shared React view.
   const externalHud=typeof data.onHudUpdate==='function';
+  const createEnemyEntryPolicy=()=>{
+    const {cssW,cssH}=measureBattleHud(engine,canvas,ui);
+    return createEnemyEntryReadabilityPolicyV26A2({
+      worldHalfHeight:ZOOM,viewportWidth:cssW,viewportHeight:cssH,externalHud,
+    });
+  };
+  let enemyEntryPolicy=createEnemyEntryPolicy();
+  engine.onResizeObservable.add(()=>{enemyEntryPolicy=createEnemyEntryPolicy();});
 
   // ── SVG HUD top-bar (hexagon shape – planet theme colour) ─────────────────
    const topBar = new GUI.Image('topBar', '');
@@ -716,7 +728,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   let enemyProjectileSequence = 0;
   const shots = createProjectileEmitter({ scene, BABYLON, bullets: playerBullets, scheduleBattleTimer });
   const liveTargets = () => [
-    ...enemies.filter(e => !e._dead && !e.mesh.isDisposed?.()),
+    ...enemies.filter(e => !e._dead && !e.mesh.isDisposed?.()
+      && enemyEntryPolicy.isEngageable(e._entryState)),
     ...(bossMesh && !bossMesh.isDisposed?.() ? [{ mesh: bossMesh, isBoss: true }] : []),
   ];
   const fireEnemyBullet = (pos, vx = 0, vz = 0.24) => {
@@ -774,6 +787,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     3: new BABYLON.Color3(.95, .8, .15),
     4: new BABYLON.Color3(.55, .2, .9),
   };
+  const entryHaloMat = makeMat(scene, new BABYLON.Color3(.18, .82, 1));
+  const fastEntryHaloMat = makeMat(scene, new BABYLON.Color3(1, .45, .12));
 
   /** Fallback mesh nếu không có imgSrc */
   const buildFallbackEnemy = (tier) => {
@@ -782,8 +797,13 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       case 2: m = BABYLON.MeshBuilder.CreateBox(`ef2_${Date.now()}`, { width:2.0, depth:2.0, height:.45 }, scene); break;
       case 3: m = BABYLON.MeshBuilder.CreateCylinder(`ef3_${Date.now()}`, { diameterTop:1.2, diameterBottom:.5, height:.45, tessellation:6 }, scene); break;
       case 4:
-        m = BABYLON.MeshBuilder.CreateTorus(`ef4_${Date.now()}`, { diameter:1.8, thickness:.35, tessellation:24 }, scene);
-        m.rotation.x = Math.PI/2;
+        // Readable top-down dart fallback. The former vertical torus was nearly
+        // edge-on to the camera, leaving only the linked HP bar visible.
+        m = BABYLON.MeshBuilder.CreateCylinder(`ef4_${Date.now()}`, {
+          diameterTop:.35,diameterBottom:1.9,height:.45,tessellation:3,
+        }, scene);
+        m.rotation.y = Math.PI;
+        m.scaling.z = 1.25;
         break;
       default: m = BABYLON.MeshBuilder.CreateSphere(`ef1_${Date.now()}`, { diameterX:1.6, diameterZ:1.6, diameterY:.4 }, scene);
     }
@@ -806,7 +826,18 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     // asset manifest; no asset load may replace this root mid-battle.
     const mesh = buildFallbackEnemy(tier);
     mesh.position.set(spawnX, .2, spawnZ);
-    const visual = attachBattleEntityVisual(scene, BABYLON, mesh, 'enemy', cfg.id);
+    const visualProfile=createReadableFastEnemyProfileV26A2(
+      resolveAssetVisual('enemy',cfg.id),{tier});
+    const visual = attachBattleEntityVisual(scene, BABYLON, mesh, 'enemy', cfg.id,
+      {profile:visualProfile});
+    const entryHalo = BABYLON.MeshBuilder.CreateTorus(`entry_${mesh.uniqueId}`, {
+      diameter:tier===4?2.7:2.25,thickness:.075,tessellation:28,
+    }, scene);
+    entryHalo.parent=mesh;
+    entryHalo.position.y=.36;
+    entryHalo.material=tier===4?fastEntryHaloMat:entryHaloMat;
+    entryHalo.isPickable=false;
+    entryHalo.visibility=.72;
 
     const rawSpeed = cfg.speedMin + Math.random() * (cfg.speedMax - cfg.speedMin);
     const speed    = rawSpeed / 1200;   // pixels/s → Babylon units/frame@60fps
@@ -823,6 +854,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     ui.addControl(miniHpBg);
     miniHpBg.linkWithMesh(mesh);
     miniHpBg.linkOffsetYInPixels = -28;
+    miniHpBg.isVisible = false;
 
     const miniHp = new GUI.Rectangle(`ehf_${mesh.uniqueId}`);
     miniHp.width = '100%'; miniHp.height = '100%';
@@ -837,7 +869,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       isBoss: false, isEnraged: false,
       canShoot: tier !== 4 && Math.random() > .5,
       lastShoot: 0, shootMs: tier===3 ? 1400 : 2200,
-      points: pts, miniHpBg, miniHp, _dead: false,
+      points: pts, miniHpBg, miniHp, entryHalo, _dead: false,
+      _entryState:enemyEntryPolicy.createState({tier}),
       _contactHitId: `campaign-enemy-contact-${mesh.uniqueId}`,
     });
   };
@@ -848,6 +881,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     if (killedByDamage) deathVisuals.capture(e.visual);
     else e.visual?.dispose();
     safeDisposeGui(e.miniHp); safeDisposeGui(e.miniHpBg);
+    safeDispose(e.entryHalo); e.entryHalo=null;
     safeDispose(e.mesh); // authoritative hitbox is gone THIS frame
   };
 
@@ -1034,7 +1068,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       if(total<=0)return;
       const radiusSquared=nova>0?25:9;
       for(const enemy of [...enemies]){
-        if(!enemy.mesh?.position||enemy._dead)continue;
+        if(!enemy.mesh?.position||enemy._dead
+          ||!enemyEntryPolicy.isEngageable(enemy._entryState))continue;
         const dx=enemy.mesh.position.x-playerRoot.position.x;
         const dz=enemy.mesh.position.z-playerRoot.position.z;
         if(dx*dx+dz*dz<=radiusSquared)applyPlayerDamageToEnemy(enemy,total);
@@ -1468,7 +1503,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   // Identical projectile hit semantics in Campaign and Dungeon; this scene
   // retains only its own scoring, drop and enemy-health UI callbacks.
   const applyPlayerDamageToEnemy = (enemy, damage) => {
-    if (!enemy || enemy._dead || enemy.mesh.isDisposed?.()) return false;
+    if (!enemy || enemy._dead || enemy.mesh.isDisposed?.()
+      || !enemyEntryPolicy.isEngageable(enemy._entryState)) return false;
     // Mark applies only in the local Guest ability experiment.
     if(guestAbilities&&enemy._guestMarkUntilTick>guestAbilities.tick)
       damage*=1+(enemy._guestMarkBonus||0);
@@ -1529,6 +1565,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     if (!bullet._splashRadius) return;
     explode(new BABYLON.Vector3(impact.x, 0, impact.z), bullet._splashRadius * .45);
     const nearby = enemies.filter(other => other !== primary && !other._dead && !other.mesh.isDisposed?.()
+      && enemyEntryPolicy.isEngageable(other._entryState)
       && projectileHitsPoint({ position: impact }, other.mesh.position, bullet._splashRadius));
     nearby.forEach(other => {
       if (bullet._slowMs) other._slowUntil = Date.now() + bullet._slowMs;
@@ -1619,7 +1656,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       }
       if(event.type==='area'||event.type==='pull'){
         for(const enemy of [...enemies]){
-          if(enemy._dead||enemy.mesh?.isDisposed?.())continue;
+          if(enemy._dead||enemy.mesh?.isDisposed?.()
+            ||!enemyEntryPolicy.isEngageable(enemy._entryState))continue;
           const dx=enemy.mesh.position.x-playerRoot.position.x;
           const dz=enemy.mesh.position.z-playerRoot.position.z;
           const distance=Math.hypot(dx,dz);
@@ -1759,8 +1797,28 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       if (e._dead) { enemies.splice(i,1); continue; }
 
       e.visual?.tick(frameFactor * (1000 / 60));
-      e.visual?.setState('move');
       const enemyFrame = frameFactor * enemySpeedFactor(e, now);
+      if(!enemyEntryPolicy.isEngageable(e._entryState)){
+        e.visual?.setState('idle');
+        if(e.entryHalo&&!e.entryHalo.isDisposed?.()){
+          const pulse=.94+.08*Math.sin(now*.012+e.sineOff);
+          e.entryHalo.scaling.x=pulse;
+          e.entryHalo.scaling.z=pulse;
+          e.entryHalo.visibility=.55+.17*Math.sin(now*.016+e.sineOff);
+        }
+        e.mesh.position.z += enemyEntryPolicy.entrySpeed(e.speed,e.tier) * frameFactor;
+        enemyEntryPolicy.update(e._entryState,{positionZ:e.mesh.position.z,nowMs:now});
+        if(enemyEntryPolicy.isEngageable(e._entryState)){
+          safeDispose(e.entryHalo);e.entryHalo=null;
+          e.miniHpBg.isVisible=true;
+          e.visual?.setState('move');
+        }
+        // The entry ring communicates temporary spawn protection. Until it
+        // disappears the enemy cannot be targeted, damaged, shoot or collide.
+        continue;
+      }
+      e.miniHpBg.isVisible=true;
+      e.visual?.setState('move');
       if (!e.canShoot) {
         // Kamikaze / melee – chase player
         const dx = playerRoot.position.x - e.mesh.position.x;
