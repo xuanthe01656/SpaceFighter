@@ -26,7 +26,7 @@ test('legacy mobile drag uses fixed pointer gain while keyboard retains ship spe
   assert.match(dungeon,/pointerSpeedMultiplier:\s*1/);
 });
 
-test('Campaign HUD is viewport-fixed and native Android reasserts immersive bars',()=>{
+test('Campaign HUD is viewport-fixed and native Android reasserts immersive bars plus HUD inset',()=>{
   const engine=read('src/components/Campaign/CampaignEngine.jsx');
   const css=read('src/ui-system/BattleHud.module.css');
   const java=read('android/app/src/main/java/com/theIT/spacefighter4/MainActivity.java');
@@ -35,5 +35,5 @@ test('Campaign HUD is viewport-fixed and native Android reasserts immersive bars
   assert.match(css,/\.hud\s*\{[^}]*position:fixed/);
   assert.match(java,/private void applyImmersiveMode\(\)/);
   assert.match(java,/onWindowFocusChanged\(boolean hasFocus\)/);
-  assert.match(java,/postDelayed\(this::applyImmersiveMode, 250\)/);
+  assert.match(java,/postDelayed\(\(\) -> \{\s*applyImmersiveMode\(\);\s*refreshNativeBattleHudInset\(\);\s*\}, 250\);/s);
 });

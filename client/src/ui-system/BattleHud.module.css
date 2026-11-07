@@ -2,9 +2,13 @@
  * No pointer consumption except the retreat button. All status is real state. */
 .hud {
   position:fixed;
-  /* F12/Android: anchor to the real viewport safe inset; do not add the old
-   * 28/44px coarse-pointer spacer. The top-centre notch remains physically open. */
-  top:calc(max(var(--sf-ui-safe-top, 0px), var(--sf-ui-hud-top-guard, 2px)) + 1px);
+  /* Native Android publishes 0px for immersive phones and only a positive
+   * inset when a side cutout can overlap retreat/metrics. Browser/F12 falls
+   * back to the web safe-area value. No cosmetic top spacer is allowed. */
+  top:var(--sf-native-battle-hud-top, var(--sf-ui-safe-top, env(safe-area-inset-top, 0px)));
+  margin-top:0;
+  padding-top:0;
+  transform:none;
   left:max(5px, env(safe-area-inset-left, 0px));
   right:max(5px, env(safe-area-inset-right, 0px));
   z-index:70;
@@ -77,10 +81,9 @@
 .noticeLine{flex:1;max-width:46px;height:2px;background:currentColor;opacity:.55}
 .notice_accent{color:var(--sf-ui-accent)}.notice_success{color:#71efbd}.notice_danger{color:var(--sf-ui-danger)}
 @keyframes sf-cockpit-notice{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:translateY(0)}}
-/* The OS reports real safe area via env(safe-area-inset-top). Screen width
- * alone must NOT impose an extra 28/44px vertical gap on touch phones. */
-@media(pointer:coarse){.hud{--sf-ui-hud-top-guard:2px}}
-@media(pointer:coarse) and (max-width:379px){.hud{--sf-ui-hud-top-guard:2px}}
+/* Top placement is controlled by the native cutout bridge or the browser
+ * safe-area fallback. Screen width must never add a vertical spacer. */
+@media(pointer:coarse){.hud{--sf-ui-pointer-mode:coarse}}
 @media(max-width:359px){
  .hud{height:126px}
  .leftPod,.rightPod{width:21%}
@@ -90,6 +93,6 @@
  .missionSubtitle{font-size:8px}
 }
 @media(orientation:landscape) and (max-height:560px){
- .hud{top:max(5px,env(safe-area-inset-top,0px));width:min(490px,calc(100% - 16px));left:max(8px,env(safe-area-inset-left,0px));right:auto;height:clamp(110px,23vw,135px)}
+ .hud{width:min(490px,calc(100% - 16px));left:max(8px,env(safe-area-inset-left,0px));right:auto;height:clamp(110px,23vw,135px)}
 }
 @media(prefers-reduced-motion:reduce){.notice{animation:none}}

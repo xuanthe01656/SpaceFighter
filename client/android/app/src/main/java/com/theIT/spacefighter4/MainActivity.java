@@ -2,11 +2,16 @@ package com.theIT.spacefighter4;
 
 import android.os.Bundle;
 import android.os.Build;
+import android.graphics.Rect;
 import android.view.Display;
+import android.view.View;
 import android.view.WindowManager;
+import android.webkit.WebView;
 import androidx.activity.EdgeToEdge;
 
 // 👇 1. IMPORT THÊM 3 THƯ VIỆN NÀY ĐỂ ĐIỀU KHIỂN HỆ THỐNG GIAO DIỆN ANDROID
+import androidx.core.view.DisplayCutoutCompat;
+import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
@@ -19,8 +24,10 @@ import com.getcapacitor.PluginHandle;
 import ee.forgr.capacitor.social.login.GoogleProvider;
 import ee.forgr.capacitor.social.login.ModifiedMainActivityForSocialLoginPlugin;
 import ee.forgr.capacitor.social.login.SocialLoginPlugin;
+import java.util.List;
 
 public class MainActivity extends BridgeActivity implements ModifiedMainActivityForSocialLoginPlugin {
+    private static final String BATTLE_HUD_TOP_CSS_VAR = "--sf-native-battle-hud-top";
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(SpaceFighterAssetStorePlugin.class);
@@ -28,6 +35,7 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
         EdgeToEdge.enable(this);
         applyGameDisplayPolicy();
         applyImmersiveMode();
+        installNativeBattleHudInsetBridge();
     }
 
     private void applyImmersiveMode() {
@@ -47,6 +55,60 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
             getWindow().setStatusBarContrastEnforced(false);
             getWindow().setNavigationBarContrastEnforced(false);
         }
+        refreshNativeBattleHudInset();
+    }
+
+    private void installNativeBattleHudInsetBridge() {
+        View decor = getWindow().getDecorView();
+        ViewCompat.setOnApplyWindowInsetsListener(decor, (view, insets) -> {
+            publishNativeBattleHudInset(insets);
+            return insets;
+        });
+        ViewCompat.requestApplyInsets(decor);
+        decor.post(this::refreshNativeBattleHudInset);
+    }
+
+    private void refreshNativeBattleHudInset() {
+        View decor = getWindow().getDecorView();
+        publishNativeBattleHudInset(ViewCompat.getRootWindowInsets(decor));
+    }
+
+    private int resolveBattleHudTopInsetDevicePx(WindowInsetsCompat insets) {
+        if (insets == null) return 0;
+        DisplayCutoutCompat cutout = insets.getDisplayCutout();
+        if (cutout == null || cutout.getSafeInsetTop() <= 0) return 0;
+
+        View decor = getWindow().getDecorView();
+        int viewportWidth = decor.getWidth();
+        if (viewportWidth <= 0) viewportWidth = getResources().getDisplayMetrics().widthPixels;
+        if (viewportWidth <= 0) return cutout.getSafeInsetTop();
+
+        // The HUD has a physical centre void. A centred notch can occupy it
+        // without moving the whole cluster; side cutouts still need protection.
+        float centreVoidLeft = viewportWidth * 0.34f;
+        float centreVoidRight = viewportWidth * 0.66f;
+        List<Rect> bounds = cutout.getBoundingRects();
+        if (bounds == null || bounds.isEmpty()) return cutout.getSafeInsetTop();
+        for (Rect bound : bounds) {
+            if (bound == null || bound.height() <= 0) continue;
+            boolean insideCentreVoid = bound.left >= centreVoidLeft && bound.right <= centreVoidRight;
+            if (!insideCentreVoid) return cutout.getSafeInsetTop();
+        }
+        return 0;
+    }
+
+    private void publishNativeBattleHudInset(WindowInsetsCompat insets) {
+        float density = Math.max(1.0f, getResources().getDisplayMetrics().density);
+        int devicePx = resolveBattleHudTopInsetDevicePx(insets);
+        int cssPx = Math.max(0, Math.round(devicePx / density));
+        if (getBridge() == null) return;
+        WebView webView = getBridge().getWebView();
+        if (webView == null) return;
+        String script = "(function(){var px=" + cssPx
+                + ";document.documentElement.style.setProperty('" + BATTLE_HUD_TOP_CSS_VAR
+                + "',px+'px');window.dispatchEvent(new CustomEvent('sf-native-battle-hud-inset',"
+                + "{detail:{top:px}}));})();";
+        webView.post(() -> webView.evaluateJavascript(script, null));
     }
 
     private Display resolveGameDisplay() {
@@ -97,7 +159,10 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
         applyImmersiveMode();
         // Some OEM WebViews restore bars one frame after resume. Re-assert once
         // after the window is attached without blocking startup.
-        getWindow().getDecorView().postDelayed(this::applyImmersiveMode, 250);
+        getWindow().getDecorView().postDelayed(() -> {
+            applyImmersiveMode();
+            refreshNativeBattleHudInset();
+        }, 250);
     }
 
     @Override
@@ -105,6 +170,7 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) {
             applyImmersiveMode();
+            getWindow().getDecorView().post(this::refreshNativeBattleHudInset);
         }
     }
 

@@ -47,9 +47,21 @@ test('Immersive mobile experience is re-applied after resume and focus changes',
     'BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE',
     'controller.hide(WindowInsetsCompat.Type.systemBars())',
     'applyImmersiveMode();', 'onWindowFocusChanged(boolean hasFocus)',
-    'postDelayed(this::applyImmersiveMode, 250)']) {
+    'postDelayed(() -> {', 'refreshNativeBattleHudInset();']) {
     assert.ok(java.includes(marker), 'Missing: ' + marker);
   }
+});
+test('Android publishes one battle-HUD top inset instead of stale status-bar padding', () => {
+  for (const marker of ['DisplayCutoutCompat', 'ViewCompat.setOnApplyWindowInsetsListener',
+    'ViewCompat.getRootWindowInsets', 'getBoundingRects()', 'getSafeInsetTop()',
+    'centreVoidLeft', 'centreVoidRight', '--sf-native-battle-hud-top',
+    'evaluateJavascript(script, null)', 'sf-native-battle-hud-inset']) {
+    assert.ok(java.includes(marker), 'Missing: ' + marker);
+  }
+  assert.match(java, /viewportWidth \* 0\.34f/);
+  assert.match(java, /viewportWidth \* 0\.66f/);
+  assert.match(java, /Math\.round\(devicePx \/ density\)/);
+  assert.doesNotMatch(java, /WindowInsetsCompat\.Type\.statusBars\(\)/);
 });
 test('Android native build is explicit manual-only after the single RC5 full gate', () => {
   assert.match(workflow, /^on:\s*\n  workflow_dispatch:/m);

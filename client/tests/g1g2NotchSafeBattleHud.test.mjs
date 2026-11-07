@@ -10,7 +10,8 @@ test('Actual notch void keeps all metrics and retreat below/outside its opening'
   assert.match(hud,/styles\.leftPod/);
   assert.match(hud,/styles\.rightPod/);
   assert.match(hud,/styles\.shieldCenter/);
-  assert.match(css,/top:calc\(max\(var\(--sf-ui-safe-top/);
+  assert.match(css,/top:var\(--sf-native-battle-hud-top, var\(--sf-ui-safe-top/);
+  assert.doesNotMatch(css,/--sf-ui-hud-top-guard|top:calc\(max\(var\(--sf-ui-safe-top/);
   assert.match(css,/safe-area-inset-left/);
   assert.match(css,/safe-area-inset-right/);
   assert.match(css,/\.cutoutClearance/);
