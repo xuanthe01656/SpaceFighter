@@ -24,6 +24,14 @@ import {
   createEnemyEntryReadabilityPolicyV26A2,
   createReadableFastEnemyProfileV26A2,
 } from '../../game/combat/EnemyEntryReadabilityV26A2.js';
+import {
+  CAMPAIGN_RUNTIME_LIMITS_V26A3,
+  createBossIntroPlanV26A3,
+  createCampaignRuntimeSnapshotV26A3,
+  createChargerMotionStateV26A3,
+  resolveEnemyFacingYawV26A3,
+  stepChargerMotionV26A3,
+} from '../../game/combat/CampaignRuntimeReliabilityV26A3.js';
 import { createGuestAbilityRuntimeV2 } from '../../game/combat/GuestAbilityRuntimeV2.js';
 import { deriveGuestAbilityActivationGateV2 } from '../../game/combat/GuestAbilityActivationGateV2.js';
 import { resolveGuestCombatQaRuntimeFromViteEnv } from '../../game/combat/GuestCombatQaBuildGateV2.js';
@@ -130,6 +138,9 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   });
   // Visual afterimages are independent of the gameOver/CLEAR battle loop.
   const deathVisuals = createBattleDeathVisualQueue(scene);
+  const runtimeLimits = CAMPAIGN_RUNTIME_LIMITS_V26A3;
+  const runtimeCapacityClamps = { enemies: 0, playerProjectiles: 0, enemyProjectiles: 0 };
+  const bossIntroPlan = createBossIntroPlanV26A3();
 
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -726,19 +737,42 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   const enemyBulMat = makeMat(scene, new BABYLON.Color3(1, .28, .34));
   const playerDamageGate = createPlayerDamageGateV25();
   let enemyProjectileSequence = 0;
-  const shots = createProjectileEmitter({ scene, BABYLON, bullets: playerBullets, scheduleBattleTimer });
+  const shots = createProjectileEmitter({
+    scene, BABYLON, bullets: playerBullets, scheduleBattleTimer,
+    maxBullets: runtimeLimits.maxPlayerProjectiles,
+    maxPendingShots: runtimeLimits.maxPendingPlayerShots,
+    onCapacityClamped: () => { runtimeCapacityClamps.playerProjectiles++; },
+  });
   const liveTargets = () => [
     ...enemies.filter(e => !e._dead && !e.mesh.isDisposed?.()
       && enemyEntryPolicy.isEngageable(e._entryState)),
-    ...(bossMesh && !bossMesh.isDisposed?.() ? [{ mesh: bossMesh, isBoss: true }] : []),
+    ...(gameState === 'BOSS_FIGHT' && bossMesh && !bossMesh.isDisposed?.()
+      ? [{ mesh: bossMesh, isBoss: true }] : []),
   ];
-  const fireEnemyBullet = (pos, vx = 0, vz = 0.24) => {
+  const fireEnemyBullet = (pos, vx = 0, vz = 0.24, { priority = 'normal' } = {}) => {
+    if (enemyBullets.length >= runtimeLimits.maxEnemyProjectiles) {
+      if (priority === 'boss') {
+        const replaceIndex = enemyBullets.findIndex(projectile => projectile?._priority !== 'boss');
+        if (replaceIndex >= 0) {
+          safeDispose(enemyBullets[replaceIndex]);
+          enemyBullets.splice(replaceIndex, 1);
+        } else {
+          runtimeCapacityClamps.enemyProjectiles++;
+          return false;
+        }
+      } else {
+        runtimeCapacityClamps.enemyProjectiles++;
+        return false;
+      }
+    }
     const hitId = `campaign-enemy-projectile-${++enemyProjectileSequence}`;
     const b = BABYLON.MeshBuilder.CreateSphere(hitId, { diameter: 0.44 }, scene);
     b.position = pos.clone(); b.position.y = 0;
     b.material = enemyBulMat; b._vx = vx; b._vz = vz;
     b._damageHitId = hitId;
+    b._priority = priority;
     enemyBullets.push(b);
+    return true;
   };
 
   const fireWeapons = () => {
@@ -790,6 +824,43 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   const entryHaloMat = makeMat(scene, new BABYLON.Color3(.18, .82, 1));
   const fastEntryHaloMat = makeMat(scene, new BABYLON.Color3(1, .45, .12));
 
+  const updateEnemyFacing = (enemy, velocityX, velocityZ, deltaMs) => {
+    if (!enemy?.mesh || enemy.mesh.isDisposed?.()) return;
+    enemy._facingYaw = resolveEnemyFacingYawV26A3({
+      currentYaw: enemy._facingYaw,
+      velocityX,
+      velocityZ,
+      maxTurnRadians: (enemy.tier === 4 ? 12 : 7) * Math.max(0, Math.min(100, deltaMs)) / 1000,
+    });
+    enemy.mesh.rotation.y = enemy._facingYaw;
+  };
+
+  const disposeChargeTelegraph = enemy => {
+    safeDispose(enemy?._chargeTelegraph);
+    if (enemy) enemy._chargeTelegraph = null;
+  };
+
+  const createChargeTelegraph = (enemy, direction) => {
+    disposeChargeTelegraph(enemy);
+    if (!enemy?.mesh?.position || !direction) return null;
+    const start = new BABYLON.Vector3(enemy.mesh.position.x, .06, enemy.mesh.position.z);
+    const length = Math.min(18, Math.max(7,
+      Math.hypot(playerRoot.position.x - start.x, playerRoot.position.z - start.z) + 2));
+    const end = new BABYLON.Vector3(
+      start.x + direction.x * length,
+      .06,
+      start.z + direction.z * length,
+    );
+    const line = BABYLON.MeshBuilder.CreateLines(`charge_telegraph_${enemy.mesh.uniqueId}`, {
+      points: [start, end],
+    }, scene);
+    line.color = new BABYLON.Color3(1, .32, .08);
+    line.alpha = .82;
+    line.isPickable = false;
+    enemy._chargeTelegraph = line;
+    return line;
+  };
+
   /** Fallback mesh nếu không có imgSrc */
   const buildFallbackEnemy = (tier) => {
     let m;
@@ -802,7 +873,6 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         m = BABYLON.MeshBuilder.CreateCylinder(`ef4_${Date.now()}`, {
           diameterTop:.35,diameterBottom:1.9,height:.45,tessellation:3,
         }, scene);
-        m.rotation.y = Math.PI;
         m.scaling.z = 1.25;
         break;
       default: m = BABYLON.MeshBuilder.CreateSphere(`ef1_${Date.now()}`, { diameterX:1.6, diameterZ:1.6, diameterY:.4 }, scene);
@@ -812,6 +882,10 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   };
 
   const spawnEnemy = () => {
+    if (enemies.length >= runtimeLimits.maxActiveEnemies) {
+      runtimeCapacityClamps.enemies++;
+      return false;
+    }
     const rand = Math.random() * 100;
     let tier = 1;
     if (currentStage >= 2 && rand > 50) tier = 2;
@@ -826,6 +900,9 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     // asset manifest; no asset load may replace this root mid-battle.
     const mesh = buildFallbackEnemy(tier);
     mesh.position.set(spawnX, .2, spawnZ);
+    // Every enemy asset uses nose-negative-z. Entry movement is screen-down,
+    // so the visual starts facing PI before its first simulation frame.
+    mesh.rotation.y = Math.PI;
     const visualProfile=createReadableFastEnemyProfileV26A2(
       resolveAssetVisual('enemy',cfg.id),{tier});
     const visual = attachBattleEntityVisual(scene, BABYLON, mesh, 'enemy', cfg.id,
@@ -872,7 +949,11 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       points: pts, miniHpBg, miniHp, entryHalo, _dead: false,
       _entryState:enemyEntryPolicy.createState({tier}),
       _contactHitId: `campaign-enemy-contact-${mesh.uniqueId}`,
+      _facingYaw: Math.PI,
+      _chargerState: tier === 4 ? createChargerMotionStateV26A3({ nowMs: Date.now() }) : null,
+      _chargeTelegraph: null,
     });
+    return true;
   };
 
   const cleanEnemy = (e, killedByDamage = false) => {
@@ -882,6 +963,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     else e.visual?.dispose();
     safeDisposeGui(e.miniHp); safeDisposeGui(e.miniHpBg);
     safeDispose(e.entryHalo); e.entryHalo=null;
+    safeDispose(e._chargeTelegraph); e._chargeTelegraph=null;
     safeDispose(e.mesh); // authoritative hitbox is gone THIS frame
   };
 
@@ -892,6 +974,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   let bossMesh    = null, bossVisual = null, bossHp = 0, bossMaxHp = 0;
   let bossEnraged = false, bossPts = 0;
   let bossVelX    = 0.028, bossFloatT = 0, nextBossFire = 0;
+  let bossRevealHalo = null, bossIntroStartedAt = 0;
 
   const buildFallbackBoss = (bType) => {
     const m = BABYLON.MeshBuilder.CreateSphere('bFb', { diameter: 3.8, segments: 24 }, scene);
@@ -902,7 +985,18 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     return m;
   };
 
-  const spawnBoss = () => {
+  const clearProjectilesForBossIntro = () => {
+    for (const projectile of playerBullets.splice(0)) safeDispose(projectile);
+    for (const projectile of enemyBullets.splice(0)) safeDispose(projectile);
+  };
+
+  const cleanBossReveal = () => {
+    safeDispose(bossRevealHalo);
+    bossRevealHalo = null;
+  };
+
+  const prepareBoss = () => {
+    if (bossMesh && !bossMesh.isDisposed?.()) return bossMesh;
     const bType   = stageConfig.bossType || 'mech';
     const bossCfg = curBossCfgs[bType] || Object.values(curBossCfgs)[0];
 
@@ -911,16 +1005,48 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     bossPts   = isReplay ? Math.max(10, Math.floor((bossCfg.score||100)/3)) : (bossCfg.score||100);
 
     bossMesh = buildFallbackBoss(bType);
-    bossMesh.position.set(0, .5, -ZOOM - 6);
+    bossMesh.position.set(0, .5, -ZOOM + 7);
     bossMesh._contactHitId = 'campaign-boss-contact';
+    bossMesh.setEnabled(false);
     bossVisual = attachBattleEntityVisual(scene, BABYLON, bossMesh, 'boss', bossCfg.id);
+    bossVisual?.setState('spawn');
 
     bossNameText.text = `⚠ ${lang==='vi' ? `TRÙM ẢI ${currentStage}` : `STAGE ${currentStage} BOSS`}`;
-    bossHpFill.width  = '100%'; bossPanel.isVisible = !externalHud;
+    bossHpFill.width  = '100%';
+    bossPanel.isVisible = false;
+
+    cleanBossReveal();
+    bossRevealHalo = BABYLON.MeshBuilder.CreateTorus('boss_reveal_v26a3', {
+      diameter: 7.2, thickness: .16, tessellation: 48,
+    }, scene);
+    bossRevealHalo.position.set(0, .08, -ZOOM + 7);
+    bossRevealHalo.material = makeMat(scene, new BABYLON.Color3(1, .18, .12));
+    bossRevealHalo.isPickable = false;
+    return bossMesh;
+  };
+
+  const activateBossFight = () => {
+    if (!bossMesh || bossMesh.isDisposed?.()) return false;
+    cleanBossReveal();
+    bossMesh.setEnabled(true);
+    bossVisual?.setState('move');
+    bossPanel.isVisible = !externalHud;
+    nextBossFire = Date.now() + bossIntroPlan.firstAttackDelayMs;
+    setGameState('BOSS_FIGHT');
+    return true;
+  };
+
+  const startBossIntro = () => {
+    clearProjectilesForBossIntro();
+    bossIntroStartedAt = Date.now();
+    setGameState('BOSS_INTRO');
     showAnnouncement(
-      lang==='vi' ? '⚠ CẢNH BÁO: TRÙM CUỐI ⚠' : '⚠ BOSS APPROACHING ⚠',
-      '#ff4757', 3000);
-    nextBossFire = Date.now() + 3200;
+      lang==='vi' ? 'CẢNH BÁO:\nTRÙM CUỐI XUẤT HIỆN!' : 'WARNING:\nBOSS APPROACHING!',
+      '#ff4757', bossIntroPlan.warningMs);
+    scheduleBattleTimer(() => {
+      prepareBoss();
+      scheduleBattleTimer(activateBossFight, bossIntroPlan.revealMs);
+    }, bossIntroPlan.warningMs);
   };
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -1022,14 +1148,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       : `STAGE ${currentStage} | WAVE ${n}/${MAX_WAVES}`;
 
     if (n === MAX_WAVES && stageConfig.hasBoss) {
-      showAnnouncement(
-        lang==='vi' ? 'CẢNH BÁO:\nTRÙM CUỐI XUẤT HIỆN!' : 'WARNING:\nBOSS APPROACHING!',
-        '#ff4757', 3000);
-      setGameState('BOSS_INTRO');
-      scheduleBattleTimer(() => {
-        spawnBoss();
-        setGameState('BOSS_FIGHT');
-      }, 3500);
+      startBossIntro();
       return;
     }
     showAnnouncement(
@@ -1137,7 +1256,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     }
 
     if (stats.hp <= 0) {
-      gameOver = true; setGameState('GAMEOVER');
+      gameOver = true; cleanBossReveal(); setGameState('GAMEOVER');
       guestVisualFeedback?.dispose();
       engineFx.stop(); playerRoot.isVisible = false;
       explode(playerRoot.position, 4);
@@ -1167,6 +1286,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   // ══════════════════════════════════════════════════════════════════════════
 
   const stageCleared = () => {
+    cleanBossReveal();
     setGameState('CLEAR'); guestVisualFeedback?.dispose(); engineFx.stop();
     showAnnouncement(lang==='vi'?'HOÀN THÀNH\nCHIẾN DỊCH!':'CAMPAIGN\nCLEARED!', '#2ecc71', 2000);
     if(guestAbilityQa){
@@ -1531,7 +1651,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     return true;
   };
   const applyPlayerDamageToBoss = damage => {
-    if(!bossMesh||bossMesh.isDisposed?.()||bossHp<=0)return false;
+    if(gameState!=='BOSS_FIGHT'||!bossMesh||bossMesh.isDisposed?.()||bossHp<=0)return false;
     if(guestAbilities&&bossMesh._guestMarkUntilTick>guestAbilities.tick)
       damage*=1+(bossMesh._guestMarkBonus||0);
     bossHp-=Math.max(0,damage);
@@ -1696,7 +1816,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     if(guestAbilities)publishGuestAbilityState();
     try{data.onHudUpdate({stage:currentStage,wave:Math.max(1,currentWave),wavesTotal:MAX_WAVES,
       hp:stats.hp,maxHp:stats.maxHp,kills:verifiedClientKills,score,
-      bossHp:bossMesh&&bossHp>0?bossHp:null,bossMaxHp:bossMesh&&bossMaxHp>0?bossMaxHp:null});}catch(_){}
+      bossHp:gameState==='BOSS_FIGHT'&&bossMesh&&bossHp>0?bossHp:null,
+      bossMaxHp:gameState==='BOSS_FIGHT'&&bossMesh&&bossMaxHp>0?bossMaxHp:null});}catch(_){}
   });
 
   // Kick off first wave
@@ -1706,7 +1827,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     if (gameOver || gameState === 'CLEAR') return;
     const now = Date.now();
     activeEffects.update(now);
-    const frameFactor = frameScale(engine.getDeltaTime());
+    const frameDeltaMs = Math.max(0, Math.min(100, Number(engine.getDeltaTime()) || 0));
+    const frameFactor = frameScale(frameDeltaMs);
     tick += frameFactor;
     if(guestAbilities){
       guestAbilityAccumulator+=Math.min(100,Math.max(0,engine.getDeltaTime()));
@@ -1806,7 +1928,9 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
           e.entryHalo.scaling.z=pulse;
           e.entryHalo.visibility=.55+.17*Math.sin(now*.016+e.sineOff);
         }
+        const beforeZ=e.mesh.position.z;
         e.mesh.position.z += enemyEntryPolicy.entrySpeed(e.speed,e.tier) * frameFactor;
+        updateEnemyFacing(e,0,e.mesh.position.z-beforeZ,frameDeltaMs);
         enemyEntryPolicy.update(e._entryState,{positionZ:e.mesh.position.z,nowMs:now});
         if(enemyEntryPolicy.isEngageable(e._entryState)){
           safeDispose(e.entryHalo);e.entryHalo=null;
@@ -1819,13 +1943,33 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       }
       e.miniHpBg.isVisible=true;
       e.visual?.setState('move');
-      if (!e.canShoot) {
-        // Kamikaze / melee – chase player
+      const beforeX=e.mesh.position.x;
+      const beforeZ=e.mesh.position.z;
+      if (!e.canShoot && e.tier===4) {
+        const charge=stepChargerMotionV26A3(e._chargerState,{
+          nowMs:now,enemyX:e.mesh.position.x,enemyZ:e.mesh.position.z,
+          targetX:playerRoot.position.x,targetZ:playerRoot.position.z,
+        });
+        e._chargerState=charge.state;
+        if(charge.event==='telegraph_started')createChargeTelegraph(e,charge.direction);
+        if(charge.event==='charge_started'||charge.event==='recovery_started')disposeChargeTelegraph(e);
+        if(charge.state.phase==='telegraph')e.visual?.setState('attack');
+        else if(charge.state.phase==='recovery')e.visual?.setState('idle');
+        else e.visual?.setState('move');
+        if(e._chargeTelegraph&&!e._chargeTelegraph.isDisposed?.()){
+          e._chargeTelegraph.visibility=.55+.25*Math.sin(now*.02);
+        }
+        e.mesh.position.x += charge.direction.x * e.speed * charge.speedMultiplier * enemyFrame;
+        e.mesh.position.z += charge.direction.z * e.speed * charge.speedMultiplier * enemyFrame;
+        updateEnemyFacing(e,charge.direction.x,charge.direction.z,frameDeltaMs);
+      } else if (!e.canShoot) {
+        // Melee enemies track the player but now turn toward their actual velocity.
         const dx = playerRoot.position.x - e.mesh.position.x;
         const dz = playerRoot.position.z - e.mesh.position.z;
         const dn = Math.sqrt(dx*dx + dz*dz) || 1;
         e.mesh.position.x += (dx/dn) * e.speed * 1.2 * enemyFrame;
         e.mesh.position.z += (dz/dn) * e.speed * 1.2 * enemyFrame;
+        updateEnemyFacing(e,e.mesh.position.x-beforeX,e.mesh.position.z-beforeZ,frameDeltaMs);
       } else {
         // Patrol + shoot
         e.mesh.position.z += e.speed * enemyFrame;
@@ -1836,6 +1980,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         if (Math.abs(e.mesh.position.x) > bx) {
           e.velX *= -1; e.mesh.position.x = clamp(e.mesh.position.x, -bx, bx);
         }
+        updateEnemyFacing(e,e.mesh.position.x-beforeX,e.mesh.position.z-beforeZ,frameDeltaMs);
         if (!guestAbilities?.modifiers().cloaked&&now > e.lastShoot + e.shootMs) {
           const dx = playerRoot.position.x - e.mesh.position.x;
           const dz = playerRoot.position.z - e.mesh.position.z;
@@ -1887,6 +2032,18 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       if (killed) continue;
     }
 
+    // ── Boss intro telegraph ──
+    if(gameState==='BOSS_INTRO'){
+      if(bossMesh&&!bossMesh.isDisposed?.())bossVisual?.tick(frameDeltaMs);
+      if(bossRevealHalo&&!bossRevealHalo.isDisposed?.()){
+        const elapsed=Math.max(0,now-bossIntroStartedAt);
+        const pulse=1+.08*Math.sin(elapsed*.018);
+        bossRevealHalo.scaling.x=pulse;
+        bossRevealHalo.scaling.z=pulse;
+        bossRevealHalo.visibility=.55+.25*Math.sin(elapsed*.022);
+      }
+    }
+
     // ── Boss ──
     if (gameState==='BOSS_FIGHT' && bossMesh && !bossMesh.isDisposed?.()) {
       bossVisual?.tick(frameFactor * (1000 / 60));
@@ -1910,16 +2067,16 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         const isAlien    = stageConfig.bossType==='alien';
         const attackType = 1 + Math.floor(Math.random()*3);
         if (attackType===1) {
-          for (let k=-3; k<=3; k++) fireEnemyBullet(bossMesh.position, k*.09, .45);
+          for (let k=-3; k<=3; k++) fireEnemyBullet(bossMesh.position, k*.09, .45,{priority:'boss'});
         } else if (attackType===2) {
           const cnt = isAlien ? 16 : 8;
           for (let a=0; a < Math.PI*2; a += Math.PI*2/cnt)
-            fireEnemyBullet(bossMesh.position, Math.cos(a)*(isAlien?.52:.38), Math.sin(a)*(isAlien?.52:.38));
+            fireEnemyBullet(bossMesh.position, Math.cos(a)*(isAlien?.52:.38), Math.sin(a)*(isAlien?.52:.38),{priority:'boss'});
         } else {
           const dx = playerRoot.position.x - bossMesh.position.x;
           const dz = playerRoot.position.z - bossMesh.position.z;
           const dn = Math.sqrt(dx*dx+dz*dz)||1;
-          fireEnemyBullet(bossMesh.position, (dx/dn)*.58, (dz/dn)*.58);
+          fireEnemyBullet(bossMesh.position, (dx/dn)*.58, (dz/dn)*.58,{priority:'boss'});
         }
         const base = isAlien ? 700+Math.random()*600 : 1100+Math.random()*900;
         nextBossFire = now + (bossEnraged ? base*.5 : base);
@@ -1985,7 +2142,12 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     // ── Spawn enemies (PLAYING state) ──
     if (gameState==='PLAYING') {
       if (waveSpawned < waveCount) {
-        if (now > lastSpawn + spawnInterval) { spawnEnemy(); waveSpawned++; lastSpawn = now; }
+        if (now > lastSpawn + spawnInterval) {
+          if (spawnEnemy()) waveSpawned++;
+          // A capacity clamp queues the remaining spawn instead of retrying on
+          // every render frame and overwhelming low-end devices.
+          lastSpawn = now;
+        }
       } else {
         // All spawned, wait for all to die
         const alive = enemies.filter(e => !e._dead).length;
@@ -1999,6 +2161,35 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
           }
         }
       }
+    }
+  });
+
+  // Runtime heartbeat is emitted after the gameplay observer. If gameplay
+  // throws, the render wrapper catches it and this heartbeat is intentionally
+  // not advanced, preserving the last useful diagnostic snapshot.
+  let lastRuntimeHeartbeatAt = -Infinity;
+  scene.onBeforeRenderObservable.add(() => {
+    const nowMs = globalThis.performance?.now?.() ?? Date.now();
+    if (nowMs - lastRuntimeHeartbeatAt < 250) return;
+    lastRuntimeHeartbeatAt = nowMs;
+    try {
+      data.onRuntimeHeartbeat?.(createCampaignRuntimeSnapshotV26A3({
+        active: !battleSceneDisposed && !gameOver && gameState !== 'CLEAR' && gameState !== 'GAMEOVER',
+        gameState,
+        planetId: currentPlanetId,
+        stageId: currentStage,
+        wave: currentWave,
+        wavesTotal: MAX_WAVES,
+        tick,
+        enemies: enemies.filter(enemy => !enemy._dead).length,
+        playerProjectiles: playerBullets.length,
+        pendingPlayerShots: shots.pendingCount(),
+        enemyProjectiles: enemyBullets.length,
+        deathVisuals: deathVisuals.activeCount,
+        capacityClamps: runtimeCapacityClamps,
+      }));
+    } catch (_) {
+      // Diagnostics must never affect gameplay.
     }
   });
 };

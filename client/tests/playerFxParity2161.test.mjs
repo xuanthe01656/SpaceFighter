@@ -15,9 +15,12 @@ const dm = read('../src/components/Dungeon/DungeonScene.js');
 test('Campaign and Dungeon both use the same engine exhaust and projectile emitters', () => {
   for (const source of [cm, dm]) {
     assert.match(source, /createShipEngineFx\(\{ scene, BABYLON, playerRoot, aircraft: aircraftBase, quality \}\)/);
-    assert.match(source, /createProjectileEmitter\(\{ scene, BABYLON, bullets: playerBullets, scheduleBattleTimer \}\)/);
+    assert.match(source, /createProjectileEmitter\(\{/);
+    assert.match(source, /scene,\s*BABYLON,\s*bullets:\s*playerBullets,\s*scheduleBattleTimer/);
     assert.doesNotMatch(source, /new BABYLON\.ParticleSystem\(['"](?:eFx|engineFx)['"]/);
   }
+  assert.match(cm, /maxBullets:\s*runtimeLimits\.maxPlayerProjectiles/);
+  assert.match(cm, /onCapacityClamped/);
 });
 
 test('X-Wing exhaust uses its aircraft mount, not a Dungeon hard-coded mount', () => {

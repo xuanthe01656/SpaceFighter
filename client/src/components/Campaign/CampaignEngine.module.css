@@ -1,0 +1,64 @@
+.runtimeFaultOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 140;
+  display: grid;
+  place-items: center;
+  padding: max(18px, env(safe-area-inset-top, 0px)) 18px max(18px, env(safe-area-inset-bottom, 0px));
+  background: rgba(1, 7, 17, .78);
+  backdrop-filter: blur(4px);
+  pointer-events: auto;
+}
+
+.runtimeFaultPanel {
+  width: min(92vw, 430px);
+  display: grid;
+  gap: 12px;
+  padding: 22px 20px 18px;
+  text-align: center;
+}
+
+.runtimeFaultEyebrow {
+  color: #ff9c55;
+  font: 700 12px/1.2 "Rajdhani", sans-serif;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.runtimeFaultTitle {
+  margin: 0;
+  color: #f4ffff;
+  font: 700 clamp(22px, 6vw, 30px)/1.05 "Rajdhani", sans-serif;
+  text-transform: uppercase;
+}
+
+.runtimeFaultCopy {
+  margin: 0;
+  color: #9ed9e5;
+  font: 500 14px/1.45 "Rajdhani", sans-serif;
+}
+
+.runtimeFaultActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.runtimeFaultDetails {
+  margin: 0;
+  padding: 9px 10px;
+  max-height: 130px;
+  overflow: auto;
+  border: 1px solid rgba(86, 226, 241, .24);
+  background: rgba(0, 16, 31, .72);
+  color: #79dce8;
+  font: 11px/1.35 ui-monospace, SFMono-Regular, Consolas, monospace;
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 360px) {
+  .runtimeFaultPanel { padding: 18px 14px 14px; }
+  .runtimeFaultActions { grid-template-columns: 1fr; }
+}

@@ -39,9 +39,14 @@ export function drawProjectileTexture(ctx, appearance) {
   ctx.globalAlpha = 1;
 }
 
-export function createProjectileEmitter({ scene, BABYLON, bullets, scheduleBattleTimer }) {
+export function createProjectileEmitter({
+  scene, BABYLON, bullets, scheduleBattleTimer,
+  maxBullets = Number.POSITIVE_INFINITY,
+  maxPendingShots = Number.POSITIVE_INFINITY,
+  onCapacityClamped = null,
+}) {
   const appearances = new Map();
-  let serial = 0, disposed = false;
+  let serial = 0, disposed = false, pendingShots = 0;
   const visualFor = shot => {
     const spec = projectileFxProfile(shot);
     if (!appearances.has(spec.textureKey)) {
@@ -83,7 +88,12 @@ export function createProjectileEmitter({ scene, BABYLON, bullets, scheduleBattl
   };
 
   const create = shot => {
-    if (disposed || (typeof scene.isDisposed === 'function' ? scene.isDisposed() : scene.isDisposed)) return;
+    if (disposed || (typeof scene.isDisposed === 'function' ? scene.isDisposed() : scene.isDisposed)) return false;
+    const limit = Number.isFinite(Number(maxBullets)) ? Math.max(1, Math.trunc(Number(maxBullets))) : Number.POSITIVE_INFINITY;
+    if (bullets.length >= limit) {
+      try { onCapacityClamped?.({ kind: 'player_projectile', limit, count: bullets.length, shot }); } catch (_) {}
+      return false;
+    }
     const { spec, mat, sprite } = visualFor(shot);
     const mesh = sprite
       ? BABYLON.MeshBuilder.CreatePlane(`player-shot-${++serial}`, { width: spec.width, height: spec.length }, scene)
@@ -111,12 +121,32 @@ export function createProjectileEmitter({ scene, BABYLON, bullets, scheduleBattl
     mesh._projectileType = shot.projectileType;
     mesh._kind = shot.kind;
     bullets.push(mesh);
+    return true;
   };
   const fire = shots => {
+    let accepted = 0;
+    const pendingLimit = Number.isFinite(Number(maxPendingShots))
+      ? Math.max(0, Math.trunc(Number(maxPendingShots)))
+      : Number.POSITIVE_INFINITY;
     for (const shot of shots) {
-      if (shot.delayMs > 0) scheduleBattleTimer(() => create(shot), shot.delayMs);
-      else create(shot);
+      if (shot.delayMs > 0) {
+        if (pendingShots >= pendingLimit) {
+          try { onCapacityClamped?.({ kind: 'player_pending_projectile', limit: pendingLimit, count: pendingShots, shot }); } catch (_) {}
+          continue;
+        }
+        pendingShots++;
+        const timer = scheduleBattleTimer(() => {
+          pendingShots = Math.max(0, pendingShots - 1);
+          create(shot);
+        }, shot.delayMs);
+        if (timer == null) {
+          pendingShots = Math.max(0, pendingShots - 1);
+          continue;
+        }
+        accepted++;
+      } else if (create(shot)) accepted++;
     }
+    return accepted;
   };
   const advance = (bullet, frameFactor) => {
     advancePlayerProjectile(bullet, frameFactor);
@@ -127,6 +157,7 @@ export function createProjectileEmitter({ scene, BABYLON, bullets, scheduleBattl
   const dispose = () => {
     if (disposed) return;
     disposed = true;
+    pendingShots = 0;
     for (const { mat, texture } of appearances.values()) {
       mat.dispose();
       texture?.dispose();
@@ -134,5 +165,5 @@ export function createProjectileEmitter({ scene, BABYLON, bullets, scheduleBattl
     appearances.clear();
   };
   scene.onDisposeObservable.addOnce(dispose);
-  return { fire, advance, registerHit, dispose };
+  return { fire, advance, registerHit, pendingCount: () => pendingShots, dispose };
 }
