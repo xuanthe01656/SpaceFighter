@@ -17,6 +17,7 @@ import { createShipInputController } from '../../game/combat/ShipInputController
 import { describeMainSalvo, describeWingSalvo, describeDroneSalvo, pickWeaponTarget, enemySpeedFactor, shieldDamageFactor, repairAmount, projectileHitsPoint } from '../../game/combat/PlayerWeapons';
 import { createProjectileEmitter } from '../../game/combat/ProjectileEmitter';
 import { createPlayerDamageGateV25, createPlayerDamageOutcomeV25 } from '../../game/combat/PlayerDamagePipelineV25.js';
+import { resolveEnemyGameplayYawV26A4 } from '../../game/assets/EnemyVisualHeadingV26A4.js';
 import { resolveBattleBackground, legacyBattleBackgroundRequested, previewBg4Variant } from '../../game/catalog/BackgroundCatalog';
 import { createScrollingBattleBackground } from '../../game/rendering/ScrollingBackgroundRenderer';
 import { attachBattleBackgroundProfiler } from '../../game/rendering/BattleBackgroundProfiler.js';
@@ -613,7 +614,6 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         switch (type) {
             case 'heavy': {
                 mesh = BABYLON.MeshBuilder.CreateBox('eH', { width: 2.8, depth: 2.8, height: 0.7 }, scene);
-                mesh.rotation.y = Math.PI / 8;
                 const hCore = BABYLON.MeshBuilder.CreateSphere('eH_core', { diameter: 1.0 }, scene);
                 hCore.parent   = mesh; hCore.position.y = 0.35; hCore.material = makeMat(scene, new BABYLON.Color3(1, 0.55, 0.25), false);
                 const hWing = BABYLON.MeshBuilder.CreateBox('eH_w', { width: 3.6, depth: 0.4, height: 0.28 }, scene);
@@ -638,7 +638,9 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
         mesh.position.set((Math.random() - 0.5) * boundX() * 1.6, 0.2, -ZOOM - 2);
         mesh.material   = MAT[type];
-        mesh.rotation.y += Math.random() * Math.PI * 2;
+        // The shared sprite/GLB adapter converts source -Z art into a +Z-forward
+        // gameplay root, matching Campaign and the upcoming shared motion core.
+        mesh.rotation.y = 0;
         const visual = attachBattleEntityVisual(scene, BABYLON, mesh, 'dungeon_enemy', `${dungeonId}_${type}`);
 
         const hpMult  = type === 'heavy' ? 3.0 : type === 'elite' ? 2.0 : 1.0;
@@ -674,6 +676,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             miniHp,
             miniHpBg,
             _contactHitId: `dungeon-enemy-contact-${mesh.uniqueId}`,
+            _facingYaw: 0,
         });
     };
 
@@ -1029,9 +1032,17 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             e.visual?.tick(frameFactor * (1000 / 60));
             e.visual?.setState('move');
             const enemyFrame = frameFactor * enemySpeedFactor(e, now);
+            const beforeX = e.mesh.position.x;
+            const beforeZ = e.mesh.position.z;
             e.mesh.position.z += e.speed * enemyFrame;
             e.mesh.position.x += Math.sin(tick * 0.025 + e.sineOff) * 0.05 * enemyFrame;
-            e.mesh.rotation.y += 0.025 * frameFactor;
+            e._facingYaw = resolveEnemyGameplayYawV26A4({
+                currentYaw: e._facingYaw,
+                velocityX: e.mesh.position.x - beforeX,
+                velocityZ: e.mesh.position.z - beforeZ,
+                maxTurnRadians: 7 * Math.max(0, Math.min(100, engine.getDeltaTime())) / 1000,
+            });
+            e.mesh.rotation.y = e._facingYaw;
 
             if (e.type !== 'scout' && now - e.lastShoot > e.shootMs) {
                 fireEnemyBullet(e.mesh.position, 0, enemyBulletVelZ);

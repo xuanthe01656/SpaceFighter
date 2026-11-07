@@ -1,3 +1,5 @@
+import { ENEMY_SOURCE_TO_ROOT_YAW_V26A4 } from './EnemyVisualHeadingV26A4.js';
+
 /**
  * Graphics 2.1.8-B2.2 GLB delivery contract.
  * Official artists should align the nose to -Z and use glTF 2.0 GLB; the
@@ -25,7 +27,9 @@ export const MODEL_VISUAL_OVERRIDES = Object.freeze({});
 export function createEnemyBossModelContract(kind, id, size) {
   const overrides = MODEL_VISUAL_OVERRIDES[`${kind}:${id}`] || {};
   const position = overrides.position || { x: 0, y: 0.18, z: 0 };
-  const rotation = overrides.rotation || { x: 0, y: 0, z: 0 };
+  // Reviewed GLBs remain authored nose -Z. Convert them once into the shared
+  // +Z-forward gameplay-root contract used by sprite/atlas presentation.
+  const rotation = overrides.rotation || { x: 0, y: ENEMY_SOURCE_TO_ROOT_YAW_V26A4, z: 0 };
   const clips = Object.freeze(Object.fromEntries(Object.entries(BATTLE_GLB_CLIPS)
     .map(([state, names]) => [state, Object.freeze([...(overrides.clips?.[state] || names)])])));
   return Object.freeze({

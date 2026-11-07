@@ -9,6 +9,7 @@ import {
   BATTLE_ANIMATION_GRID, validateBattleAtlasContract, battleAtlasUV, createBattleVisualAnimator,
 } from '../src/game/assets/EnemyBossAnimationCatalog.js';
 import { attachBattleEntityVisual } from '../src/game/rendering/BattleEntityVisual.js';
+import { ENEMY_SOURCE_TO_ROOT_YAW_V26A4 } from '../src/game/assets/EnemyVisualHeadingV26A4.js';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function mockBabylon() {
@@ -112,6 +113,8 @@ test('atlas sprite replaces visuals only and changes UVs per actor, never shared
   assert.equal(m.textures.size,1);
   assert.ok(m.textures.has(profile.atlasSrc));
   assert.equal(m.meshes[0].options.updatable,true);
+  assert.equal(m.meshes[0].rotation.z,ENEMY_SOURCE_TO_ROOT_YAW_V26A4,
+    'source -Z atlas must be converted once into the +Z-forward gameplay root');
   assert.equal(m.rootMesh.visibility,1);
   m.textures.get(profile.atlasSrc).onReady();
   assert.equal(ctrl.mode,'atlas');

@@ -8,9 +8,14 @@ import {
   createCampaignRuntimeMonitorV26A3,
   createCampaignRuntimeSnapshotV26A3,
   createChargerMotionStateV26A3,
-  resolveEnemyFacingYawV26A3,
   stepChargerMotionV26A3,
 } from '../src/game/combat/CampaignRuntimeReliabilityV26A3.js';
+import {
+  ENEMY_GAMEPLAY_FORWARD_AXIS_V26A4,
+  ENEMY_SOURCE_NOSE_AXIS_V26A4,
+  ENEMY_SOURCE_TO_ROOT_YAW_V26A4,
+  resolveEnemyGameplayYawV26A4,
+} from '../src/game/assets/EnemyVisualHeadingV26A4.js';
 import { createProjectileEmitter } from '../src/game/combat/ProjectileEmitter.js';
 
 const near = (actual, expected, epsilon = 1e-6) => {
@@ -93,14 +98,17 @@ test('projectile emitter bounds delayed burst work as well as live projectile me
   assert.deepEqual(clamps, ['player_pending_projectile', 'player_projectile']);
 });
 
-test('enemy facing follows nose-negative-z velocity and takes the shortest bounded turn', () => {
-  near(resolveEnemyFacingYawV26A3({ currentYaw: 0, velocityX: 0, velocityZ: -1 }), 0);
-  near(Math.abs(resolveEnemyFacingYawV26A3({ currentYaw: 0, velocityX: 0, velocityZ: 1 })), Math.PI);
-  near(resolveEnemyFacingYawV26A3({ currentYaw: 0, velocityX: 1, velocityZ: 0 }), -Math.PI / 2);
-  const bounded = resolveEnemyFacingYawV26A3({
+test('enemy root uses +Z-forward while source art remains -Z and turns by shortest bounded yaw', () => {
+  assert.equal(ENEMY_SOURCE_NOSE_AXIS_V26A4, '-Z');
+  assert.equal(ENEMY_GAMEPLAY_FORWARD_AXIS_V26A4, '+Z');
+  near(ENEMY_SOURCE_TO_ROOT_YAW_V26A4, Math.PI);
+  near(resolveEnemyGameplayYawV26A4({ currentYaw: 0, velocityX: 0, velocityZ: 1 }), 0);
+  near(Math.abs(resolveEnemyGameplayYawV26A4({ currentYaw: 0, velocityX: 0, velocityZ: -1 })), Math.PI);
+  near(resolveEnemyGameplayYawV26A4({ currentYaw: 0, velocityX: 1, velocityZ: 0 }), Math.PI / 2);
+  const bounded = resolveEnemyGameplayYawV26A4({
     currentYaw: Math.PI - .05,
-    velocityX: -.1,
-    velocityZ: 1,
+    velocityX: .1,
+    velocityZ: -1,
     maxTurnRadians: .1,
   });
   assert.ok(Math.abs(bounded) <= Math.PI);
@@ -147,6 +155,7 @@ test('boss intro has one warning, one hidden reveal and one fight transition', (
 test('Campaign wires fail-closed runtime health, bounded entities, facing and clean boss intro', () => {
   const engine = fs.readFileSync(new URL('../src/components/Campaign/CampaignEngine.jsx', import.meta.url), 'utf8');
   const scene = fs.readFileSync(new URL('../src/components/Campaign/CampaignScene.js', import.meta.url), 'utf8');
+  const dungeon = fs.readFileSync(new URL('../src/components/Dungeon/DungeonScene.js', import.meta.url), 'utf8');
   const emitter = fs.readFileSync(new URL('../src/game/combat/ProjectileEmitter.js', import.meta.url), 'utf8');
 
   assert.match(engine, /createCampaignRuntimeMonitorV26A3/);
@@ -160,7 +169,12 @@ test('Campaign wires fail-closed runtime health, bounded entities, facing and cl
   assert.match(scene, /createCampaignRuntimeSnapshotV26A3/);
   assert.match(scene, /maxActiveEnemies/);
   assert.match(scene, /maxEnemyProjectiles/);
-  assert.match(scene, /resolveEnemyFacingYawV26A3/);
+  assert.match(scene, /resolveEnemyGameplayYawV26A4/);
+  assert.match(scene, /_facingYaw: 0/);
+  assert.doesNotMatch(scene, /_facingYaw: Math\.PI/);
+  assert.match(dungeon, /resolveEnemyGameplayYawV26A4/);
+  assert.match(dungeon, /velocityZ: e\.mesh\.position\.z - beforeZ/);
+  assert.doesNotMatch(dungeon, /e\.mesh\.rotation\.y \+= 0\.025/);
   assert.match(scene, /stepChargerMotionV26A3/);
   assert.match(scene, /charge_telegraph_/);
   assert.match(scene, /bossMesh\.setEnabled\(false\)/);

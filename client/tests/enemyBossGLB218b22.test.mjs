@@ -93,6 +93,8 @@ test('GLB contract resolves exactly the per-ID file; no world or combat schema c
   const p = profile();
   assert.equal(p.modelSrc, '/models/visuals/enemy/p1_small.glb');
   assert.equal(p.visual.model.noseAxis, '-Z');
+  assert.equal(p.visual.model.rotation.y, Math.PI,
+    'source -Z GLB must use the same +Z-forward gameplay-root conversion as atlas art');
   assert.equal(p.visual.model.targetSize, p.visual.size);
   assert.equal(Object.keys(p.visual.model.clips).length, 7);
   assert.equal(shouldLoadBattleGLB(p, {mobile:false}), true);

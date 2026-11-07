@@ -9,6 +9,7 @@
 import { resolveAssetVisual } from '../assets/AssetRegistry.js';
 import { battleAtlasUV, createBattleVisualAnimator } from '../assets/EnemyBossAnimationCatalog.js';
 import { createBattleGLBVisual } from './BattleGLBVisual.js';
+import { ENEMY_SOURCE_TO_ROOT_YAW_V26A4 } from '../assets/EnemyVisualHeadingV26A4.js';
 
 const sceneCaches = new WeakMap();
 const sceneDisposed = scene => typeof scene.isDisposed === 'function'
@@ -118,7 +119,7 @@ export function attachBattleEntityVisual(scene, BABYLON, root, kind, id, options
     plane.parent = root;
     plane.position.y = 0.18;
     plane.rotation.x = Math.PI / 2;
-    plane.rotation.z = Math.PI;
+    plane.rotation.z = ENEMY_SOURCE_TO_ROOT_YAW_V26A4;
     plane.isVisible = false;
     plane.isPickable = false;
     plane.metadata = { visualOnly: true, assetId: profile.assetId };

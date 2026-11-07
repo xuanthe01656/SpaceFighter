@@ -29,9 +29,9 @@ import {
   createBossIntroPlanV26A3,
   createCampaignRuntimeSnapshotV26A3,
   createChargerMotionStateV26A3,
-  resolveEnemyFacingYawV26A3,
   stepChargerMotionV26A3,
 } from '../../game/combat/CampaignRuntimeReliabilityV26A3.js';
+import { resolveEnemyGameplayYawV26A4 } from '../../game/assets/EnemyVisualHeadingV26A4.js';
 import { createGuestAbilityRuntimeV2 } from '../../game/combat/GuestAbilityRuntimeV2.js';
 import { deriveGuestAbilityActivationGateV2 } from '../../game/combat/GuestAbilityActivationGateV2.js';
 import { resolveGuestCombatQaRuntimeFromViteEnv } from '../../game/combat/GuestCombatQaBuildGateV2.js';
@@ -826,7 +826,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
 
   const updateEnemyFacing = (enemy, velocityX, velocityZ, deltaMs) => {
     if (!enemy?.mesh || enemy.mesh.isDisposed?.()) return;
-    enemy._facingYaw = resolveEnemyFacingYawV26A3({
+    enemy._facingYaw = resolveEnemyGameplayYawV26A4({
       currentYaw: enemy._facingYaw,
       velocityX,
       velocityZ,
@@ -900,9 +900,10 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     // asset manifest; no asset load may replace this root mid-battle.
     const mesh = buildFallbackEnemy(tier);
     mesh.position.set(spawnX, .2, spawnZ);
-    // Every enemy asset uses nose-negative-z. Entry movement is screen-down,
-    // so the visual starts facing PI before its first simulation frame.
-    mesh.rotation.y = Math.PI;
+    // Source art is authored nose -Z, while BattleEntityVisual converts the
+    // gameplay root to +Z-forward. Entry movement is screen-down (+Z), so yaw 0
+    // is the canonical initial heading.
+    mesh.rotation.y = 0;
     const visualProfile=createReadableFastEnemyProfileV26A2(
       resolveAssetVisual('enemy',cfg.id),{tier});
     const visual = attachBattleEntityVisual(scene, BABYLON, mesh, 'enemy', cfg.id,
@@ -949,7 +950,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       points: pts, miniHpBg, miniHp, entryHalo, _dead: false,
       _entryState:enemyEntryPolicy.createState({tier}),
       _contactHitId: `campaign-enemy-contact-${mesh.uniqueId}`,
-      _facingYaw: Math.PI,
+      _facingYaw: 0,
       _chargerState: tier === 4 ? createChargerMotionStateV26A3({ nowMs: Date.now() }) : null,
       _chargeTelegraph: null,
     });

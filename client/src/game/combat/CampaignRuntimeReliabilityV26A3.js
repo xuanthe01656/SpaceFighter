@@ -1,3 +1,5 @@
+import { resolveEnemyGameplayYawV26A4 } from '../assets/EnemyVisualHeadingV26A4.js';
+
 /**
  * Campaign V2.6A.3 runtime reliability and combat-readability policies.
  *
@@ -46,24 +48,11 @@ export function normalizeAngleV26A3(angle) {
 }
 
 /**
- * All enemy visual assets use nose-negative-z. Yaw 0 therefore faces screen-up
- * and yaw PI faces screen-down. Rotation is bounded so homing enemies turn
- * smoothly instead of snapping or spinning around their own axis.
+ * Backward-compatible V2.6A.3 export. V2.6A.4 corrected the presentation
+ * contract: source art is -Z, but the shared adapter converts gameplay roots
+ * to +Z-forward. New scene code imports resolveEnemyGameplayYawV26A4 directly.
  */
-export function resolveEnemyFacingYawV26A3({
-  currentYaw = 0,
-  velocityX = 0,
-  velocityZ = 0,
-  maxTurnRadians = Math.PI,
-} = {}) {
-  const vx = finite(velocityX, 0);
-  const vz = finite(velocityZ, 0);
-  if (Math.hypot(vx, vz) < 0.00001) return normalizeAngleV26A3(currentYaw);
-  const targetYaw = Math.atan2(-vx, -vz);
-  const delta = normalizeAngleV26A3(targetYaw - finite(currentYaw, 0));
-  const step = clamp(Math.abs(finite(maxTurnRadians, Math.PI)), 0, Math.PI * 2);
-  return normalizeAngleV26A3(finite(currentYaw, 0) + clamp(delta, -step, step));
-}
+export const resolveEnemyFacingYawV26A3 = resolveEnemyGameplayYawV26A4;
 
 const directionTo = (fromX, fromZ, toX, toZ) => {
   const dx = finite(toX, 0) - finite(fromX, 0);
