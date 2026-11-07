@@ -25,6 +25,10 @@ import { deriveGuestAbilityActivationGateV2 } from '../../game/combat/GuestAbili
 import { resolveGuestCombatQaRuntimeFromViteEnv } from '../../game/combat/GuestCombatQaBuildGateV2.js';
 import { resolveGuestCombatQaLoadoutV2 } from '../../game/combat/GuestCombatQaLoadoutV2.js';
 import {
+  createGuestBattleQaResultV26A,
+  resolveGuestBattleQaSelectionV26A,
+} from '../../game/combat/GuestBattleQaNavigationV26A.js';
+import {
   createGuestAbilityActivationFeedbackV2,
   createGuestAbilityRejectedFeedbackV2,
   createGuestArmorProcFeedbackV2,
@@ -125,13 +129,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   // 1. TÍNH CHỈ SỐ RPG (KHỚP 100% VỚI PHASER VÀ DUNGEON)
   // ══════════════════════════════════════════════════════════════════════════
 
-  const { items, loadout, progress } = gsRef.current.campaignData;
-  const currentPlanetId = Number(progress.currentPlanet) || 1;
-  const planetConfig    = PLANET_CONFIG[currentPlanetId] || PLANET_CONFIG[1];
-  const currentStage    = Number(progress.selectedStage)
-    || (progress.planets?.[currentPlanetId]?.highestStage ?? 1);
-  const isReplay        = currentStage < (progress.planets?.[currentPlanetId]?.highestStage ?? 1);
-  const stageConfig     = STAGE_CONFIG[currentStage] || STAGE_CONFIG[1];
+  const campaignData = gsRef.current.campaignData;
+  const { items, loadout, progress } = campaignData;
 
   // One ruleset for HQ, Campaign and Dungeon: catalog fire rates are mixed
   // (main gun = seconds, wing/drone = milliseconds). See combatStats.js.
@@ -141,6 +140,19 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   });
   const requestedQa=guestAbilityQa
     ?new URLSearchParams(globalThis.location?.search||''):null;
+  const qaBattleSelection=guestAbilityQa?resolveGuestBattleQaSelectionV26A(
+    globalThis.location?.search||'',{
+      fallbackPlanetId:Number(progress.currentPlanet)||1,
+      fallbackStageId:Number(progress.selectedStage)
+        ||(progress.planets?.[Number(progress.currentPlanet)||1]?.highestStage??1),
+    }):null;
+  const currentPlanetId = qaBattleSelection?.planetId ?? (Number(progress.currentPlanet) || 1);
+  const planetConfig    = PLANET_CONFIG[currentPlanetId] || PLANET_CONFIG[1];
+  const currentStage    = qaBattleSelection?.stageId ?? (Number(progress.selectedStage)
+    || (progress.planets?.[currentPlanetId]?.highestStage ?? 1));
+  const isReplay        = guestAbilityQa ? false
+    : currentStage < (progress.planets?.[currentPlanetId]?.highestStage ?? 1);
+  const stageConfig     = STAGE_CONFIG[currentStage] || STAGE_CONFIG[1];
   const mobileQaLoadout=guestAbilityQa&&import.meta.env.VITE_SF_GUEST_COMBAT_V2_QA==='true'
     ?resolveGuestCombatQaLoadoutV2(globalThis.location?.search||''):null;
   const requestedShip=requestedQa?.get('sfGuestShip')||mobileQaLoadout?.shipId;
@@ -149,12 +161,13 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   const previewShip=AIRCRAFTS.some(a=>a.id===requestedShip)?requestedShip:null;
   const previewArmor=GEAR_CATALOG.armor.some(a=>a.id===requestedArmor)?requestedArmor:null;
   const previewArmorKey='__sf_guest_lab_armor__';
-  const qaBattleData=(previewShip||previewArmor)
-    ?{...gsRef.current.campaignData,
+  const qaBattleData=(guestAbilityQa||previewShip||previewArmor)
+    ?{...campaignData,
+      progress:{...progress,currentPlanet:currentPlanetId,selectedStage:currentStage},
       loadout:{...loadout,...(previewShip?{aircraft:previewShip}:{}),
         ...(previewArmor?{armor:previewArmorKey}:{})},
       ...(previewArmor?{items:{...items,[previewArmorKey]:{baseId:previewArmor,level:1,rarity:1}}}:{})}
-    :gsRef.current.campaignData;
+    :campaignData;
   const combat = deriveBattleLoadout(qaBattleData, { PILOTS, AIRCRAFTS, GEAR_CATALOG },
     { mode: 'campaign', location: planetConfig,
       armorPassivePolicy:guestAbilityQa?'none':'legacy',
@@ -884,6 +897,24 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   let lastPlayerDamageFxAt = -Infinity;
   const PLAYER_DAMAGE_FX_COOLDOWN_MS = 120;
   let tick          = 0;
+  let qaResultPublished = false;
+
+  const publishGuestBattleQaResult = outcome => {
+    if (!guestAbilityQa || qaResultPublished) return false;
+    qaResultPublished = true;
+    data.onQaResult?.(createGuestBattleQaResultV26A({
+      outcome,
+      planetId: currentPlanetId,
+      stageId: currentStage,
+      isBoss: Boolean(stageConfig.hasBoss),
+      kills: verifiedClientKills,
+      score,
+      hp: stats.hp,
+      maxHp: stats.maxHp,
+      durationMs: Date.now() - startTime,
+    }));
+    return true;
+  };
 
   const getGuestAbilityActivationGate=()=>deriveGuestAbilityActivationGateV2({gameState,gameOver});
   const getGuestAbilityHudSnapshot=()=>{
@@ -1040,14 +1071,15 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       engineFx.stop(); playerRoot.isVisible = false;
       explode(playerRoot.position, 4);
       showAnnouncement(lang==='vi'?'THẤT BẠI!':'MISSION FAILED!', '#ff0000', 3000);
-      scheduleBattleTimer(async () => {
+      if (guestAbilityQa) {
+        scheduleBattleTimer(() => publishGuestBattleQaResult('defeat'), 1400);
+      } else scheduleBattleTimer(async () => {
         if (isCloud) {
           try {
             await gameAction('battle.finish',{ticketId:gsRef.current.activeBattleId,victory:false,kills:verifiedClientKills});
             onDefeat();
           } catch(error) {console.error('Battle settlement failed',error);showAnnouncement(lang==='vi'?'LỖI MÁY CHỦ - HÃY RÚT LUI':'SERVER ERROR - PLEASE RETREAT', '#ff4757');}
         } else {
-          if(guestAbilityQa){onDefeat();return;} // No local QA rewards or progress writes.
           const coinMult = activeCoinMultiplier(EVENT_CONFIG, getRealTime?.() || Date.now());
           gsRef.current.coins = (Number(gsRef.current.coins)||0) + score + (collectedCoins * coinMult);
           recordGuestBattle(gsRef.current.campaignData,{mode:"campaign",victory:false,kills:verifiedClientKills}, getRealTime?.() ?? Date.now());
@@ -1067,8 +1099,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     setGameState('CLEAR'); guestVisualFeedback?.dispose(); engineFx.stop();
     showAnnouncement(lang==='vi'?'HOÀN THÀNH\nCHIẾN DỊCH!':'CAMPAIGN\nCLEARED!', '#2ecc71', 2000);
     if(guestAbilityQa){
-      showAnnouncement(lang==='vi'?'GUEST LAB · KHÔNG LƯU THƯỞNG':'GUEST LAB · NO REWARDS','#57e6ed',2100);
-      scheduleBattleTimer(()=>onVictory(),2600);
+      showAnnouncement(lang==='vi'?'GUEST LAB · KHÔNG LƯU THƯỞNG':'GUEST LAB · NO REWARDS','#57e6ed',1400);
+      scheduleBattleTimer(()=>publishGuestBattleQaResult('victory'),1000);
       return;
     }
     scheduleBattleTimer(() => showRewardSummary(), 2600);

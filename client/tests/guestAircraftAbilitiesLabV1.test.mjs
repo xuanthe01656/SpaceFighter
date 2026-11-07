@@ -90,7 +90,10 @@ test('QA source wiring uses the explicit Guest-only browser/mobile build gate wi
  assert.match(gate,/staging-qa/);
  assert.match(gate,/authenticated \|\| cloudBattle/);
  assert.doesNotMatch(scene,/GAME_C15_RC1B_HMAC_KEY_B64/);
- assert.match(scene,/if\(guestAbilityQa\)\{onDefeat\(\);return;\}/);
- assert.match(scene,/if\(guestAbilityQa\)\{[\s\S]*?scheduleBattleTimer\(\(\)=>onVictory\(\),2600\);/);
+ assert.match(scene,/createGuestBattleQaResultV26A/);
+ assert.match(scene,/if \(guestAbilityQa\) \{[\s\S]*?publishGuestBattleQaResult\('defeat'\)/);
+ assert.match(scene,/if\(guestAbilityQa\)\{[\s\S]{0,400}?publishGuestBattleQaResult\('victory'\)[\s\S]{0,120}?return;/);
+ assert.doesNotMatch(scene,/if\(guestAbilityQa\)\{onDefeat\(\);return;\}/);
+ assert.doesNotMatch(scene,/scheduleBattleTimer\(\(\)=>onVictory\(\),2600\)/);
  assert.match(scene,/__sf_guest_lab_armor__/);
 });

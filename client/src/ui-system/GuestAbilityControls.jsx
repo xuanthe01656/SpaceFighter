@@ -195,45 +195,99 @@ function ArmorPassive({ armor, lang, currentTick }) {
   </div>;
 }
 
-function MobileQaLoadoutSwitcher({ activationGate, onQaCycle, lang }) {
+function MobileQaLoadoutSwitcher({ activationGate, qaSelection, onQaCycle, onQaNavigate, lang }) {
   const enabled = import.meta.env.VITE_SF_GUEST_COMBAT_V2_QA === 'true'
     && typeof window !== 'undefined'
-    && typeof onQaCycle === 'function';
+    && (typeof onQaCycle === 'function' || typeof onQaNavigate === 'function');
   if (!enabled) return null;
   const current = resolveGuestCombatQaLoadoutV2(window.location.search);
   const shipIndex = GUEST_COMBAT_QA_SHIP_IDS.indexOf(current.shipId) + 1;
   const armorIndex = GUEST_COMBAT_QA_ARMOR_IDS.indexOf(current.armorId) + 1;
-  const cycleOnPointerDown = (event, kind) => {
+  const activate = (event, callback, value) => {
     event.stopPropagation();
     if (event.cancelable) event.preventDefault();
     if (event.pointerType === 'mouse' && event.button !== 0) return;
-    onQaCycle(kind);
+    callback?.(value);
   };
-  const cycleOnAccessibleClick = (event, kind) => {
+  const accessible = (event, callback, value) => {
     event.stopPropagation();
-    if (event.detail === 0) onQaCycle(kind);
+    if (event.detail === 0) callback?.(value);
   };
+  const button = (key, label, title, callback, value) => <button key={key} type="button"
+    onPointerDown={event => activate(event, callback, value)}
+    onPointerUp={event => event.stopPropagation()}
+    onPointerCancel={event => event.stopPropagation()}
+    onClick={event => accessible(event, callback, value)}
+    title={title}>{label}</button>;
   return <div
     className={styles.qaSwitcher}
-    aria-label={lang === 'vi' ? 'Đổi loadout QA' : 'Change QA loadout'}
+    aria-label={lang === 'vi' ? 'Điều hướng và loadout QA' : 'QA navigation and loadout'}
     data-qa-battle-phase={activationGate?.battlePhase || 'UNKNOWN'}
+    data-qa-navigation-version="v2.6a"
   >
-    <button type="button"
-      onPointerDown={event => cycleOnPointerDown(event, 'ship')}
-      onPointerUp={event => event.stopPropagation()}
-      onPointerCancel={event => event.stopPropagation()}
-      onClick={event => cycleOnAccessibleClick(event, 'ship')}
-      title={current.shipId}>{`S ${shipIndex}/${GUEST_COMBAT_QA_SHIP_IDS.length}`}</button>
-    <button type="button"
-      onPointerDown={event => cycleOnPointerDown(event, 'armor')}
-      onPointerUp={event => event.stopPropagation()}
-      onPointerCancel={event => event.stopPropagation()}
-      onClick={event => cycleOnAccessibleClick(event, 'armor')}
-      title={current.armorId}>{`A ${armorIndex}/${GUEST_COMBAT_QA_ARMOR_IDS.length}`}</button>
+    {qaSelection && button('planet', `P ${qaSelection.planetIndex}/${qaSelection.planetTotal}`,
+      lang === 'vi' ? 'Đổi tinh cầu QA' : 'Change QA planet', onQaNavigate, 'planet')}
+    {qaSelection && button('stage', `T ${qaSelection.stageIndex}/${qaSelection.stageTotal}`,
+      lang === 'vi' ? 'Đổi ải QA' : 'Change QA stage', onQaNavigate, 'stage')}
+    {qaSelection && button('boss', 'B',
+      lang === 'vi' ? 'Nhảy tới ải Boss kế tiếp' : 'Jump to next boss stage', onQaNavigate, 'boss')}
+    {button('ship', `S ${shipIndex}/${GUEST_COMBAT_QA_SHIP_IDS.length}`, current.shipId, onQaCycle, 'ship')}
+    {button('armor', `A ${armorIndex}/${GUEST_COMBAT_QA_ARMOR_IDS.length}`, current.armorId, onQaCycle, 'armor')}
   </div>;
 }
 
-function DebugReadout({ state, feedback, lang }) {
+const formatQaTime = milliseconds => {
+  const totalSeconds = Math.max(0, Math.round(Number(milliseconds || 0) / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  return `${String(minutes).padStart(2, '0')}:${String(totalSeconds % 60).padStart(2, '0')}`;
+};
+
+function GuestBattleQaResult({ result, lang, onAction }) {
+  if (!result) return null;
+  const vi = lang === 'vi';
+  const won = result.outcome === 'victory';
+  const invoke = (event, action) => {
+    event.stopPropagation();
+    if (event.cancelable) event.preventDefault();
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    onAction?.(action);
+  };
+  const accessible = (event, action) => {
+    event.stopPropagation();
+    if (event.detail === 0) onAction?.(action);
+  };
+  const actionButton = (action, label, primary = false) => <button type="button"
+    className={primary ? styles.qaResultPrimary : undefined}
+    onPointerDown={event => invoke(event, action)}
+    onPointerUp={event => event.stopPropagation()}
+    onPointerCancel={event => event.stopPropagation()}
+    onClick={event => accessible(event, action)}>{label}</button>;
+  return <section className={styles.qaResultBackdrop} role="dialog" aria-modal="true"
+    aria-label={vi ? 'Kết quả kiểm thử trận' : 'Battle QA result'}>
+    <div className={styles.qaResultPanel} data-qa-outcome={result.outcome}>
+      <small>{vi ? 'GUEST COMBAT QA · KHÔNG LƯU DỮ LIỆU' : 'GUEST COMBAT QA · NO DATA WRITTEN'}</small>
+      <h2>{won ? (vi ? 'HOÀN THÀNH KIỂM THỬ' : 'QA BATTLE CLEARED')
+        : (vi ? 'KẾT THÚC KIỂM THỬ' : 'QA BATTLE ENDED')}</h2>
+      <strong>{`${vi ? 'TINH CẦU' : 'PLANET'} ${result.planetId} · ${vi ? 'ẢI' : 'STAGE'} ${result.stageId}${result.isBoss ? ' · BOSS' : ''}`}</strong>
+      <div className={styles.qaResultStats}>
+        <span>{vi ? 'Hạ gục' : 'Kills'} <b>{result.kills}</b></span>
+        <span>{vi ? 'Điểm' : 'Score'} <b>{result.score}</b></span>
+        <span>HP <b>{result.hp}/{result.maxHp}</b></span>
+        <span>{vi ? 'Thời gian' : 'Time'} <b>{formatQaTime(result.durationMs)}</b></span>
+      </div>
+      <p>{vi ? 'Không cộng Xu/EXP/sao, không mở ải thật và không gửi trusted outcome.'
+        : 'No coins/EXP/stars, no real unlock and no trusted outcome.'}</p>
+      <div className={styles.qaResultActions}>
+        {actionButton('replay', vi ? 'CHƠI LẠI' : 'REPLAY', true)}
+        {won && actionButton('next', vi ? 'ẢI TIẾP' : 'NEXT STAGE')}
+        {actionButton('boss', vi ? 'BOSS TEST' : 'BOSS TEST')}
+        {actionButton('exit', vi ? 'THOÁT' : 'EXIT')}
+      </div>
+    </div>
+  </section>;
+}
+
+function DebugReadout({ state, feedback, qaSelection, lang }) {
   const enabled = import.meta.env.DEV
     && typeof window !== 'undefined'
     && new URLSearchParams(window.location.search).get('sfAbilityDebug') === '1';
@@ -259,27 +313,42 @@ function DebugReadout({ state, feedback, lang }) {
     <span>{localizeGuestFeedbackV2(armorProfile?.name, lang)} · {feedbackText}</span>
     {gateText && <span>{gateText}</span>}
     {qaForceText && <span>{qaForceText}</span>}
+    {qaSelection && <span>{`QA P${qaSelection.planetId} · T${qaSelection.stageId}${qaSelection.isBoss ? ' · BOSS' : ''}`}</span>}
   </output>;
 }
 
-export default function GuestAbilityControls({ state, feedback = null, onActivate, onQaCycle = null, lang = 'vi' }) {
-  if (!state?.ship) return null;
-  return <aside
-    className={styles.controls}
-    aria-label={lang === 'vi' ? 'Kỹ năng trận Guest' : 'Guest battle skill'}
-    data-feedback-version="guest-ability-feedback-v2.2.0"
-    data-battle-phase={state.activationGate?.battlePhase || 'UNKNOWN'}
-  >
-    <DebugReadout state={state} feedback={feedback} lang={lang} />
-    <ShipAction
-      slot={state.ship}
-      activationGate={state.activationGate}
-      lang={lang}
-      onActivate={onActivate}
-      feedback={feedback}
-      currentTick={state.tick}
-    />
-    <ArmorPassive armor={state.armor} lang={lang} currentTick={state.tick} />
-    <MobileQaLoadoutSwitcher activationGate={state.activationGate} onQaCycle={onQaCycle} lang={lang} />
-  </aside>;
+export default function GuestAbilityControls({
+  state,
+  feedback = null,
+  onActivate,
+  onQaCycle = null,
+  qaSelection = null,
+  onQaNavigate = null,
+  qaResult = null,
+  onQaResultAction = null,
+  lang = 'vi',
+}) {
+  if (!state?.ship && !qaResult) return null;
+  return <>
+    {state?.ship && <aside
+      className={styles.controls}
+      aria-label={lang === 'vi' ? 'Kỹ năng trận Guest' : 'Guest battle skill'}
+      data-feedback-version="guest-ability-feedback-v2.6a"
+      data-battle-phase={state.activationGate?.battlePhase || 'UNKNOWN'}
+    >
+      <DebugReadout state={state} feedback={feedback} qaSelection={qaSelection} lang={lang} />
+      <ShipAction
+        slot={state.ship}
+        activationGate={state.activationGate}
+        lang={lang}
+        onActivate={onActivate}
+        feedback={feedback}
+        currentTick={state.tick}
+      />
+      <ArmorPassive armor={state.armor} lang={lang} currentTick={state.tick} />
+      <MobileQaLoadoutSwitcher activationGate={state.activationGate} qaSelection={qaSelection}
+        onQaCycle={onQaCycle} onQaNavigate={onQaNavigate} lang={lang} />
+    </aside>}
+    <GuestBattleQaResult result={qaResult} lang={lang} onAction={onQaResultAction} />
+  </>;
 }

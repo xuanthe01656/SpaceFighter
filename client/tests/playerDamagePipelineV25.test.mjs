@@ -128,7 +128,8 @@ test('V2.5 leaves Guest reward and Cloud settlement code outside the damage refa
   assert.match(campaign, /\+ score \+ \(collectedCoins \* coinMult\)/);
   assert.match(campaign, /recordGuestBattle\(gsRef\.current\.campaignData,\{mode:"campaign",victory:false,kills:verifiedClientKills\}/);
   assert.match(campaign, /if \(saveUserProfile\) saveUserProfile\(\);/);
-  assert.match(campaign, /if\(guestAbilityQa\)\{onDefeat\(\);return;\}/);
+  assert.match(campaign, /if \(guestAbilityQa\) \{[\s\S]*publishGuestBattleQaResult\('defeat'\)/);
+  assert.match(campaign, /publishGuestBattleQaResult\('victory'\)/);
 });
 
 test('V2.5 default contact timing is explicit and tuneable', () => {

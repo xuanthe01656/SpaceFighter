@@ -50,7 +50,9 @@
   font:8px/1.25 ui-monospace,SFMono-Regular,Consolas,monospace;text-align:left;pointer-events:none;
 }
 .debugReadout b{color:#fff;font-size:9px}.debugReadout span{display:block}
-.qaSwitcher{display:flex;gap:5px;pointer-events:auto}
+.qaSwitcher{
+  width:98px;display:grid;grid-template-columns:repeat(2,minmax(44px,1fr));gap:5px;pointer-events:auto;
+}
 .qaSwitcher button{
   min-width:44px;height:30px;padding:0 6px;border:1px solid rgba(91,229,243,.62);border-radius:4px;
   background:rgba(0,13,23,.94);color:#dffaff;font:700 10px/1 ui-monospace,SFMono-Regular,Consolas,monospace;
@@ -96,4 +98,39 @@
 .lockBadge::before{
   content:"";position:absolute;left:3px;top:-7px;width:6px;height:7px;border:2px solid #d8edf3;
   border-bottom:0;border-radius:7px 7px 0 0;box-sizing:border-box;
+}
+
+/* V2.6A Guest-only result surface. It replaces reward/progression writes with
+   deterministic QA navigation while keeping the live battle scene mounted. */
+.qaResultBackdrop{
+  position:fixed;inset:0;z-index:95;display:grid;place-items:center;padding:16px;
+  background:radial-gradient(circle at 50% 42%,rgba(16,76,96,.24),rgba(0,5,12,.86) 58%,rgba(0,2,7,.96));
+  pointer-events:auto;touch-action:none;font-family:Rajdhani,system-ui,sans-serif;color:#eaffff;
+}
+.qaResultPanel{
+  width:min(390px,calc(100vw - 28px));padding:18px 16px 16px;border:1px solid rgba(91,229,243,.72);
+  background:linear-gradient(155deg,rgba(5,30,43,.98),rgba(1,10,18,.99) 72%);text-align:center;
+  clip-path:polygon(8% 0,92% 0,100% 10%,100% 90%,92% 100%,8% 100%,0 90%,0 10%);
+  box-shadow:0 0 28px rgba(51,208,233,.22),inset 0 0 24px rgba(30,121,148,.14);
+}
+.qaResultPanel[data-qa-outcome="defeat"]{border-color:rgba(255,101,101,.72);box-shadow:0 0 28px rgba(255,71,87,.16)}
+.qaResultPanel small{display:block;color:#7fdfe9;font:700 10px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.08em}
+.qaResultPanel h2{margin:8px 0 4px;font-size:23px;line-height:1.05;color:#fff;text-shadow:0 0 12px rgba(91,229,243,.5)}
+.qaResultPanel>strong{display:block;color:#ffd56a;font-size:15px;letter-spacing:.04em}
+.qaResultStats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:14px 0 10px}
+.qaResultStats span{padding:7px 5px;border:1px solid rgba(102,189,210,.24);background:rgba(0,12,21,.76);font-size:11px;color:#9fc8d2}
+.qaResultStats b{display:block;margin-top:2px;color:#fff;font-size:15px;font-variant-numeric:tabular-nums}
+.qaResultPanel p{margin:0 auto 12px;max-width:330px;color:#8fb1bc;font-size:11px;line-height:1.35}
+.qaResultActions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.qaResultActions button{
+  min-height:40px;border:1px solid rgba(91,229,243,.55);border-radius:5px;background:rgba(3,25,36,.94);
+  color:#dffaff;font:800 12px/1 Rajdhani,system-ui,sans-serif;letter-spacing:.04em;touch-action:none;
+  -webkit-tap-highlight-color:transparent;
+}
+.qaResultActions button:active{transform:scale(.96);filter:brightness(1.25)}
+.qaResultPrimary{background:linear-gradient(135deg,#17a7c0,#3dd4d9)!important;color:#00131a!important;border-color:#a5fbff!important}
+@media(max-width:360px){.qaSwitcher{width:92px}.qaResultPanel{padding:15px 13px}.qaResultPanel h2{font-size:20px}}
+@media(orientation:landscape) and (max-height:560px){
+  .qaResultPanel{width:min(520px,calc(100vw - 32px));padding:12px 16px}
+  .qaResultStats{grid-template-columns:repeat(4,minmax(0,1fr));margin:9px 0}.qaResultPanel p{margin-bottom:8px}
 }

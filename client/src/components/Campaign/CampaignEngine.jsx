@@ -10,6 +10,11 @@ import BattleHud from '../../ui-system/BattleHud.jsx';
 import GuestAbilityControls from '../../ui-system/GuestAbilityControls.jsx';
 import { resolveGuestCombatQaRuntimeFromViteEnv } from '../../game/combat/GuestCombatQaBuildGateV2.js';
 import { cycleGuestCombatQaLoadoutV2 } from '../../game/combat/GuestCombatQaLoadoutV2.js';
+import {
+  cycleGuestBattleQaSelectionV26A,
+  resolveGuestBattleQaResultActionV26A,
+  resolveGuestBattleQaSelectionV26A,
+} from '../../game/combat/GuestBattleQaNavigationV26A.js';
 
 export default function CampaignEngine(props) {
   const data=props.gsRef?.current?.campaignData;
@@ -51,13 +56,44 @@ function LegacyCampaignEngine({ gsRef, setScreen, lang, saveUserProfile, getReal
   const abilityActionRef=useRef(null);
   const [abilityHud,setAbilityHud]=React.useState(null);
   const [abilityFeedback,setAbilityFeedback]=React.useState(null);
-  const [qaLoadoutRevision,setQaLoadoutRevision]=React.useState(0);
-  const cycleQaLoadout=React.useCallback(kind=>{
-    if(import.meta.env.VITE_SF_GUEST_COMBAT_V2_QA!=='true'||typeof window==='undefined')return;
-    const next=cycleGuestCombatQaLoadoutV2(window.location.search,kind);
-    window.history.replaceState(null,'',`${window.location.pathname}${next.search}${window.location.hash}`);
-    setQaLoadoutRevision(value=>value+1);
+  const [qaBattleRevision,setQaBattleRevision]=React.useState(0);
+  const [qaResult,setQaResult]=React.useState(null);
+  const getQaFallback=React.useCallback(()=>{
+    const progress=gsRef.current?.campaignData?.progress||{};
+    const planetId=Number(progress.currentPlanet)||1;
+    return {
+      fallbackPlanetId:planetId,
+      fallbackStageId:Number(progress.selectedStage)
+        ||Number(progress.planets?.[planetId]?.highestStage)||1,
+    };
+  },[gsRef]);
+  const restartQaBattle=React.useCallback(nextSearch=>{
+    if(typeof window==='undefined')return;
+    window.history.replaceState(null,'',`${window.location.pathname}${nextSearch}${window.location.hash}`);
+    setQaResult(null);
+    setAbilityHud(null);
+    setAbilityFeedback(null);
+    setQaBattleRevision(value=>value+1);
   },[]);
+  const cycleQaLoadout=React.useCallback(kind=>{
+    if(!guestAbilityQa||typeof window==='undefined')return;
+    const next=cycleGuestCombatQaLoadoutV2(window.location.search,kind);
+    restartQaBattle(next.search);
+  },[guestAbilityQa,restartQaBattle]);
+  const cycleQaBattle=React.useCallback(action=>{
+    if(!guestAbilityQa||typeof window==='undefined')return;
+    const next=cycleGuestBattleQaSelectionV26A(window.location.search,action,getQaFallback());
+    restartQaBattle(next.search);
+  },[guestAbilityQa,getQaFallback,restartQaBattle]);
+  const handleQaResultAction=React.useCallback(action=>{
+    if(!guestAbilityQa||!qaResult||typeof window==='undefined')return;
+    const next=resolveGuestBattleQaResultActionV26A(window.location.search,qaResult,action);
+    if(next.exit){setQaResult(null);setScreen('stage_select');return;}
+    restartQaBattle(next.search);
+  },[guestAbilityQa,qaResult,restartQaBattle,setScreen]);
+  const qaSelection=guestAbilityQa&&typeof window!=='undefined'
+    ?resolveGuestBattleQaSelectionV26A(window.location.search,getQaFallback())
+    :null;
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -93,6 +129,7 @@ function LegacyCampaignEngine({ gsRef, setScreen, lang, saveUserProfile, getReal
       onAbilityState:guestAbilityQa?setAbilityHud:null,
       onAbilityFeedback:guestAbilityQa?setAbilityFeedback:null,
       onAbilityController:guestAbilityQa?(activate=>{abilityActionRef.current=activate;}):null,
+      onQaResult:guestAbilityQa?(result=>setQaResult(result)):null,
 
       // Presentation only: Babylon publishes compact HUD snapshots to the same
       // React component used by C15. No extra gameplay state or rewards.
@@ -133,7 +170,7 @@ function LegacyCampaignEngine({ gsRef, setScreen, lang, saveUserProfile, getReal
       scene.dispose();
       engine.dispose();
     };
-  }, [gsRef, lang, setScreen, saveUserProfile, guestAbilityQa, qaLoadoutRevision]);
+  }, [gsRef, lang, setScreen, saveUserProfile, guestAbilityQa, qaBattleRevision]);
 
   const retreat=async()=>{
     if(retreatLockRef.current)return;
@@ -163,9 +200,10 @@ function LegacyCampaignEngine({ gsRef, setScreen, lang, saveUserProfile, getReal
 
       {/* Guest shows its actual local score. C15 never invents a trusted score. */}
       <BattleHud lang={lang} {...battleHud} announcement={battleNotice} onRetreat={retreat} retreating={retreating}/>
-      {guestAbilityQa&&abilityHud&&<GuestAbilityControls lang={lang} state={abilityHud}
+      {guestAbilityQa&&(abilityHud||qaResult)&&<GuestAbilityControls lang={lang} state={abilityHud}
         feedback={abilityFeedback} onActivate={slot=>abilityActionRef.current?.(slot)}
-        onQaCycle={cycleQaLoadout}/>}
+        onQaCycle={cycleQaLoadout} qaSelection={qaSelection} onQaNavigate={cycleQaBattle}
+        qaResult={qaResult} onQaResultAction={handleQaResultAction}/>}
 
     </div>
   );
