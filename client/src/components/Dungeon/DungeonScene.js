@@ -16,6 +16,7 @@ import { createShipEngineFx } from '../../game/rendering/ShipEngineFx';
 import { createShipInputController } from '../../game/combat/ShipInputController';
 import { describeMainSalvo, describeWingSalvo, describeDroneSalvo, pickWeaponTarget, enemySpeedFactor, shieldDamageFactor, repairAmount, projectileHitsPoint } from '../../game/combat/PlayerWeapons';
 import { createProjectileEmitter } from '../../game/combat/ProjectileEmitter';
+import { createPlayerDamageGateV25, createPlayerDamageOutcomeV25 } from '../../game/combat/PlayerDamagePipelineV25.js';
 import { resolveBattleBackground, legacyBattleBackgroundRequested, previewBg4Variant } from '../../game/catalog/BackgroundCatalog';
 import { createScrollingBattleBackground } from '../../game/rendering/ScrollingBackgroundRenderer';
 import { attachBattleBackgroundProfiler } from '../../game/rendering/BattleBackgroundProfiler.js';
@@ -672,6 +673,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             sineOff: Math.random() * Math.PI * 2,
             miniHp,
             miniHpBg,
+            _contactHitId: `dungeon-enemy-contact-${mesh.uniqueId}`,
         });
     };
 
@@ -691,6 +693,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
     const playerBullets = [];
     const enemyBullets  = [];
+    const playerDamageGate = createPlayerDamageGateV25();
+    let enemyProjectileSequence = 0;
     let   lastFire      = 0;
     let   nextWingFire  = 0;
     let   nextDroneFire = 0;
@@ -701,13 +705,15 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         ...(bossMesh && !bossMesh.isDisposed() ? [{ mesh: bossMesh }] : []),
     ];
     const fireEnemyBullet = (pos, velX = 0, velZ = enemyBulletVelZ) => {
-        const b = BABYLON.MeshBuilder.CreateSphere(`eb_${Date.now()}_${Math.random()}`, { diameter: 0.5 }, scene);
+        const hitId = `dungeon-enemy-projectile-${++enemyProjectileSequence}`;
+        const b = BABYLON.MeshBuilder.CreateSphere(hitId, { diameter: 0.5 }, scene);
         b.position = pos.clone();
-        b.position.y = 0; 
-        
+        b.position.y = 0;
+
         b.material = MAT.bulletEnemy;
         b._velX    = velX;
         b._velZ    = velZ;
+        b._damageHitId = hitId;
         enemyBullets.push(b);
     };
 
@@ -719,8 +725,6 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     let totalKills   = 0;
     let enemyBulletVelZ = DIFF.bulletVel;
     let gameOver     = false;
-    let invincibleMs = 0;
-    const INV_DUR    = 1500;   
     let tick         = 0;
 
 
@@ -729,16 +733,39 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         scoreText.text = `${lang === 'vi' ? 'ĐIỂM' : 'SCORE'}: ${score}`;
     };
 
-    const damagePlayer = (rawDmg, source = 'contact') => {
-        rawDmg *= shieldDamageFactor(droneBase);
-        const now = Date.now();
-        if (now < invincibleMs) return;
+    const damagePlayer = ({
+        rawDamage,
+        source = 'contact',
+        damageType = 'kinetic',
+        hitId = null,
+        contactId = null,
+    } = {}) => {
+        const nowMs = globalThis.performance?.now?.() ?? Date.now();
+        const hpBefore = stats.hp;
+        if (gameOver || hpBefore <= 0) {
+            return createPlayerDamageOutcomeV25({
+                source, hitId, contactId, rawDamage, hpBefore, hpAfter: stats.hp,
+            });
+        }
+        const gate = playerDamageGate.admitHit({ source, hitId, contactId, nowMs });
+        if (!gate.accepted) {
+            return createPlayerDamageOutcomeV25({
+                gate, source, hitId, contactId, rawDamage, hpBefore, hpAfter: stats.hp,
+            });
+        }
 
-        const result = receiveBattleHit(stats, passives, rawDmg, {source, nowMs: now});
+        const scaledRawDamage = Math.max(0, Number(rawDamage) || 0) * shieldDamageFactor(droneBase);
+        const result = receiveBattleHit(stats, passives, scaledRawDamage, {
+            source, nowMs: Date.now(),
+        });
         if (result.dodged) {
             showAnnouncement(lang === 'vi' ? 'NÉ TRÁNH!' : 'DODGED!', '#4ade80', 1000);
-            return;
+            return createPlayerDamageOutcomeV25({
+                gate, source, hitId, contactId, rawDamage: scaledRawDamage,
+                hpBefore, hpAfter: stats.hp, dodged: true, dodgeSource: 'pilot',
+            });
         }
+
         // Battle passives hit nearby enemies, without changing cloud rewards.
         if (result.reflected || result.novaDamage) {
             for(const enemy of [...enemies]) {
@@ -749,10 +776,17 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                     applyPlayerDamageToEnemy(enemy,result.reflected+result.novaDamage);
             }
         }
-        invincibleMs = now + INV_DUR;
-        triggerShake(0.28, 10);
+
+        const outcome = createPlayerDamageOutcomeV25({
+            gate, source, hitId, contactId, rawDamage: scaledRawDamage,
+            hpBefore, hpAfter: stats.hp, absorbed: result.absorbed,
+            reflected: result.reflected, novaDamage: result.novaDamage,
+        });
         updateHpUI();
+        if (outcome.outcome === 'absorbed' || outcome.outcome === 'no_damage') return outcome;
+        triggerShake(0.28, 10);
         if (stats.hp <= 0) triggerGameOver();
+        return outcome;
     };
 
     const triggerGameOver = () => {
@@ -849,12 +883,6 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             playerPlane.rotation.z = BABYLON.Scalar.Lerp(playerPlane.rotation.z, 0, scaledLerpFactor(0.05,frameFactor));
         }
 
-        // C. Blink khi bất tử 
-        if (now < invincibleMs) {
-            shipVisual.setVisibility(Math.sin(now * 0.025) > 0 ? 1 : 0.3);
-        } else {
-            shipVisual.setVisibility(1);
-        }
         // B. Di chuyển Vệ tinh (Drones Hovering)
         if (drones.length > 0) {
             const hoverZ = Math.sin(tick * 0.04) * 0.18;
@@ -987,7 +1015,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 continue;
             }
             if (eb.intersectsMesh(shipVisual.collider, false)) {
-                damagePlayer(70, 'projectile');
+                damagePlayer({rawDamage:70,source:'projectile',damageType:'energy',hitId:eb._damageHitId});
                 safeDis(eb);
                 enemyBullets.splice(i, 1);
             }
@@ -1014,13 +1042,13 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             if (e.mesh.position.z > ZOOM + 3) {
                 cleanEnemy(e);
                 enemies.splice(i, 1);
-                damagePlayer(30);
+                damagePlayer({rawDamage:30,source:'environment',damageType:'kinetic'});
                 continue;
             }
 
             if (e.mesh.intersectsMesh(shipVisual.collider, false)) {
                 explode(e.mesh.position);
-                damagePlayer(150);
+                damagePlayer({rawDamage:150,source:'contact',damageType:'kinetic',contactId:e._contactHitId});
                 cleanEnemy(e);
                 enemies.splice(i, 1);
                 waveKilled++;

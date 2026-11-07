@@ -278,17 +278,18 @@ test('scene and compact HUD expose only the DEV one-shot force contract', () => 
   const controls = fs.readFileSync(new URL('../src/ui-system/GuestAbilityControls.jsx', import.meta.url), 'utf8');
   assert.match(scene, /sfArmorQa'\)===\'force-next-projectile\'/);
   assert.match(scene, /qaForceNextProjectileEvade:forceNextProjectileEvadeQa/);
-  assert.match(scene, /forceNextProjectileEvadePending===true/);
-  assert.match(scene, /nowMs < invincibleUntil&&!forceProjectileEvadePending/);
+  assert.match(scene, /createPlayerDamageGateV25/);
+  assert.doesNotMatch(scene, /invincibleUntil|INV_DUR/);
   assert.match(controls, /QA NÉ ĐẠN: ĐÃ NẠP/);
   assert.match(controls, /QA NÉ ĐẠN: ĐÃ KÍCH HOẠT/);
 });
 
-test('boss can be marked and normal armor resolution remains behind the overlap guard', () => {
+test('boss mark and incoming armor resolution use the shared V2.5 hit gate', () => {
   const scene = fs.readFileSync(new URL('../src/components/Campaign/CampaignScene.js', import.meta.url), 'utf8');
   assert.match(scene, /const marked=target\.isBoss\?target\.mesh:target/);
   assert.match(scene, /bossMesh\._guestMarkUntilTick>guestAbilities\.tick/);
-  const guard = scene.indexOf('if (nowMs < invincibleUntil&&!forceProjectileEvadePending) return;');
+  const gate = scene.indexOf('playerDamageGate.admitHit');
   const resolve = scene.indexOf('guestAbilities.resolveIncomingHit');
-  assert.ok(guard >= 0 && resolve > guard);
+  assert.ok(gate >= 0 && resolve > gate);
+  assert.match(scene, /contactId:bossMesh\._contactHitId\|\|'campaign-boss-contact'/);
 });

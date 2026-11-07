@@ -19,6 +19,7 @@ import { createShipEngineFx } from '../../game/rendering/ShipEngineFx';
 import { createShipInputController } from '../../game/combat/ShipInputController';
 import { describeMainSalvo, describeWingSalvo, describeDroneSalvo, pickWeaponTarget, enemySpeedFactor, shieldDamageFactor, repairAmount, projectileHitsPoint } from '../../game/combat/PlayerWeapons';
 import { createProjectileEmitter } from '../../game/combat/ProjectileEmitter';
+import { createPlayerDamageGateV25, createPlayerDamageOutcomeV25 } from '../../game/combat/PlayerDamagePipelineV25.js';
 import { createGuestAbilityRuntimeV2 } from '../../game/combat/GuestAbilityRuntimeV2.js';
 import { deriveGuestAbilityActivationGateV2 } from '../../game/combat/GuestAbilityActivationGateV2.js';
 import { resolveGuestCombatQaRuntimeFromViteEnv } from '../../game/combat/GuestCombatQaBuildGateV2.js';
@@ -666,15 +667,19 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
 
   const mainGunBase = combat.gear.mainGun.base || GEAR_CATALOG.mainGun[0];
   const enemyBulMat = makeMat(scene, new BABYLON.Color3(1, .28, .34));
+  const playerDamageGate = createPlayerDamageGateV25();
+  let enemyProjectileSequence = 0;
   const shots = createProjectileEmitter({ scene, BABYLON, bullets: playerBullets, scheduleBattleTimer });
   const liveTargets = () => [
     ...enemies.filter(e => !e._dead && !e.mesh.isDisposed?.()),
     ...(bossMesh && !bossMesh.isDisposed?.() ? [{ mesh: bossMesh, isBoss: true }] : []),
   ];
   const fireEnemyBullet = (pos, vx = 0, vz = 0.24) => {
-    const b = BABYLON.MeshBuilder.CreateSphere(`eb_${Date.now()}_${Math.random()}`, { diameter: 0.44 }, scene);
+    const hitId = `campaign-enemy-projectile-${++enemyProjectileSequence}`;
+    const b = BABYLON.MeshBuilder.CreateSphere(hitId, { diameter: 0.44 }, scene);
     b.position = pos.clone(); b.position.y = 0;
     b.material = enemyBulMat; b._vx = vx; b._vz = vz;
+    b._damageHitId = hitId;
     enemyBullets.push(b);
   };
 
@@ -788,6 +793,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       canShoot: tier !== 4 && Math.random() > .5,
       lastShoot: 0, shootMs: tier===3 ? 1400 : 2200,
       points: pts, miniHpBg, miniHp, _dead: false,
+      _contactHitId: `campaign-enemy-contact-${mesh.uniqueId}`,
     });
   };
 
@@ -827,6 +833,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
 
     bossMesh = buildFallbackBoss(bType);
     bossMesh.position.set(0, .5, -ZOOM - 6);
+    bossMesh._contactHitId = 'campaign-boss-contact';
     bossVisual = attachBattleEntityVisual(scene, BABYLON, bossMesh, 'boss', bossCfg.id);
 
     bossNameText.text = `⚠ ${lang==='vi' ? `TRÙM ẢI ${currentStage}` : `STAGE ${currentStage} BOSS`}`;
@@ -874,8 +881,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   let verifiedClientKills = 0;
   let collectedCoins = 0;
   let startTime     = Date.now();
-  let invincibleUntil = 0;
-  const INV_DUR     = 1500;
+  let lastPlayerDamageFxAt = -Infinity;
+  const PLAYER_DAMAGE_FX_COOLDOWN_MS = 120;
   let tick          = 0;
 
   const getGuestAbilityActivationGate=()=>deriveGuestAbilityActivationGateV2({gameState,gameOver});
@@ -933,8 +940,28 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   // 13. PLAYER DAMAGE / DEATH
   // ══════════════════════════════════════════════════════════════════════════
 
-  const damagePlayer = (rawDmg, source = 'contact', damageType = 'kinetic') => {
-    const nowMs = Date.now();
+  const damagePlayer = ({
+    rawDamage,
+    source = 'contact',
+    damageType = 'kinetic',
+    hitId = null,
+    contactId = null,
+    unavoidable = false,
+  } = {}) => {
+    const nowMs = globalThis.performance?.now?.() ?? Date.now();
+    const hpBefore = stats.hp;
+    if(gameOver||hpBefore<=0){
+      return createPlayerDamageOutcomeV25({
+        source,hitId,contactId,rawDamage,hpBefore,hpAfter:stats.hp,
+      });
+    }
+    const gate = playerDamageGate.admitHit({ source, hitId, contactId, nowMs });
+    if (!gate.accepted) {
+      return createPlayerDamageOutcomeV25({
+        gate, source, hitId, contactId, rawDamage, hpBefore, hpAfter: stats.hp,
+      });
+    }
+
     const applyRetaliation=(reflection=0,nova=0)=>{
       const total=Math.max(0,reflection)+Math.max(0,nova);
       if(total<=0)return;
@@ -951,50 +978,61 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         if(dx*dx+dz*dz<=radiusSquared)applyPlayerDamageToBoss(total);
       }
     };
-    // Normal hits retain the legacy overlap guard. A one-shot DEV QA evade is
-    // allowed through so the next eligible projectile reliably exercises the
-    // Light Armor path even if a previous contact briefly started an i-frame.
-    const forceProjectileEvadePending=source==='projectile'
-      &&guestAbilities?.snapshot().qa?.forceNextProjectileEvadePending===true;
-    if (nowMs < invincibleUntil&&!forceProjectileEvadePending) return;
-    rawDmg *= shieldDamageFactor(droneBase);
+
+    const scaledRawDamage = Math.max(0, Number(rawDamage) || 0) * shieldDamageFactor(droneBase);
     let impact;
+    let outcome;
     if(guestAbilities){
-      const guestHit=guestAbilities.resolveIncomingHit({damage:rawDmg,source,damageType});
+      const guestHit=guestAbilities.resolveIncomingHit({
+        damage:scaledRawDamage,source,damageType,unavoidable,
+      });
       if(guestHit.dodged){
-        invincibleUntil=nowMs+450;
         publishArmorFeedback(guestHit.dodgeSource==='armor'?'evade':'pilot_evade');
         publishGuestAbilityState();
-        return;
+        return createPlayerDamageOutcomeV25({
+          gate, source, hitId, contactId, rawDamage:scaledRawDamage,
+          hpBefore, hpAfter:stats.hp, dodged:true, dodgeSource:guestHit.dodgeSource,
+        });
       }
       const crystalProc=guestHit.events?.some(event=>event.type==='crystal_prism');
       const reactiveProc=!crystalProc&&guestHit.reflected>0
         &&guestAbilities.snapshot().armor?.id==='armor_reactive_plating';
       if(crystalProc)publishArmorFeedback('crystal_prism',guestHit.reflected||0);
       else if(reactiveProc)publishArmorFeedback('reactive_reflect',guestHit.reflected||0);
-      if(guestHit.absorbed>0)invincibleUntil=nowMs+INV_DUR;
-      if(guestHit.remaining<=0){
-        applyRetaliation(guestHit.reflected||0,guestHit.novaDamage||0);
-        publishGuestAbilityState();
-        return;
-      }
       stats.hp=clamp(stats.hp-guestHit.remaining,0,stats.maxHp);
       impact={dodged:false,damage:guestHit.remaining,absorbed:guestHit.absorbed||0,
         reflected:guestHit.reflected||0,novaDamage:guestHit.novaDamage||0};
+      applyRetaliation(impact.reflected,impact.novaDamage);
       publishGuestAbilityState();
+      outcome=createPlayerDamageOutcomeV25({
+        gate, source, hitId, contactId, rawDamage:scaledRawDamage,
+        hpBefore, hpAfter:stats.hp, absorbed:impact.absorbed,
+        reflected:impact.reflected, novaDamage:impact.novaDamage,
+      });
     }else{
-      impact = receiveBattleHit(stats, passives, rawDmg, { source, nowMs });
+      impact = receiveBattleHit(stats, passives, scaledRawDamage, { source, nowMs:Date.now() });
       if (impact.dodged) {
         showAnnouncement(lang==='vi'?'NÉ TRÁNH!':'DODGED!', '#4ade80', 900);
-        return;
+        return createPlayerDamageOutcomeV25({
+          gate, source, hitId, contactId, rawDamage:scaledRawDamage,
+          hpBefore, hpAfter:stats.hp, dodged:true, dodgeSource:'pilot',
+        });
       }
+      applyRetaliation(impact.reflected,impact.novaDamage);
+      outcome=createPlayerDamageOutcomeV25({
+        gate, source, hitId, contactId, rawDamage:scaledRawDamage,
+        hpBefore, hpAfter:stats.hp, absorbed:impact.absorbed,
+        reflected:impact.reflected, novaDamage:impact.novaDamage,
+      });
     }
-    invincibleUntil = nowMs + INV_DUR;
-    // Retaliation hits enemies near the player. This is purely battle-local.
-    applyRetaliation(impact.reflected,impact.novaDamage);
+
     updateHpBar();
-    explode(playerRoot.position, 2);
-    shakeCamera();
+    if(outcome.outcome==='absorbed'||outcome.outcome==='no_damage')return outcome;
+    if(nowMs-lastPlayerDamageFxAt>=PLAYER_DAMAGE_FX_COOLDOWN_MS){
+      lastPlayerDamageFxAt=nowMs;
+      explode(playerRoot.position, 2);
+      shakeCamera();
+    }
 
     if (stats.hp <= 0) {
       gameOver = true; setGameState('GAMEOVER');
@@ -1018,6 +1056,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         }
       }, 4000);
     }
+    return outcome;
   };
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -1641,7 +1680,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       const dx = b.position.x - playerRoot.position.x;
       const dz = b.position.z - playerRoot.position.z;
       if (dx*dx + dz*dz < 1.44) {   // hit radius 1.2
-        damagePlayer(200, 'projectile', 'energy'); safeDispose(b); enemyBullets.splice(i,1);
+        damagePlayer({rawDamage:200,source:'projectile',damageType:'energy',hitId:b._damageHitId});
+        safeDispose(b); enemyBullets.splice(i,1);
       }
     }
 
@@ -1688,7 +1728,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         const dx = e.mesh.position.x - playerRoot.position.x;
         const dz = e.mesh.position.z - playerRoot.position.z;
         if (dx*dx + dz*dz < 3.24) {   // hit radius 1.8
-          damagePlayer(e.tier===4 ? 400 : 200, 'contact', 'kinetic');
+          damagePlayer({rawDamage:e.tier===4?400:200,source:'contact',damageType:'kinetic',contactId:e._contactHitId});
           explode(e.mesh.position, 1.5);
           cleanEnemy(e); enemies.splice(i,1); continue;
         }
@@ -1784,7 +1824,10 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       if (bossMesh) {
         const dx = bossMesh.position.x - playerRoot.position.x;
         const dz = bossMesh.position.z - playerRoot.position.z;
-        if (dx*dx + dz*dz < 10.24) damagePlayer(400, 'contact', 'kinetic');   // hit radius 3.2
+        if (dx*dx + dz*dz < 10.24) damagePlayer({
+          rawDamage:400,source:'contact',damageType:'kinetic',
+          contactId:bossMesh._contactHitId||'campaign-boss-contact',
+        });   // hit radius 3.2
       }
     }
 

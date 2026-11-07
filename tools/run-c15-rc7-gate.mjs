@@ -19,7 +19,7 @@ if(fast){
     'tests/resourceManifestV1.test.mjs','tests/c15Rc1bResourceDelivery.test.mjs','tests/c15Rc1bIndexedDbSafety.test.mjs',
     'tests/c15Rc7AssetPayloadStore.test.mjs','tests/c15Rc7StartupDownloads.test.mjs',
     'tests/c15Rc7CommercialPresentation.test.mjs',
-    'tests/guestAircraftAbilitiesLabV1.test.mjs','tests/guestCombatFoundationV2.test.mjs',
+    'tests/guestAircraftAbilitiesLabV1.test.mjs','tests/guestCombatFoundationV2.test.mjs','tests/playerDamagePipelineV25.test.mjs',
     'tests/guestAbilityFeedbackV2.test.mjs','tests/guestCombatQaBuildGateV2.test.mjs','tests/enemyCombatFoundationV2.test.mjs','tests/sharedCombatModePolicyV2.test.mjs',
     'tests/gameplayPhase2.test.mjs','tests/combatCampaignAlphaAIC6DV8.test.mjs',
     'tests/g1g2C15VisualViewport.test.mjs','tests/g1g2HudTopPlacement.test.mjs','tests/c15BattleVisualParity.test.mjs','tests/g1g2UnifiedUi.test.mjs','tests/g1g2F12PresentationParity.test.mjs','tests/g1g2SciFiTacticalPresentation.test.mjs','tests/g1g2NotchSafeBattleHud.test.mjs','tests/approvedTacticalHudV4.test.mjs',
