@@ -2,7 +2,7 @@ import { ARMOR_TRAITS_V2, SHIP_ACTIVE_SKILLS_V2 } from './GuestAbilityCatalogV2.
 
 export const GUEST_COMBAT_QA_SHIP_IDS = Object.freeze(Object.keys(SHIP_ACTIVE_SKILLS_V2));
 export const GUEST_COMBAT_QA_ARMOR_IDS = Object.freeze(Object.keys(ARMOR_TRAITS_V2));
-export const GUEST_COMBAT_QA_EQUIPMENT_VERSION = 'guest-combat-qa-equipment-v2.6a1';
+export const GUEST_COMBAT_QA_EQUIPMENT_VERSION = 'guest-combat-qa-equipment-v2.8.0';
 
 const freezePreset = preset => Object.freeze({
   ...preset,
@@ -42,16 +42,18 @@ export const GUEST_COMBAT_QA_EQUIPMENT_PRESETS = Object.freeze([
   }),
   freezePreset({
     id: 'elite',
-    name: { vi: 'Bộ tinh nhuệ', en: 'Elite set' },
-    shortCode: 'E',
-    recommended: { vi: 'Khuyến nghị ải 5–8', en: 'Recommended stages 5–8' },
-    aircraftLevel: 45,
-    gearLevel: 45,
-    rarity: 4,
+    name: { vi: 'Bộ quan sát cơ chế', en: 'Mechanic observer' },
+    shortCode: 'O',
+    recommended: { vi: 'EHP cao · DPS vừa để quan sát wave/Boss', en: 'High EHP · moderate DPS for wave/Boss review' },
+    aircraftLevel: 70,
+    gearLevel: 24,
+    armorLevel: 65,
+    supportLevel: 22,
+    rarity: 3,
     equipment: {
-      mainGunId: 'gun_neutron',
-      wingmanId: 'wing_homing',
-      droneId: 'drone_laser',
+      mainGunId: 'gun_ion',
+      wingmanId: 'wing_emp',
+      droneId: 'drone_repair',
     },
   }),
   freezePreset({
@@ -95,7 +97,12 @@ export function describeGuestCombatQaEquipmentPresetV2(presetOrId, lang = 'vi') 
     ? getGuestCombatQaEquipmentPresetV2(presetOrId)
     : presetOrId || GUEST_COMBAT_QA_EQUIPMENT_PRESETS[0];
   if (!preset.equipment) return `${localize(preset.name, lang)} · ${localize(preset.recommended, lang)}`;
-  return `${localize(preset.name, lang)} · L${preset.gearLevel}/R${preset.rarity}`
+  const offenseLevel = preset.gearLevel;
+  const defenseLevel = preset.armorLevel || preset.gearLevel;
+  const levelText = defenseLevel !== offenseLevel
+    ? `OFF L${offenseLevel} · DEF L${defenseLevel}/R${preset.rarity}`
+    : `L${offenseLevel}/R${preset.rarity}`;
+  return `${localize(preset.name, lang)} · ${levelText}`
     + ` · ${preset.equipment.mainGunId} + ${preset.equipment.wingmanId} + ${preset.equipment.droneId}`;
 }
 
@@ -137,6 +144,13 @@ const createTemporaryItem = (baseId, level, rarity, type) => Object.freeze({
   type,
 });
 
+const presetSlotLevel = (preset, slot) => {
+  if (!preset?.equipment) return 1;
+  if (slot === 'armor') return preset.armorLevel || preset.gearLevel;
+  if (slot === 'wingman' || slot === 'drone') return preset.supportLevel || preset.gearLevel;
+  return preset.gearLevel;
+};
+
 /**
  * Creates the battle-local campaign clone used by Guest Combat QA.
  * No reference from the source profile is mutated. Profile/economy ownership
@@ -173,7 +187,7 @@ export function createGuestCombatQaBattleDataV26A1(campaignData, {
     nextLoadout.armor = QA_ITEM_KEYS.armor;
     nextItems[QA_ITEM_KEYS.armor] = createTemporaryItem(
       armorId,
-      preset.equipment ? preset.gearLevel : 1,
+      preset.equipment ? presetSlotLevel(preset, 'armor') : 1,
       preset.equipment ? preset.rarity : 1,
       'armor',
     );
@@ -184,13 +198,13 @@ export function createGuestCombatQaBattleDataV26A1(campaignData, {
     nextLoadout.wingman = QA_ITEM_KEYS.wingman;
     nextLoadout.drone = QA_ITEM_KEYS.drone;
     nextItems[QA_ITEM_KEYS.mainGun] = createTemporaryItem(
-      preset.equipment.mainGunId, preset.gearLevel, preset.rarity, 'mainGun',
+      preset.equipment.mainGunId, presetSlotLevel(preset, 'mainGun'), preset.rarity, 'mainGun',
     );
     nextItems[QA_ITEM_KEYS.wingman] = createTemporaryItem(
-      preset.equipment.wingmanId, preset.gearLevel, preset.rarity, 'wingman',
+      preset.equipment.wingmanId, presetSlotLevel(preset, 'wingman'), preset.rarity, 'wingman',
     );
     nextItems[QA_ITEM_KEYS.drone] = createTemporaryItem(
-      preset.equipment.droneId, preset.gearLevel, preset.rarity, 'drone',
+      preset.equipment.droneId, presetSlotLevel(preset, 'drone'), preset.rarity, 'drone',
     );
     nextOwnedAircrafts[selectedShipId] = {
       ...(sourceAircraft[selectedShipId] || {}),

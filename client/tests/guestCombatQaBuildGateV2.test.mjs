@@ -122,6 +122,8 @@ test('QA equipment presets use real catalog gear and create isolated battle-loca
     assert.equal(catalogIds('drone').has(preset.equipment.droneId), true, preset.id);
     assert.ok(preset.aircraftLevel >= 1 && preset.aircraftLevel <= 100);
     assert.ok(preset.gearLevel >= 1 && preset.gearLevel <= 100);
+    assert.ok((preset.armorLevel || preset.gearLevel) >= 1 && (preset.armorLevel || preset.gearLevel) <= 100);
+    assert.ok((preset.supportLevel || preset.gearLevel) >= 1 && (preset.supportLevel || preset.gearLevel) <= 100);
     assert.ok(preset.rarity >= 1 && preset.rarity <= 5);
   }
   const source = structuredClone(DEFAULT_CAMPAIGN_DATA);
@@ -134,13 +136,34 @@ test('QA equipment presets use real catalog gear and create isolated battle-loca
   assert.equal(battle.progress.currentPlanet, 3);
   assert.equal(battle.progress.selectedStage, 8);
   assert.equal(battle.loadout.aircraft, 'ship_tank');
-  assert.equal(battle.items[battle.loadout.mainGun].baseId, 'gun_neutron');
-  assert.equal(battle.items[battle.loadout.wingman].baseId, 'wing_homing');
-  assert.equal(battle.items[battle.loadout.drone].baseId, 'drone_laser');
+  assert.equal(battle.items[battle.loadout.mainGun].baseId, 'gun_ion');
+  assert.equal(battle.items[battle.loadout.wingman].baseId, 'wing_emp');
+  assert.equal(battle.items[battle.loadout.drone].baseId, 'drone_repair');
   assert.equal(battle.items[battle.loadout.armor].baseId, 'armor_heavy');
-  assert.equal(battle.items[battle.loadout.mainGun].level, 45);
-  assert.equal(battle.items[battle.loadout.armor].rarity, 4);
-  assert.equal(battle.ownedAircrafts.ship_tank.level, 45);
+  assert.equal(battle.items[battle.loadout.mainGun].level, 24);
+  assert.equal(battle.items[battle.loadout.wingman].level, 22);
+  assert.equal(battle.items[battle.loadout.armor].level, 65);
+  assert.equal(battle.items[battle.loadout.armor].rarity, 3);
+  assert.equal(battle.ownedAircrafts.ship_tank.level, 70);
+});
+
+test('Mechanic observer preset prioritizes survivability without deleting every wave immediately', () => {
+  const field = createGuestCombatQaBattleDataV26A1(DEFAULT_CAMPAIGN_DATA, {
+    shipId: 'ship_xwing', armorId: 'armor_heavy', equipmentPresetId: 'field', planetId: 3, stageId: 10,
+  });
+  const observer = createGuestCombatQaBattleDataV26A1(DEFAULT_CAMPAIGN_DATA, {
+    shipId: 'ship_xwing', armorId: 'armor_heavy', equipmentPresetId: 'elite', planetId: 3, stageId: 10,
+  });
+  const catalogs = { PILOTS, AIRCRAFTS, GEAR_CATALOG };
+  const fieldCombat = deriveBattleLoadout(field, catalogs, {
+    mode: 'campaign', location: PLANET_CONFIG[3], armorPassivePolicy: 'none', combatRatingVersion: 'v2',
+  });
+  const observerCombat = deriveBattleLoadout(observer, catalogs, {
+    mode: 'campaign', location: PLANET_CONFIG[3], armorPassivePolicy: 'none', combatRatingVersion: 'v2',
+  });
+  assert.ok(observerCombat.combatRatingV2.breakdown.effectiveHp > fieldCombat.combatRatingV2.breakdown.effectiveHp * 2);
+  assert.ok(observerCombat.combatRatingV2.breakdown.offenseDps < fieldCombat.combatRatingV2.breakdown.offenseDps);
+  assert.equal(observerCombat.gear.drone.base.behavior, 'repair');
 });
 
 test('Boss QA preset materially increases offense and survivability without granting profile ownership', () => {

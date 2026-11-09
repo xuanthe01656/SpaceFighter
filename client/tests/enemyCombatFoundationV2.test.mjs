@@ -14,6 +14,13 @@ import {
   createEnemyDirectorV2,
   scaleEnemyStatsV2,
 } from '../src/game/combat/DeterministicEnemyDirectorV2.js';
+import {
+  CAMPAIGN_ENCOUNTER_ESCALATION_VERSION,
+  CAMPAIGN_ENCOUNTER_PROFILES_V28,
+  completeBossPhaseGateV28,
+  createBossPhaseStateV28,
+  resolveBossDamageGateV28,
+} from '../src/game/combat/CampaignEncounterEscalationV28.js';
 
 const stagePlan = (options = {}) => createEnemyDirectorV2({
   seed: options.seed ?? 12345,
@@ -76,8 +83,9 @@ test('boss plan telegraphs every attack and changes phase deterministically', ()
   assert.deepEqual([...new Set(plan.map(entry => entry.phaseId))], ['phase_1', 'phase_2', 'phase_3']);
 });
 
-test('V2.7 combines deterministic director, three planet profiles and 10/15-wave pacing', () => {
-  assert.equal(CAMPAIGN_WAVE_DIRECTOR_VERSION, 'campaign-wave-director-v2.7.0');
+test('V2.8 combines deterministic pacing with mini-bosses and real Boss mechanic previews', () => {
+  assert.equal(CAMPAIGN_WAVE_DIRECTOR_VERSION, 'campaign-wave-director-v2.8.0');
+  assert.equal(CAMPAIGN_ENCOUNTER_ESCALATION_VERSION, 'campaign-encounter-v2.8.0');
   assert.deepEqual(Object.keys(CAMPAIGN_PLANET_PROFILES_V27), ['1', '2', '3']);
   assert.ok(Object.keys(CAMPAIGN_WAVE_TEMPLATES_V27).length >= 14);
 
@@ -88,9 +96,18 @@ test('V2.7 combines deterministic director, three planet profiles and 10/15-wave
     'recovery_elite', 'lane_sweep', 'support_network', 'pressure_lanes',
     'mixed_pressure', 'commander', 'elite_duel', 'boss_preview_a', 'boss_preview_b', 'boss',
   ]);
-  assert.equal(long.waves[5].guaranteedDrop, 'heal');
+  assert.equal(long.waves[4].miniBoss, true);
+  assert.equal(long.waves[4].encounter.id, 'mechanical_warden');
+  assert.equal(long.waves[4].entries[0].encounterMechanicId, 'lane_sweep');
+  assert.equal(long.waves[4].guaranteedDrop, 'heal');
+  assert.equal(long.waves[9].miniBoss, true);
+  assert.equal(long.waves[9].encounter.id, 'frontline_carrier');
+  assert.deepEqual(long.waves[9].entries[0].mechanicSummonRoles, ['gunner', 'raider']);
   assert.equal(long.waves[12].bossPreview, true);
+  assert.equal(long.waves[12].encounter.kind, 'boss_preview');
+  assert.equal(long.waves[12].entries[0].encounterMechanicId, 'lane_sweep');
   assert.equal(long.waves[13].bossPreview, true);
+  assert.equal(long.waves[13].entries[0].encounterMechanicId, 'summon_escort');
   assert.equal(long.waves[14].boss, true);
   assert.equal(long.waves[14].entries.length, 0);
 
@@ -99,9 +116,43 @@ test('V2.7 combines deterministic director, three planet profiles and 10/15-wave
     'recon', 'crossfire', 'first_rush', 'pincer', 'elite_duel',
     'recovery_elite', 'escort', 'mixed_pressure', 'boss_preview_a', 'boss',
   ]);
+  assert.equal(short.waves[4].miniBoss, true);
+  assert.equal(short.waves[8].bossPreview, true);
+  assert.equal(short.waves[8].entries[0].protectUntilMechanic, true);
 });
 
-test('V2.7 threat budgets stay readable, schedules are monotonic and early stages do not leak locked roles', () => {
+ test('V2.8 Boss gates clamp burst damage at 70/35 percent and summon deterministic planet support', () => {
+  let state = createBossPhaseStateV28(1);
+  const first = resolveBossDamageGateV28({ state, hp: 1000, maxHp: 1000, damage: 450 });
+  assert.equal(first.nextHp, 700);
+  assert.equal(first.gate.id, 'mechanical_guard');
+  assert.deepEqual(first.gate.summonRoles, ['shieldbearer', 'gunner']);
+  state = completeBossPhaseGateV28(first.state);
+  const second = resolveBossDamageGateV28({ state, hp: first.nextHp, maxHp: 1000, damage: 500 });
+  assert.equal(second.nextHp, 350);
+  assert.equal(second.gate.id, 'mechanical_charge');
+  state = completeBossPhaseGateV28(second.state);
+  const terminal = resolveBossDamageGateV28({ state, hp: second.nextHp, maxHp: 1000, damage: 500 });
+  assert.equal(terminal.nextHp, 0);
+  assert.equal(terminal.gate, null);
+
+  assert.notDeepEqual(
+    CAMPAIGN_ENCOUNTER_PROFILES_V28[1].bossPhases[0].summonRoles,
+    CAMPAIGN_ENCOUNTER_PROFILES_V28[2].bossPhases[0].summonRoles,
+  );
+  assert.notDeepEqual(
+    CAMPAIGN_ENCOUNTER_PROFILES_V28[2].bossPhases[0].summonRoles,
+    CAMPAIGN_ENCOUNTER_PROFILES_V28[3].bossPhases[0].summonRoles,
+  );
+
+  const director = createEnemyDirectorV2({ seed: 42, stage: 10, planetId: 3 });
+  const a = director.buildReinforcementPlan({ roles: ['raider', 'charger'], formation: 'pincer', groupId: 'boss-test' });
+  const b = director.buildReinforcementPlan({ roles: ['raider', 'charger'], formation: 'pincer', groupId: 'boss-test' });
+  assert.deepEqual(a, b);
+  assert.equal(a.every(entry => entry.bossSupport), true);
+});
+
+test('V2.8 threat budgets stay readable, schedules are monotonic and early stages do not leak locked roles', () => {
   const early = stagePlan({ stage: 1, totalWaves: 5, hasBoss: false, baseEnemies: 5 });
   const allowedEarly = new Set(['raider', 'gunner']);
   for (const wave of early.waves) {
@@ -134,13 +185,18 @@ test('planet profiles create distinct deterministic compositions without changin
   assert.notEqual(signature(cryo), signature(inferno));
 });
 
-test('Campaign source uses V2.7 only in Guest QA and keeps the frozen non-QA fallback', () => {
+test('Campaign source wires V2.8 encounters only in Guest QA and keeps the frozen non-QA fallback', () => {
   const source = fs.readFileSync(new URL('../src/components/Campaign/CampaignScene.js', import.meta.url), 'utf8');
   assert.match(source, /campaignWaveDirector=guestAbilityQa\?createEnemyDirectorV2/);
   assert.match(source, /buildCampaignStagePlan\(\{/);
   assert.match(source, /spawnEnemy\(nextSpec\)/);
   assert.match(source, /currentWavePlan\.entries\[waveSpawned\]/);
   assert.match(source, /currentWavePlan\?\.guaranteedDrop/);
+  assert.match(source, /stepEncounterMechanic\(e,now\)/);
+  assert.match(source, /buildReinforcementPlan\(\{/);
+  assert.match(source, /resolveBossDamageGateV28\(\{/);
+  assert.match(source, /beginBossPhaseTransition\(gateResult\.gate\)/);
+  assert.match(source, /bossPhaseState=guestAbilityQa\?createBossPhaseStateV28/);
   assert.match(source, /Frozen legacy fallback for non-QA lanes/);
   assert.match(source, /waveCount\s*=\s*\(stageConfig\.baseEnemies\|\|5\)\s*\+\s*currentWave\s*\*\s*3/);
   assert.match(source, /spawnInterval\s*=\s*Math\.max\(300,\s*1500\s*-\s*\(currentStage\*100\s*\+\s*currentWave\*50\)\)/);

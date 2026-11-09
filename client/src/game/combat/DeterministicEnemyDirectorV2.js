@@ -1,6 +1,10 @@
 import { ENEMY_ARCHETYPES_V2, BOSS_PHASES_V2 } from './EnemyCombatCatalogV2.js';
+import {
+  CAMPAIGN_ENCOUNTER_ESCALATION_VERSION,
+  resolveCampaignWaveEncounterV28,
+} from './CampaignEncounterEscalationV28.js';
 
-export const CAMPAIGN_WAVE_DIRECTOR_VERSION = 'campaign-wave-director-v2.7.0';
+export const CAMPAIGN_WAVE_DIRECTOR_VERSION = 'campaign-wave-director-v2.8.0';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const freezeList = values => Object.freeze(values.map(value => Object.freeze(value)));
@@ -260,6 +264,83 @@ function buildCampaignEntries({ seed, profile, template, stage, wave, baseEnemie
   return Object.freeze({ entries: freezeList(entries), threatBudget, spawnGapMs: gapMs, formation });
 }
 
+function roleRuntimeV28(role) {
+  return LEGACY_ROLE_RUNTIME_V27[role] || LEGACY_ROLE_RUNTIME_V27.raider;
+}
+
+function decorateEncounterEntriesV28(entries, encounter, seed) {
+  if (!encounter || encounter.kind === 'boss' || !entries.length) return Object.freeze(entries);
+  const next = rng32(seed);
+  const trimmed = entries.slice(0, Math.max(1, encounter.maxEntries || entries.length));
+  const featuredRole = LEGACY_ROLE_RUNTIME_V27[encounter.featuredRole]
+    ? encounter.featuredRole : trimmed[0].archetypeId;
+  const runtime = roleRuntimeV28(featuredRole);
+  const featuredBase = trimmed.find(entry => entry.archetypeId === featuredRole) || trimmed[0];
+  const rest = trimmed.filter(entry => entry !== featuredBase);
+  const featured = Object.freeze({
+    ...featuredBase,
+    index: 0,
+    spawnOffsetMs: 500,
+    archetypeId: featuredRole,
+    tier: runtime.tier,
+    canShoot: runtime.canShoot,
+    shootMs: runtime.shootMs,
+    hpMultiplier: runtime.hpMultiplier * Number(encounter.hpMultiplier || 1),
+    speedMultiplier: runtime.speedMultiplier * Number(encounter.speedMultiplier || 1),
+    speedRoll: (next() % 1000) / 999,
+    sinePhase: (next() % 6284) / 1000,
+    strafeDirection: (next() & 1) === 0 ? -1 : 1,
+    defenseClass: ENEMY_ARCHETYPES_V2[featuredRole]?.defenseClass || 'balanced',
+    damageType: ENEMY_ARCHETYPES_V2[featuredRole]?.damageType || 'kinetic',
+    elite: true,
+    encounterKind: encounter.kind,
+    encounterId: encounter.id,
+    encounterMechanicId: encounter.mechanicId,
+    encounterLabel: encounter.label,
+    encounterFeatured: true,
+    mechanicTelegraphMs: encounter.telegraphMs,
+    mechanicSummonRoles: Object.freeze([...(encounter.summonRoles || [])]),
+    protectUntilMechanic: Boolean(encounter.protectUntilMechanic),
+    scaleMultiplier: Number(encounter.scaleMultiplier || 1),
+    pointsMultiplier: encounter.kind === 'mini_boss' ? 4 : 2,
+  });
+  const normalized = [featured, ...rest].map((entry, index) => Object.freeze({
+    ...entry,
+    index,
+    spawnOffsetMs: index === 0 ? 500 : Math.max(900, Number(entry.spawnOffsetMs || 0)),
+  }));
+  return Object.freeze(normalized);
+}
+
+function createReinforcementEntriesV28({ seed, roles, formation = 'pincer', groupId = 'reinforcement', startOffsetMs = 0 }) {
+  const next = rng32(seed);
+  const list = Array.isArray(roles) && roles.length ? roles : ['raider'];
+  const lanes = FORMATION_LANES[formation] || FORMATION_LANES.pincer;
+  return Object.freeze(list.map((role, index) => {
+    const runtime = roleRuntimeV28(role);
+    return Object.freeze({
+      index,
+      spawnOffsetMs: Math.max(0, startOffsetMs) + index * 320,
+      lane: lanes[index % lanes.length],
+      archetypeId: role,
+      tier: runtime.tier,
+      canShoot: runtime.canShoot,
+      shootMs: runtime.shootMs,
+      hpMultiplier: runtime.hpMultiplier * .92,
+      speedMultiplier: runtime.speedMultiplier,
+      elite: false,
+      speedRoll: (next() % 1000) / 999,
+      sinePhase: (next() % 6284) / 1000,
+      strafeDirection: (next() & 1) === 0 ? -1 : 1,
+      defenseClass: ENEMY_ARCHETYPES_V2[role]?.defenseClass || 'balanced',
+      damageType: ENEMY_ARCHETYPES_V2[role]?.damageType || 'kinetic',
+      formation,
+      reinforcementGroupId: groupId,
+      bossSupport: groupId.startsWith('boss-'),
+    });
+  }));
+}
+
 export function scaleEnemyStatsV2({ baseHp, baseDamage, baseSpeed, archetype, stage = 1, wave = 1, difficulty = 1 } = {}) {
   const s = clamp(Math.trunc(Number(stage) || 1), 1, 100);
   const w = clamp(Math.trunc(Number(wave) || 1), 1, 20);
@@ -334,6 +415,12 @@ export function createEnemyDirectorV2({ seed = 1, stage = 1, difficulty = 1, pla
     const templateIds = stageTemplateIds(totalWaves, hasBoss);
     const waves = templateIds.map((templateId, index) => {
       const template = CAMPAIGN_WAVE_TEMPLATES_V27[templateId] || CAMPAIGN_WAVE_TEMPLATES_V27.recon;
+      const encounter = resolveCampaignWaveEncounterV28({
+        planetId: resolvedPlanetId,
+        wave: index + 1,
+        totalWaves: templateIds.length,
+        hasBoss,
+      });
       if (template.boss) {
         return Object.freeze({
           wave: index + 1,
@@ -348,6 +435,8 @@ export function createEnemyDirectorV2({ seed = 1, stage = 1, difficulty = 1, pla
           interWaveDelayMs: 0,
           guaranteedDrop: null,
           planetProfileId: profile.id,
+          encounterVersion: CAMPAIGN_ENCOUNTER_ESCALATION_VERSION,
+          encounter,
         });
       }
       const waveSeed = hashParts(seed, resolvedPlanetId, safeStage, index + 1, templateId);
@@ -360,19 +449,28 @@ export function createEnemyDirectorV2({ seed = 1, stage = 1, difficulty = 1, pla
         baseEnemies,
         difficulty: safeDifficulty,
       });
+      const encounterEntries = decorateEncounterEntriesV28(
+        built.entries,
+        encounter,
+        hashParts(waveSeed, encounter?.id || 'standard'),
+      );
       return Object.freeze({
         wave: index + 1,
         templateId,
-        label: template.label,
+        label: encounter?.label || template.label,
         boss: false,
-        bossPreview: template.bossPreview,
-        entries: built.entries,
+        bossPreview: encounter?.kind === 'boss_preview' || template.bossPreview,
+        miniBoss: encounter?.kind === 'mini_boss',
+        entries: encounterEntries,
         threatBudget: built.threatBudget,
         spawnGapMs: built.spawnGapMs,
         formation: built.formation,
-        interWaveDelayMs: template.interWaveDelayMs,
-        guaranteedDrop: template.guaranteedDrop,
+        interWaveDelayMs: encounter?.kind === 'mini_boss'
+          ? Math.max(2400, template.interWaveDelayMs) : template.interWaveDelayMs,
+        guaranteedDrop: encounter?.guaranteedDrop || template.guaranteedDrop,
         planetProfileId: profile.id,
+        encounterVersion: CAMPAIGN_ENCOUNTER_ESCALATION_VERSION,
+        encounter,
       });
     });
     return Object.freeze({
@@ -383,7 +481,23 @@ export function createEnemyDirectorV2({ seed = 1, stage = 1, difficulty = 1, pla
       stage: safeStage,
       totalWaves: waves.length,
       hasBoss: Boolean(hasBoss),
+      encounterVersion: CAMPAIGN_ENCOUNTER_ESCALATION_VERSION,
       waves: Object.freeze(waves),
+    });
+  }
+
+  function buildReinforcementPlan({
+    roles = ['raider'],
+    formation = 'pincer',
+    groupId = 'reinforcement',
+    startOffsetMs = 0,
+  } = {}) {
+    return createReinforcementEntriesV28({
+      seed: hashParts(seed, safePlanetId, safeStage, groupId, roles.join(',')),
+      roles,
+      formation,
+      groupId,
+      startOffsetMs,
     });
   }
 
@@ -407,6 +521,7 @@ export function createEnemyDirectorV2({ seed = 1, stage = 1, difficulty = 1, pla
     planetId: safePlanetId,
     buildWavePlan,
     buildCampaignStagePlan,
+    buildReinforcementPlan,
     buildBossAttackPlan,
   });
 }
