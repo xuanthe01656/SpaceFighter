@@ -38,6 +38,12 @@ import {
   createBossPhaseStateV28,
   resolveBossDamageGateV28,
 } from '../../game/combat/CampaignEncounterEscalationV28.js';
+import {
+  createCampaignMiniBossAiStateV281,
+  forceCampaignMiniBossRecoveryV281,
+  getCampaignMiniBossAiProfileV281,
+  stepCampaignMiniBossAiV281,
+} from '../../game/combat/CampaignMiniBossAiV281.js';
 import { createGuestAbilityRuntimeV2 } from '../../game/combat/GuestAbilityRuntimeV2.js';
 import { deriveGuestAbilityActivationGateV2 } from '../../game/combat/GuestAbilityActivationGateV2.js';
 import { resolveGuestCombatQaRuntimeFromViteEnv } from '../../game/combat/GuestCombatQaBuildGateV2.js';
@@ -85,6 +91,14 @@ const makeMat = (scene, emissive) => {
   const m = new BABYLON.StandardMaterial(`cm_${Math.random()}`, scene);
   m.emissiveColor   = emissive;
   m.disableLighting = true;
+  return m;
+};
+
+const makeTransparentMat = (scene, emissive, alpha = .24) => {
+  const m = makeMat(scene, emissive);
+  m.diffuseColor = emissive.scale(.25);
+  m.alpha = clamp(alpha, .05, 1);
+  m.backFaceCulling = false;
   return m;
 };
 
@@ -844,6 +858,10 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   const fastEntryHaloMat = makeMat(scene, new BABYLON.Color3(1, .45, .12));
   const encounterSummonMat = makeMat(scene, new BABYLON.Color3(.75, .2, 1));
   const encounterMiniBossMat = makeMat(scene, new BABYLON.Color3(1, .55, .08));
+  const encounterLaneDangerMat = makeTransparentMat(scene, new BABYLON.Color3(1, .58, .12), .22);
+  const encounterPreviewDangerMat = makeTransparentMat(scene, new BABYLON.Color3(.68, .35, 1), .20);
+  const encounterAimChargeMat = makeTransparentMat(scene, new BABYLON.Color3(1, .72, .22), .32);
+  const encounterChargeCorridorMat = makeTransparentMat(scene, new BABYLON.Color3(1, .46, .08), .20);
 
   const updateEnemyFacing = (enemy, velocityX, velocityZ, deltaMs) => {
     if (!enemy?.mesh || enemy.mesh.isDisposed?.()) return;
@@ -867,47 +885,76 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     const start = new BABYLON.Vector3(enemy.mesh.position.x, .06, enemy.mesh.position.z);
     const length = Math.min(18, Math.max(7,
       Math.hypot(playerRoot.position.x - start.x, playerRoot.position.z - start.z) + 2));
-    const end = new BABYLON.Vector3(
-      start.x + direction.x * length,
-      .06,
-      start.z + direction.z * length,
-    );
-    const line = BABYLON.MeshBuilder.CreateLines(`charge_telegraph_${enemy.mesh.uniqueId}`, {
-      points: [start, end],
+    const corridor = BABYLON.MeshBuilder.CreateBox(`charge_telegraph_${enemy.mesh.uniqueId}`, {
+      width: enemy._encounterKind === 'mini_boss' ? 2.4 : 1.45,
+      height: .025,
+      depth: length,
     }, scene);
-    line.color = new BABYLON.Color3(1, .32, .08);
-    line.alpha = .82;
-    line.isPickable = false;
-    enemy._chargeTelegraph = line;
-    return line;
+    corridor.position.set(
+      start.x + direction.x * length * .5,
+      .045,
+      start.z + direction.z * length * .5,
+    );
+    corridor.rotation.y = Math.atan2(direction.x, direction.z);
+    corridor.material = encounterChargeCorridorMat;
+    corridor.isPickable = false;
+    corridor.visibility = .72;
+    enemy._chargeTelegraph = corridor;
+    return corridor;
   };
 
 
   const disposeEncounterTelegraph = enemy => {
     for (const mesh of enemy?._encounterTelegraphs || []) safeDispose(mesh);
-    if (enemy) enemy._encounterTelegraphs = [];
+    if (enemy) {
+      enemy._encounterTelegraphs = [];
+      enemy._encounterTelegraphKind = null;
+    }
   };
 
-  const createLaneSweepTelegraph = enemy => {
+  const createLaneSweepTelegraph = (enemy, laneNorms = [-.62, 0, .62]) => {
     disposeEncounterTelegraph(enemy);
     if (!enemy?.mesh?.position) return [];
-    const laneXs = [-.62, 0, .62].map(value => value * boundX());
-    const lines = laneXs.map((x, index) => {
-      const line = BABYLON.MeshBuilder.CreateLines(`enc_lane_${enemy.mesh.uniqueId}_${index}`, {
-        points: [
-          new BABYLON.Vector3(x, .05, Math.max(-ZOOM + 2, enemy.mesh.position.z + 1)),
-          new BABYLON.Vector3(x, .05, ZOOM + 1),
-        ],
+    const laneXs = laneNorms.map(value => clamp(Number(value) || 0, -.9, .9) * boundX());
+    const startZ = Math.max(-ZOOM + 2, enemy.mesh.position.z + 1);
+    const endZ = ZOOM + 1;
+    const depth = Math.max(3, endZ - startZ);
+    const width = Math.max(1.05, boundX() * .16);
+    const zones = laneXs.map((x, index) => {
+      const zone = BABYLON.MeshBuilder.CreateBox(`enc_lane_${enemy.mesh.uniqueId}_${index}`, {
+        width,
+        height: .025,
+        depth,
       }, scene);
-      line.color = enemy._encounterKind === 'mini_boss'
-        ? new BABYLON.Color3(1, .48, .08) : new BABYLON.Color3(.72, .28, 1);
-      line.alpha = .76;
-      line.isPickable = false;
-      return line;
+      zone.position.set(x, .045, startZ + depth * .5);
+      zone.material = enemy._encounterKind === 'mini_boss'
+        ? encounterLaneDangerMat : encounterPreviewDangerMat;
+      zone.isPickable = false;
+      zone.visibility = .62;
+      return zone;
     });
-    enemy._encounterTelegraphs = lines;
+    enemy._encounterTelegraphs = zones;
     enemy._encounterLaneXs = laneXs;
-    return lines;
+    enemy._encounterTelegraphKind = 'lane_zones';
+    return zones;
+  };
+
+  const createMuzzleChargeTelegraph = enemy => {
+    disposeEncounterTelegraph(enemy);
+    if (!enemy?.mesh) return null;
+    const marker = BABYLON.MeshBuilder.CreateTorus(`enc_muzzle_${enemy.mesh.uniqueId}`, {
+      diameter: 1.05,
+      thickness: .13,
+      tessellation: 28,
+    }, scene);
+    marker.parent = enemy.mesh;
+    marker.position.set(0, .10, 1.15);
+    marker.material = encounterAimChargeMat;
+    marker.isPickable = false;
+    marker.visibility = .8;
+    enemy._encounterTelegraphs = [marker];
+    enemy._encounterTelegraphKind = 'muzzle_charge';
+    return marker;
   };
 
   const createSummonTelegraph = enemy => {
@@ -924,6 +971,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     ring.isPickable = false;
     ring.visibility = .82;
     enemy._encounterTelegraphs = [ring];
+    enemy._encounterTelegraphKind = 'summon';
     return ring;
   };
 
@@ -938,7 +986,9 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   const spawnEncounterReinforcements = enemy => {
     const roles = enemy?._encounterSummonRoles || [];
     if (!roles.length || !campaignWaveDirector) return false;
-    const groupId = `encounter-${currentWave}-${enemy.mesh.uniqueId}`;
+    const groupId = enemy._encounterReinforcementGroupId
+      || `encounter-${currentWave}-${enemy.mesh.uniqueId}`;
+    enemy._encounterReinforcementGroupId = groupId;
     const plan = campaignWaveDirector.buildReinforcementPlan({
       roles,
       formation: currentWavePlan?.formation || 'pincer',
@@ -947,11 +997,19 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     plan.forEach((spec, index) => scheduleBattleTimer(() => {
       if (!battleSceneDisposed && !gameOver) spawnEnemy({ ...spec, hpMultiplier: spec.hpMultiplier * .82 });
     }, index * 180));
-    return true;
+    return groupId;
+  };
+
+  const countEncounterReinforcements = enemy => {
+    const groupId = enemy?._encounterReinforcementGroupId;
+    if (!groupId) return 0;
+    return enemies.filter(candidate => !candidate._dead
+      && candidate._reinforcementGroupId === groupId).length;
   };
 
   const armEncounterMechanic = (enemy, nowMs) => {
-    if (!enemy?._encounterFeatured || enemy._encounterMechanicPhase !== 'idle') return;
+    if (!enemy?._encounterFeatured || enemy._encounterKind === 'mini_boss'
+      || enemy._encounterMechanicPhase !== 'idle') return;
     enemy._encounterMechanicStartedAt = nowMs;
     enemy._encounterMechanicFireAt = nowMs + Math.max(500, enemy._encounterTelegraphMs || 850);
     enemy._encounterMechanicPhase = enemy._encounterMechanicId === 'charge_rush'
@@ -962,13 +1020,16 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   };
 
   const stepEncounterMechanic = (enemy, nowMs) => {
-    if (!enemy?._encounterFeatured || enemy._encounterMechanicComplete) return;
+    if (!enemy?._encounterFeatured || enemy._encounterKind === 'mini_boss'
+      || enemy._encounterMechanicComplete) return;
     armEncounterMechanic(enemy, nowMs);
     for (const telegraph of enemy._encounterTelegraphs || []) {
       if (!telegraph?.isDisposed?.()) {
         const pulse = .92 + .12 * Math.sin(nowMs * .018);
-        telegraph.scaling.x = pulse;
-        telegraph.scaling.z = pulse;
+        if (enemy._encounterTelegraphKind !== 'lane_zones') {
+          telegraph.scaling.x = pulse;
+          telegraph.scaling.z = pulse;
+        }
         telegraph.visibility = .55 + .25 * Math.sin(nowMs * .022);
       }
     }
@@ -982,6 +1043,133 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       spawnEncounterReinforcements(enemy);
     }
     completeEncounterMechanic(enemy);
+  };
+
+  const fireMiniBossAimedBurst = (enemy, event) => {
+    if (!enemy?.mesh?.position) return;
+    const dx = playerRoot.position.x - enemy.mesh.position.x;
+    const dz = playerRoot.position.z - enemy.mesh.position.z;
+    const length = Math.hypot(dx, dz) || 1;
+    const baseX = dx / length;
+    const baseZ = dz / length;
+    const count = Math.max(1, Math.trunc(Number(event?.shotCount) || 1));
+    const spread = Math.max(0, Number(event?.spreadRadians) || 0);
+    const speed = Math.max(.08, Number(event?.projectileSpeed) || .32);
+    for (let index = 0; index < count; index += 1) {
+      const normalized = count === 1 ? 0 : index / (count - 1) - .5;
+      const angle = normalized * spread * 2;
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      fireEnemyBullet(enemy.mesh.position,
+        (baseX * cos - baseZ * sin) * speed,
+        (baseX * sin + baseZ * cos) * speed);
+    }
+  };
+
+  const fireMiniBossLaneVolley = (enemy, event) => {
+    if (!enemy?.mesh?.position) return;
+    const speed = Math.max(.08, Number(event?.projectileSpeed) || .34);
+    for (const lane of event?.lanes || []) {
+      const targetX = clamp(Number(lane) || 0, -.9, .9) * boundX();
+      const targetZ = ZOOM + 2;
+      const dx = targetX - enemy.mesh.position.x;
+      const dz = targetZ - enemy.mesh.position.z;
+      const length = Math.hypot(dx, dz) || 1;
+      fireEnemyBullet(enemy.mesh.position, dx / length * speed, dz / length * speed);
+    }
+  };
+
+  const applyMiniBossTelegraph = (enemy, telegraph) => {
+    disposeEncounterTelegraph(enemy);
+    disposeChargeTelegraph(enemy);
+    if (!telegraph) return;
+    if (telegraph.kind === 'lane_zones') createLaneSweepTelegraph(enemy, telegraph.lanes);
+    else if (telegraph.kind === 'charge_corridor') createChargeTelegraph(enemy, telegraph.direction);
+    else if (telegraph.kind === 'summon_ring') createSummonTelegraph(enemy);
+    else createMuzzleChargeTelegraph(enemy);
+  };
+
+  const stepMiniBossEnemy = (enemy, nowMs, enemyFrame, frameDeltaMs) => {
+    const profile = getCampaignMiniBossAiProfileV281(enemy?._encounterAiProfileId);
+    if (!profile || !enemy?._miniBossAiState || !enemy.mesh?.position) return false;
+    const targetX = enemy._miniBossAiState.targetLane * boundX();
+    const targetZ = -ZOOM + profile.anchorOffsetZ;
+    const atAnchor = Math.hypot(targetX - enemy.mesh.position.x, targetZ - enemy.mesh.position.z) <= .45;
+    const result = stepCampaignMiniBossAiV281(enemy._miniBossAiState, {
+      nowMs,
+      atAnchor,
+      enemyX: enemy.mesh.position.x,
+      enemyZ: enemy.mesh.position.z,
+      playerX: playerRoot.position.x,
+      playerZ: playerRoot.position.z,
+      hpRatio: enemy.maxHp > 0 ? enemy.hp / enemy.maxHp : 0,
+      addsAlive: countEncounterReinforcements(enemy),
+    });
+    enemy._miniBossAiState = result.state;
+
+    for (const telegraph of enemy._encounterTelegraphs || []) {
+      if (!telegraph?.isDisposed?.()) {
+        const pulse = .94 + .08 * Math.sin(nowMs * .018);
+        if (enemy._encounterTelegraphKind !== 'lane_zones') {
+          telegraph.scaling.x = pulse;
+          telegraph.scaling.z = pulse;
+        }
+        telegraph.visibility = .58 + .18 * Math.sin(nowMs * .022);
+      }
+    }
+    if (enemy._chargeTelegraph && !enemy._chargeTelegraph.isDisposed?.()) {
+      enemy._chargeTelegraph.visibility = .55 + .20 * Math.sin(nowMs * .02);
+    }
+
+    for (const event of result.events) {
+      if (event.type === 'telegraph_started') {
+        applyMiniBossTelegraph(enemy, event.telegraph);
+        enemy.visual?.setState('attack');
+      } else if (event.type === 'telegraph_ended') {
+        disposeEncounterTelegraph(enemy);
+        disposeChargeTelegraph(enemy);
+        if (!enemy._encounterMechanicComplete) completeEncounterMechanic(enemy);
+      } else if (event.type === 'fire_lane_volley') {
+        fireMiniBossLaneVolley(enemy, event);
+        enemy.visual?.setState('attack');
+      } else if (event.type === 'fire_aimed_burst') {
+        fireMiniBossAimedBurst(enemy, event);
+        enemy.visual?.setState('attack');
+      } else if (event.type === 'summon') {
+        spawnEncounterReinforcements(enemy);
+      }
+    }
+
+    const beforeX = enemy.mesh.position.x;
+    const beforeZ = enemy.mesh.position.z;
+    const movement = result.movement;
+    if (movement?.mode === 'seek_anchor') {
+      const dx = targetX - enemy.mesh.position.x;
+      const dz = targetZ - enemy.mesh.position.z;
+      const distance = Math.hypot(dx, dz) || 1;
+      const step = Math.min(distance,
+        Math.max(.025, Math.abs(enemy.speed) * movement.speedMultiplier) * enemyFrame);
+      enemy.mesh.position.x += dx / distance * step;
+      enemy.mesh.position.z += dz / distance * step;
+      enemy.visual?.setState('move');
+    } else if (movement?.mode === 'charge') {
+      enemy.mesh.position.x += movement.direction.x * Math.abs(enemy.speed)
+        * movement.speedMultiplier * enemyFrame;
+      enemy.mesh.position.z += movement.direction.z * Math.abs(enemy.speed)
+        * movement.speedMultiplier * enemyFrame;
+      enemy.visual?.setState('move');
+    } else {
+      const dx = playerRoot.position.x - enemy.mesh.position.x;
+      const dz = playerRoot.position.z - enemy.mesh.position.z;
+      updateEnemyFacing(enemy, dx, dz, frameDeltaMs);
+      if (enemy._miniBossAiState.phase === 'recover') enemy.visual?.setState('idle');
+      return true;
+    }
+    updateEnemyFacing(enemy,
+      enemy.mesh.position.x - beforeX,
+      enemy.mesh.position.z - beforeZ,
+      frameDeltaMs);
+    return true;
   };
 
   /** Fallback mesh nếu không có imgSrc */
@@ -1088,6 +1276,12 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       canShoot: tier !== 4 && Math.random() > .5,
       lastShoot: 0, shootMs: tier===3 ? 1400 : 2200,
     };
+    const miniBossAiState = spawnSpec?.encounterKind === 'mini_boss'
+      && spawnSpec?.encounterAiProfileId
+      ? createCampaignMiniBossAiStateV281({
+        profileId: spawnSpec.encounterAiProfileId,
+        nowMs: Date.now(),
+      }) : null;
     enemies.push({
       mesh, visual, hp: baseHp, maxHp: baseHp, tier, speed,
       velX: spawnSpec?(tier===4?0:(Number(spawnSpec.strafeDirection)||1)*.035):legacyMotion.velX,
@@ -1109,14 +1303,18 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       _encounterLabel:spawnSpec?.encounterLabel||null,
       _encounterFeatured:Boolean(spawnSpec?.encounterFeatured),
       _encounterMechanicId:spawnSpec?.encounterMechanicId||null,
+      _encounterAiProfileId:spawnSpec?.encounterAiProfileId||null,
+      _miniBossAiState:miniBossAiState,
       _encounterTelegraphMs:Number(spawnSpec?.mechanicTelegraphMs)||850,
       _encounterSummonRoles:Object.freeze([...(spawnSpec?.mechanicSummonRoles||[])]),
       _encounterMechanicProtected:Boolean(spawnSpec?.encounterFeatured&&spawnSpec?.protectUntilMechanic),
       _encounterMechanicComplete:!Boolean(spawnSpec?.encounterFeatured),
       _encounterMechanicPhase:spawnSpec?.encounterFeatured?'idle':'complete',
       _encounterTelegraphs:[],
+      _encounterTelegraphKind:null,
       _encounterLaneXs:[],
       _reinforcementGroupId:spawnSpec?.reinforcementGroupId||null,
+      _encounterReinforcementGroupId:null,
       _bossSupport:Boolean(spawnSpec?.bossSupport),
     });
     return true;
@@ -2215,6 +2413,11 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
           safeDispose(e.entryHalo);e.entryHalo=null;
           e.miniHpBg.isVisible=true;
           e.visual?.setState('move');
+          if(e._encounterKind==='mini_boss'&&e._encounterAiProfileId){
+            e._miniBossAiState=createCampaignMiniBossAiStateV281({
+              profileId:e._encounterAiProfileId,nowMs:now,
+            });
+          }
           armEncounterMechanic(e,now);
         }
         // The entry ring communicates temporary spawn protection. Until it
@@ -2224,60 +2427,64 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       e.miniHpBg.isVisible=true;
       e.visual?.setState('move');
       stepEncounterMechanic(e,now);
-      if(e._encounterMechanicProtected&&!e._encounterMechanicComplete
-        &&e._encounterMechanicId!=='charge_rush'){
-        e.visual?.setState('attack');
-        continue;
-      }
-      const beforeX=e.mesh.position.x;
-      const beforeZ=e.mesh.position.z;
-      if (!e.canShoot && e.tier===4) {
-        const charge=stepChargerMotionV26A3(e._chargerState,{
-          nowMs:now,enemyX:e.mesh.position.x,enemyZ:e.mesh.position.z,
-          targetX:playerRoot.position.x,targetZ:playerRoot.position.z,
-        });
-        e._chargerState=charge.state;
-        if(charge.event==='telegraph_started')createChargeTelegraph(e,charge.direction);
-        if(charge.event==='charge_started'){
-          disposeChargeTelegraph(e);
-          if(e._encounterMechanicId==='charge_rush')completeEncounterMechanic(e);
+      const miniBossHandled = e._encounterKind === 'mini_boss'
+        && stepMiniBossEnemy(e,now,enemyFrame,frameDeltaMs);
+      if (!miniBossHandled) {
+        if(e._encounterMechanicProtected&&!e._encounterMechanicComplete
+          &&e._encounterMechanicId!=='charge_rush'){
+          e.visual?.setState('attack');
+          continue;
         }
-        if(charge.event==='recovery_started')disposeChargeTelegraph(e);
-        if(charge.state.phase==='telegraph')e.visual?.setState('attack');
-        else if(charge.state.phase==='recovery')e.visual?.setState('idle');
-        else e.visual?.setState('move');
-        if(e._chargeTelegraph&&!e._chargeTelegraph.isDisposed?.()){
-          e._chargeTelegraph.visibility=.55+.25*Math.sin(now*.02);
-        }
-        e.mesh.position.x += charge.direction.x * e.speed * charge.speedMultiplier * enemyFrame;
-        e.mesh.position.z += charge.direction.z * e.speed * charge.speedMultiplier * enemyFrame;
-        updateEnemyFacing(e,charge.direction.x,charge.direction.z,frameDeltaMs);
-      } else if (!e.canShoot) {
-        // Melee enemies track the player but now turn toward their actual velocity.
-        const dx = playerRoot.position.x - e.mesh.position.x;
-        const dz = playerRoot.position.z - e.mesh.position.z;
-        const dn = Math.sqrt(dx*dx + dz*dz) || 1;
-        e.mesh.position.x += (dx/dn) * e.speed * 1.2 * enemyFrame;
-        e.mesh.position.z += (dz/dn) * e.speed * 1.2 * enemyFrame;
-        updateEnemyFacing(e,e.mesh.position.x-beforeX,e.mesh.position.z-beforeZ,frameDeltaMs);
-      } else {
-        // Patrol + shoot
-        e.mesh.position.z += e.speed * enemyFrame;
-        e.mesh.position.x += (e.velX + Math.sin(tick * .03 + e.sineOff) * .04) * enemyFrame;
-        const bx = boundX();
-        if (e.mesh.position.z > ZOOM * .65 && e.speed > 0) e.speed = -Math.abs(e.speed);
-        if (e.mesh.position.z < -ZOOM + 1 && e.speed < 0) e.speed = Math.abs(e.speed);
-        if (Math.abs(e.mesh.position.x) > bx) {
-          e.velX *= -1; e.mesh.position.x = clamp(e.mesh.position.x, -bx, bx);
-        }
-        updateEnemyFacing(e,e.mesh.position.x-beforeX,e.mesh.position.z-beforeZ,frameDeltaMs);
-        if (!guestAbilities?.modifiers().cloaked&&now > e.lastShoot + e.shootMs) {
+        const beforeX=e.mesh.position.x;
+        const beforeZ=e.mesh.position.z;
+        if (!e.canShoot && e.tier===4) {
+          const charge=stepChargerMotionV26A3(e._chargerState,{
+            nowMs:now,enemyX:e.mesh.position.x,enemyZ:e.mesh.position.z,
+            targetX:playerRoot.position.x,targetZ:playerRoot.position.z,
+          });
+          e._chargerState=charge.state;
+          if(charge.event==='telegraph_started')createChargeTelegraph(e,charge.direction);
+          if(charge.event==='charge_started'){
+            disposeChargeTelegraph(e);
+            if(e._encounterMechanicId==='charge_rush')completeEncounterMechanic(e);
+          }
+          if(charge.event==='recovery_started')disposeChargeTelegraph(e);
+          if(charge.state.phase==='telegraph')e.visual?.setState('attack');
+          else if(charge.state.phase==='recovery')e.visual?.setState('idle');
+          else e.visual?.setState('move');
+          if(e._chargeTelegraph&&!e._chargeTelegraph.isDisposed?.()){
+            e._chargeTelegraph.visibility=.55+.25*Math.sin(now*.02);
+          }
+          e.mesh.position.x += charge.direction.x * e.speed * charge.speedMultiplier * enemyFrame;
+          e.mesh.position.z += charge.direction.z * e.speed * charge.speedMultiplier * enemyFrame;
+          updateEnemyFacing(e,charge.direction.x,charge.direction.z,frameDeltaMs);
+        } else if (!e.canShoot) {
+          // Melee enemies track the player but now turn toward their actual velocity.
           const dx = playerRoot.position.x - e.mesh.position.x;
           const dz = playerRoot.position.z - e.mesh.position.z;
           const dn = Math.sqrt(dx*dx + dz*dz) || 1;
-          fireEnemyBullet(e.mesh.position, (dx/dn)*.24, (dz/dn)*.24);
-          e.visual?.setState('attack');
-          e.lastShoot = now;
+          e.mesh.position.x += (dx/dn) * e.speed * 1.2 * enemyFrame;
+          e.mesh.position.z += (dz/dn) * e.speed * 1.2 * enemyFrame;
+          updateEnemyFacing(e,e.mesh.position.x-beforeX,e.mesh.position.z-beforeZ,frameDeltaMs);
+        } else {
+          // Patrol + shoot
+          e.mesh.position.z += e.speed * enemyFrame;
+          e.mesh.position.x += (e.velX + Math.sin(tick * .03 + e.sineOff) * .04) * enemyFrame;
+          const bx = boundX();
+          if (e.mesh.position.z > ZOOM * .65 && e.speed > 0) e.speed = -Math.abs(e.speed);
+          if (e.mesh.position.z < -ZOOM + 1 && e.speed < 0) e.speed = Math.abs(e.speed);
+          if (Math.abs(e.mesh.position.x) > bx) {
+            e.velX *= -1; e.mesh.position.x = clamp(e.mesh.position.x, -bx, bx);
+          }
+          updateEnemyFacing(e,e.mesh.position.x-beforeX,e.mesh.position.z-beforeZ,frameDeltaMs);
+          if (!guestAbilities?.modifiers().cloaked&&now > e.lastShoot + e.shootMs) {
+            const dx = playerRoot.position.x - e.mesh.position.x;
+            const dz = playerRoot.position.z - e.mesh.position.z;
+            const dn = Math.sqrt(dx*dx + dz*dz) || 1;
+            fireEnemyBullet(e.mesh.position, (dx/dn)*.24, (dz/dn)*.24);
+            e.visual?.setState('attack');
+            e.lastShoot = now;
+          }
         }
       }
 
@@ -2290,8 +2497,18 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         const dz = e.mesh.position.z - playerRoot.position.z;
         if (dx*dx + dz*dz < 3.24) {   // hit radius 1.8
           damagePlayer({rawDamage:e.tier===4?400:200,source:'contact',damageType:'kinetic',contactId:e._contactHitId});
-          explode(e.mesh.position, 1.5);
-          cleanEnemy(e); enemies.splice(i,1); continue;
+          if (e._encounterKind === 'mini_boss' && e._miniBossAiState) {
+            e._miniBossAiState = forceCampaignMiniBossRecoveryV281(e._miniBossAiState, now);
+            disposeEncounterTelegraph(e);
+            disposeChargeTelegraph(e);
+            const pushLength = Math.hypot(dx, dz) || 1;
+            e.mesh.position.x += dx / pushLength * .45;
+            e.mesh.position.z += dz / pushLength * .45;
+            explode(e.mesh.position, .85);
+          } else {
+            explode(e.mesh.position, 1.5);
+            cleanEnemy(e); enemies.splice(i,1); continue;
+          }
         }
       }
 

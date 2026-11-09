@@ -1,4 +1,4 @@
-export const CAMPAIGN_ENCOUNTER_ESCALATION_VERSION = 'campaign-encounter-v2.8.0';
+export const CAMPAIGN_ENCOUNTER_ESCALATION_VERSION = 'campaign-encounter-v2.8.1';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const freezeValue = value => {
@@ -15,6 +15,7 @@ const encounter = options => freezeValue({
   id: options.id,
   label: options.label,
   mechanicId: options.mechanicId,
+  aiProfileId: options.aiProfileId ?? null,
   featuredRole: options.featuredRole,
   hpMultiplier: options.hpMultiplier ?? 1,
   speedMultiplier: options.speedMultiplier ?? 1,
@@ -42,14 +43,14 @@ export const CAMPAIGN_ENCOUNTER_PROFILES_V28 = freezeValue({
     miniBossA: encounter({
       kind: 'mini_boss', id: 'mechanical_warden',
       label: localized('MINI-BOSS · HỘ VỆ CƠ KHÍ', 'MINI-BOSS · MECHANICAL WARDEN'),
-      mechanicId: 'lane_sweep', featuredRole: 'shieldbearer', hpMultiplier: 5.2,
+      mechanicId: 'lane_sweep', aiProfileId: 'mechanical_warden', featuredRole: 'shieldbearer', hpMultiplier: 5.2,
       speedMultiplier: .72, scaleMultiplier: 1.38, maxEntries: 5, telegraphMs: 850,
       guaranteedDrop: 'heal',
     }),
     miniBossB: encounter({
       kind: 'mini_boss', id: 'frontline_carrier',
       label: localized('MINI-BOSS · TÀU MẸ TIỀN TUYẾN', 'MINI-BOSS · FRONTLINE CARRIER'),
-      mechanicId: 'summon_escort', featuredRole: 'support', hpMultiplier: 5.8,
+      mechanicId: 'summon_escort', aiProfileId: 'frontline_carrier', featuredRole: 'support', hpMultiplier: 5.8,
       speedMultiplier: .68, scaleMultiplier: 1.42, maxEntries: 4, telegraphMs: 900,
       summonRoles: ['gunner', 'raider'], guaranteedDrop: 'heal',
     }),
@@ -85,14 +86,14 @@ export const CAMPAIGN_ENCOUNTER_PROFILES_V28 = freezeValue({
     miniBossA: encounter({
       kind: 'mini_boss', id: 'ion_sentinel',
       label: localized('MINI-BOSS · VỆ BINH ION', 'MINI-BOSS · ION SENTINEL'),
-      mechanicId: 'lane_sweep', featuredRole: 'artillery', hpMultiplier: 5.0,
+      mechanicId: 'lane_sweep', aiProfileId: 'ion_sentinel', featuredRole: 'artillery', hpMultiplier: 5.0,
       speedMultiplier: .66, scaleMultiplier: 1.36, maxEntries: 5, telegraphMs: 900,
       guaranteedDrop: 'heal',
     }),
     miniBossB: encounter({
       kind: 'mini_boss', id: 'repair_frigate',
       label: localized('MINI-BOSS · HỘ TỐNG SỬA CHỮA', 'MINI-BOSS · REPAIR FRIGATE'),
-      mechanicId: 'summon_escort', featuredRole: 'support', hpMultiplier: 5.6,
+      mechanicId: 'summon_escort', aiProfileId: 'repair_frigate', featuredRole: 'support', hpMultiplier: 5.6,
       speedMultiplier: .64, scaleMultiplier: 1.4, maxEntries: 4, telegraphMs: 950,
       summonRoles: ['support', 'gunner'], guaranteedDrop: 'heal',
     }),
@@ -129,14 +130,14 @@ export const CAMPAIGN_ENCOUNTER_PROFILES_V28 = freezeValue({
     miniBossA: encounter({
       kind: 'mini_boss', id: 'brood_alpha',
       label: localized('MINI-BOSS · CHÚA BẦY', 'MINI-BOSS · BROOD ALPHA'),
-      mechanicId: 'summon_swarm', featuredRole: 'support', hpMultiplier: 4.8,
+      mechanicId: 'summon_swarm', aiProfileId: 'brood_alpha', featuredRole: 'support', hpMultiplier: 4.8,
       speedMultiplier: .76, scaleMultiplier: 1.34, maxEntries: 5, telegraphMs: 850,
       summonRoles: ['raider', 'raider', 'raider'], guaranteedDrop: 'heal',
     }),
     miniBossB: encounter({
       kind: 'mini_boss', id: 'inferno_charger',
       label: localized('MINI-BOSS · MŨI LAO HỎA NGỤC', 'MINI-BOSS · INFERNO CHARGER'),
-      mechanicId: 'charge_rush', featuredRole: 'charger', hpMultiplier: 5.4,
+      mechanicId: 'charge_rush', aiProfileId: 'inferno_charger', featuredRole: 'charger', hpMultiplier: 5.4,
       speedMultiplier: .88, scaleMultiplier: 1.38, maxEntries: 4, telegraphMs: 850,
       guaranteedDrop: 'heal',
     }),

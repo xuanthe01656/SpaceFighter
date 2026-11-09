@@ -21,6 +21,13 @@ import {
   createBossPhaseStateV28,
   resolveBossDamageGateV28,
 } from '../src/game/combat/CampaignEncounterEscalationV28.js';
+import {
+  CAMPAIGN_MINI_BOSS_AI_PROFILES_V281,
+  CAMPAIGN_MINI_BOSS_AI_VERSION,
+  createCampaignMiniBossAiStateV281,
+  forceCampaignMiniBossRecoveryV281,
+  stepCampaignMiniBossAiV281,
+} from '../src/game/combat/CampaignMiniBossAiV281.js';
 
 const stagePlan = (options = {}) => createEnemyDirectorV2({
   seed: options.seed ?? 12345,
@@ -84,8 +91,8 @@ test('boss plan telegraphs every attack and changes phase deterministically', ()
 });
 
 test('V2.8 combines deterministic pacing with mini-bosses and real Boss mechanic previews', () => {
-  assert.equal(CAMPAIGN_WAVE_DIRECTOR_VERSION, 'campaign-wave-director-v2.8.0');
-  assert.equal(CAMPAIGN_ENCOUNTER_ESCALATION_VERSION, 'campaign-encounter-v2.8.0');
+  assert.equal(CAMPAIGN_WAVE_DIRECTOR_VERSION, 'campaign-wave-director-v2.8.1');
+  assert.equal(CAMPAIGN_ENCOUNTER_ESCALATION_VERSION, 'campaign-encounter-v2.8.1');
   assert.deepEqual(Object.keys(CAMPAIGN_PLANET_PROFILES_V27), ['1', '2', '3']);
   assert.ok(Object.keys(CAMPAIGN_WAVE_TEMPLATES_V27).length >= 14);
 
@@ -99,10 +106,12 @@ test('V2.8 combines deterministic pacing with mini-bosses and real Boss mechanic
   assert.equal(long.waves[4].miniBoss, true);
   assert.equal(long.waves[4].encounter.id, 'mechanical_warden');
   assert.equal(long.waves[4].entries[0].encounterMechanicId, 'lane_sweep');
+  assert.equal(long.waves[4].entries[0].encounterAiProfileId, 'mechanical_warden');
   assert.equal(long.waves[4].guaranteedDrop, 'heal');
   assert.equal(long.waves[9].miniBoss, true);
   assert.equal(long.waves[9].encounter.id, 'frontline_carrier');
   assert.deepEqual(long.waves[9].entries[0].mechanicSummonRoles, ['gunner', 'raider']);
+  assert.equal(long.waves[9].entries[0].encounterAiProfileId, 'frontline_carrier');
   assert.equal(long.waves[12].bossPreview, true);
   assert.equal(long.waves[12].encounter.kind, 'boss_preview');
   assert.equal(long.waves[12].entries[0].encounterMechanicId, 'lane_sweep');
@@ -119,6 +128,89 @@ test('V2.8 combines deterministic pacing with mini-bosses and real Boss mechanic
   assert.equal(short.waves[4].miniBoss, true);
   assert.equal(short.waves[8].bossPreview, true);
   assert.equal(short.waves[8].entries[0].protectUntilMechanic, true);
+});
+
+test('V2.8.1 mini-boss AI uses deliberate anchors and repeats attack cycles instead of one-shot sine patrol', () => {
+  assert.equal(CAMPAIGN_MINI_BOSS_AI_VERSION, 'campaign-mini-boss-ai-v2.8.1');
+  assert.deepEqual(Object.keys(CAMPAIGN_MINI_BOSS_AI_PROFILES_V281).sort(), [
+    'brood_alpha',
+    'frontline_carrier',
+    'inferno_charger',
+    'ion_sentinel',
+    'mechanical_warden',
+    'repair_frigate',
+  ]);
+  assert.equal(Object.values(CAMPAIGN_MINI_BOSS_AI_PROFILES_V281)
+    .every(profile => Array.isArray(profile.anchorLanes) && profile.anchorLanes.length >= 3), true);
+
+  let state = createCampaignMiniBossAiStateV281({ profileId: 'mechanical_warden', nowMs: 0 });
+  let step = stepCampaignMiniBossAiV281(state, {
+    nowMs: 0, atAnchor: true, enemyX: 0, enemyZ: -6, playerX: 0, playerZ: 8, hpRatio: 1,
+  });
+  state = step.state;
+  assert.equal(step.events.some(event => event.type === 'telegraph_started'), true);
+  assert.equal(step.events[0].telegraph.kind, 'lane_zones');
+
+  step = stepCampaignMiniBossAiV281(state, {
+    nowMs: 900, atAnchor: true, enemyX: 0, enemyZ: -6, playerX: 0, playerZ: 8, hpRatio: 1,
+  });
+  state = step.state;
+  assert.equal(step.events.some(event => event.type === 'telegraph_ended'), true);
+  assert.equal(step.events.some(event => event.type === 'fire_lane_volley'), true);
+  step = stepCampaignMiniBossAiV281(state, {
+    nowMs: 1140, atAnchor: true, enemyX: 0, enemyZ: -6, playerX: 0, playerZ: 8, hpRatio: 1,
+  });
+  state = step.state;
+  assert.equal(step.events.filter(event => event.type === 'fire_lane_volley').length, 1);
+  step = stepCampaignMiniBossAiV281(state, {
+    nowMs: 1380, atAnchor: true, enemyX: 0, enemyZ: -6, playerX: 0, playerZ: 8, hpRatio: 1,
+  });
+  state = step.state;
+  assert.equal(step.events.filter(event => event.type === 'fire_lane_volley').length, 1);
+  assert.equal(state.phase, 'recover');
+  step = stepCampaignMiniBossAiV281(state, {
+    nowMs: 3000, atAnchor: true, enemyX: 0, enemyZ: -6, playerX: 0, playerZ: 8, hpRatio: .8,
+  });
+  state = step.state;
+  step = stepCampaignMiniBossAiV281(state, {
+    nowMs: 3001, atAnchor: true, enemyX: 0, enemyZ: -6, playerX: 0, playerZ: 8, hpRatio: .8,
+  });
+  assert.equal(step.events.some(event => event.type === 'telegraph_started'), true);
+});
+
+test('V2.8.1 carrier mini-boss keeps firing between bounded summons and charge mini-boss recovers instead of despawning', () => {
+  let carrier = createCampaignMiniBossAiStateV281({ profileId: 'frontline_carrier', nowMs: 0 });
+  const carrierTelegraph = stepCampaignMiniBossAiV281(carrier, {
+    nowMs: 0, atAnchor: true, enemyX: 0, enemyZ: -6, playerX: 1, playerZ: 8, hpRatio: 1, addsAlive: 0,
+  });
+  assert.equal(carrierTelegraph.events[0].telegraph.kind, 'summon_ring');
+  carrier = carrierTelegraph.state;
+  let step = stepCampaignMiniBossAiV281(carrier, {
+    nowMs: 800, atAnchor: true, enemyX: 0, enemyZ: -6, playerX: 1, playerZ: 8, hpRatio: 1, addsAlive: 0,
+  });
+  carrier = step.state;
+  assert.equal(step.events.some(event => event.type === 'summon'), true);
+  step = stepCampaignMiniBossAiV281(carrier, {
+    nowMs: 1000, atAnchor: true, enemyX: 0, enemyZ: -6, playerX: 1, playerZ: 8, hpRatio: 1, addsAlive: 2,
+  });
+  assert.equal(step.events.some(event => event.type === 'fire_aimed_burst'), true);
+
+  let charger = createCampaignMiniBossAiStateV281({ profileId: 'inferno_charger', nowMs: 0 });
+  charger = stepCampaignMiniBossAiV281(charger, {
+    nowMs: 0, atAnchor: true, enemyX: 0, enemyZ: -6, playerX: 2, playerZ: 8, hpRatio: 1,
+  }).state;
+  step = stepCampaignMiniBossAiV281(charger, {
+    nowMs: 720, atAnchor: true, enemyX: 0, enemyZ: -6, playerX: 2, playerZ: 8, hpRatio: 1,
+  });
+  charger = step.state;
+  assert.equal(step.events.some(event => event.type === 'charge_started'), true);
+  assert.equal(step.movement.mode, 'charge');
+  step = stepCampaignMiniBossAiV281(charger, {
+    nowMs: 1500, atAnchor: false, enemyX: 2, enemyZ: 0, playerX: 2, playerZ: 8, hpRatio: .8,
+  });
+  assert.equal(step.events.some(event => event.type === 'fire_aimed_burst'), true);
+  assert.equal(step.state.phase, 'recover');
+  assert.equal(forceCampaignMiniBossRecoveryV281(step.state, 1600).phase, 'recover');
 });
 
  test('V2.8 Boss gates clamp burst damage at 70/35 percent and summon deterministic planet support', () => {
@@ -197,6 +289,14 @@ test('Campaign source wires V2.8 encounters only in Guest QA and keeps the froze
   assert.match(source, /resolveBossDamageGateV28\(\{/);
   assert.match(source, /beginBossPhaseTransition\(gateResult\.gate\)/);
   assert.match(source, /bossPhaseState=guestAbilityQa\?createBossPhaseStateV28/);
+  assert.match(source, /stepMiniBossEnemy\(e,now,enemyFrame,frameDeltaMs\)/);
+  assert.match(source, /createMuzzleChargeTelegraph/);
+  assert.match(source, /telegraph\.kind === 'summon_ring'/);
+  assert.match(source, /encounterLaneDangerMat/);
+  const aiSource = fs.readFileSync(new URL('../src/game/combat/CampaignMiniBossAiV281.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(aiSource, /Math\.sin/);
+  assert.match(source, /forceCampaignMiniBossRecoveryV281/);
+  assert.doesNotMatch(source, /CreateLines\(`enc_lane_/);
   assert.match(source, /Frozen legacy fallback for non-QA lanes/);
   assert.match(source, /waveCount\s*=\s*\(stageConfig\.baseEnemies\|\|5\)\s*\+\s*currentWave\s*\*\s*3/);
   assert.match(source, /spawnInterval\s*=\s*Math\.max\(300,\s*1500\s*-\s*\(currentStage\*100\s*\+\s*currentWave\*50\)\)/);

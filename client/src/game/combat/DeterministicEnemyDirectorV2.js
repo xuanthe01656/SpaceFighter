@@ -4,7 +4,7 @@ import {
   resolveCampaignWaveEncounterV28,
 } from './CampaignEncounterEscalationV28.js';
 
-export const CAMPAIGN_WAVE_DIRECTOR_VERSION = 'campaign-wave-director-v2.8.0';
+export const CAMPAIGN_WAVE_DIRECTOR_VERSION = 'campaign-wave-director-v2.8.1';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const freezeList = values => Object.freeze(values.map(value => Object.freeze(value)));
@@ -296,6 +296,7 @@ function decorateEncounterEntriesV28(entries, encounter, seed) {
     encounterKind: encounter.kind,
     encounterId: encounter.id,
     encounterMechanicId: encounter.mechanicId,
+    encounterAiProfileId: encounter.aiProfileId,
     encounterLabel: encounter.label,
     encounterFeatured: true,
     mechanicTelegraphMs: encounter.telegraphMs,
