@@ -1,12 +1,31 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {
   ENEMY_ARCHETYPES_V2,
   BOSS_PHASES_V2,
   auditEnemyCombatCatalogV2,
   bossPhaseForHp,
 } from '../src/game/combat/EnemyCombatCatalogV2.js';
-import { createEnemyDirectorV2, scaleEnemyStatsV2 } from '../src/game/combat/DeterministicEnemyDirectorV2.js';
+import {
+  CAMPAIGN_PLANET_PROFILES_V27,
+  CAMPAIGN_WAVE_DIRECTOR_VERSION,
+  CAMPAIGN_WAVE_TEMPLATES_V27,
+  createEnemyDirectorV2,
+  scaleEnemyStatsV2,
+} from '../src/game/combat/DeterministicEnemyDirectorV2.js';
+
+const stagePlan = (options = {}) => createEnemyDirectorV2({
+  seed: options.seed ?? 12345,
+  stage: options.stage ?? 10,
+  planetId: options.planetId ?? 1,
+  difficulty: options.difficulty ?? 1,
+}).buildCampaignStagePlan({
+  planetId: options.planetId ?? 1,
+  totalWaves: options.totalWaves ?? 15,
+  hasBoss: options.hasBoss ?? true,
+  baseEnemies: options.baseEnemies ?? 40,
+});
 
 test('enemy V2 roles expose readable telegraphs, defense classes and bounded control resistance', () => {
   assert.deepEqual(auditEnemyCombatCatalogV2(), []);
@@ -17,10 +36,14 @@ test('enemy V2 roles expose readable telegraphs, defense classes and bounded con
   assert.equal(bossPhaseForHp(.2).id, 'phase_3');
 });
 
-test('same seed produces the same wave and boss plans', () => {
-  const a = createEnemyDirectorV2({ seed: 12345, stage: 7 });
-  const b = createEnemyDirectorV2({ seed: 12345, stage: 7 });
+test('same seed produces the same legacy wave, campaign stage and boss plans', () => {
+  const a = createEnemyDirectorV2({ seed: 12345, stage: 7, planetId: 2 });
+  const b = createEnemyDirectorV2({ seed: 12345, stage: 7, planetId: 2 });
   assert.deepEqual(a.buildWavePlan({ wave: 4, count: 30 }), b.buildWavePlan({ wave: 4, count: 30 }));
+  assert.deepEqual(
+    a.buildCampaignStagePlan({ planetId: 2, totalWaves: 10, hasBoss: true, baseEnemies: 20 }),
+    b.buildCampaignStagePlan({ planetId: 2, totalWaves: 10, hasBoss: true, baseEnemies: 20 }),
+  );
   assert.deepEqual(a.buildBossAttackPlan({ cycles: 12 }), b.buildBossAttackPlan({ cycles: 12 }));
 });
 
@@ -51,4 +74,75 @@ test('boss plan telegraphs every attack and changes phase deterministically', ()
   const plan = createEnemyDirectorV2({ seed: 2468, stage: 10 }).buildBossAttackPlan({ cycles: 12 });
   assert.equal(plan.every(entry => entry.fireTick - entry.telegraphTick === 30), true);
   assert.deepEqual([...new Set(plan.map(entry => entry.phaseId))], ['phase_1', 'phase_2', 'phase_3']);
+});
+
+test('V2.7 combines deterministic director, three planet profiles and 10/15-wave pacing', () => {
+  assert.equal(CAMPAIGN_WAVE_DIRECTOR_VERSION, 'campaign-wave-director-v2.7.0');
+  assert.deepEqual(Object.keys(CAMPAIGN_PLANET_PROFILES_V27), ['1', '2', '3']);
+  assert.ok(Object.keys(CAMPAIGN_WAVE_TEMPLATES_V27).length >= 14);
+
+  const long = stagePlan({ totalWaves: 15, hasBoss: true, stage: 10 });
+  assert.equal(long.waves.length, 15);
+  assert.deepEqual(long.waves.map(wave => wave.templateId), [
+    'recon', 'crossfire', 'first_rush', 'pincer', 'escort',
+    'recovery_elite', 'lane_sweep', 'support_network', 'pressure_lanes',
+    'mixed_pressure', 'commander', 'elite_duel', 'boss_preview_a', 'boss_preview_b', 'boss',
+  ]);
+  assert.equal(long.waves[5].guaranteedDrop, 'heal');
+  assert.equal(long.waves[12].bossPreview, true);
+  assert.equal(long.waves[13].bossPreview, true);
+  assert.equal(long.waves[14].boss, true);
+  assert.equal(long.waves[14].entries.length, 0);
+
+  const short = stagePlan({ totalWaves: 10, hasBoss: true, stage: 5, baseEnemies: 20 });
+  assert.deepEqual(short.waves.map(wave => wave.templateId), [
+    'recon', 'crossfire', 'first_rush', 'pincer', 'elite_duel',
+    'recovery_elite', 'escort', 'mixed_pressure', 'boss_preview_a', 'boss',
+  ]);
+});
+
+test('V2.7 threat budgets stay readable, schedules are monotonic and early stages do not leak locked roles', () => {
+  const early = stagePlan({ stage: 1, totalWaves: 5, hasBoss: false, baseEnemies: 5 });
+  const allowedEarly = new Set(['raider', 'gunner']);
+  for (const wave of early.waves) {
+    assert.ok(wave.threatBudget >= 6 && wave.threatBudget <= 46);
+    assert.ok(wave.entries.length > 0 && wave.entries.length <= 46);
+    assert.equal(wave.entries.every(entry => allowedEarly.has(entry.archetypeId)), true);
+    assert.equal(wave.entries.every((entry, index, list) => index === 0 || entry.spawnOffsetMs > list[index - 1].spawnOffsetMs), true);
+    assert.equal(wave.entries.every(entry => [-.8, -.4, 0, .4, .8].includes(entry.lane)), true);
+  }
+  const generic = stagePlan({ stage: 9, totalWaves: 12, hasBoss: false, baseEnemies: 35 });
+  assert.equal(generic.waves.at(-1).templateId, 'finale');
+  assert.equal(generic.waves.some(wave => wave.templateId === 'recovery_elite'), true);
+  assert.equal(generic.waves.every((wave, index, waves) => index === 0 || wave.templateId !== waves[index - 1].templateId), true);
+});
+
+test('planet profiles create distinct deterministic compositions without changing stage length or boss position', () => {
+  const alpha = stagePlan({ planetId: 1, seed: 99 });
+  const cryo = stagePlan({ planetId: 2, seed: 99 });
+  const inferno = stagePlan({ planetId: 3, seed: 99 });
+  assert.equal(alpha.waves.length, cryo.waves.length);
+  assert.equal(cryo.waves.length, inferno.waves.length);
+  assert.equal(alpha.waves.at(-1).boss, true);
+  assert.equal(cryo.waves.at(-1).boss, true);
+  assert.equal(inferno.waves.at(-1).boss, true);
+  assert.notEqual(alpha.planetProfileId, cryo.planetProfileId);
+  assert.notEqual(cryo.planetProfileId, inferno.planetProfileId);
+  const signature = plan => plan.waves.slice(0, -1)
+    .flatMap(wave => wave.entries.map(entry => entry.archetypeId)).join('|');
+  assert.notEqual(signature(alpha), signature(cryo));
+  assert.notEqual(signature(cryo), signature(inferno));
+});
+
+test('Campaign source uses V2.7 only in Guest QA and keeps the frozen non-QA fallback', () => {
+  const source = fs.readFileSync(new URL('../src/components/Campaign/CampaignScene.js', import.meta.url), 'utf8');
+  assert.match(source, /campaignWaveDirector=guestAbilityQa\?createEnemyDirectorV2/);
+  assert.match(source, /buildCampaignStagePlan\(\{/);
+  assert.match(source, /spawnEnemy\(nextSpec\)/);
+  assert.match(source, /currentWavePlan\.entries\[waveSpawned\]/);
+  assert.match(source, /currentWavePlan\?\.guaranteedDrop/);
+  assert.match(source, /Frozen legacy fallback for non-QA lanes/);
+  assert.match(source, /waveCount\s*=\s*\(stageConfig\.baseEnemies\|\|5\)\s*\+\s*currentWave\s*\*\s*3/);
+  assert.match(source, /spawnInterval\s*=\s*Math\.max\(300,\s*1500\s*-\s*\(currentStage\*100\s*\+\s*currentWave\*50\)\)/);
+  assert.doesNotMatch(source, /campaignWaveDirector\s*=\s*createEnemyDirectorV2/);
 });

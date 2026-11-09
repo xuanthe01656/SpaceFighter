@@ -32,6 +32,7 @@ import {
   stepChargerMotionV26A3,
 } from '../../game/combat/CampaignRuntimeReliabilityV26A3.js';
 import { resolveEnemyGameplayYawV26A4 } from '../../game/assets/EnemyVisualHeadingV26A4.js';
+import { createEnemyDirectorV2 } from '../../game/combat/DeterministicEnemyDirectorV2.js';
 import { createGuestAbilityRuntimeV2 } from '../../game/combat/GuestAbilityRuntimeV2.js';
 import { deriveGuestAbilityActivationGateV2 } from '../../game/combat/GuestAbilityActivationGateV2.js';
 import { resolveGuestCombatQaRuntimeFromViteEnv } from '../../game/combat/GuestCombatQaBuildGateV2.js';
@@ -171,6 +172,18 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   const isReplay        = guestAbilityQa ? false
     : currentStage < (progress.planets?.[currentPlanetId]?.highestStage ?? 1);
   const stageConfig     = STAGE_CONFIG[currentStage] || STAGE_CONFIG[1];
+  const campaignWaveDirector=guestAbilityQa?createEnemyDirectorV2({
+    seed:stableSeed('campaign-wave-v27',currentPlanetId,currentStage),
+    stage:currentStage,
+    planetId:currentPlanetId,
+    difficulty:clamp(0.9+currentPlanetId*.1+currentStage*.015,1,1.35),
+  }):null;
+  const campaignStagePlan=campaignWaveDirector?.buildCampaignStagePlan({
+    planetId:currentPlanetId,
+    totalWaves:stageConfig.waves||5,
+    hasBoss:Boolean(stageConfig.hasBoss),
+    baseEnemies:stageConfig.baseEnemies||5,
+  })||null;
   const qaLoadoutSelection=guestAbilityQa
     ?resolveGuestCombatQaLoadoutV2(globalThis.location?.search||''):null;
   const mobileQaLoadout=guestAbilityQa&&import.meta.env.VITE_SF_GUEST_COMBAT_V2_QA==='true'
@@ -881,19 +894,26 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     return m;
   };
 
-  const spawnEnemy = () => {
+  const spawnEnemy = (spawnSpec = null) => {
     if (enemies.length >= runtimeLimits.maxActiveEnemies) {
       runtimeCapacityClamps.enemies++;
       return false;
     }
-    const rand = Math.random() * 100;
-    let tier = 1;
-    if (currentStage >= 2 && rand > 50) tier = 2;
-    if (currentStage >= 4 && rand > 75) tier = 3;
-    if (currentStage >= 6 && rand > 85) tier = 4;
+    let tier;
+    if(spawnSpec){
+      tier=clamp(Math.trunc(Number(spawnSpec.tier)||1),1,4);
+    }else{
+      const rand = Math.random() * 100;
+      tier = 1;
+      if (currentStage >= 2 && rand > 50) tier = 2;
+      if (currentStage >= 4 && rand > 75) tier = 3;
+      if (currentStage >= 6 && rand > 85) tier = 4;
+    }
 
     const cfg    = curEnemyCfgs.find(e => e.tier === tier) || curEnemyCfgs[0];
-    const spawnX = playerRoot.position.x + (Math.random() - .5) * boundX() * 1.6;
+    const spawnX = spawnSpec
+      ?clamp(Number(spawnSpec.lane)||0,-.88,.88)*boundX()
+      :playerRoot.position.x + (Math.random() - .5) * boundX() * 1.6;
     const spawnZ = -ZOOM - 3;
 
     // Gameplay/collision root is always stable. Artwork may arrive later via
@@ -917,12 +937,18 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     entryHalo.isPickable=false;
     entryHalo.visibility=.72;
 
-    const rawSpeed = cfg.speedMin + Math.random() * (cfg.speedMax - cfg.speedMin);
-    const speed    = rawSpeed / 1200;   // pixels/s → Babylon units/frame@60fps
+    const speedRoll=spawnSpec?clamp(Number(spawnSpec.speedRoll)||0,0,1):Math.random();
+    const rawSpeed = cfg.speedMin + speedRoll * (cfg.speedMax - cfg.speedMin);
+    const speed    = rawSpeed / 1200 * (spawnSpec?.speedMultiplier||1);   // pixels/s → Babylon units/frame@60fps
 
     let baseHp = cfg.baseHp + currentStage * 15 + currentWave * 5;
-    baseHp     = Math.floor(baseHp * combat.environment.enemyHpMultiplier);
-    const pts  = isReplay ? Math.max(1, Math.floor(cfg.score / 2)) : cfg.score;
+    baseHp     = Math.floor(baseHp * combat.environment.enemyHpMultiplier * (spawnSpec?.hpMultiplier||1));
+    const ptsBase=isReplay ? Math.max(1, Math.floor(cfg.score / 2)) : cfg.score;
+    const pts  = Math.max(1,Math.round(ptsBase*(spawnSpec?.elite?2:1)));
+    if(spawnSpec?.elite){
+      mesh.scaling.x*=1.14;mesh.scaling.z*=1.14;
+      entryHalo.scaling.x=1.12;entryHalo.scaling.z=1.12;
+    }
 
     // Mini HP bar
     const miniHpBg = new GUI.Rectangle(`ehb_${mesh.uniqueId}`);
@@ -936,18 +962,27 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
 
     const miniHp = new GUI.Rectangle(`ehf_${mesh.uniqueId}`);
     miniHp.width = '100%'; miniHp.height = '100%';
-    miniHp.background = tier===3?'#ffdd55': tier===2?'#ff8a66':'#66ddff';
+    miniHp.background = spawnSpec?.elite?'#ffd166':tier===3?'#ffdd55': tier===2?'#ff8a66':'#66ddff';
     miniHp.thickness = 0; miniHp.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
     miniHpBg.addControl(miniHp);
 
-    enemies.push({
-      mesh, visual, hp: baseHp, maxHp: baseHp, tier, speed,
+    const legacyMotion=spawnSpec?null:{
       velX: tier===4 ? 0 : (Math.random()-.5)*.05,
       sineOff: Math.random() * Math.PI * 2,
-      isBoss: false, isEnraged: false,
       canShoot: tier !== 4 && Math.random() > .5,
       lastShoot: 0, shootMs: tier===3 ? 1400 : 2200,
+    };
+    enemies.push({
+      mesh, visual, hp: baseHp, maxHp: baseHp, tier, speed,
+      velX: spawnSpec?(tier===4?0:(Number(spawnSpec.strafeDirection)||1)*.035):legacyMotion.velX,
+      sineOff: spawnSpec?Number(spawnSpec.sinePhase)||0:legacyMotion.sineOff,
+      isBoss: false, isEnraged: false,
+      canShoot: spawnSpec?Boolean(spawnSpec.canShoot):legacyMotion.canShoot,
+      lastShoot: spawnSpec?0:legacyMotion.lastShoot,
+      shootMs: spawnSpec?.shootMs||legacyMotion?.shootMs||2200,
       points: pts, miniHpBg, miniHp, entryHalo, _dead: false,
+      _waveRole:spawnSpec?.archetypeId||null,
+      _waveElite:Boolean(spawnSpec?.elite),
       _entryState:enemyEntryPolicy.createState({tier}),
       _contactHitId: `campaign-enemy-contact-${mesh.uniqueId}`,
       _facingYaw: 0,
@@ -1076,11 +1111,15 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   // ══════════════════════════════════════════════════════════════════════════
 
   const MAX_WAVES   = stageConfig.waves || 5;
+  const CAMPAIGN_WAVES_TOTAL = campaignStagePlan?.totalWaves || MAX_WAVES;
   let currentWave   = 0;
   let waveCount     = 0;   // total enemies to spawn in current wave
   let waveSpawned   = 0;
   let lastSpawn     = 0;
   let spawnInterval = 1200;
+  let currentWavePlan = null;
+  let currentWaveStartedAt = 0;
+  let waveRecoveryDropSpawned = false;
   let gameOver      = false;
   let gameState     = 'TRANSITION';  // PLAYING | BOSS_INTRO | BOSS_FIGHT | TRANSITION | GAMEOVER | CLEAR
   let score         = 0;
@@ -1139,21 +1178,34 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   };
   const startWave = n => {
     currentWave   = n;
-    waveCount = (stageConfig.baseEnemies||5) + currentWave * 3;
-    spawnInterval = Math.max(300, 1500 - (currentStage*100 + currentWave*50));
-    waveSpawned   = 0;
-    lastSpawn     = Date.now() + 500;
+    currentWavePlan=campaignStagePlan?.waves?.[n-1]||null;
+    waveRecoveryDropSpawned=false;
+    if(currentWavePlan){
+      waveCount=currentWavePlan.entries.length;
+      spawnInterval=currentWavePlan.spawnGapMs||1200;
+      waveSpawned=0;
+      currentWaveStartedAt=Date.now();
+      lastSpawn=currentWaveStartedAt;
+    }else{
+      // Frozen legacy fallback for non-QA lanes. Guest Combat QA uses the
+      // deterministic V2.7 stage plan above and never reads these random counts.
+      waveCount = (stageConfig.baseEnemies||5) + currentWave * 3;
+      spawnInterval = Math.max(300, 1500 - (currentStage*100 + currentWave*50));
+      waveSpawned   = 0;
+      lastSpawn     = Date.now() + 500;
+    }
 
     waveText.text = lang==='vi'
-      ? `ẢI ${currentStage} | ĐỢT ${n}/${MAX_WAVES}`
-      : `STAGE ${currentStage} | WAVE ${n}/${MAX_WAVES}`;
+      ? `ẢI ${currentStage} | ĐỢT ${n}/${CAMPAIGN_WAVES_TOTAL}`
+      : `STAGE ${currentStage} | WAVE ${n}/${CAMPAIGN_WAVES_TOTAL}`;
 
-    if (n === MAX_WAVES && stageConfig.hasBoss) {
+    if (currentWavePlan?.boss || (n === CAMPAIGN_WAVES_TOTAL && stageConfig.hasBoss)) {
       startBossIntro();
       return;
     }
+    const planLabel=currentWavePlan?.label?.[lang==='vi'?'vi':'en'];
     showAnnouncement(
-      `${lang==='vi'?'TIẾN VÀO ĐỢT':'ENTERING WAVE'} ${n}`, '#66fcf1');
+      `${lang==='vi'?'TIẾN VÀO ĐỢT':'ENTERING WAVE'} ${n}${planLabel?`\n${planLabel}`:''}`, '#66fcf1');
     setGameState('PLAYING');
   };
 
@@ -1815,7 +1867,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   if(externalHud)scene.onBeforeRenderObservable.add(()=>{
     const now=Date.now();if(now-lastHudPublishAt<100)return;lastHudPublishAt=now;
     if(guestAbilities)publishGuestAbilityState();
-    try{data.onHudUpdate({stage:currentStage,wave:Math.max(1,currentWave),wavesTotal:MAX_WAVES,
+    try{data.onHudUpdate({stage:currentStage,wave:Math.max(1,currentWave),wavesTotal:CAMPAIGN_WAVES_TOTAL,
       hp:stats.hp,maxHp:stats.maxHp,kills:verifiedClientKills,score,
       bossHp:gameState==='BOSS_FIGHT'&&bossMesh&&bossHp>0?bossHp:null,
       bossMaxHp:gameState==='BOSS_FIGHT'&&bossMesh&&bossMaxHp>0?bossMaxHp:null});}catch(_){}
@@ -2143,7 +2195,17 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     // ── Spawn enemies (PLAYING state) ──
     if (gameState==='PLAYING') {
       if (waveSpawned < waveCount) {
-        if (now > lastSpawn + spawnInterval) {
+        if(currentWavePlan){
+          const elapsed=Math.max(0,now-currentWaveStartedAt);
+          let spawnedThisFrame=0;
+          while(waveSpawned<waveCount&&spawnedThisFrame<2){
+            const nextSpec=currentWavePlan.entries[waveSpawned];
+            if(!nextSpec||elapsed<nextSpec.spawnOffsetMs)break;
+            if(!spawnEnemy(nextSpec))break;
+            waveSpawned++;
+            spawnedThisFrame++;
+          }
+        }else if (now > lastSpawn + spawnInterval) {
           if (spawnEnemy()) waveSpawned++;
           // A capacity clamp queues the remaining spawn instead of retrying on
           // every render frame and overwhelming low-end devices.
@@ -2153,10 +2215,21 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         // All spawned, wait for all to die
         const alive = enemies.filter(e => !e._dead).length;
         if (alive===0) {
-          if (currentWave < MAX_WAVES) {
+          if(currentWavePlan?.guaranteedDrop&&!waveRecoveryDropSpawned){
+            waveRecoveryDropSpawned=true;
+            spawnDrop(playerRoot.position.x,playerRoot.position.z-2,currentWavePlan.guaranteedDrop);
+          }
+          if (currentWave < CAMPAIGN_WAVES_TOTAL) {
             setGameState('TRANSITION');
             showAnnouncement(lang==='vi'?'DỌN SẠCH!':'SECTOR CLEARED!', '#2ecc71', 1000);
-            scheduleBattleTimer(() => startWave(currentWave+1), 2000);
+            if(currentWavePlan){
+              scheduleBattleTimer(
+                () => startWave(currentWave+1),
+                currentWavePlan.interWaveDelayMs||2000,
+              );
+            }else{
+              scheduleBattleTimer(() => startWave(currentWave+1), 2000);
+            }
           } else if (!stageConfig.hasBoss) {
             stageCleared();
           }
@@ -2180,7 +2253,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         planetId: currentPlanetId,
         stageId: currentStage,
         wave: currentWave,
-        wavesTotal: MAX_WAVES,
+        wavesTotal: CAMPAIGN_WAVES_TOTAL,
         tick,
         enemies: enemies.filter(enemy => !enemy._dead).length,
         playerProjectiles: playerBullets.length,
