@@ -39,6 +39,12 @@ import {
   resolveBossDamageGateV28,
 } from '../../game/combat/CampaignEncounterEscalationV28.js';
 import {
+  createBossPreviewLaneAttackPlanV282,
+  lockBossPreviewLaneAttackPlanV282,
+  projectilesFromBossPreviewLaneAttackPlanV282,
+  trackBossPreviewLaneAttackPlanV282,
+} from '../../game/combat/CampaignAttackTelegraphPlanV282.js';
+import {
   createCampaignMiniBossAiStateV281,
   forceCampaignMiniBossRecoveryV281,
   getCampaignMiniBossAiProfileV281,
@@ -862,6 +868,14 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   const encounterPreviewDangerMat = makeTransparentMat(scene, new BABYLON.Color3(.68, .35, 1), .20);
   const encounterAimChargeMat = makeTransparentMat(scene, new BABYLON.Color3(1, .72, .22), .32);
   const encounterChargeCorridorMat = makeTransparentMat(scene, new BABYLON.Color3(1, .46, .08), .20);
+  const encounterMuzzleLocal = new BABYLON.Vector3(0, 0, 1.15);
+
+  const resolveEncounterMuzzleOrigin = enemy => {
+    if (!enemy?.mesh || enemy.mesh.isDisposed?.()) return null;
+    enemy.mesh.computeWorldMatrix(true);
+    const world = BABYLON.Vector3.TransformCoordinates(encounterMuzzleLocal, enemy.mesh.getWorldMatrix());
+    return Object.freeze({ x: world.x, y: 0, z: world.z });
+  };
 
   const updateEnemyFacing = (enemy, velocityX, velocityZ, deltaMs) => {
     if (!enemy?.mesh || enemy.mesh.isDisposed?.()) return;
@@ -909,10 +923,11 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     if (enemy) {
       enemy._encounterTelegraphs = [];
       enemy._encounterTelegraphKind = null;
+      enemy._encounterAttackCorridors = [];
     }
   };
 
-  const createLaneSweepTelegraph = (enemy, laneNorms = [-.62, 0, .62]) => {
+  const createMiniBossLaneSweepTelegraph = (enemy, laneNorms = [-.62, 0, .62]) => {
     disposeEncounterTelegraph(enemy);
     if (!enemy?.mesh?.position) return [];
     const laneXs = laneNorms.map(value => clamp(Number(value) || 0, -.9, .9) * boundX());
@@ -934,9 +949,91 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       return zone;
     });
     enemy._encounterTelegraphs = zones;
-    enemy._encounterLaneXs = laneXs;
     enemy._encounterTelegraphKind = 'lane_zones';
     return zones;
+  };
+
+  const syncBossPreviewLaneTelegraph = (enemy, plan) => {
+    const corridors = enemy?._encounterAttackCorridors || [];
+    for (let index = 0; index < corridors.length; index += 1) {
+      const corridor = corridors[index];
+      const path = plan?.paths?.[index];
+      if (!corridor || corridor.isDisposed?.() || !path) continue;
+      corridor.position.set(path.midpoint.x, .045, path.midpoint.z);
+      corridor.rotation.y = path.yawRadians;
+      corridor.scaling.set(path.width, 1, path.length);
+    }
+  };
+
+  const createBossPreviewLaneTelegraph = (enemy, plan) => {
+    disposeEncounterTelegraph(enemy);
+    if (!enemy?.mesh || !plan?.paths?.length) return [];
+    const corridors = plan.paths.map((path, index) => {
+      const corridor = BABYLON.MeshBuilder.CreateBox(`enc_preview_lane_${enemy.mesh.uniqueId}_${index}`, {
+        width: 1,
+        height: .025,
+        depth: 1,
+      }, scene);
+      corridor.material = encounterPreviewDangerMat;
+      corridor.isPickable = false;
+      corridor.visibility = .68;
+      return corridor;
+    });
+    enemy._encounterTelegraphs = corridors;
+    enemy._encounterAttackCorridors = corridors;
+    enemy._encounterTelegraphKind = 'attack_corridors';
+    syncBossPreviewLaneTelegraph(enemy, plan);
+    return corridors;
+  };
+
+  const updateBossPreviewLaneAttackPlan = (enemy, nowMs) => {
+    let plan = enemy?._encounterAttackPlan;
+    if (!plan) return null;
+    const origin = resolveEncounterMuzzleOrigin(enemy);
+    if (plan.phase !== 'locked') {
+      plan = trackBossPreviewLaneAttackPlanV282(plan, {
+        origin,
+        arenaHalfWidth: boundX(),
+        targetZ: ZOOM + 1,
+      });
+      if (nowMs >= plan.lockAtMs) {
+        plan = lockBossPreviewLaneAttackPlanV282(plan, {
+          nowMs,
+          origin,
+          arenaHalfWidth: boundX(),
+          targetZ: ZOOM + 1,
+        });
+      }
+      enemy._encounterAttackPlan = plan;
+    }
+    syncBossPreviewLaneTelegraph(enemy, plan);
+    return plan;
+  };
+
+  const fireBossPreviewLaneAttack = (enemy, nowMs) => {
+    let plan = updateBossPreviewLaneAttackPlan(enemy, nowMs);
+    if (!plan) return 0;
+    if (plan.phase !== 'locked') {
+      plan = lockBossPreviewLaneAttackPlanV282(plan, {
+        nowMs,
+        origin: resolveEncounterMuzzleOrigin(enemy),
+        arenaHalfWidth: boundX(),
+        targetZ: ZOOM + 1,
+      });
+      enemy._encounterAttackPlan = plan;
+      syncBossPreviewLaneTelegraph(enemy, plan);
+    }
+    const projectiles = projectilesFromBossPreviewLaneAttackPlanV282(plan);
+    for (const projectile of projectiles) {
+      const fire = () => fireEnemyBullet(
+        new BABYLON.Vector3(projectile.origin.x, 0, projectile.origin.z),
+        projectile.velocity.x,
+        projectile.velocity.z,
+      );
+      if (projectile.fireOffsetMs > 0) scheduleBattleTimer(fire, projectile.fireOffsetMs);
+      else fire();
+    }
+    return projectiles.length;
   };
 
   const createMuzzleChargeTelegraph = enemy => {
@@ -981,6 +1078,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     enemy._encounterMechanicProtected = false;
     enemy._encounterMechanicPhase = 'complete';
     disposeEncounterTelegraph(enemy);
+    enemy._encounterAttackPlan = null;
   };
 
   const spawnEncounterReinforcements = enemy => {
@@ -1010,12 +1108,27 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   const armEncounterMechanic = (enemy, nowMs) => {
     if (!enemy?._encounterFeatured || enemy._encounterKind === 'mini_boss'
       || enemy._encounterMechanicPhase !== 'idle') return;
+    const telegraphMs = Math.max(500, enemy._encounterTelegraphMs || 850);
     enemy._encounterMechanicStartedAt = nowMs;
-    enemy._encounterMechanicFireAt = nowMs + Math.max(500, enemy._encounterTelegraphMs || 850);
+    enemy._encounterMechanicFireAt = nowMs + telegraphMs;
     enemy._encounterMechanicPhase = enemy._encounterMechanicId === 'charge_rush'
       ? 'waiting_charge' : 'telegraph';
-    if (enemy._encounterMechanicId === 'lane_sweep') createLaneSweepTelegraph(enemy);
-    else if (enemy._encounterMechanicId === 'summon_escort'
+    if (enemy._encounterMechanicId === 'lane_sweep') {
+      const plan = createBossPreviewLaneAttackPlanV282({
+        origin: resolveEncounterMuzzleOrigin(enemy),
+        laneNorms: [-.62, 0, .62],
+        arenaHalfWidth: boundX(),
+        targetZ: ZOOM + 1,
+        width: Math.max(1.05, boundX() * .16),
+        createdAtMs: nowMs,
+        telegraphMs,
+        lockLeadMs: 200,
+        projectileSpeed: .38,
+      });
+      enemy._encounterAttackPlan = plan;
+      enemy._encounterMechanicFireAt = plan.telegraphEndsAtMs;
+      createBossPreviewLaneTelegraph(enemy, plan);
+    } else if (enemy._encounterMechanicId === 'summon_escort'
       || enemy._encounterMechanicId === 'summon_swarm') createSummonTelegraph(enemy);
   };
 
@@ -1023,10 +1136,12 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     if (!enemy?._encounterFeatured || enemy._encounterKind === 'mini_boss'
       || enemy._encounterMechanicComplete) return;
     armEncounterMechanic(enemy, nowMs);
+    if (enemy._encounterMechanicId === 'lane_sweep') updateBossPreviewLaneAttackPlan(enemy, nowMs);
     for (const telegraph of enemy._encounterTelegraphs || []) {
       if (!telegraph?.isDisposed?.()) {
         const pulse = .92 + .12 * Math.sin(nowMs * .018);
-        if (enemy._encounterTelegraphKind !== 'lane_zones') {
+        if (enemy._encounterTelegraphKind !== 'lane_zones'
+          && enemy._encounterTelegraphKind !== 'attack_corridors') {
           telegraph.scaling.x = pulse;
           telegraph.scaling.z = pulse;
         }
@@ -1035,9 +1150,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     }
     if (enemy._encounterMechanicPhase !== 'telegraph' || nowMs < enemy._encounterMechanicFireAt) return;
     if (enemy._encounterMechanicId === 'lane_sweep') {
-      for (const x of enemy._encounterLaneXs || []) {
-        fireEnemyBullet(new BABYLON.Vector3(x, 0, Math.max(-ZOOM + 2, enemy.mesh.position.z + 1)), 0, .38);
-      }
+      fireBossPreviewLaneAttack(enemy, nowMs);
     } else if (enemy._encounterMechanicId === 'summon_escort'
       || enemy._encounterMechanicId === 'summon_swarm') {
       spawnEncounterReinforcements(enemy);
@@ -1083,7 +1196,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     disposeEncounterTelegraph(enemy);
     disposeChargeTelegraph(enemy);
     if (!telegraph) return;
-    if (telegraph.kind === 'lane_zones') createLaneSweepTelegraph(enemy, telegraph.lanes);
+    if (telegraph.kind === 'lane_zones') createMiniBossLaneSweepTelegraph(enemy, telegraph.lanes);
     else if (telegraph.kind === 'charge_corridor') createChargeTelegraph(enemy, telegraph.direction);
     else if (telegraph.kind === 'summon_ring') createSummonTelegraph(enemy);
     else createMuzzleChargeTelegraph(enemy);
@@ -1312,7 +1425,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       _encounterMechanicPhase:spawnSpec?.encounterFeatured?'idle':'complete',
       _encounterTelegraphs:[],
       _encounterTelegraphKind:null,
-      _encounterLaneXs:[],
+      _encounterAttackPlan:null,
+      _encounterAttackCorridors:[],
       _reinforcementGroupId:spawnSpec?.reinforcementGroupId||null,
       _encounterReinforcementGroupId:null,
       _bossSupport:Boolean(spawnSpec?.bossSupport),
@@ -1329,6 +1443,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     safeDispose(e.entryHalo); e.entryHalo=null;
     safeDispose(e._chargeTelegraph); e._chargeTelegraph=null;
     disposeEncounterTelegraph(e);
+    e._encounterAttackPlan = null;
     safeDispose(e.mesh); // authoritative hitbox is gone THIS frame
   };
 

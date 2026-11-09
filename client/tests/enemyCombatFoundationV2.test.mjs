@@ -28,6 +28,13 @@ import {
   forceCampaignMiniBossRecoveryV281,
   stepCampaignMiniBossAiV281,
 } from '../src/game/combat/CampaignMiniBossAiV281.js';
+import {
+  CAMPAIGN_ATTACK_TELEGRAPH_PLAN_VERSION,
+  createBossPreviewLaneAttackPlanV282,
+  lockBossPreviewLaneAttackPlanV282,
+  projectilesFromBossPreviewLaneAttackPlanV282,
+  trackBossPreviewLaneAttackPlanV282,
+} from '../src/game/combat/CampaignAttackTelegraphPlanV282.js';
 
 const stagePlan = (options = {}) => createEnemyDirectorV2({
   seed: options.seed ?? 12345,
@@ -128,6 +135,83 @@ test('V2.8 combines deterministic pacing with mini-bosses and real Boss mechanic
   assert.equal(short.waves[4].miniBoss, true);
   assert.equal(short.waves[8].bossPreview, true);
   assert.equal(short.waves[8].entries[0].protectUntilMechanic, true);
+});
+
+test('V2.8.2 Boss Preview uses one immutable entity-origin plan for tracking, lock, VFX width and projectile paths', () => {
+  const right = createBossPreviewLaneAttackPlanV282({
+    origin: { x: 4, y: 0, z: -5 },
+    laneNorms: [-.6, 0, .6],
+    arenaHalfWidth: 6,
+    targetZ: 12,
+    width: 1.25,
+    createdAtMs: 1000,
+    telegraphMs: 800,
+    lockLeadMs: 200,
+    projectileSpeed: .4,
+  });
+  const left = createBossPreviewLaneAttackPlanV282({
+    origin: { x: -4, y: 0, z: -5 },
+    laneNorms: [-.6, 0, .6],
+    arenaHalfWidth: 6,
+    targetZ: 12,
+    width: 1.25,
+    createdAtMs: 1000,
+    telegraphMs: 800,
+    lockLeadMs: 200,
+    projectileSpeed: .4,
+  });
+
+  assert.equal(CAMPAIGN_ATTACK_TELEGRAPH_PLAN_VERSION, 'campaign-attack-telegraph-plan-v2.8.2');
+  assert.throws(() => createBossPreviewLaneAttackPlanV282({ arenaHalfWidth: 6, targetZ: 12 }),
+    /requires a finite entity\/muzzle world origin/);
+  assert.equal(right.originSpace, 'world');
+  assert.equal(right.originKind, 'entity_muzzle');
+  assert.equal(right.telegraphDurationMs, 800);
+  assert.equal(right.lockLeadMs, 200);
+  assert.equal(Object.isFrozen(right), true);
+  assert.equal(Object.isFrozen(right.paths), true);
+  assert.equal(right.origin.x, 4);
+  assert.equal(left.origin.x, -4);
+  assert.equal(right.paths.every(path => path.origin.x === 4), true);
+  assert.equal(left.paths.every(path => path.origin.x === -4), true);
+  assert.notEqual(right.paths[1].yawRadians, left.paths[1].yawRadians);
+
+  const tracked = trackBossPreviewLaneAttackPlanV282(right, {
+    origin: { x: 5, y: 0, z: -4.5 },
+    arenaHalfWidth: 6.5,
+    targetZ: 12.5,
+  });
+  assert.notStrictEqual(tracked, right);
+  assert.equal(tracked.phase, 'tracking');
+  assert.equal(tracked.origin.x, 5);
+  assert.equal(tracked.paths.every(path => path.origin.x === 5), true);
+
+  const locked = lockBossPreviewLaneAttackPlanV282(tracked, {
+    nowMs: tracked.lockAtMs,
+    origin: { x: 4.75, y: 0, z: -4.25 },
+    arenaHalfWidth: 6.5,
+    targetZ: 12.5,
+  });
+  assert.equal(locked.phase, 'locked');
+  assert.equal(locked.origin.x, 4.75);
+  assert.equal(Object.isFrozen(locked.paths[0].origin), true);
+  assert.strictEqual(trackBossPreviewLaneAttackPlanV282(locked, {
+    origin: { x: -9, y: 0, z: 0 },
+    arenaHalfWidth: 9,
+    targetZ: 20,
+  }), locked);
+
+  const projectiles = projectilesFromBossPreviewLaneAttackPlanV282(locked);
+  assert.equal(Object.isFrozen(projectiles), true);
+  assert.equal(projectiles.length, locked.paths.length);
+  assert.equal(projectiles.every(projectile => projectile.origin.x === locked.origin.x), true);
+  assert.equal(projectiles.every(projectile => projectile.width === 1.25), true);
+  projectiles.forEach((projectile, index) => {
+    const path = locked.paths[index];
+    const travelFrames = path.length / locked.projectileSpeed;
+    assert.ok(Math.abs(projectile.origin.x + projectile.velocity.x * travelFrames - projectile.endpoint.x) < 1e-9);
+    assert.ok(Math.abs(projectile.origin.z + projectile.velocity.z * travelFrames - projectile.endpoint.z) < 1e-9);
+  });
 });
 
 test('V2.8.1 mini-boss AI uses deliberate anchors and repeats attack cycles instead of one-shot sine patrol', () => {
@@ -293,6 +377,14 @@ test('Campaign source wires V2.8 encounters only in Guest QA and keeps the froze
   assert.match(source, /createMuzzleChargeTelegraph/);
   assert.match(source, /telegraph\.kind === 'summon_ring'/);
   assert.match(source, /encounterLaneDangerMat/);
+  assert.match(source, /createBossPreviewLaneAttackPlanV282/);
+  assert.match(source, /trackBossPreviewLaneAttackPlanV282/);
+  assert.match(source, /lockBossPreviewLaneAttackPlanV282/);
+  assert.match(source, /projectilesFromBossPreviewLaneAttackPlanV282/);
+  assert.match(source, /resolveEncounterMuzzleOrigin/);
+  assert.match(source, /_encounterTelegraphKind = 'attack_corridors'/);
+  assert.match(source, /new BABYLON\.Vector3\(projectile\.origin\.x, 0, projectile\.origin\.z\)/);
+  assert.doesNotMatch(source, /enemy\._encounterLaneXs/);
   const aiSource = fs.readFileSync(new URL('../src/game/combat/CampaignMiniBossAiV281.js', import.meta.url), 'utf8');
   assert.doesNotMatch(aiSource, /Math\.sin/);
   assert.match(source, /forceCampaignMiniBossRecoveryV281/);
