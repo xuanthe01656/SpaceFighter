@@ -35,6 +35,14 @@ import {
   projectilesFromBossPreviewLaneAttackPlanV282,
   trackBossPreviewLaneAttackPlanV282,
 } from '../src/game/combat/CampaignAttackTelegraphPlanV282.js';
+import {
+  CAMPAIGN_ENEMY_MOVEMENT_PROFILES_V283,
+  CAMPAIGN_ENEMY_MOVEMENT_VERSION,
+  createCampaignEnemyMovementStateV283,
+  resolveCampaignHudSafeBandV283,
+  resolveCampaignMiniBossAnchorZV283,
+  stepCampaignEnemyMovementV283,
+} from '../src/game/combat/CampaignEnemyMovementV283.js';
 
 const stagePlan = (options = {}) => createEnemyDirectorV2({
   seed: options.seed ?? 12345,
@@ -214,6 +222,86 @@ test('V2.8.2 Boss Preview uses one immutable entity-origin plan for tracking, lo
   });
 });
 
+test('V2.8.3 gives scripted roles readable choreography, locks Boss Preview transforms and keeps Mini-Bosses below the HUD', () => {
+  assert.equal(CAMPAIGN_ENEMY_MOVEMENT_VERSION, 'campaign-enemy-movement-v2.8.3');
+  assert.deepEqual(Object.keys(CAMPAIGN_ENEMY_MOVEMENT_PROFILES_V283).sort(), [
+    'artillery', 'boss_preview', 'gunner', 'raider', 'shieldbearer', 'support',
+  ]);
+
+  const seedOptions = {
+    role: 'gunner', lane: .4, strafeDirection: -1, phaseOffset: 1.75, nowMs: 100,
+  };
+  const seededA = createCampaignEnemyMovementStateV283(seedOptions);
+  const seededB = createCampaignEnemyMovementStateV283(seedOptions);
+  assert.deepEqual(seededA, seededB);
+  assert.equal(Object.isFrozen(seededA), true);
+
+  const common = {
+    nowMs: 100,
+    arenaHalfWidth: 7,
+    worldHalfHeight: 15,
+    hudOcclusionLineZ: -9.4,
+    encounterScale: 1,
+    enemyX: 0,
+    enemyZ: -6,
+    playerX: 1.25,
+    playerZ: 10,
+  };
+  const roleModes = Object.fromEntries(['raider', 'gunner', 'shieldbearer', 'support', 'artillery']
+    .map((role, index) => {
+      const state = createCampaignEnemyMovementStateV283({
+        role, lane: (index - 2) * .2, strafeDirection: index % 2 ? -1 : 1,
+        phaseOffset: index * .35, nowMs: 100,
+      });
+      const first = stepCampaignEnemyMovementV283(state, common);
+      const repeat = stepCampaignEnemyMovementV283(state, common);
+      assert.deepEqual(first, repeat);
+      return [role, first.movement.mode];
+    }));
+  assert.match(roleModes.raider, /^raider_(flank|cross_pass|reset)$/);
+  assert.equal(roleModes.gunner, 'gunner_range_strafe');
+  assert.equal(roleModes.shieldbearer, 'shieldbearer_lane_guard');
+  assert.equal(roleModes.support, 'support_offset_orbit');
+  assert.equal(roleModes.artillery, 'artillery_backline_relocate');
+  assert.equal(new Set(Object.values(roleModes)).size, 5);
+
+  const previewState = createCampaignEnemyMovementStateV283({
+    role: 'artillery', encounterKind: 'boss_preview', lane: .4,
+    strafeDirection: 1, phaseOffset: .75, nowMs: 0,
+  });
+  const tracking = stepCampaignEnemyMovementV283(previewState, {
+    ...common, nowMs: 400, enemyX: 4.1, enemyZ: -6.2,
+    mechanicPhase: 'telegraph', attackPlanPhase: 'tracking', encounterScale: 1.28,
+  });
+  assert.equal(tracking.movement.mode, 'preview_attack_track');
+  assert.ok(tracking.movement.speedMultiplier > 0);
+  const locked = stepCampaignEnemyMovementV283(tracking.state, {
+    ...common, nowMs: 650, enemyX: 3.7, enemyZ: -5.8,
+    mechanicPhase: 'telegraph', attackPlanPhase: 'locked', encounterScale: 1.28,
+  });
+  assert.equal(locked.movement.mode, 'preview_lock_hold');
+  assert.equal(locked.movement.speedMultiplier, 0);
+  assert.equal(locked.movement.targetX, 3.7);
+  assert.equal(locked.movement.targetZ, -5.8);
+  assert.equal(locked.movement.facePlayer, false);
+
+  const phoneBand = resolveCampaignHudSafeBandV283({
+    worldHalfHeight: 15, hudOcclusionLineZ: -9.4, encounterScale: 1.42,
+  });
+  const oldFixedAnchor = -15 + 5.4;
+  const safeAnchor = resolveCampaignMiniBossAnchorZV283({
+    worldHalfHeight: 15, hudOcclusionLineZ: -9.4,
+    requestedOffsetZ: 5.4, encounterScale: 1.42,
+  });
+  assert.ok(phoneBand.topSafeZ > phoneBand.hudOcclusionLineZ);
+  assert.ok(safeAnchor >= phoneBand.miniBossAnchorZ);
+  assert.ok(safeAnchor > oldFixedAnchor);
+  assert.ok(safeAnchor > phoneBand.hudOcclusionLineZ);
+  const movementSource = fs.readFileSync(
+    new URL('../src/game/combat/CampaignEnemyMovementV283.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(movementSource, /Math\.random/);
+});
+
 test('V2.8.1 mini-boss AI uses deliberate anchors and repeats attack cycles instead of one-shot sine patrol', () => {
   assert.equal(CAMPAIGN_MINI_BOSS_AI_VERSION, 'campaign-mini-boss-ai-v2.8.1');
   assert.deepEqual(Object.keys(CAMPAIGN_MINI_BOSS_AI_PROFILES_V281).sort(), [
@@ -374,6 +462,13 @@ test('Campaign source wires V2.8 encounters only in Guest QA and keeps the froze
   assert.match(source, /beginBossPhaseTransition\(gateResult\.gate\)/);
   assert.match(source, /bossPhaseState=guestAbilityQa\?createBossPhaseStateV28/);
   assert.match(source, /stepMiniBossEnemy\(e,now,enemyFrame,frameDeltaMs\)/);
+  assert.match(source, /applyCampaignEnemyMovementV283\(e,now,enemyFrame,frameDeltaMs\)/);
+  assert.match(source, /resolveCampaignMiniBossAnchorZV283\(\{/);
+  assert.match(source, /hudOcclusionLineZ:\s*enemyEntryPolicy\.engagementLineZ/);
+  assert.match(source, /_movementState:movementState/);
+  const previewMoveIndex = source.indexOf("if(e._encounterKind==='boss_preview'");
+  const mechanicStepIndex = source.indexOf('stepEncounterMechanic(e,now)', previewMoveIndex);
+  assert.ok(previewMoveIndex >= 0 && mechanicStepIndex > previewMoveIndex);
   assert.match(source, /createMuzzleChargeTelegraph/);
   assert.match(source, /telegraph\.kind === 'summon_ring'/);
   assert.match(source, /encounterLaneDangerMat/);

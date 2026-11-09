@@ -45,6 +45,11 @@ import {
   trackBossPreviewLaneAttackPlanV282,
 } from '../../game/combat/CampaignAttackTelegraphPlanV282.js';
 import {
+  createCampaignEnemyMovementStateV283,
+  resolveCampaignMiniBossAnchorZV283,
+  stepCampaignEnemyMovementV283,
+} from '../../game/combat/CampaignEnemyMovementV283.js';
+import {
   createCampaignMiniBossAiStateV281,
   forceCampaignMiniBossRecoveryV281,
   getCampaignMiniBossAiProfileV281,
@@ -1202,11 +1207,68 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     else createMuzzleChargeTelegraph(enemy);
   };
 
+  const applyCampaignEnemyMovementV283 = (enemy, nowMs, enemyFrame, frameDeltaMs) => {
+    if (!enemy?._movementState || !enemy.mesh?.position) return false;
+    const result = stepCampaignEnemyMovementV283(enemy._movementState, {
+      nowMs,
+      arenaHalfWidth: boundX(),
+      worldHalfHeight: ZOOM,
+      hudOcclusionLineZ: enemyEntryPolicy.engagementLineZ,
+      encounterScale: enemy._encounterScale,
+      enemyX: enemy.mesh.position.x,
+      enemyZ: enemy.mesh.position.z,
+      playerX: playerRoot.position.x,
+      playerZ: playerRoot.position.z,
+      mechanicPhase: enemy._encounterMechanicPhase,
+      attackPlanPhase: enemy._encounterAttackPlan?.phase || null,
+    });
+    enemy._movementState = result.state;
+    const movement = result.movement;
+    if (!movement) return false;
+
+    const beforeX = enemy.mesh.position.x;
+    const beforeZ = enemy.mesh.position.z;
+    const dx = movement.targetX - beforeX;
+    const dz = movement.targetZ - beforeZ;
+    const distance = Math.hypot(dx, dz);
+    const shouldMove = movement.speedMultiplier > 0 && distance > movement.arrivalRadius;
+    if (shouldMove) {
+      const step = Math.min(distance,
+        Math.max(.018, Math.abs(enemy.speed) * movement.speedMultiplier) * enemyFrame);
+      enemy.mesh.position.x += dx / distance * step;
+      enemy.mesh.position.z += dz / distance * step;
+      enemy.mesh.position.x = clamp(enemy.mesh.position.x, -boundX() + .35, boundX() - .35);
+      enemy.mesh.position.z = clamp(enemy.mesh.position.z, movement.minZ, movement.maxZ);
+      enemy.visual?.setState('move');
+    } else if (movement.facePlayer) {
+      updateEnemyFacing(enemy,
+        playerRoot.position.x - enemy.mesh.position.x,
+        playerRoot.position.z - enemy.mesh.position.z,
+        frameDeltaMs);
+      enemy.visual?.setState('idle');
+      return true;
+    } else {
+      enemy.visual?.setState('idle');
+      return true;
+    }
+
+    updateEnemyFacing(enemy,
+      enemy.mesh.position.x - beforeX,
+      enemy.mesh.position.z - beforeZ,
+      frameDeltaMs);
+    return true;
+  };
+
   const stepMiniBossEnemy = (enemy, nowMs, enemyFrame, frameDeltaMs) => {
     const profile = getCampaignMiniBossAiProfileV281(enemy?._encounterAiProfileId);
     if (!profile || !enemy?._miniBossAiState || !enemy.mesh?.position) return false;
     const targetX = enemy._miniBossAiState.targetLane * boundX();
-    const targetZ = -ZOOM + profile.anchorOffsetZ;
+    const targetZ = resolveCampaignMiniBossAnchorZV283({
+      worldHalfHeight: ZOOM,
+      hudOcclusionLineZ: enemyEntryPolicy.engagementLineZ,
+      requestedOffsetZ: profile.anchorOffsetZ,
+      encounterScale: enemy._encounterScale,
+    });
     const atAnchor = Math.hypot(targetX - enemy.mesh.position.x, targetZ - enemy.mesh.position.z) <= .45;
     const result = stepCampaignMiniBossAiV281(enemy._miniBossAiState, {
       nowMs,
@@ -1395,6 +1457,19 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         profileId: spawnSpec.encounterAiProfileId,
         nowMs: Date.now(),
       }) : null;
+    // V2.8.3 is scoped to deterministic Guest Campaign entries. Tier-4
+    // chargers retain the accepted telegraph/charge state machine and
+    // Mini-Bosses retain V2.8.1; all other scripted roles get choreography.
+    const movementState = spawnSpec && guestAbilityQa && tier !== 4
+      && spawnSpec.encounterKind !== 'mini_boss'
+      ? createCampaignEnemyMovementStateV283({
+        role: spawnSpec.archetypeId,
+        encounterKind: spawnSpec.encounterKind,
+        lane: spawnSpec.lane,
+        strafeDirection: spawnSpec.strafeDirection,
+        phaseOffset: spawnSpec.sinePhase,
+        nowMs: Date.now(),
+      }) : null;
     enemies.push({
       mesh, visual, hp: baseHp, maxHp: baseHp, tier, speed,
       velX: spawnSpec?(tier===4?0:(Number(spawnSpec.strafeDirection)||1)*.035):legacyMotion.velX,
@@ -1418,6 +1493,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       _encounterMechanicId:spawnSpec?.encounterMechanicId||null,
       _encounterAiProfileId:spawnSpec?.encounterAiProfileId||null,
       _miniBossAiState:miniBossAiState,
+      _movementState:movementState,
+      _encounterScale:encounterScale,
       _encounterTelegraphMs:Number(spawnSpec?.mechanicTelegraphMs)||850,
       _encounterSummonRoles:Object.freeze([...(spawnSpec?.mechanicSummonRoles||[])]),
       _encounterMechanicProtected:Boolean(spawnSpec?.encounterFeatured&&spawnSpec?.protectUntilMechanic),
@@ -2533,6 +2610,16 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
               profileId:e._encounterAiProfileId,nowMs:now,
             });
           }
+          if(e._movementState){
+            e._movementState=createCampaignEnemyMovementStateV283({
+              role:e._movementState.role,
+              encounterKind:e._movementState.encounterKind,
+              lane:e._movementState.baseLane,
+              strafeDirection:e._movementState.direction,
+              phaseOffset:e._movementState.phaseOffset,
+              nowMs:now,
+            });
+          }
           armEncounterMechanic(e,now);
         }
         // The entry ring communicates temporary spawn protection. Until it
@@ -2541,6 +2628,14 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       }
       e.miniHpBg.isVisible=true;
       e.visual?.setState('move');
+
+      // Boss Preview must move before the V2.8.2 plan samples its muzzle. The
+      // plan then tracks that real transform and freezes both movement and
+      // orientation after lock, so VFX and projectile still share one origin.
+      let movementHandled = false;
+      if(e._encounterKind==='boss_preview'&&e._encounterMechanicId!=='charge_rush'){
+        movementHandled=applyCampaignEnemyMovementV283(e,now,enemyFrame,frameDeltaMs);
+      }
       stepEncounterMechanic(e,now);
       const miniBossHandled = e._encounterKind === 'mini_boss'
         && stepMiniBossEnemy(e,now,enemyFrame,frameDeltaMs);
@@ -2550,56 +2645,70 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
           e.visual?.setState('attack');
           continue;
         }
+        if(!movementHandled&&e._movementState&&e.tier!==4){
+          movementHandled=applyCampaignEnemyMovementV283(e,now,enemyFrame,frameDeltaMs);
+        }
         const beforeX=e.mesh.position.x;
         const beforeZ=e.mesh.position.z;
-        if (!e.canShoot && e.tier===4) {
-          const charge=stepChargerMotionV26A3(e._chargerState,{
-            nowMs:now,enemyX:e.mesh.position.x,enemyZ:e.mesh.position.z,
-            targetX:playerRoot.position.x,targetZ:playerRoot.position.z,
-          });
-          e._chargerState=charge.state;
-          if(charge.event==='telegraph_started')createChargeTelegraph(e,charge.direction);
-          if(charge.event==='charge_started'){
-            disposeChargeTelegraph(e);
-            if(e._encounterMechanicId==='charge_rush')completeEncounterMechanic(e);
-          }
-          if(charge.event==='recovery_started')disposeChargeTelegraph(e);
-          if(charge.state.phase==='telegraph')e.visual?.setState('attack');
-          else if(charge.state.phase==='recovery')e.visual?.setState('idle');
-          else e.visual?.setState('move');
-          if(e._chargeTelegraph&&!e._chargeTelegraph.isDisposed?.()){
-            e._chargeTelegraph.visibility=.55+.25*Math.sin(now*.02);
-          }
-          e.mesh.position.x += charge.direction.x * e.speed * charge.speedMultiplier * enemyFrame;
-          e.mesh.position.z += charge.direction.z * e.speed * charge.speedMultiplier * enemyFrame;
-          updateEnemyFacing(e,charge.direction.x,charge.direction.z,frameDeltaMs);
-        } else if (!e.canShoot) {
-          // Melee enemies track the player but now turn toward their actual velocity.
-          const dx = playerRoot.position.x - e.mesh.position.x;
-          const dz = playerRoot.position.z - e.mesh.position.z;
-          const dn = Math.sqrt(dx*dx + dz*dz) || 1;
-          e.mesh.position.x += (dx/dn) * e.speed * 1.2 * enemyFrame;
-          e.mesh.position.z += (dz/dn) * e.speed * 1.2 * enemyFrame;
-          updateEnemyFacing(e,e.mesh.position.x-beforeX,e.mesh.position.z-beforeZ,frameDeltaMs);
-        } else {
-          // Patrol + shoot
-          e.mesh.position.z += e.speed * enemyFrame;
-          e.mesh.position.x += (e.velX + Math.sin(tick * .03 + e.sineOff) * .04) * enemyFrame;
-          const bx = boundX();
-          if (e.mesh.position.z > ZOOM * .65 && e.speed > 0) e.speed = -Math.abs(e.speed);
-          if (e.mesh.position.z < -ZOOM + 1 && e.speed < 0) e.speed = Math.abs(e.speed);
-          if (Math.abs(e.mesh.position.x) > bx) {
-            e.velX *= -1; e.mesh.position.x = clamp(e.mesh.position.x, -bx, bx);
-          }
-          updateEnemyFacing(e,e.mesh.position.x-beforeX,e.mesh.position.z-beforeZ,frameDeltaMs);
-          if (!guestAbilities?.modifiers().cloaked&&now > e.lastShoot + e.shootMs) {
+        if (!movementHandled) {
+          if (!e.canShoot && e.tier===4) {
+            const charge=stepChargerMotionV26A3(e._chargerState,{
+              nowMs:now,enemyX:e.mesh.position.x,enemyZ:e.mesh.position.z,
+              targetX:playerRoot.position.x,targetZ:playerRoot.position.z,
+            });
+            e._chargerState=charge.state;
+            if(charge.event==='telegraph_started')createChargeTelegraph(e,charge.direction);
+            if(charge.event==='charge_started'){
+              disposeChargeTelegraph(e);
+              if(e._encounterMechanicId==='charge_rush')completeEncounterMechanic(e);
+            }
+            if(charge.event==='recovery_started')disposeChargeTelegraph(e);
+            if(charge.state.phase==='telegraph')e.visual?.setState('attack');
+            else if(charge.state.phase==='recovery')e.visual?.setState('idle');
+            else e.visual?.setState('move');
+            if(e._chargeTelegraph&&!e._chargeTelegraph.isDisposed?.()){
+              e._chargeTelegraph.visibility=.55+.25*Math.sin(now*.02);
+            }
+            e.mesh.position.x += charge.direction.x * e.speed * charge.speedMultiplier * enemyFrame;
+            e.mesh.position.z += charge.direction.z * e.speed * charge.speedMultiplier * enemyFrame;
+            updateEnemyFacing(e,charge.direction.x,charge.direction.z,frameDeltaMs);
+          } else if (!e.canShoot) {
+            // Frozen legacy fallback: non-QA melee still uses the accepted direct chase.
             const dx = playerRoot.position.x - e.mesh.position.x;
             const dz = playerRoot.position.z - e.mesh.position.z;
             const dn = Math.sqrt(dx*dx + dz*dz) || 1;
-            fireEnemyBullet(e.mesh.position, (dx/dn)*.24, (dz/dn)*.24);
-            e.visual?.setState('attack');
-            e.lastShoot = now;
+            e.mesh.position.x += (dx/dn) * e.speed * 1.2 * enemyFrame;
+            e.mesh.position.z += (dz/dn) * e.speed * 1.2 * enemyFrame;
+            updateEnemyFacing(e,e.mesh.position.x-beforeX,e.mesh.position.z-beforeZ,frameDeltaMs);
+          } else {
+            // Frozen legacy fallback: non-QA shooters retain patrol + shoot.
+            e.mesh.position.z += e.speed * enemyFrame;
+            e.mesh.position.x += (e.velX + Math.sin(tick * .03 + e.sineOff) * .04) * enemyFrame;
+            const bx = boundX();
+            if (e.mesh.position.z > ZOOM * .65 && e.speed > 0) e.speed = -Math.abs(e.speed);
+            if (e.mesh.position.z < -ZOOM + 1 && e.speed < 0) e.speed = Math.abs(e.speed);
+            if (Math.abs(e.mesh.position.x) > bx) {
+              e.velX *= -1; e.mesh.position.x = clamp(e.mesh.position.x, -bx, bx);
+            }
+            updateEnemyFacing(e,e.mesh.position.x-beforeX,e.mesh.position.z-beforeZ,frameDeltaMs);
+            if (!guestAbilities?.modifiers().cloaked&&now > e.lastShoot + e.shootMs) {
+              const dx = playerRoot.position.x - e.mesh.position.x;
+              const dz = playerRoot.position.z - e.mesh.position.z;
+              const dn = Math.sqrt(dx*dx + dz*dz) || 1;
+              fireEnemyBullet(e.mesh.position, (dx/dn)*.24, (dz/dn)*.24);
+              e.visual?.setState('attack');
+              e.lastShoot = now;
+            }
           }
+        }
+        if (movementHandled&&e.canShoot&&!guestAbilities?.modifiers().cloaked
+          &&now > e.lastShoot + e.shootMs) {
+          const dx = playerRoot.position.x - e.mesh.position.x;
+          const dz = playerRoot.position.z - e.mesh.position.z;
+          const dn = Math.sqrt(dx*dx + dz*dz) || 1;
+          fireEnemyBullet(e.mesh.position, (dx/dn)*.24, (dz/dn)*.24);
+          e.visual?.setState('attack');
+          e.lastShoot = now;
         }
       }
 
