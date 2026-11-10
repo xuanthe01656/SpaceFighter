@@ -5,7 +5,7 @@
  * combat output and movement behavior. The director may scale these values by
  * stage, wave, planet and elite state, but must not duplicate role constants.
  */
-export const ENEMY_COMBAT_CATALOG_VERSION = 'enemy-combat-v3.0.0';
+export const ENEMY_COMBAT_CATALOG_VERSION = 'enemy-combat-v3.1.0';
 
 const freezeRole = value => Object.freeze({ ...value });
 
@@ -23,7 +23,9 @@ export const ENEMY_ARCHETYPES_V2 = Object.freeze({
     tier: 2, threatCost: 2, canShoot: true,
     unlockStage: 1, hpMultiplier: 1.00, damageMultiplier: 1.00, speedMultiplier: 1.04,
     behavior: 'keep_range', preferredRange: 7.6, telegraphTicks: 18, attackCooldownTicks: 54,
-    fireCooldownMs: 1800, projectileSpeed: 0.28, projectileDamage: 180, contactDamage: 180,
+    fireCooldownMs: 1800, projectileSpeed: 0.42, projectileDamage: 180, contactDamage: 180,
+    projectileAimMode: 'predictive', projectileLeadFactor: 0.88, projectileMaxLeadMs: 720,
+    projectileGuidanceMs: 0, projectileTurnRateRadians: 0, projectileLifetimeMs: 4200,
     routeVariants: Object.freeze(['range_strafe']), controlResistance: 0.10,
   }),
   charger: freezeRole({
@@ -47,7 +49,9 @@ export const ENEMY_ARCHETYPES_V2 = Object.freeze({
     tier: 2, threatCost: 4, canShoot: true,
     unlockStage: 5, hpMultiplier: 0.90, damageMultiplier: 0.72, speedMultiplier: 0.98,
     behavior: 'support_orbit', preferredRange: 8.6, telegraphTicks: 21, attackCooldownTicks: 66,
-    fireCooldownMs: 2200, projectileSpeed: 0.26, projectileDamage: 145, contactDamage: 150,
+    fireCooldownMs: 2200, projectileSpeed: 0.36, projectileDamage: 145, contactDamage: 150,
+    projectileAimMode: 'soft_homing', projectileLeadFactor: 0.35, projectileMaxLeadMs: 420,
+    projectileGuidanceMs: 760, projectileTurnRateRadians: 0.052, projectileLifetimeMs: 4600,
     routeVariants: Object.freeze(['support_orbit']),
     supportPulseTicks: 150, supportRatio: 0.08, controlResistance: 0.10,
   }),
@@ -56,7 +60,9 @@ export const ENEMY_ARCHETYPES_V2 = Object.freeze({
     tier: 3, threatCost: 4, canShoot: true,
     unlockStage: 6, hpMultiplier: 1.10, damageMultiplier: 1.32, speedMultiplier: 0.80,
     behavior: 'telegraphed_zone', preferredRange: 11.4, telegraphTicks: 33, attackCooldownTicks: 75,
-    fireCooldownMs: 2500, projectileSpeed: 0.31, projectileDamage: 260, contactDamage: 200,
+    fireCooldownMs: 2500, projectileSpeed: 0.40, projectileDamage: 260, contactDamage: 200,
+    projectileAimMode: 'predictive', projectileLeadFactor: 1.0, projectileMaxLeadMs: 900,
+    projectileGuidanceMs: 0, projectileTurnRateRadians: 0, projectileLifetimeMs: 5000,
     routeVariants: Object.freeze(['battery_relocate']), controlResistance: 0.15,
   }),
 });
@@ -78,6 +84,12 @@ export const ENEMY_RUNTIME_CATALOG_V3 = Object.freeze(Object.fromEntries(
     shootMs: archetype.fireCooldownMs,
     projectileSpeed: archetype.projectileSpeed,
     projectileDamage: archetype.projectileDamage,
+    projectileAimMode: archetype.projectileAimMode || 'snapshot',
+    projectileLeadFactor: archetype.projectileLeadFactor || 0,
+    projectileMaxLeadMs: archetype.projectileMaxLeadMs || 0,
+    projectileGuidanceMs: archetype.projectileGuidanceMs || 0,
+    projectileTurnRateRadians: archetype.projectileTurnRateRadians || 0,
+    projectileLifetimeMs: archetype.projectileLifetimeMs || 3600,
     contactDamage: archetype.contactDamage,
     damageType: archetype.damageType,
     defenseClass: archetype.defenseClass,
@@ -114,6 +126,13 @@ export function auditEnemyCombatCatalogV2() {
     if (!Number.isFinite(enemy.threatCost) || enemy.threatCost <= 0) issues.push(`THREAT_COST:${enemy.id}`);
     if (enemy.canShoot && (!(enemy.fireCooldownMs > 0) || !(enemy.projectileSpeed > 0)
       || !(enemy.projectileDamage > 0))) issues.push(`PROJECTILE_RUNTIME:${enemy.id}`);
+    if (enemy.canShoot && !['snapshot', 'predictive', 'soft_homing'].includes(enemy.projectileAimMode))
+      issues.push(`PROJECTILE_AIM_MODE:${enemy.id}`);
+    if (enemy.canShoot && (!(enemy.projectileLifetimeMs >= 1600) || enemy.projectileLifetimeMs > 6500))
+      issues.push(`PROJECTILE_LIFETIME:${enemy.id}`);
+    if (enemy.projectileAimMode === 'soft_homing'
+      && (!(enemy.projectileGuidanceMs > 0) || !(enemy.projectileTurnRateRadians > 0)))
+      issues.push(`PROJECTILE_GUIDANCE:${enemy.id}`);
     if (!(enemy.contactDamage > 0)) issues.push(`CONTACT_DAMAGE:${enemy.id}`);
     if (!Array.isArray(enemy.routeVariants) || !enemy.routeVariants.length) issues.push(`ROUTE_VARIANTS:${enemy.id}`);
     const runtime = ENEMY_RUNTIME_CATALOG_V3[enemy.id];

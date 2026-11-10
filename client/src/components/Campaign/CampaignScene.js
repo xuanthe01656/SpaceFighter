@@ -64,6 +64,12 @@ import {
   projectilesFromCampaignBossAttackPlanV29,
   stepCampaignBossCombatV29,
 } from '../../game/combat/CampaignBossCombatV29.js';
+import {
+  advanceCampaignEnemyProjectileV31,
+  createCampaignEnemyShotPlanV31,
+  resolveCampaignEnemyInterceptV31,
+  resolveCampaignEnemyProjectileVisualV31,
+} from '../../game/combat/CampaignEnemyProjectileV31.js';
 import { createGuestAbilityRuntimeV2 } from '../../game/combat/GuestAbilityRuntimeV2.js';
 import { deriveGuestAbilityActivationGateV2 } from '../../game/combat/GuestAbilityActivationGateV2.js';
 import { resolveGuestCombatQaRuntimeFromViteEnv } from '../../game/combat/GuestCombatQaBuildGateV2.js';
@@ -792,9 +798,40 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   let nextRegenTime = 0;
 
   const mainGunBase = combat.gear.mainGun.base || GEAR_CATALOG.mainGun[0];
-  const enemyBulMat = makeMat(scene, new BABYLON.Color3(1, .28, .34));
+  const enemyProjectileMaterials = Object.freeze({
+    energy: makeMat(scene, new BABYLON.Color3(1, .28, .34)),
+    ion: makeMat(scene, new BABYLON.Color3(.42, .72, 1)),
+    explosive: makeMat(scene, new BABYLON.Color3(1, .58, .12)),
+    boss: makeMat(scene, new BABYLON.Color3(1, .10, .08)),
+  });
   const playerDamageGate = createPlayerDamageGateV25();
   let enemyProjectileSequence = 0;
+  let playerVelocityFrame = Object.freeze({ x: 0, z: 0 });
+  let playerMotionSample = {
+    x: playerRoot.position.x,
+    z: playerRoot.position.z,
+    initialized: false,
+  };
+  const samplePlayerCombatVelocity = frameFactorValue => {
+    const safeFrame = Math.max(.25, Math.min(4, Number(frameFactorValue) || 1));
+    const dx = playerRoot.position.x - playerMotionSample.x;
+    const dz = playerRoot.position.z - playerMotionSample.z;
+    const teleported = Math.hypot(dx, dz) > 2.4;
+    if (!playerMotionSample.initialized || teleported) {
+      playerVelocityFrame = Object.freeze({ x: 0, z: 0 });
+      playerMotionSample.initialized = true;
+    } else {
+      const instantX = dx / safeFrame;
+      const instantZ = dz / safeFrame;
+      playerVelocityFrame = Object.freeze({
+        x: clamp(playerVelocityFrame.x * .62 + instantX * .38, -.22, .22),
+        z: clamp(playerVelocityFrame.z * .62 + instantZ * .38, -.18, .18),
+      });
+    }
+    playerMotionSample.x = playerRoot.position.x;
+    playerMotionSample.z = playerRoot.position.z;
+    return playerVelocityFrame;
+  };
   const shots = createProjectileEmitter({
     scene, BABYLON, bullets: playerBullets, scheduleBattleTimer,
     maxBullets: runtimeLimits.maxPlayerProjectiles,
@@ -810,6 +847,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   ];
   const fireEnemyBullet = (pos, vx = 0, vz = 0.24, {
     priority = 'normal', rawDamage = 200, damageType = 'energy', sourceRole = null,
+    shotPlan = null,
   } = {}) => {
     if (enemyBullets.length >= runtimeLimits.maxEnemyProjectiles) {
       if (priority === 'boss') {
@@ -827,14 +865,31 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       }
     }
     const hitId = `campaign-enemy-projectile-${++enemyProjectileSequence}`;
-    const b = BABYLON.MeshBuilder.CreateSphere(hitId, { diameter: 0.44 }, scene);
-    b.position = pos.clone(); b.position.y = 0;
-    b.material = enemyBulMat; b._vx = vx; b._vz = vz;
+    const visual = shotPlan?.visual
+      || resolveCampaignEnemyProjectileVisualV31({ sourceRole, priority });
+    const b = BABYLON.MeshBuilder.CreateBox(hitId, {
+      width: visual.width,
+      depth: visual.length,
+      height: visual.height,
+    }, scene);
+    b.position = pos.clone(); b.position.y = .04;
+    const materialKey = priority === 'boss' ? 'boss'
+      : damageType === 'ion' ? 'ion'
+        : damageType === 'explosive' ? 'explosive' : 'energy';
+    b.material = enemyProjectileMaterials[materialKey];
+    b._vx = Number(shotPlan?.velocity?.x ?? vx) || 0;
+    b._vz = Number(shotPlan?.velocity?.z ?? vz) || .24;
+    b.rotation.y = Math.atan2(b._vx, b._vz);
+    b._shotPlan = shotPlan;
+    b._visualPulse = Number(visual.pulse) || 0;
+    b._createdAtMs = Number(shotPlan?.createdAtMs) || Date.now();
+    b._expiresAtMs = Number(shotPlan?.expiresAtMs) || (b._createdAtMs + (priority === 'boss' ? 5200 : 4200));
     b._damageHitId = hitId;
     b._priority = priority;
     b._rawDamage = Math.max(1, Math.round(Number(rawDamage) || 200));
     b._damageType = damageType || 'energy';
     b._sourceRole = sourceRole;
+    b.isPickable = false;
     enemyBullets.push(b);
     return true;
   };
@@ -1055,6 +1110,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         new BABYLON.Vector3(projectile.origin.x, 0, projectile.origin.z),
         projectile.velocity.x,
         projectile.velocity.z,
+        { sourceRole: 'boss_preview', rawDamage: enemy._projectileDamage || 240,
+          damageType: enemy._damageType || 'energy' },
       );
       if (projectile.fireOffsetMs > 0) scheduleBattleTimer(fire, projectile.fireOffsetMs);
       else fire();
@@ -1187,35 +1244,54 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
 
   const fireMiniBossAimedBurst = (enemy, event) => {
     if (!enemy?.mesh?.position) return;
-    const dx = playerRoot.position.x - enemy.mesh.position.x;
-    const dz = playerRoot.position.z - enemy.mesh.position.z;
-    const length = Math.hypot(dx, dz) || 1;
-    const baseX = dx / length;
-    const baseZ = dz / length;
+    const origin = resolveEncounterMuzzleOrigin(enemy)
+      || Object.freeze({ x: enemy.mesh.position.x, y: 0, z: enemy.mesh.position.z });
+    const speed = Math.max(.34, Number(event?.projectileSpeed) || .38);
+    const intercept = resolveCampaignEnemyInterceptV31({
+      origin,
+      target: { x: playerRoot.position.x, z: playerRoot.position.z },
+      targetVelocity: playerVelocityFrame,
+      projectileSpeed: speed,
+      leadFactor: .78,
+      maxLeadMs: 620,
+    });
+    const baseX = intercept.direction.x;
+    const baseZ = intercept.direction.z;
     const count = Math.max(1, Math.trunc(Number(event?.shotCount) || 1));
     const spread = Math.max(0, Number(event?.spreadRadians) || 0);
-    const speed = Math.max(.08, Number(event?.projectileSpeed) || .32);
     for (let index = 0; index < count; index += 1) {
       const normalized = count === 1 ? 0 : index / (count - 1) - .5;
       const angle = normalized * spread * 2;
       const cos = Math.cos(angle);
       const sin = Math.sin(angle);
-      fireEnemyBullet(enemy.mesh.position,
+      fireEnemyBullet(new BABYLON.Vector3(origin.x, 0, origin.z),
         (baseX * cos - baseZ * sin) * speed,
-        (baseX * sin + baseZ * cos) * speed);
+        (baseX * sin + baseZ * cos) * speed,
+        {
+          sourceRole: 'mini_boss',
+          rawDamage: enemy._projectileDamage || 260,
+          damageType: enemy._damageType || 'energy',
+        });
     }
   };
 
   const fireMiniBossLaneVolley = (enemy, event) => {
     if (!enemy?.mesh?.position) return;
-    const speed = Math.max(.08, Number(event?.projectileSpeed) || .34);
+    const origin = resolveEncounterMuzzleOrigin(enemy)
+      || Object.freeze({ x: enemy.mesh.position.x, y: 0, z: enemy.mesh.position.z });
+    const speed = Math.max(.34, Number(event?.projectileSpeed) || .38);
     for (const lane of event?.lanes || []) {
       const targetX = clamp(Number(lane) || 0, -.9, .9) * boundX();
       const targetZ = ZOOM + 2;
-      const dx = targetX - enemy.mesh.position.x;
-      const dz = targetZ - enemy.mesh.position.z;
+      const dx = targetX - origin.x;
+      const dz = targetZ - origin.z;
       const length = Math.hypot(dx, dz) || 1;
-      fireEnemyBullet(enemy.mesh.position, dx / length * speed, dz / length * speed);
+      fireEnemyBullet(new BABYLON.Vector3(origin.x, 0, origin.z),
+        dx / length * speed, dz / length * speed, {
+          sourceRole: 'mini_boss',
+          rawDamage: enemy._projectileDamage || 260,
+          damageType: enemy._damageType || 'energy',
+        });
     }
   };
 
@@ -1346,20 +1422,36 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
 
   const fireAimedEnemyBullet = (enemy, speed = null, priority = 'normal') => {
     if (!enemy?.mesh?.position) return false;
-    const dx = playerRoot.position.x - enemy.mesh.position.x;
-    const dz = playerRoot.position.z - enemy.mesh.position.z;
-    const distance = Math.hypot(dx, dz) || 1;
+    const origin = resolveEncounterMuzzleOrigin(enemy)
+      || Object.freeze({ x: enemy.mesh.position.x, y: 0, z: enemy.mesh.position.z });
     const projectileSpeed = Number.isFinite(Number(speed))
-      ? Number(speed) : Math.max(.12, Number(enemy._projectileSpeed) || .24);
+      ? Number(speed) : Math.max(.18, Number(enemy._projectileSpeed) || .34);
+    const shotPlan = createCampaignEnemyShotPlanV31({
+      origin,
+      target: { x: playerRoot.position.x, z: playerRoot.position.z },
+      targetVelocity: playerVelocityFrame,
+      projectileSpeed,
+      aimMode: enemy._projectileAimMode || 'predictive',
+      leadFactor: enemy._projectileLeadFactor ?? .78,
+      maxLeadMs: enemy._projectileMaxLeadMs ?? 680,
+      guidanceMs: enemy._projectileGuidanceMs ?? 0,
+      turnRateRadians: enemy._projectileTurnRateRadians ?? 0,
+      lifetimeMs: enemy._projectileLifetimeMs ?? 4200,
+      sourceRole: enemy._waveRole || enemy._encounterKind || null,
+      priority,
+      damageType: enemy._damageType || 'energy',
+      createdAtMs: Date.now(),
+    });
     return fireEnemyBullet(
-      enemy.mesh.position,
-      dx / distance * projectileSpeed,
-      dz / distance * projectileSpeed,
+      new BABYLON.Vector3(shotPlan.origin.x, 0, shotPlan.origin.z),
+      shotPlan.velocity.x,
+      shotPlan.velocity.z,
       {
         priority,
         rawDamage: enemy._projectileDamage || 200,
         damageType: enemy._damageType || 'energy',
         sourceRole: enemy._waveRole || enemy._encounterKind || null,
+        shotPlan,
       },
     );
   };
@@ -1495,7 +1587,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       : result.holdOrientation ? 'idle' : 'move');
     if (result.mayFire && enemy.canShoot && !guestAbilities?.modifiers().cloaked
       && nowMs > enemy.lastShoot + enemy.shootMs) {
-      fireAimedEnemyBullet(enemy, .27);
+      fireAimedEnemyBullet(enemy);
       enemy.lastShoot = nowMs;
     }
     return result;
@@ -1652,6 +1744,13 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       _routeVariant:spawnSpec?.routeVariant||null,
       _projectileSpeed:Math.max(.12,Number(spawnSpec?.projectileSpeed)||.24),
       _projectileDamage:Math.max(1,Math.round(Number(spawnSpec?.projectileDamage)||200)),
+      _projectileAimMode:spawnSpec?.projectileAimMode||'predictive',
+      _projectileLeadFactor:Number.isFinite(Number(spawnSpec?.projectileLeadFactor))
+        ?Number(spawnSpec.projectileLeadFactor):.78,
+      _projectileMaxLeadMs:Math.max(0,Number(spawnSpec?.projectileMaxLeadMs)||680),
+      _projectileGuidanceMs:Math.max(0,Number(spawnSpec?.projectileGuidanceMs)||0),
+      _projectileTurnRateRadians:Math.max(0,Number(spawnSpec?.projectileTurnRateRadians)||0),
+      _projectileLifetimeMs:Math.max(1600,Number(spawnSpec?.projectileLifetimeMs)||4200),
       _contactDamage:Math.max(1,Math.round(Number(spawnSpec?.contactDamage)||(tier===4?400:200))),
       _damageMultiplier:Number(spawnSpec?.damageMultiplier)||1,
       _damageType:spawnSpec?.damageType||'kinetic',
@@ -1714,7 +1813,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   let bossMesh    = null, bossVisual = null, bossHp = 0, bossMaxHp = 0;
   let bossEnraged = false, bossPts = 0;
   let bossVelX    = 0.028, bossFloatT = 0, nextBossFire = 0;
-  let bossRevealHalo = null, bossIntroStartedAt = 0;
+  let bossRevealHalo = null, bossFrenzyAura = null, bossIntroStartedAt = 0;
   let bossPhaseState=campaignCombatV3Enabled?createBossPhaseStateV28(currentPlanetId):null;
   let bossPhaseTransition=null;
   let bossCombatState=null;
@@ -1740,6 +1839,38 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   const cleanBossReveal = () => {
     safeDispose(bossRevealHalo);
     bossRevealHalo = null;
+  };
+
+  const disposeBossFrenzyAura = () => {
+    safeDispose(bossFrenzyAura);
+    bossFrenzyAura = null;
+  };
+
+  const ensureBossFrenzyAura = () => {
+    if (!bossMesh || bossMesh.isDisposed?.()) return null;
+    if (bossFrenzyAura && !bossFrenzyAura.isDisposed?.()) return bossFrenzyAura;
+    bossFrenzyAura = BABYLON.MeshBuilder.CreateTorus('boss_frenzy_aura_v31', {
+      diameter: 6.6,
+      thickness: .24,
+      tessellation: 56,
+    }, scene);
+    bossFrenzyAura.parent = bossMesh;
+    bossFrenzyAura.position.set(0, .10, 0);
+    bossFrenzyAura.material = makeMat(scene, new BABYLON.Color3(1, .06, .02));
+    bossFrenzyAura.isPickable = false;
+    bossFrenzyAura.visibility = .78;
+    return bossFrenzyAura;
+  };
+
+  const activateBossFrenzyV31 = ({ announce = true } = {}) => {
+    const firstActivation = !bossEnraged;
+    bossEnraged = true;
+    ensureBossFrenzyAura();
+    bossVisual?.setState('enrage');
+    if (announce && firstActivation) {
+      showAnnouncement(lang==='vi'?'CẢNH BÁO: TRÙM NỔI ĐIÊN!':'WARNING: BOSS ENRAGED!','#ff2a16',2200);
+    }
+    return firstActivation;
   };
 
   const disposeBossAttackTelegraph = () => {
@@ -1793,7 +1924,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         if(campaignCombatV3Enabled&&bossCombatState?.attackPlan?.id!==planId)return;
         fireEnemyBullet(
           new BABYLON.Vector3(projectile.origin.x,0,projectile.origin.z),
-          projectile.velocity.x,projectile.velocity.z,{priority:'boss'},
+          projectile.velocity.x,projectile.velocity.z,{priority:'boss',sourceRole:'boss'},
         );
       };
       if(projectile.fireOffsetMs>0)scheduleBattleTimer(fire,projectile.fireOffsetMs);
@@ -1810,6 +1941,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
 
     bossHp    = Math.floor((bossCfg.baseHp || 25000) * combat.environment.enemyHpMultiplier);
     bossMaxHp = bossHp; bossEnraged = false;
+    disposeBossFrenzyAura();
     bossPts   = isReplay ? Math.max(10, Math.floor((bossCfg.score||100)/3)) : (bossCfg.score||100);
     bossPhaseState=campaignCombatV3Enabled?createBossPhaseStateV28(currentPlanetId):null;
     bossPhaseTransition=null;
@@ -2594,11 +2726,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       return false;
     }
     if(!bossEnraged&&bossHp<=bossMaxHp*.3&&bossHp>0){
-      bossEnraged=true;
-      bossVisual?.setState('enrage');
-      showAnnouncement(lang==='vi'?'CẢNH BÁO: TRÙM NỔI ĐIÊN!':'WARNING: BOSS ENRAGED!','#ff0000',2200);
-      bossVelX*=1.6;
-      if(bossMesh.material)bossMesh.material.emissiveColor=new BABYLON.Color3(1,.3,.3);
+      activateBossFrenzyV31({announce:true});
     }
     if(bossHp>0)return false;
     explode(bossMesh.position,5);
@@ -2610,6 +2738,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     }
     bossSupportGroups.clear();
     disposeBossAttackTelegraph();
+    disposeBossFrenzyAura();
     bossCombatState=null;
     deathVisuals.capture(bossVisual);
     bossVisual=null;
@@ -2833,10 +2962,41 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     }
 
     // ── Enemy bullets ──
+    samplePlayerCombatVelocity(frameFactor);
     for (let i = enemyBullets.length-1; i >= 0; i--) {
       const b = enemyBullets[i];
       if (b.isDisposed?.()) { enemyBullets.splice(i,1); continue; }
-      b.position.x += b._vx * frameFactor; b.position.z += b._vz * frameFactor;
+      if (b._shotPlan) {
+        const motion = advanceCampaignEnemyProjectileV31({
+          plan: b._shotPlan,
+          position: { x: b.position.x, z: b.position.z },
+          velocity: { x: b._vx, z: b._vz },
+          target: { x: playerRoot.position.x, z: playerRoot.position.z },
+          targetVelocity: playerVelocityFrame,
+          nowMs: now,
+          frameScale: frameFactor,
+        });
+        b._vx = motion.velocity.x;
+        b._vz = motion.velocity.z;
+        b.position.x += motion.delta.x;
+        b.position.z += motion.delta.z;
+        b.rotation.y = motion.yawRadians;
+        if (motion.expired) {
+          safeDispose(b); enemyBullets.splice(i,1); continue;
+        }
+      } else {
+        b.position.x += b._vx * frameFactor;
+        b.position.z += b._vz * frameFactor;
+        b.rotation.y = Math.atan2(b._vx, b._vz);
+      }
+      if (now >= b._expiresAtMs) {
+        safeDispose(b); enemyBullets.splice(i,1); continue;
+      }
+      if (b._visualPulse > 0) {
+        const pulse = 1 + b._visualPulse * Math.sin((now - b._createdAtMs) * .028);
+        b.scaling.x = pulse;
+        b.scaling.y = pulse;
+      }
 
       if (b.position.z > ZOOM+3 || b.position.z < -ZOOM-3 || Math.abs(b.position.x) > cullX) {
         safeDispose(b); enemyBullets.splice(i,1); continue;
@@ -3091,8 +3251,18 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
           for(const event of bossStep.events){
             if(event.type==='telegraph_started')createBossAttackTelegraph(event.plan);
             else if(event.type==='fire_pattern')fireBossAttackPlan(event.plan);
+            else if(event.type==='enrage_started')activateBossFrenzyV31({announce:!bossEnraged});
             else if(event.type==='telegraph_ended'||event.type==='telegraph_cancelled'){
               disposeBossAttackTelegraph();
+            }
+          }
+          if(bossEnraged){
+            const aura=ensureBossFrenzyAura();
+            if(aura&&!aura.isDisposed?.()){
+              const auraPulse=1+.11*Math.sin(now*.024);
+              aura.scaling.x=auraPulse;
+              aura.scaling.z=auraPulse;
+              aura.visibility=.62+.24*Math.sin(now*.031);
             }
           }
           for(const corridor of bossAttackTelegraphs){

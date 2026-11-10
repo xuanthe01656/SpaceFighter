@@ -22,13 +22,15 @@ test('C15 stage1 friendly visual matches current pinned Guest gun_rail, not a cy
   assert.equal(spec.style,'bolt');
   assert.equal(spec.color,0xffffff);
 });
-test('C15 hostile shot adopts the Guest red-orb appearance without changing combat movement',()=>{
+test('C15 hostile shot adopts the Guest directional red-bolt presentation without changing combat movement',()=>{
   const p=c15Alpha1ProjectileAppearance(true);
   assert.equal(p.color,0xff4757);
-  assert.equal(projectileFxProfile(p).style,'orb');
-  assert.ok(projectileFxProfile(p).width>0.4&&projectileFxProfile(p).width<0.5);
+  const spec=projectileFxProfile(p);
+  assert.equal(spec.style,'bolt');
+  assert.ok(spec.length>spec.width);
   const guest=read('src/components/Campaign/CampaignScene.js');
   assert.match(guest,/new BABYLON\.Color3\(1, \.28, \.34\)/);
+  assert.match(guest,/MeshBuilder\.CreateBox\(hitId/);
   const renderer=read('src/components/C15LocalAlpha1/C15LocalRenderer.js');
   assert.match(renderer,/c15Alpha1ProjectileAppearance\(hostile\)/);
   assert.match(renderer,/drawProjectileTexture\(ctx,spec\)/);

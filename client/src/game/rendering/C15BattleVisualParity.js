@@ -6,9 +6,9 @@
  * versioned, validated visual descriptor from the trusted battle contract.
  */
 export function c15Alpha1ProjectileAppearance(hostile = false) {
-  // Guest enemy bullets are red orbs, and the pinned Guest railgun is white.
+  // Guest hostile fire uses a directional red pulse bolt; the pinned Guest railgun is white.
   return hostile
-    ? Object.freeze({projectileType: 'plasma', color: 0xff4757, visualScale: 0.65})
+    ? Object.freeze({projectileType: 'pulse', color: 0xff4757, visualScale: 0.9})
     : Object.freeze({projectileType: 'rail', color: 0xffffff, visualScale: 1.8});
 }
 

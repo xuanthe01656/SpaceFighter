@@ -9,7 +9,7 @@ import {
   resolveCampaignWaveEncounterV28,
 } from './CampaignEncounterEscalationV28.js';
 
-export const CAMPAIGN_WAVE_DIRECTOR_VERSION = 'campaign-wave-director-v3.0.0';
+export const CAMPAIGN_WAVE_DIRECTOR_VERSION = 'campaign-wave-director-v3.1.0';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const round3 = value => Math.round(Number(value) * 1000) / 1000;
@@ -275,6 +275,12 @@ function projectRuntimeV3(runtime, wavePower, elite = false) {
     damageMultiplier: round3(runtime.damageMultiplier * wavePower.damageMultiplier * eliteDamage),
     speedMultiplier: round3(runtime.speedMultiplier * wavePower.speedMultiplier * eliteSpeed),
     projectileSpeed: round3(runtime.projectileSpeed * wavePower.projectileSpeedMultiplier),
+    projectileAimMode: runtime.projectileAimMode,
+    projectileLeadFactor: runtime.projectileLeadFactor,
+    projectileMaxLeadMs: runtime.projectileMaxLeadMs,
+    projectileGuidanceMs: runtime.projectileGuidanceMs,
+    projectileTurnRateRadians: runtime.projectileTurnRateRadians,
+    projectileLifetimeMs: runtime.projectileLifetimeMs,
     projectileDamage: Math.max(0, Math.round(runtime.projectileDamage * wavePower.damageMultiplier * eliteDamage)),
     contactDamage: Math.max(1, Math.round(runtime.contactDamage * wavePower.damageMultiplier * eliteDamage)),
   });

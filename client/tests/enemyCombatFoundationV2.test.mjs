@@ -55,13 +55,22 @@ import {
   stepCampaignMiniBossMotionV29,
 } from '../src/game/combat/CampaignCombatChoreographyV29.js';
 import {
+  CAMPAIGN_BOSS_COMBAT_VERSION,
   CAMPAIGN_BOSS_PATTERN_CATALOG_V29,
+  CAMPAIGN_BOSS_PHASE_COMBAT_V31,
   auditCampaignBossCombatV29,
   createCampaignBossAttackPlanV29,
   createCampaignBossCombatStateV29,
   projectilesFromCampaignBossAttackPlanV29,
   stepCampaignBossCombatV29,
 } from '../src/game/combat/CampaignBossCombatV29.js';
+import {
+  CAMPAIGN_ENEMY_PROJECTILE_VERSION,
+  advanceCampaignEnemyProjectileV31,
+  auditCampaignEnemyProjectileV31,
+  createCampaignEnemyShotPlanV31,
+  resolveCampaignEnemyProjectileVisualV31,
+} from '../src/game/combat/CampaignEnemyProjectileV31.js';
 
 const stagePlan = (options = {}) => createEnemyDirectorV2({
   seed: options.seed ?? 12345,
@@ -76,7 +85,7 @@ const stagePlan = (options = {}) => createEnemyDirectorV2({
 });
 
 test('enemy V3 catalog is the single runtime source for six readable combat roles', () => {
-  assert.equal(ENEMY_COMBAT_CATALOG_VERSION, 'enemy-combat-v3.0.0');
+  assert.equal(ENEMY_COMBAT_CATALOG_VERSION, 'enemy-combat-v3.1.0');
   assert.deepEqual(auditEnemyCombatCatalogV2(), []);
   assert.equal(Object.keys(ENEMY_ARCHETYPES_V2).length, 6);
   assert.deepEqual(Object.keys(ENEMY_RUNTIME_CATALOG_V3).sort(), Object.keys(ENEMY_ARCHETYPES_V2).sort());
@@ -90,12 +99,107 @@ test('enemy V3 catalog is the single runtime source for six readable combat role
     assert.equal(runtime.contactDamage, archetype.contactDamage);
     if (archetype.canShoot) {
       assert.ok(runtime.shootMs > 0 && runtime.projectileSpeed > 0 && runtime.projectileDamage > 0);
+      assert.equal(runtime.projectileAimMode, archetype.projectileAimMode);
+      assert.equal(runtime.projectileLifetimeMs, archetype.projectileLifetimeMs);
+      assert.ok(['predictive', 'soft_homing'].includes(runtime.projectileAimMode));
     }
   }
   assert.equal(BOSS_PHASES_V2.length, 3);
   assert.equal(bossPhaseForHp(.8).id, 'phase_1');
   assert.equal(bossPhaseForHp(.5).id, 'phase_2');
   assert.equal(bossPhaseForHp(.2).id, 'phase_3');
+});
+
+test('V3.1 enemy fire-control leads moving targets, guides support shots briefly and expires every projectile', () => {
+  assert.equal(CAMPAIGN_ENEMY_PROJECTILE_VERSION, 'campaign-enemy-projectile-v3.1.0');
+  assert.deepEqual(auditCampaignEnemyProjectileV31(), []);
+
+  const predictive = createCampaignEnemyShotPlanV31({
+    origin: { x: -2, y: 0, z: -6 },
+    target: { x: 0, z: 10 },
+    targetVelocity: { x: .09, z: 0 },
+    projectileSpeed: .42,
+    aimMode: 'predictive',
+    leadFactor: .88,
+    maxLeadMs: 720,
+    lifetimeMs: 4200,
+    sourceRole: 'gunner',
+    createdAtMs: 1000,
+  });
+  assert.equal(Object.isFrozen(predictive), true);
+  assert.equal(predictive.originKind, 'entity_muzzle');
+  assert.ok(predictive.aimPoint.x > 0, 'predictive fire must lead a player moving to the right');
+  assert.ok(predictive.velocity.x > 0);
+  assert.equal(predictive.expiresAtMs, 5200);
+  let projectilePosition = { x: predictive.origin.x, z: predictive.origin.z };
+  let movingTarget = { x: predictive.targetSnapshot.x, z: predictive.targetSnapshot.z };
+  let closestApproach = Number.POSITIVE_INFINITY;
+  for (let frame = 0; frame < 90; frame += 1) {
+    projectilePosition = {
+      x: projectilePosition.x + predictive.velocity.x,
+      z: projectilePosition.z + predictive.velocity.z,
+    };
+    movingTarget = {
+      x: movingTarget.x + predictive.targetVelocitySnapshot.x,
+      z: movingTarget.z + predictive.targetVelocitySnapshot.z,
+    };
+    closestApproach = Math.min(closestApproach, Math.hypot(
+      projectilePosition.x - movingTarget.x, projectilePosition.z - movingTarget.z,
+    ));
+  }
+  assert.ok(closestApproach < 1.2,
+    'predictive gunner fire must enter the actual player hit radius instead of drifting past');
+
+  const support = createCampaignEnemyShotPlanV31({
+    origin: { x: 0, y: 0, z: -5 },
+    target: { x: 0, z: 10 },
+    projectileSpeed: .36,
+    aimMode: 'soft_homing',
+    leadFactor: .35,
+    maxLeadMs: 420,
+    guidanceMs: 760,
+    turnRateRadians: .052,
+    lifetimeMs: 4600,
+    sourceRole: 'support',
+    createdAtMs: 2000,
+  });
+  const guided = advanceCampaignEnemyProjectileV31({
+    plan: support,
+    position: { x: 0, z: -3 },
+    velocity: support.velocity,
+    target: { x: 5, z: 10 },
+    targetVelocity: { x: .06, z: 0 },
+    nowMs: 2300,
+    frameScale: 1,
+  });
+  assert.equal(guided.guidanceActive, true);
+  assert.ok(guided.velocity.x > support.velocity.x,
+    'bounded support guidance must visibly turn toward the current player position');
+  const ballistic = advanceCampaignEnemyProjectileV31({
+    plan: support,
+    position: { x: 1, z: 3 },
+    velocity: guided.velocity,
+    target: { x: -6, z: 10 },
+    targetVelocity: { x: -.1, z: 0 },
+    nowMs: 2900,
+    frameScale: 1,
+  });
+  assert.equal(ballistic.guidanceActive, false,
+    'support guidance must stop after the readable bounded guidance window');
+  assert.deepEqual(ballistic.velocity, guided.velocity);
+  const expired = advanceCampaignEnemyProjectileV31({
+    plan: support,
+    position: { x: 1, z: 3 },
+    velocity: guided.velocity,
+    target: { x: 0, z: 10 },
+    nowMs: support.expiresAtMs,
+    frameScale: 1,
+  });
+  assert.equal(expired.expired, true);
+  const visual = resolveCampaignEnemyProjectileVisualV31({ sourceRole: 'gunner' });
+  assert.ok(visual.length > visual.width, 'enemy fire must render as a directional bolt, not a floating sphere');
+  const previewVisual = resolveCampaignEnemyProjectileVisualV31({ sourceRole: 'boss_preview' });
+  assert.ok(previewVisual.length > previewVisual.width);
 });
 
 test('same seed produces the same legacy wave, campaign stage and boss plans', () => {
@@ -139,7 +243,7 @@ test('boss plan telegraphs every attack and changes phase deterministically', ()
 });
 
 test('V2.8 combines deterministic pacing with mini-bosses and real Boss mechanic previews', () => {
-  assert.equal(CAMPAIGN_WAVE_DIRECTOR_VERSION, 'campaign-wave-director-v3.0.0');
+  assert.equal(CAMPAIGN_WAVE_DIRECTOR_VERSION, 'campaign-wave-director-v3.1.0');
   assert.equal(CAMPAIGN_ENCOUNTER_ESCALATION_VERSION, 'campaign-encounter-v2.8.1');
   assert.deepEqual(Object.keys(CAMPAIGN_PLANET_PROFILES_V27), ['1', '2', '3']);
   assert.ok(Object.keys(CAMPAIGN_WAVE_TEMPLATES_V27).length >= 14);
@@ -463,6 +567,11 @@ test('V3 wave power, planet identity and scout route mix are deterministic and m
           assert.ok(Number.isFinite(entry.spawnOffsetMs) && Number.isFinite(entry.damageMultiplier));
           if (entry.canShoot) {
             assert.ok(entry.shootMs >= 650 && entry.projectileSpeed > 0 && entry.projectileDamage > 0);
+            assert.ok(['predictive', 'soft_homing'].includes(entry.projectileAimMode));
+            assert.ok(entry.projectileLifetimeMs >= 1600);
+            if (entry.projectileAimMode === 'soft_homing') {
+              assert.ok(entry.projectileGuidanceMs > 0 && entry.projectileTurnRateRadians > 0);
+            }
           }
           if (entry.archetypeId === 'raider') routeTotals.get(planetId)[entry.routeVariant] += 1;
         }
@@ -693,7 +802,7 @@ test('V2.9 final Boss uses deterministic reposition-aim-telegraph-fire-recover p
   });
   assert.equal(Object.isFrozen(radial), true);
   assert.equal(Object.isFrozen(radial.paths), true);
-  assert.equal(radial.paths.length, 13);
+  assert.equal(radial.paths.length, 15);
   assert.equal(radial.paths.every(path => path.origin.x === radial.origin.x
     && path.origin.y === radial.origin.y && path.origin.z === radial.origin.z), true);
   const projectiles = projectilesFromCampaignBossAttackPlanV29(radial);
@@ -754,6 +863,58 @@ test('V2.9 final Boss uses deterministic reposition-aim-telegraph-fire-recover p
   assert.equal(fired.phase, 'recover');
 });
 
+test('V3.1 final Boss has a real frenzy state with persistent stronger phase-three plans', () => {
+  assert.equal(CAMPAIGN_BOSS_COMBAT_VERSION, 'campaign-boss-combat-v3.1.0');
+  assert.ok(CAMPAIGN_BOSS_PHASE_COMBAT_V31.phase_3.movementMultiplier
+    > CAMPAIGN_BOSS_PHASE_COMBAT_V31.phase_2.movementMultiplier);
+  assert.ok(CAMPAIGN_BOSS_PHASE_COMBAT_V31.phase_3.recoveryMultiplier
+    < CAMPAIGN_BOSS_PHASE_COMBAT_V31.phase_2.recoveryMultiplier);
+
+  const calm = createCampaignBossAttackPlanV29({
+    pattern: 'aimed_burst', origin: { x: 0, y: 0, z: -5 },
+    playerX: 2, playerZ: 10, createdAtMs: 1000, cycle: 0, phaseId: 'phase_1',
+  });
+  const frenzy = createCampaignBossAttackPlanV29({
+    pattern: 'aimed_burst', origin: { x: 0, y: 0, z: -5 },
+    playerX: 2, playerZ: 10, createdAtMs: 1000, cycle: 0, phaseId: 'phase_3',
+  });
+  assert.equal(calm.paths.length, 3);
+  assert.equal(frenzy.paths.length, 5);
+  assert.ok(frenzy.projectileSpeed > calm.projectileSpeed);
+  assert.ok(frenzy.recoveryMs < calm.recoveryMs);
+  assert.equal(frenzy.frenzyLevel, 2);
+
+  const state = createCampaignBossCombatStateV29({ seed: 23, nowMs: 0 });
+  const entered = stepCampaignBossCombatV29(state, {
+    nowMs: 100, hpRatio: .29, frameScale: 1, baseSpeed: .045,
+    enemyX: 0, enemyZ: -6, playerX: 0, playerZ: 12,
+    origin: { x: 0, y: 0, z: -4.1 }, arenaHalfWidth: 7, worldHalfHeight: 15,
+    viewportHeight: 852, hudOcclusionLineZ: -9.3,
+  });
+  assert.equal(entered.phase, 'enrage');
+  assert.equal(entered.deltaX, 0);
+  assert.equal(entered.deltaZ, 0);
+  assert.equal(entered.visualState, 'enrage');
+  assert.equal(entered.events.some(event => event.type === 'enrage_started'), true);
+  assert.equal(state.currentPhaseId, 'phase_3');
+
+  const held = stepCampaignBossCombatV29(state, {
+    nowMs: 950, hpRatio: .29, frameScale: 1, baseSpeed: .045,
+    enemyX: 0, enemyZ: -6, playerX: 0, playerZ: 12,
+    origin: { x: 0, y: 0, z: -4.1 }, arenaHalfWidth: 7, worldHalfHeight: 15,
+    viewportHeight: 852, hudOcclusionLineZ: -9.3,
+  });
+  assert.equal(held.phase, 'enrage');
+  const released = stepCampaignBossCombatV29(state, {
+    nowMs: 1001, hpRatio: .29, frameScale: 1, baseSpeed: .045,
+    enemyX: 0, enemyZ: -6, playerX: 0, playerZ: 12,
+    origin: { x: 0, y: 0, z: -4.1 }, arenaHalfWidth: 7, worldHalfHeight: 15,
+    viewportHeight: 852, hudOcclusionLineZ: -9.3,
+  });
+  assert.equal(released.phase, 'reposition');
+  assert.equal(released.events.some(event => event.type === 'enrage_finished'), true);
+});
+
 test('Campaign source enables V3 enemy combat in production while preserving V2.8/V2.8.2 contracts and an explicit kill switch', () => {
   const source = fs.readFileSync(new URL('../src/components/Campaign/CampaignScene.js', import.meta.url), 'utf8');
   assert.match(source, /campaignCombatV3Enabled=import\.meta\.env\.VITE_SF_CAMPAIGN_COMBAT_V3!==['\"]false['\"]/);
@@ -796,6 +957,15 @@ test('Campaign source enables V3 enemy combat in production while preserving V2.
   assert.match(source, /projectilesFromCampaignBossAttackPlanV29/);
   assert.match(source, /campaignCombatV3Enabled&&bossCombatState/);
   assert.match(source, /Emergency kill-switch legacy boss fallback/);
+  assert.match(source, /createCampaignEnemyShotPlanV31/);
+  assert.match(source, /advanceCampaignEnemyProjectileV31/);
+  assert.match(source, /samplePlayerCombatVelocity\(frameFactor\)/);
+  assert.match(source, /resolveEncounterMuzzleOrigin\(enemy\)/);
+  assert.match(source, /MeshBuilder\.CreateBox\(hitId/);
+  assert.match(source, /_projectileAimMode:spawnSpec\?\.projectileAimMode/);
+  assert.match(source, /activateBossFrenzyV31/);
+  assert.match(source, /boss_frenzy_aura_v31/);
+  assert.match(source, /event\.type===['"]enrage_started['"]/);
 
   assert.match(source, /const spawnZ = spawnSpec \? -ZOOM - 1\.8 : -ZOOM - 3/);
   assert.match(source, /const environmentHpMultiplier = spawnSpec \? 1 : combat\.environment\.enemyHpMultiplier/);
@@ -816,8 +986,13 @@ test('Campaign source enables V3 enemy combat in production while preserving V2.
     new URL('../src/game/combat/CampaignCombatChoreographyV29.js', import.meta.url), 'utf8');
   const bossSource = fs.readFileSync(
     new URL('../src/game/combat/CampaignBossCombatV29.js', import.meta.url), 'utf8');
+  const projectileSource = fs.readFileSync(
+    new URL('../src/game/combat/CampaignEnemyProjectileV31.js', import.meta.url), 'utf8');
   assert.doesNotMatch(choreographySource, /Math\.random/);
   assert.doesNotMatch(bossSource, /Math\.random/);
+  assert.doesNotMatch(projectileSource, /Math\.random/);
+  assert.match(bossSource, /state\.phase = ['"]enrage['"]/);
+  assert.match(bossSource, /extraBurstShots: 2/);
   assert.match(choreographySource, /hardTravelTimeout/);
   assert.match(choreographySource, /CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30/);
 });

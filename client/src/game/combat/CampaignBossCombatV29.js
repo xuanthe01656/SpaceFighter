@@ -5,7 +5,7 @@ import { resolveCampaignCombatSafeBandV29 } from './CampaignCombatChoreographyV2
  * Deterministic final-boss movement and attack choreography for Campaign QA.
  * One immutable attack plan is shared by warning VFX and spawned projectiles.
  */
-export const CAMPAIGN_BOSS_COMBAT_VERSION = 'campaign-boss-combat-v2.9.0';
+export const CAMPAIGN_BOSS_COMBAT_VERSION = 'campaign-boss-combat-v3.1.0';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -70,6 +70,61 @@ export const CAMPAIGN_BOSS_PATTERN_CATALOG_V29 = freezeDeep({
   },
 });
 
+
+export const CAMPAIGN_BOSS_PHASE_COMBAT_V31 = freezeDeep({
+  phase_1: {
+    frenzyLevel: 0,
+    movementMultiplier: 1,
+    recoveryMultiplier: 1,
+    projectileSpeedMultiplier: 1,
+    extraBurstShots: 0,
+    extraRadialSlots: 0,
+    enrageHoldMs: 0,
+  },
+  phase_2: {
+    frenzyLevel: 1,
+    movementMultiplier: 1.10,
+    recoveryMultiplier: .88,
+    projectileSpeedMultiplier: 1.06,
+    extraBurstShots: 0,
+    extraRadialSlots: 0,
+    enrageHoldMs: 0,
+  },
+  phase_3: {
+    frenzyLevel: 2,
+    movementMultiplier: 1.32,
+    recoveryMultiplier: .62,
+    projectileSpeedMultiplier: 1.14,
+    extraBurstShots: 2,
+    extraRadialSlots: 2,
+    enrageHoldMs: 900,
+  },
+});
+
+const phaseCombatFor = phaseId => CAMPAIGN_BOSS_PHASE_COMBAT_V31[phaseId]
+  || CAMPAIGN_BOSS_PHASE_COMBAT_V31.phase_1;
+
+const resolvePatternContractV31 = (pattern, phaseId) => {
+  const base = CAMPAIGN_BOSS_PATTERN_CATALOG_V29[pattern];
+  if (!base) return null;
+  const phase = phaseCombatFor(phaseId);
+  const contract = {
+    ...base,
+    projectileSpeed: base.projectileSpeed * phase.projectileSpeedMultiplier,
+    recoveryMs: Math.max(600, Math.round(base.recoveryMs * phase.recoveryMultiplier)),
+  };
+  if ((pattern === 'aimed_burst' || pattern === 'fan') && phase.extraBurstShots > 0) {
+    contract.shotCount = base.shotCount + phase.extraBurstShots;
+  }
+  if (pattern === 'radial_gap' && phase.extraRadialSlots > 0) {
+    contract.radialSlots = base.radialSlots + phase.extraRadialSlots;
+  }
+  if (pattern === 'lane_sweep' && phase.frenzyLevel >= 2) {
+    contract.lanes = [-.78, -.39, 0, .39, .78];
+  }
+  return freezeDeep(contract);
+};
+
 export function auditCampaignBossCombatV29() {
   const issues = [];
   const catalogPatterns = new Set(Object.keys(CAMPAIGN_BOSS_PATTERN_CATALOG_V29));
@@ -84,6 +139,14 @@ export function auditCampaignBossCombatV29() {
     if (pattern.recoveryMs < 600) issues.push(`SHORT_RECOVERY:${id}`);
     if (pattern.projectileSpeed <= 0) issues.push(`INVALID_SPEED:${id}`);
   }
+  for (const phase of BOSS_PHASES_V2) {
+    const combat = CAMPAIGN_BOSS_PHASE_COMBAT_V31[phase.id];
+    if (!combat) issues.push(`MISSING_PHASE_COMBAT:${phase.id}`);
+    else if (!(combat.movementMultiplier > 0 && combat.recoveryMultiplier > 0
+      && combat.projectileSpeedMultiplier > 0)) issues.push(`INVALID_PHASE_COMBAT:${phase.id}`);
+  }
+  if (!(CAMPAIGN_BOSS_PHASE_COMBAT_V31.phase_3.frenzyLevel
+    > CAMPAIGN_BOSS_PHASE_COMBAT_V31.phase_2.frenzyLevel)) issues.push('FRENZY_LEVEL_ORDER');
   return Object.freeze(issues);
 }
 
@@ -150,8 +213,9 @@ export function createCampaignBossAttackPlanV29({
   cycle = 0,
   phaseId = 'phase_1',
 } = {}) {
-  const contract = CAMPAIGN_BOSS_PATTERN_CATALOG_V29[pattern];
-  if (!contract) throw new Error(`Unknown Campaign Boss V2.9 pattern: ${pattern}`);
+  const contract = resolvePatternContractV31(pattern, phaseId);
+  if (!contract) throw new Error(`Unknown Campaign Boss V3.1 pattern: ${pattern}`);
+  const phaseCombat = phaseCombatFor(phaseId);
   const ox = Number(origin?.x);
   const oz = Number(origin?.z);
   if (!Number.isFinite(ox) || !Number.isFinite(oz)) {
@@ -219,6 +283,8 @@ export function createCampaignBossAttackPlanV29({
     version: CAMPAIGN_BOSS_COMBAT_VERSION,
     id: `boss-v29-${phaseId}-${cycle}-${pattern}`,
     phaseId,
+    frenzyLevel: phaseCombat.frenzyLevel,
+    phaseCombat,
     cycle: Math.max(0, Math.trunc(finite(cycle, 0))),
     pattern,
     originSpace: 'world',
@@ -259,6 +325,7 @@ export function createCampaignBossCombatStateV29({ seed = 1, nowMs = 0 } = {}) {
     velocityZ: 0,
     attackPlan: null,
     currentPhaseId: 'phase_1',
+    enrageUntilMs: 0,
   };
 }
 
@@ -338,7 +405,6 @@ export function stepCampaignBossCombatV29(state, input = {}) {
   const hpRatio = clamp(finite(input.hpRatio, 1), 0, 1);
   const events = [];
   const hpPhase = bossPhaseForHp(hpRatio);
-  state.currentPhaseId = hpPhase.id;
 
   if (input.suspended) {
     if (state.attackPlan) events.push(Object.freeze({ type: 'telegraph_cancelled', planId: state.attackPlan.id }));
@@ -351,6 +417,53 @@ export function stepCampaignBossCombatV29(state, input = {}) {
     return Object.freeze({
       state, events: Object.freeze(events), phase: state.phase,
       holdOrientation: true, visualState: 'enrage',
+      ...motion,
+    });
+  }
+
+  if (hpPhase.id !== state.currentPhaseId) {
+    const previousPhaseId = state.currentPhaseId;
+    state.currentPhaseId = hpPhase.id;
+    events.push(Object.freeze({ type: 'phase_changed', previousPhaseId, phaseId: hpPhase.id }));
+    if (hpPhase.id === 'phase_3') {
+      if (state.attackPlan) {
+        events.push(Object.freeze({ type: 'telegraph_cancelled', planId: state.attackPlan.id }));
+      }
+      state.attackPlan = null;
+      state.phase = 'enrage';
+      state.phaseStartedAt = nowMs;
+      state.enrageUntilMs = nowMs + phaseCombatFor(hpPhase.id).enrageHoldMs;
+      state.targetX = null;
+      state.targetZ = null;
+      const motion = stopBoss(state);
+      events.push(Object.freeze({
+        type: 'enrage_started',
+        phaseId: hpPhase.id,
+        frenzyLevel: phaseCombatFor(hpPhase.id).frenzyLevel,
+        holdMs: phaseCombatFor(hpPhase.id).enrageHoldMs,
+      }));
+      return Object.freeze({
+        state, events: Object.freeze(events), phase: state.phase,
+        holdOrientation: true, visualState: 'enrage', frenzyLevel: 2,
+        ...motion,
+      });
+    }
+  }
+
+  if (state.phase === 'enrage') {
+    const motion = stopBoss(state);
+    if (nowMs >= state.enrageUntilMs) {
+      state.phase = 'reposition';
+      state.phaseStartedAt = nowMs;
+      state.targetX = null;
+      state.targetZ = null;
+      events.push(Object.freeze({ type: 'enrage_finished', phaseId: state.currentPhaseId }));
+    }
+    return Object.freeze({
+      state, events: Object.freeze(events), phase: state.phase,
+      holdOrientation: true,
+      visualState: nowMs < state.enrageUntilMs ? 'enrage' : 'move',
+      frenzyLevel: phaseCombatFor(state.currentPhaseId).frenzyLevel,
       ...motion,
     });
   }
@@ -387,8 +500,9 @@ export function stepCampaignBossCombatV29(state, input = {}) {
         deltaX: 0, deltaZ: 0, velocityX: 0, velocityZ: 0,
       });
     }
-    const enragedSpeed = hpRatio <= .30 ? 1.18 : hpRatio <= .65 ? 1.08 : 1;
-    const motion = steerBoss(state, input, { x: state.targetX, z: state.targetZ }, enragedSpeed);
+    const phaseCombat = phaseCombatFor(hpPhase.id);
+    const motion = steerBoss(state, input, { x: state.targetX, z: state.targetZ },
+      phaseCombat.movementMultiplier);
     return Object.freeze({
       state, events: Object.freeze(events), phase: state.phase,
       holdOrientation: false, visualState: 'move',
@@ -440,8 +554,7 @@ export function stepCampaignBossCombatV29(state, input = {}) {
   }
 
   const motion = holdBoss(state, input);
-  const recoveryMs = Math.max(600, finite(state.attackPlan?.recoveryMs, 1000))
-    * (hpRatio <= .30 ? .78 : hpRatio <= .65 ? .9 : 1);
+  const recoveryMs = Math.max(600, finite(state.attackPlan?.recoveryMs, 1000));
   if (nowMs - state.phaseStartedAt >= recoveryMs) {
     state.cycle += 1;
     state.phase = 'reposition';
