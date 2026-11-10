@@ -1,47 +1,92 @@
 /**
- * Production-oriented enemy roles for Shared Combat Rules V2.
- * The legacy Babylon scene does not consume this catalog yet; it is a pure,
- * deterministic contract for the next server/client simulation phase.
+ * Campaign enemy product catalog V3.
+ *
+ * This is the single source of truth for role identity, threat cost, base
+ * combat output and movement behavior. The director may scale these values by
+ * stage, wave, planet and elite state, but must not duplicate role constants.
  */
-export const ENEMY_COMBAT_CATALOG_VERSION = 'enemy-combat-v2.0.0';
+export const ENEMY_COMBAT_CATALOG_VERSION = 'enemy-combat-v3.0.0';
+
+const freezeRole = value => Object.freeze({ ...value });
+
 export const ENEMY_ARCHETYPES_V2 = Object.freeze({
-  raider: Object.freeze({
+  raider: freezeRole({
     id: 'raider', role: 'skirmisher', defenseClass: 'light', damageType: 'kinetic',
-    unlockStage: 1, hpMultiplier: 0.80, damageMultiplier: 0.85, speedMultiplier: 1.18,
-    behavior: 'strafe', preferredRange: 5.5, telegraphTicks: 18, attackCooldownTicks: 66,
-    controlResistance: 0.05,
+    tier: 1, threatCost: 1, canShoot: false,
+    unlockStage: 1, hpMultiplier: 0.82, damageMultiplier: 0.88, speedMultiplier: 1.22,
+    behavior: 'strafe', preferredRange: 5.2, telegraphTicks: 18, attackCooldownTicks: 60,
+    fireCooldownMs: 0, projectileSpeed: 0, projectileDamage: 0, contactDamage: 170,
+    routeVariants: Object.freeze(['flyby', 'hook_return']), controlResistance: 0.05,
   }),
-  gunner: Object.freeze({
+  gunner: freezeRole({
     id: 'gunner', role: 'ranged', defenseClass: 'balanced', damageType: 'energy',
-    unlockStage: 1, hpMultiplier: 1.00, damageMultiplier: 1.00, speedMultiplier: 1.00,
-    behavior: 'keep_range', preferredRange: 8, telegraphTicks: 24, attackCooldownTicks: 78,
-    controlResistance: 0.10,
+    tier: 2, threatCost: 2, canShoot: true,
+    unlockStage: 1, hpMultiplier: 1.00, damageMultiplier: 1.00, speedMultiplier: 1.04,
+    behavior: 'keep_range', preferredRange: 7.6, telegraphTicks: 18, attackCooldownTicks: 54,
+    fireCooldownMs: 1800, projectileSpeed: 0.28, projectileDamage: 180, contactDamage: 180,
+    routeVariants: Object.freeze(['range_strafe']), controlResistance: 0.10,
   }),
-  charger: Object.freeze({
+  charger: freezeRole({
     id: 'charger', role: 'diver', defenseClass: 'armored', damageType: 'kinetic',
-    unlockStage: 2, hpMultiplier: 1.25, damageMultiplier: 1.15, speedMultiplier: 0.92,
-    behavior: 'telegraphed_charge', preferredRange: 10, telegraphTicks: 36, attackCooldownTicks: 120,
-    controlResistance: 0.20,
+    tier: 4, threatCost: 3, canShoot: false,
+    unlockStage: 2, hpMultiplier: 1.22, damageMultiplier: 1.18, speedMultiplier: 1.04,
+    behavior: 'telegraphed_charge', preferredRange: 10, telegraphTicks: 30, attackCooldownTicks: 102,
+    fireCooldownMs: 0, projectileSpeed: 0, projectileDamage: 0, contactDamage: 380,
+    routeVariants: Object.freeze(['charge_cycle']), controlResistance: 0.20,
   }),
-  shieldbearer: Object.freeze({
+  shieldbearer: freezeRole({
     id: 'shieldbearer', role: 'defender', defenseClass: 'shielded', damageType: 'energy',
-    unlockStage: 4, hpMultiplier: 1.35, damageMultiplier: 0.82, speedMultiplier: 0.78,
-    behavior: 'guard_lane', preferredRange: 7, telegraphTicks: 30, attackCooldownTicks: 96,
-    shieldRatio: 0.20, controlResistance: 0.30,
+    tier: 3, threatCost: 4, canShoot: false,
+    unlockStage: 4, hpMultiplier: 1.42, damageMultiplier: 0.92, speedMultiplier: 0.86,
+    behavior: 'guard_lane', preferredRange: 6.8, telegraphTicks: 24, attackCooldownTicks: 84,
+    fireCooldownMs: 0, projectileSpeed: 0, projectileDamage: 0, contactDamage: 240,
+    routeVariants: Object.freeze(['lane_guard']), shieldRatio: 0.20, controlResistance: 0.30,
   }),
-  support: Object.freeze({
+  support: freezeRole({
     id: 'support', role: 'support', defenseClass: 'light', damageType: 'ion',
-    unlockStage: 5, hpMultiplier: 0.85, damageMultiplier: 0.60, speedMultiplier: 0.90,
-    behavior: 'support_orbit', preferredRange: 9, telegraphTicks: 30, attackCooldownTicks: 105,
+    tier: 2, threatCost: 4, canShoot: true,
+    unlockStage: 5, hpMultiplier: 0.90, damageMultiplier: 0.72, speedMultiplier: 0.98,
+    behavior: 'support_orbit', preferredRange: 8.6, telegraphTicks: 21, attackCooldownTicks: 66,
+    fireCooldownMs: 2200, projectileSpeed: 0.26, projectileDamage: 145, contactDamage: 150,
+    routeVariants: Object.freeze(['support_orbit']),
     supportPulseTicks: 150, supportRatio: 0.08, controlResistance: 0.10,
   }),
-  artillery: Object.freeze({
+  artillery: freezeRole({
     id: 'artillery', role: 'artillery', defenseClass: 'balanced', damageType: 'explosive',
-    unlockStage: 6, hpMultiplier: 1.05, damageMultiplier: 1.30, speedMultiplier: 0.68,
-    behavior: 'telegraphed_zone', preferredRange: 12, telegraphTicks: 48, attackCooldownTicks: 132,
-    controlResistance: 0.15,
+    tier: 3, threatCost: 4, canShoot: true,
+    unlockStage: 6, hpMultiplier: 1.10, damageMultiplier: 1.32, speedMultiplier: 0.80,
+    behavior: 'telegraphed_zone', preferredRange: 11.4, telegraphTicks: 33, attackCooldownTicks: 75,
+    fireCooldownMs: 2500, projectileSpeed: 0.31, projectileDamage: 260, contactDamage: 200,
+    routeVariants: Object.freeze(['battery_relocate']), controlResistance: 0.15,
   }),
 });
+
+/**
+ * Compatibility/runtime projection used by the campaign director and scene.
+ * Keeping this derived from ENEMY_ARCHETYPES_V2 removes the former duplicate
+ * LEGACY_ROLE_RUNTIME table and prevents catalog/runtime drift.
+ */
+export const ENEMY_RUNTIME_CATALOG_V3 = Object.freeze(Object.fromEntries(
+  Object.values(ENEMY_ARCHETYPES_V2).map(archetype => [archetype.id, Object.freeze({
+    id: archetype.id,
+    tier: archetype.tier,
+    cost: archetype.threatCost,
+    canShoot: archetype.canShoot,
+    hpMultiplier: archetype.hpMultiplier,
+    damageMultiplier: archetype.damageMultiplier,
+    speedMultiplier: archetype.speedMultiplier,
+    shootMs: archetype.fireCooldownMs,
+    projectileSpeed: archetype.projectileSpeed,
+    projectileDamage: archetype.projectileDamage,
+    contactDamage: archetype.contactDamage,
+    damageType: archetype.damageType,
+    defenseClass: archetype.defenseClass,
+  })]),
+));
+
+export function enemyRuntimeFromCatalogV3(roleId = 'raider') {
+  return ENEMY_RUNTIME_CATALOG_V3[roleId] || ENEMY_RUNTIME_CATALOG_V3.raider;
+}
 
 export const BOSS_PHASES_V2 = Object.freeze([
   Object.freeze({ id: 'phase_1', enterHpRatio: 1, patterns: Object.freeze(['aimed_burst', 'fan']), cooldownTicks: 84 }),
@@ -65,6 +110,15 @@ export function auditEnemyCombatCatalogV2() {
     if (enemy.controlResistance < 0 || enemy.controlResistance > .5) issues.push(`CONTROL_RESISTANCE:${enemy.id}`);
     if (!['light','balanced','armored','shielded'].includes(enemy.defenseClass))
       issues.push(`DEFENSE_CLASS:${enemy.id}`);
+    if (!Number.isInteger(enemy.tier) || enemy.tier < 1 || enemy.tier > 4) issues.push(`TIER:${enemy.id}`);
+    if (!Number.isFinite(enemy.threatCost) || enemy.threatCost <= 0) issues.push(`THREAT_COST:${enemy.id}`);
+    if (enemy.canShoot && (!(enemy.fireCooldownMs > 0) || !(enemy.projectileSpeed > 0)
+      || !(enemy.projectileDamage > 0))) issues.push(`PROJECTILE_RUNTIME:${enemy.id}`);
+    if (!(enemy.contactDamage > 0)) issues.push(`CONTACT_DAMAGE:${enemy.id}`);
+    if (!Array.isArray(enemy.routeVariants) || !enemy.routeVariants.length) issues.push(`ROUTE_VARIANTS:${enemy.id}`);
+    const runtime = ENEMY_RUNTIME_CATALOG_V3[enemy.id];
+    if (!runtime || runtime.tier !== enemy.tier || runtime.cost !== enemy.threatCost
+      || runtime.canShoot !== enemy.canShoot) issues.push(`RUNTIME_PROJECTION:${enemy.id}`);
   }
   for (let index = 1; index < BOSS_PHASES_V2.length; index += 1) {
     if (BOSS_PHASES_V2[index].enterHpRatio >= BOSS_PHASES_V2[index - 1].enterHpRatio)

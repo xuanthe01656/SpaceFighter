@@ -1,12 +1,18 @@
-import { ENEMY_ARCHETYPES_V2, BOSS_PHASES_V2 } from './EnemyCombatCatalogV2.js';
+import {
+  ENEMY_ARCHETYPES_V2,
+  ENEMY_RUNTIME_CATALOG_V3,
+  BOSS_PHASES_V2,
+  enemyRuntimeFromCatalogV3,
+} from './EnemyCombatCatalogV2.js';
 import {
   CAMPAIGN_ENCOUNTER_ESCALATION_VERSION,
   resolveCampaignWaveEncounterV28,
 } from './CampaignEncounterEscalationV28.js';
 
-export const CAMPAIGN_WAVE_DIRECTOR_VERSION = 'campaign-wave-director-v2.8.1';
+export const CAMPAIGN_WAVE_DIRECTOR_VERSION = 'campaign-wave-director-v3.0.0';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const round3 = value => Math.round(Number(value) * 1000) / 1000;
 const freezeList = values => Object.freeze(values.map(value => Object.freeze(value)));
 
 function rng32(seedValue) {
@@ -28,31 +34,36 @@ function hashParts(...parts) {
 
 const LANE_NORMALIZED_X = Object.freeze([-0.80, -0.40, 0, 0.40, 0.80]);
 
-const LEGACY_ROLE_RUNTIME_V27 = Object.freeze({
-  raider: Object.freeze({ tier: 1, cost: 1, canShoot: false, hpMultiplier: .88, speedMultiplier: 1.12, shootMs: 0 }),
-  gunner: Object.freeze({ tier: 2, cost: 2, canShoot: true, hpMultiplier: 1, speedMultiplier: .96, shootMs: 2200 }),
-  charger: Object.freeze({ tier: 4, cost: 3, canShoot: false, hpMultiplier: 1.18, speedMultiplier: 1.04, shootMs: 0 }),
-  shieldbearer: Object.freeze({ tier: 3, cost: 4, canShoot: false, hpMultiplier: 1.55, speedMultiplier: .72, shootMs: 0 }),
-  support: Object.freeze({ tier: 2, cost: 4, canShoot: true, hpMultiplier: .92, speedMultiplier: .84, shootMs: 2700 }),
-  artillery: Object.freeze({ tier: 3, cost: 4, canShoot: true, hpMultiplier: 1.18, speedMultiplier: .66, shootMs: 3000 }),
-});
-
+/**
+ * Planet identity is expressed through composition, tempo and bounded combat
+ * multipliers. Existing PLANET_ENEMIES still owns visual/tier base values; this
+ * profile owns how those values behave in a full campaign encounter.
+ */
 export const CAMPAIGN_PLANET_PROFILES_V27 = Object.freeze({
   1: Object.freeze({
-    id: 'alpha_mechanical', budgetMultiplier: 1, spawnGapMultiplier: 1,
+    id: 'alpha_mechanical', budgetMultiplier: 1, spawnGapMultiplier: .88,
+    hpMultiplier: 1, damageMultiplier: 1, speedMultiplier: 1.03,
+    projectileSpeedMultiplier: 1, fireCooldownMultiplier: .96,
+    scoutReturnRatio: .68,
     roleWeights: Object.freeze({ raider: 12, gunner: 11, charger: 6, shieldbearer: 7, support: 3, artillery: 5 }),
     preferredFormations: Object.freeze(['line', 'crossfire', 'escort', 'stagger']),
     modifierId: 'mechanical_formations',
   }),
   2: Object.freeze({
-    id: 'cryo_ion', budgetMultiplier: 1.05, spawnGapMultiplier: 1.08,
-    roleWeights: Object.freeze({ raider: 7, gunner: 12, charger: 5, shieldbearer: 8, support: 7, artillery: 9 }),
+    id: 'cryo_ion', budgetMultiplier: 1.06, spawnGapMultiplier: .95,
+    hpMultiplier: 1.12, damageMultiplier: 1.06, speedMultiplier: .97,
+    projectileSpeedMultiplier: .96, fireCooldownMultiplier: 1.04,
+    scoutReturnRatio: .78,
+    roleWeights: Object.freeze({ raider: 7, gunner: 12, charger: 5, shieldbearer: 9, support: 8, artillery: 10 }),
     preferredFormations: Object.freeze(['crossfire', 'stagger', 'lane_sweep', 'escort']),
     modifierId: 'cryo_lane_control',
   }),
   3: Object.freeze({
-    id: 'inferno_swarm', budgetMultiplier: 1.10, spawnGapMultiplier: .92,
-    roleWeights: Object.freeze({ raider: 12, gunner: 7, charger: 11, shieldbearer: 5, support: 5, artillery: 8 }),
+    id: 'inferno_swarm', budgetMultiplier: 1.12, spawnGapMultiplier: .78,
+    hpMultiplier: 1.06, damageMultiplier: 1.18, speedMultiplier: 1.12,
+    projectileSpeedMultiplier: 1.08, fireCooldownMultiplier: .86,
+    scoutReturnRatio: .34,
+    roleWeights: Object.freeze({ raider: 14, gunner: 7, charger: 12, shieldbearer: 4, support: 4, artillery: 8 }),
     preferredFormations: Object.freeze(['pincer', 'swarm', 'stagger', 'center_push']),
     modifierId: 'inferno_pressure',
   }),
@@ -65,10 +76,14 @@ const TEMPLATE = (id, options) => Object.freeze({
   formation: options.formation,
   budgetMultiplier: options.budgetMultiplier ?? 1,
   spawnGapMultiplier: options.spawnGapMultiplier ?? 1,
-  interWaveDelayMs: options.interWaveDelayMs ?? 1900,
+  interWaveDelayMs: options.interWaveDelayMs ?? 1650,
   guaranteedDrop: options.guaranteedDrop ?? null,
   eliteFirst: Boolean(options.eliteFirst),
   eliteEvery: options.eliteEvery ?? 0,
+  scoutReturnBias: options.scoutReturnBias ?? 0,
+  hpMultiplier: options.hpMultiplier ?? 1,
+  damageMultiplier: options.damageMultiplier ?? 1,
+  speedMultiplier: options.speedMultiplier ?? 1,
   bossPreview: Boolean(options.bossPreview),
   boss: Boolean(options.boss),
 });
@@ -76,63 +91,67 @@ const TEMPLATE = (id, options) => Object.freeze({
 export const CAMPAIGN_WAVE_TEMPLATES_V27 = Object.freeze({
   recon: TEMPLATE('recon', {
     label: { vi: 'TRINH SÁT', en: 'RECON' }, roles: ['raider', 'gunner'], formation: 'line',
-    budgetMultiplier: .78, spawnGapMultiplier: 1.08,
+    budgetMultiplier: .78, spawnGapMultiplier: 1.02, scoutReturnBias: .14,
   }),
   crossfire: TEMPLATE('crossfire', {
     label: { vi: 'HỎA LỰC HAI CÁNH', en: 'CROSSFIRE' }, roles: ['gunner', 'raider', 'gunner'], formation: 'crossfire',
-    budgetMultiplier: .9,
+    budgetMultiplier: .9, scoutReturnBias: .08,
   }),
   first_rush: TEMPLATE('first_rush', {
     label: { vi: 'ĐỘT KÍCH', en: 'FIRST RUSH' }, roles: ['raider', 'charger', 'raider'], formation: 'center_push',
-    budgetMultiplier: .95, spawnGapMultiplier: .92,
+    budgetMultiplier: .95, spawnGapMultiplier: .84, scoutReturnBias: -.18, speedMultiplier: 1.04,
   }),
   pincer: TEMPLATE('pincer', {
     label: { vi: 'GỌNG KÌM', en: 'PINCER' }, roles: ['raider', 'gunner', 'raider', 'charger'], formation: 'pincer',
-    budgetMultiplier: 1.0,
+    budgetMultiplier: 1.0, scoutReturnBias: .05,
   }),
   escort: TEMPLATE('escort', {
     label: { vi: 'ĐỘI HÌNH HỘ TỐNG', en: 'ESCORT FORMATION' }, roles: ['shieldbearer', 'gunner', 'gunner', 'raider'], formation: 'escort',
-    budgetMultiplier: 1.03, spawnGapMultiplier: 1.05,
+    budgetMultiplier: 1.03, spawnGapMultiplier: .98, hpMultiplier: 1.04,
   }),
   recovery_elite: TEMPLATE('recovery_elite', {
     label: { vi: 'TINH ANH · TIẾP TẾ', en: 'ELITE RECOVERY' }, roles: ['shieldbearer', 'raider', 'gunner'], formation: 'stagger',
-    budgetMultiplier: .68, spawnGapMultiplier: 1.12, interWaveDelayMs: 2600, guaranteedDrop: 'heal', eliteFirst: true,
+    budgetMultiplier: .68, spawnGapMultiplier: 1.04, interWaveDelayMs: 2200,
+    guaranteedDrop: 'heal', eliteFirst: true, hpMultiplier: 1.06,
   }),
   lane_sweep: TEMPLATE('lane_sweep', {
     label: { vi: 'QUÉT LÀN', en: 'LANE SWEEP' }, roles: ['artillery', 'gunner', 'raider'], formation: 'lane_sweep',
-    budgetMultiplier: 1.02, spawnGapMultiplier: 1.08,
+    budgetMultiplier: 1.02, spawnGapMultiplier: .96, damageMultiplier: 1.04,
   }),
   support_network: TEMPLATE('support_network', {
     label: { vi: 'MẠNG HỖ TRỢ', en: 'SUPPORT NETWORK' }, roles: ['support', 'gunner', 'shieldbearer', 'raider'], formation: 'escort',
-    budgetMultiplier: 1.04,
+    budgetMultiplier: 1.04, hpMultiplier: 1.03,
   }),
   pressure_lanes: TEMPLATE('pressure_lanes', {
     label: { vi: 'ÁP LỰC KHÔNG GIAN', en: 'SPACE PRESSURE' }, roles: ['artillery', 'charger', 'raider', 'gunner'], formation: 'stagger',
-    budgetMultiplier: 1.08, spawnGapMultiplier: .96,
+    budgetMultiplier: 1.08, spawnGapMultiplier: .88, damageMultiplier: 1.05,
   }),
   mixed_pressure: TEMPLATE('mixed_pressure', {
     label: { vi: 'ÁP LỰC HỖN HỢP', en: 'MIXED PRESSURE' }, roles: ['raider', 'gunner', 'charger', 'shieldbearer', 'artillery'],
-    budgetMultiplier: 1.12, spawnGapMultiplier: .92,
+    budgetMultiplier: 1.12, spawnGapMultiplier: .84, hpMultiplier: 1.04, damageMultiplier: 1.05,
   }),
   commander: TEMPLATE('commander', {
     label: { vi: 'CHỈ HUY TIỀN TUYẾN', en: 'FIELD COMMANDER' }, roles: ['shieldbearer', 'support', 'gunner', 'raider'], formation: 'escort',
-    budgetMultiplier: 1.03, eliteFirst: true,
+    budgetMultiplier: 1.03, eliteFirst: true, hpMultiplier: 1.06,
   }),
   elite_duel: TEMPLATE('elite_duel', {
     label: { vi: 'ĐỐI ĐẦU TINH ANH', en: 'ELITE DUEL' }, roles: ['charger', 'shieldbearer', 'raider'], formation: 'center_push',
-    budgetMultiplier: .82, spawnGapMultiplier: 1.14, interWaveDelayMs: 2500, eliteFirst: true,
+    budgetMultiplier: .82, spawnGapMultiplier: 1.02, interWaveDelayMs: 2200,
+    eliteFirst: true, hpMultiplier: 1.08, damageMultiplier: 1.06,
   }),
   boss_preview_a: TEMPLATE('boss_preview_a', {
     label: { vi: 'MÔ PHỎNG TRÙM I', en: 'BOSS PREVIEW I' }, roles: ['artillery', 'gunner', 'charger'], formation: 'lane_sweep',
-    budgetMultiplier: 1.04, bossPreview: true,
+    budgetMultiplier: 1.04, bossPreview: true, damageMultiplier: 1.05,
   }),
   boss_preview_b: TEMPLATE('boss_preview_b', {
     label: { vi: 'MÔ PHỎNG TRÙM II', en: 'BOSS PREVIEW II' }, roles: ['charger', 'shieldbearer', 'artillery'], formation: 'pincer',
-    budgetMultiplier: 1.10, spawnGapMultiplier: .94, bossPreview: true,
+    budgetMultiplier: 1.10, spawnGapMultiplier: .88, bossPreview: true,
+    hpMultiplier: 1.05, damageMultiplier: 1.08,
   }),
   finale: TEMPLATE('finale', {
     label: { vi: 'CAO TRÀO', en: 'FINALE' }, roles: ['raider', 'gunner', 'charger', 'shieldbearer', 'artillery'],
-    budgetMultiplier: 1.16, spawnGapMultiplier: .90, eliteEvery: 4,
+    budgetMultiplier: 1.16, spawnGapMultiplier: .82, eliteEvery: 4,
+    hpMultiplier: 1.06, damageMultiplier: 1.08, speedMultiplier: 1.04,
   }),
   boss: TEMPLATE('boss', {
     label: { vi: 'TRÙM CUỐI', en: 'FINAL BOSS' }, roles: [], formation: 'center_push', boss: true,
@@ -183,17 +202,44 @@ function stageTemplateIds(totalWaves, hasBoss) {
   }
   if (!hasBoss && result.length) {
     result[result.length - 1] = 'finale';
-    if (result.length > 1 && result[result.length - 2] === 'finale') {
-      result[result.length - 2] = 'elite_duel';
-    }
+    if (result.length > 1 && result[result.length - 2] === 'finale') result[result.length - 2] = 'elite_duel';
   }
   if (hasBoss) result.push('boss');
   return Object.freeze(result);
 }
 
+export function resolveCampaignWavePowerV3({
+  planetId = 1,
+  stage = 1,
+  wave = 1,
+  totalWaves = 5,
+  difficulty = 1,
+  templateId = 'recon',
+} = {}) {
+  const profile = CAMPAIGN_PLANET_PROFILES_V27[planetId] || CAMPAIGN_PLANET_PROFILES_V27[1];
+  const template = CAMPAIGN_WAVE_TEMPLATES_V27[templateId] || CAMPAIGN_WAVE_TEMPLATES_V27.recon;
+  const safeStage = clamp(Math.trunc(Number(stage) || 1), 1, 100);
+  const safeWave = clamp(Math.trunc(Number(wave) || 1), 1, 20);
+  const playableWaves = Math.max(1, Math.trunc(Number(totalWaves) || 1) - (templateId === 'boss' ? 1 : 0));
+  const progress = playableWaves <= 1 ? 0 : clamp((safeWave - 1) / (playableWaves - 1), 0, 1);
+  const stageProgress = clamp((safeStage - 1) / 9, 0, 1.5);
+  const d = clamp(Number(difficulty) || 1, .75, 3);
+  return Object.freeze({
+    progress: round3(progress),
+    hpMultiplier: round3(profile.hpMultiplier * template.hpMultiplier
+      * (1 + progress * .28 + stageProgress * .10 + (d - 1) * .08)),
+    damageMultiplier: round3(profile.damageMultiplier * template.damageMultiplier
+      * (1 + progress * .22 + stageProgress * .08 + (d - 1) * .08)),
+    speedMultiplier: round3(profile.speedMultiplier * template.speedMultiplier
+      * (1 + progress * .07 + stageProgress * .035)),
+    projectileSpeedMultiplier: round3(profile.projectileSpeedMultiplier * (1 + progress * .05)),
+    fireCooldownMultiplier: round3(clamp(profile.fireCooldownMultiplier * (1 - progress * .13), .68, 1.18)),
+  });
+}
+
 function weightedRole(next, roles, profile, previousRole) {
   const weighted = [];
-  const allowed = roles.filter(role => LEGACY_ROLE_RUNTIME_V27[role]);
+  const allowed = roles.filter(role => ENEMY_RUNTIME_CATALOG_V3[role]);
   for (const role of allowed) {
     let weight = Number(profile.roleWeights[role] || 1);
     if (role === previousRole) weight *= .38;
@@ -208,7 +254,43 @@ function resolveFormation(template, profile, next) {
   return pool[next() % Math.max(1, pool.length)] || 'line';
 }
 
-function buildCampaignEntries({ seed, profile, template, stage, wave, baseEnemies, difficulty }) {
+function resolveRouteVariantV3(role, profile, template, next) {
+  const archetype = ENEMY_ARCHETYPES_V2[role] || ENEMY_ARCHETYPES_V2.raider;
+  if (role !== 'raider') return archetype.routeVariants?.[0] || archetype.behavior;
+  const returnRatio = clamp(profile.scoutReturnRatio + Number(template.scoutReturnBias || 0), .18, .88);
+  return (next() % 1000) < Math.round(returnRatio * 1000) ? 'hook_return' : 'flyby';
+}
+
+function projectRuntimeV3(runtime, wavePower, elite = false) {
+  const eliteHp = elite ? 1.68 : 1;
+  const eliteDamage = elite ? 1.18 : 1;
+  const eliteSpeed = elite ? 1.035 : 1;
+  const eliteCooldown = elite ? .90 : 1;
+  return Object.freeze({
+    tier: runtime.tier,
+    canShoot: runtime.canShoot,
+    shootMs: runtime.shootMs > 0
+      ? Math.max(650, Math.round(runtime.shootMs * wavePower.fireCooldownMultiplier * eliteCooldown)) : 0,
+    hpMultiplier: round3(runtime.hpMultiplier * wavePower.hpMultiplier * eliteHp),
+    damageMultiplier: round3(runtime.damageMultiplier * wavePower.damageMultiplier * eliteDamage),
+    speedMultiplier: round3(runtime.speedMultiplier * wavePower.speedMultiplier * eliteSpeed),
+    projectileSpeed: round3(runtime.projectileSpeed * wavePower.projectileSpeedMultiplier),
+    projectileDamage: Math.max(0, Math.round(runtime.projectileDamage * wavePower.damageMultiplier * eliteDamage)),
+    contactDamage: Math.max(1, Math.round(runtime.contactDamage * wavePower.damageMultiplier * eliteDamage)),
+  });
+}
+
+function buildCampaignEntries({
+  seed,
+  profile,
+  template,
+  stage,
+  wave,
+  totalWaves,
+  baseEnemies,
+  difficulty,
+  planetId,
+}) {
   const next = rng32(seed);
   const formation = resolveFormation(template, profile, next);
   const lanes = FORMATION_LANES[formation] || FORMATION_LANES.line;
@@ -219,10 +301,13 @@ function buildCampaignEntries({ seed, profile, template, stage, wave, baseEnemie
     baseBudget * profile.budgetMultiplier * template.budgetMultiplier * clamp(difficulty, .75, 2),
   ), 6, 46);
   const gapMs = clamp(Math.round(
-    (860 - stage * 17 - wave * 7) * profile.spawnGapMultiplier * template.spawnGapMultiplier,
-  ), 360, 1050);
+    (735 - stage * 11 - wave * 8) * profile.spawnGapMultiplier * template.spawnGapMultiplier,
+  ), 300, 850);
+  const wavePower = resolveCampaignWavePowerV3({
+    planetId, stage, wave, totalWaves, difficulty, templateId: template.id,
+  });
   const allowedRoles = template.roles.filter(role =>
-    LEGACY_ROLE_RUNTIME_V27[role] && (ENEMY_ARCHETYPES_V2[role]?.unlockStage || 1) <= stage);
+    ENEMY_RUNTIME_CATALOG_V3[role] && (ENEMY_ARCHETYPES_V2[role]?.unlockStage || 1) <= stage);
   if (!allowedRoles.length) allowedRoles.push(stage <= 1 ? 'raider' : 'gunner');
   const entries = [];
   let spent = 0;
@@ -231,67 +316,73 @@ function buildCampaignEntries({ seed, profile, template, stage, wave, baseEnemie
   while (spent < threatBudget && safety++ < 80) {
     const scriptedRole = allowedRoles[entries.length % allowedRoles.length];
     const role = entries.length < allowedRoles.length
-      ? scriptedRole
-      : weightedRole(next, allowedRoles, profile, previousRole);
-    const runtime = LEGACY_ROLE_RUNTIME_V27[role] || LEGACY_ROLE_RUNTIME_V27.raider;
+      ? scriptedRole : weightedRole(next, allowedRoles, profile, previousRole);
+    const runtime = enemyRuntimeFromCatalogV3(role);
     if (entries.length > 0 && spent + runtime.cost > threatBudget + 2) break;
     const elite = template.eliteFirst
       ? entries.length === 0
       : template.eliteEvery > 0 && entries.length % template.eliteEvery === 0;
-    const groupPause = entries.length > 0 && entries.length % 5 === 0 ? 420 : 0;
+    const projected = projectRuntimeV3(runtime, wavePower, elite);
+    const groupPause = entries.length > 0 && entries.length % 6 === 0 ? 220 : 0;
     const previousOffset = entries.at(-1)?.spawnOffsetMs || 0;
     entries.push(Object.freeze({
       index: entries.length,
-      spawnOffsetMs: entries.length === 0 ? 500 : previousOffset + gapMs + groupPause,
+      spawnOffsetMs: entries.length === 0 ? 420 : previousOffset + gapMs + groupPause,
       lane: lanes[entries.length % lanes.length],
       archetypeId: role,
-      tier: runtime.tier,
-      canShoot: runtime.canShoot,
-      shootMs: runtime.shootMs,
-      hpMultiplier: runtime.hpMultiplier * (elite ? 1.85 : 1),
-      speedMultiplier: runtime.speedMultiplier * (elite ? .92 : 1),
+      routeVariant: resolveRouteVariantV3(role, profile, template, next),
+      ...projected,
       elite,
       speedRoll: (next() % 1000) / 999,
       sinePhase: (next() % 6284) / 1000,
       strafeDirection: (next() & 1) === 0 ? -1 : 1,
-      defenseClass: ENEMY_ARCHETYPES_V2[role]?.defenseClass || 'balanced',
-      damageType: ENEMY_ARCHETYPES_V2[role]?.damageType || 'kinetic',
+      defenseClass: runtime.defenseClass,
+      damageType: runtime.damageType,
       formation,
+      wavePower,
     }));
     spent += runtime.cost + (elite ? 3 : 0);
     previousRole = role;
   }
-  return Object.freeze({ entries: freezeList(entries), threatBudget, spawnGapMs: gapMs, formation });
+  return Object.freeze({ entries: freezeList(entries), threatBudget, spawnGapMs: gapMs, formation, wavePower });
 }
 
 function roleRuntimeV28(role) {
-  return LEGACY_ROLE_RUNTIME_V27[role] || LEGACY_ROLE_RUNTIME_V27.raider;
+  return enemyRuntimeFromCatalogV3(role);
 }
 
-function decorateEncounterEntriesV28(entries, encounter, seed) {
+function decorateEncounterEntriesV28(entries, encounter, seed, context) {
   if (!encounter || encounter.kind === 'boss' || !entries.length) return Object.freeze(entries);
   const next = rng32(seed);
   const trimmed = entries.slice(0, Math.max(1, encounter.maxEntries || entries.length));
-  const featuredRole = LEGACY_ROLE_RUNTIME_V27[encounter.featuredRole]
+  const featuredRole = ENEMY_RUNTIME_CATALOG_V3[encounter.featuredRole]
     ? encounter.featuredRole : trimmed[0].archetypeId;
   const runtime = roleRuntimeV28(featuredRole);
   const featuredBase = trimmed.find(entry => entry.archetypeId === featuredRole) || trimmed[0];
   const rest = trimmed.filter(entry => entry !== featuredBase);
+  const wavePower = context?.wavePower || featuredBase.wavePower || Object.freeze({
+    hpMultiplier: 1, damageMultiplier: 1, speedMultiplier: 1,
+    projectileSpeedMultiplier: 1, fireCooldownMultiplier: 1,
+  });
+  const encounterElite = projectRuntimeV3(runtime, wavePower, true);
+  const encounterDamage = encounter.kind === 'mini_boss' ? 1.18 : 1.10;
   const featured = Object.freeze({
     ...featuredBase,
     index: 0,
-    spawnOffsetMs: 500,
+    spawnOffsetMs: 420,
     archetypeId: featuredRole,
-    tier: runtime.tier,
-    canShoot: runtime.canShoot,
-    shootMs: runtime.shootMs,
-    hpMultiplier: runtime.hpMultiplier * Number(encounter.hpMultiplier || 1),
-    speedMultiplier: runtime.speedMultiplier * Number(encounter.speedMultiplier || 1),
+    routeVariant: resolveRouteVariantV3(featuredRole, context.profile, context.template, next),
+    ...encounterElite,
+    hpMultiplier: round3(encounterElite.hpMultiplier * Number(encounter.hpMultiplier || 1)),
+    damageMultiplier: round3(encounterElite.damageMultiplier * encounterDamage),
+    projectileDamage: Math.round(encounterElite.projectileDamage * encounterDamage),
+    contactDamage: Math.round(encounterElite.contactDamage * encounterDamage),
+    speedMultiplier: round3(encounterElite.speedMultiplier * Number(encounter.speedMultiplier || 1)),
     speedRoll: (next() % 1000) / 999,
     sinePhase: (next() % 6284) / 1000,
     strafeDirection: (next() & 1) === 0 ? -1 : 1,
-    defenseClass: ENEMY_ARCHETYPES_V2[featuredRole]?.defenseClass || 'balanced',
-    damageType: ENEMY_ARCHETYPES_V2[featuredRole]?.damageType || 'kinetic',
+    defenseClass: runtime.defenseClass,
+    damageType: runtime.damageType,
     elite: true,
     encounterKind: encounter.kind,
     encounterId: encounter.id,
@@ -308,36 +399,50 @@ function decorateEncounterEntriesV28(entries, encounter, seed) {
   const normalized = [featured, ...rest].map((entry, index) => Object.freeze({
     ...entry,
     index,
-    spawnOffsetMs: index === 0 ? 500 : Math.max(900, Number(entry.spawnOffsetMs || 0)),
+    spawnOffsetMs: index === 0 ? 420 : Math.max(760, Number(entry.spawnOffsetMs || 0)),
   }));
   return Object.freeze(normalized);
 }
 
-function createReinforcementEntriesV28({ seed, roles, formation = 'pincer', groupId = 'reinforcement', startOffsetMs = 0 }) {
+function createReinforcementEntriesV28({
+  seed,
+  roles,
+  formation = 'pincer',
+  groupId = 'reinforcement',
+  startOffsetMs = 0,
+  profile,
+  stage,
+  difficulty,
+  planetId,
+}) {
   const next = rng32(seed);
   const list = Array.isArray(roles) && roles.length ? roles : ['raider'];
   const lanes = FORMATION_LANES[formation] || FORMATION_LANES.pincer;
+  const template = CAMPAIGN_WAVE_TEMPLATES_V27.pincer;
+  const wavePower = resolveCampaignWavePowerV3({
+    planetId, stage, wave: 1, totalWaves: 1, difficulty, templateId: template.id,
+  });
   return Object.freeze(list.map((role, index) => {
     const runtime = roleRuntimeV28(role);
+    const projected = projectRuntimeV3(runtime, wavePower, false);
     return Object.freeze({
       index,
-      spawnOffsetMs: Math.max(0, startOffsetMs) + index * 320,
+      spawnOffsetMs: Math.max(0, startOffsetMs) + index * 260,
       lane: lanes[index % lanes.length],
       archetypeId: role,
-      tier: runtime.tier,
-      canShoot: runtime.canShoot,
-      shootMs: runtime.shootMs,
-      hpMultiplier: runtime.hpMultiplier * .92,
-      speedMultiplier: runtime.speedMultiplier,
+      routeVariant: resolveRouteVariantV3(role, profile, template, next),
+      ...projected,
+      hpMultiplier: round3(projected.hpMultiplier * .92),
       elite: false,
       speedRoll: (next() % 1000) / 999,
       sinePhase: (next() % 6284) / 1000,
       strafeDirection: (next() & 1) === 0 ? -1 : 1,
-      defenseClass: ENEMY_ARCHETYPES_V2[role]?.defenseClass || 'balanced',
-      damageType: ENEMY_ARCHETYPES_V2[role]?.damageType || 'kinetic',
+      defenseClass: runtime.defenseClass,
+      damageType: runtime.damageType,
       formation,
       reinforcementGroupId: groupId,
       bossSupport: groupId.startsWith('boss-'),
+      wavePower,
     });
   }));
 }
@@ -353,10 +458,23 @@ export function scaleEnemyStatsV2({ baseHp, baseDamage, baseSpeed, archetype, st
     hp: Math.max(1, Math.round((Number(baseHp) || 1) * hpScale * (archetype?.hpMultiplier || 1))),
     damage: Math.max(1, Math.round((Number(baseDamage) || 1) * damageScale * (archetype?.damageMultiplier || 1))),
     speed: Math.max(.01, (Number(baseSpeed) || 1) * speedScale * (archetype?.speedMultiplier || 1)),
-    hpScale: Math.round(hpScale * 1000) / 1000,
-    damageScale: Math.round(damageScale * 1000) / 1000,
-    speedScale: Math.round(speedScale * 1000) / 1000,
+    hpScale: round3(hpScale), damageScale: round3(damageScale), speedScale: round3(speedScale),
   });
+}
+
+export function auditCampaignEnemyDirectorV3() {
+  const issues = [];
+  for (const [id, archetype] of Object.entries(ENEMY_ARCHETYPES_V2)) {
+    const runtime = ENEMY_RUNTIME_CATALOG_V3[id];
+    if (!runtime) issues.push(`MISSING_RUNTIME:${id}`);
+    if (runtime?.tier !== archetype.tier || runtime?.cost !== archetype.threatCost) issues.push(`RUNTIME_DRIFT:${id}`);
+  }
+  for (const [planetId, profile] of Object.entries(CAMPAIGN_PLANET_PROFILES_V27)) {
+    if (!(profile.spawnGapMultiplier > 0)) issues.push(`SPAWN_GAP:${planetId}`);
+    if (!(profile.scoutReturnRatio >= 0 && profile.scoutReturnRatio <= 1)) issues.push(`SCOUT_ROUTE:${planetId}`);
+    if (!(profile.damageMultiplier > 0 && profile.speedMultiplier > 0)) issues.push(`PLANET_POWER:${planetId}`);
+  }
+  return Object.freeze(issues);
 }
 
 export function createEnemyDirectorV2({ seed = 1, stage = 1, difficulty = 1, planetId = 1 } = {}) {
@@ -365,8 +483,7 @@ export function createEnemyDirectorV2({ seed = 1, stage = 1, difficulty = 1, pla
   const safeDifficulty = clamp(Number(difficulty) || 1, .75, 3);
   const safePlanetId = CAMPAIGN_PLANET_PROFILES_V27[planetId] ? Number(planetId) : 1;
 
-  const available = () => Object.values(ENEMY_ARCHETYPES_V2)
-    .filter(enemy => enemy.unlockStage <= safeStage);
+  const available = () => Object.values(ENEMY_ARCHETYPES_V2).filter(enemy => enemy.unlockStage <= safeStage);
 
   function chooseArchetype(previousId = null) {
     const pool = available();
@@ -424,36 +541,27 @@ export function createEnemyDirectorV2({ seed = 1, stage = 1, difficulty = 1, pla
       });
       if (template.boss) {
         return Object.freeze({
-          wave: index + 1,
-          templateId,
-          label: template.label,
-          boss: true,
-          bossPreview: false,
-          entries: Object.freeze([]),
-          threatBudget: 0,
-          spawnGapMs: 0,
-          formation: template.formation,
-          interWaveDelayMs: 0,
-          guaranteedDrop: null,
-          planetProfileId: profile.id,
-          encounterVersion: CAMPAIGN_ENCOUNTER_ESCALATION_VERSION,
-          encounter,
+          wave: index + 1, templateId, label: template.label, boss: true, bossPreview: false,
+          entries: Object.freeze([]), threatBudget: 0, spawnGapMs: 0, formation: template.formation,
+          interWaveDelayMs: 0, guaranteedDrop: null, planetProfileId: profile.id,
+          wavePower: resolveCampaignWavePowerV3({
+            planetId: resolvedPlanetId, stage: safeStage, wave: index + 1,
+            totalWaves: templateIds.length, difficulty: safeDifficulty, templateId,
+          }),
+          encounterVersion: CAMPAIGN_ENCOUNTER_ESCALATION_VERSION, encounter,
         });
       }
       const waveSeed = hashParts(seed, resolvedPlanetId, safeStage, index + 1, templateId);
       const built = buildCampaignEntries({
-        seed: waveSeed,
-        profile,
-        template,
-        stage: safeStage,
-        wave: index + 1,
-        baseEnemies,
-        difficulty: safeDifficulty,
+        seed: waveSeed, profile, template, stage: safeStage, wave: index + 1,
+        totalWaves: templateIds.length, baseEnemies, difficulty: safeDifficulty,
+        planetId: resolvedPlanetId,
       });
       const encounterEntries = decorateEncounterEntriesV28(
         built.entries,
         encounter,
         hashParts(waveSeed, encounter?.id || 'standard'),
+        { profile, template, wavePower: built.wavePower },
       );
       return Object.freeze({
         wave: index + 1,
@@ -467,9 +575,10 @@ export function createEnemyDirectorV2({ seed = 1, stage = 1, difficulty = 1, pla
         spawnGapMs: built.spawnGapMs,
         formation: built.formation,
         interWaveDelayMs: encounter?.kind === 'mini_boss'
-          ? Math.max(2400, template.interWaveDelayMs) : template.interWaveDelayMs,
+          ? Math.max(2200, template.interWaveDelayMs) : template.interWaveDelayMs,
         guaranteedDrop: encounter?.guaranteedDrop || template.guaranteedDrop,
         planetProfileId: profile.id,
+        wavePower: built.wavePower,
         encounterVersion: CAMPAIGN_ENCOUNTER_ESCALATION_VERSION,
         encounter,
       });
@@ -488,17 +597,13 @@ export function createEnemyDirectorV2({ seed = 1, stage = 1, difficulty = 1, pla
   }
 
   function buildReinforcementPlan({
-    roles = ['raider'],
-    formation = 'pincer',
-    groupId = 'reinforcement',
-    startOffsetMs = 0,
+    roles = ['raider'], formation = 'pincer', groupId = 'reinforcement', startOffsetMs = 0,
   } = {}) {
     return createReinforcementEntriesV28({
       seed: hashParts(seed, safePlanetId, safeStage, groupId, roles.join(',')),
-      roles,
-      formation,
-      groupId,
-      startOffsetMs,
+      roles, formation, groupId, startOffsetMs,
+      profile: CAMPAIGN_PLANET_PROFILES_V27[safePlanetId],
+      stage: safeStage, difficulty: safeDifficulty, planetId: safePlanetId,
     });
   }
 

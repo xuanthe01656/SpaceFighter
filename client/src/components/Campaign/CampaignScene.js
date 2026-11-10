@@ -211,8 +211,12 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   const isReplay        = guestAbilityQa ? false
     : currentStage < (progress.planets?.[currentPlanetId]?.highestStage ?? 1);
   const stageConfig     = STAGE_CONFIG[currentStage] || STAGE_CONFIG[1];
-  const campaignWaveDirector=guestAbilityQa?createEnemyDirectorV2({
-    seed:stableSeed('campaign-wave-v27',currentPlanetId,currentStage),
+  // V3 campaign combat is the production default. Guest QA still owns only
+  // loadout/navigation/progress isolation; it no longer gates enemy AI itself.
+  // Set VITE_SF_CAMPAIGN_COMBAT_V3=false only as an emergency rollback switch.
+  const campaignCombatV3Enabled=import.meta.env.VITE_SF_CAMPAIGN_COMBAT_V3!=='false';
+  const campaignWaveDirector=campaignCombatV3Enabled?createEnemyDirectorV2({
+    seed:stableSeed('campaign-wave-v30',currentPlanetId,currentStage),
     stage:currentStage,
     planetId:currentPlanetId,
     difficulty:clamp(0.9+currentPlanetId*.1+currentStage*.015,1,1.35),
@@ -804,7 +808,9 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     ...(gameState === 'BOSS_FIGHT' && bossMesh && !bossMesh.isDisposed?.()
       ? [{ mesh: bossMesh, isBoss: true }] : []),
   ];
-  const fireEnemyBullet = (pos, vx = 0, vz = 0.24, { priority = 'normal' } = {}) => {
+  const fireEnemyBullet = (pos, vx = 0, vz = 0.24, {
+    priority = 'normal', rawDamage = 200, damageType = 'energy', sourceRole = null,
+  } = {}) => {
     if (enemyBullets.length >= runtimeLimits.maxEnemyProjectiles) {
       if (priority === 'boss') {
         const replaceIndex = enemyBullets.findIndex(projectile => projectile?._priority !== 'boss');
@@ -826,6 +832,9 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     b.material = enemyBulMat; b._vx = vx; b._vz = vz;
     b._damageHitId = hitId;
     b._priority = priority;
+    b._rawDamage = Math.max(1, Math.round(Number(rawDamage) || 200));
+    b._damageType = damageType || 'energy';
+    b._sourceRole = sourceRole;
     enemyBullets.push(b);
     return true;
   };
@@ -1335,12 +1344,24 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     return true;
   };
 
-  const fireAimedEnemyBullet = (enemy, speed = .24, priority = 'normal') => {
+  const fireAimedEnemyBullet = (enemy, speed = null, priority = 'normal') => {
     if (!enemy?.mesh?.position) return false;
     const dx = playerRoot.position.x - enemy.mesh.position.x;
     const dz = playerRoot.position.z - enemy.mesh.position.z;
     const distance = Math.hypot(dx, dz) || 1;
-    return fireEnemyBullet(enemy.mesh.position, dx / distance * speed, dz / distance * speed, { priority });
+    const projectileSpeed = Number.isFinite(Number(speed))
+      ? Number(speed) : Math.max(.12, Number(enemy._projectileSpeed) || .24);
+    return fireEnemyBullet(
+      enemy.mesh.position,
+      dx / distance * projectileSpeed,
+      dz / distance * projectileSpeed,
+      {
+        priority,
+        rawDamage: enemy._projectileDamage || 200,
+        damageType: enemy._damageType || 'energy',
+        sourceRole: enemy._waveRole || enemy._encounterKind || null,
+      },
+    );
   };
 
   const resolveEnemySeparation = enemy => {
@@ -1390,6 +1411,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       hpBarHeightPx: enemy._encounterFeatured ? 7 : 5,
       separationX: separation.x,
       separationZ: separation.z,
+      fireCooldownMs: enemy.shootMs,
     });
     if (!result.handled) return null;
     if (result.completed) return result;
@@ -1414,7 +1436,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     else if (result.egress) enemy.visual?.setState('move');
     if (result.mayFire && enemy.canShoot && !guestAbilities?.modifiers().cloaked
       && nowMs > enemy.lastShoot + (result.fireCooldownMs || enemy.shootMs)) {
-      fireAimedEnemyBullet(enemy, enemy._waveRole === 'artillery' ? .29 : .24);
+      fireAimedEnemyBullet(enemy);
       enemy.visual?.setState('attack');
       enemy.lastShoot = nowMs;
     }
@@ -1519,7 +1541,11 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     const spawnX = spawnSpec
       ?clamp(Number(spawnSpec.lane)||0,-.88,.88)*boundX()
       :playerRoot.position.x + (Math.random() - .5) * boundX() * 1.6;
-    const spawnZ = -ZOOM - 3;
+    // Deterministic choreography enters just outside the readable arena so
+    // the entry remains visible without spending several seconds drifting in
+    // from an unnecessarily distant off-screen point. Legacy fallback keeps
+    // its original spawn depth.
+    const spawnZ = spawnSpec ? -ZOOM - 1.8 : -ZOOM - 3;
 
     // Gameplay/collision root is always stable. Artwork may arrive later via
     // asset manifest; no asset load may replace this root mid-battle.
@@ -1558,7 +1584,11 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     const speed    = rawSpeed / 1200 * (spawnSpec?.speedMultiplier||1);   // pixels/s → Babylon units/frame@60fps
 
     let baseHp = cfg.baseHp + currentStage * 15 + currentWave * 5;
-    baseHp     = Math.floor(baseHp * combat.environment.enemyHpMultiplier * (spawnSpec?.hpMultiplier||1));
+    // PLANET_ENEMIES already owns planet-specific base HP. Production V3 plans
+    // add role/wave/planet tactical scaling exactly once; applying the legacy
+    // environment multiplier again would double/triple-scale later planets.
+    const environmentHpMultiplier = spawnSpec ? 1 : combat.environment.enemyHpMultiplier;
+    baseHp = Math.floor(baseHp * environmentHpMultiplier * (spawnSpec?.hpMultiplier || 1));
     const ptsBase=isReplay ? Math.max(1, Math.floor(cfg.score / 2)) : cfg.score;
     const ptsMultiplier=Number(spawnSpec?.pointsMultiplier)||(spawnSpec?.elite?2:1);
     const pts  = Math.max(1,Math.round(ptsBase*ptsMultiplier));
@@ -1602,6 +1632,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       ?createCampaignEnemyChoreographyStateV29({
         roleId:spawnSpec.archetypeId,lane:spawnSpec.lane,
         strafeDirection:spawnSpec.strafeDirection,seed:motionSeed,nowMs:Date.now(),
+        routeVariant:spawnSpec.routeVariant,
       }):null;
     const previewMotionState=spawnSpec?.encounterKind==='boss_preview'
       ?createCampaignBossPreviewMotionStateV29({
@@ -1618,6 +1649,12 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       lastShoot: spawnSpec?Date.now():legacyMotion.lastShoot,
       shootMs: spawnSpec?.shootMs||legacyMotion?.shootMs||2200,
       points: pts, miniHpBg, miniHp, entryHalo, _dead: false,
+      _routeVariant:spawnSpec?.routeVariant||null,
+      _projectileSpeed:Math.max(.12,Number(spawnSpec?.projectileSpeed)||.24),
+      _projectileDamage:Math.max(1,Math.round(Number(spawnSpec?.projectileDamage)||200)),
+      _contactDamage:Math.max(1,Math.round(Number(spawnSpec?.contactDamage)||(tier===4?400:200))),
+      _damageMultiplier:Number(spawnSpec?.damageMultiplier)||1,
+      _damageType:spawnSpec?.damageType||'kinetic',
       _waveRole:spawnSpec?.archetypeId||null,
       _waveElite:Boolean(spawnSpec?.elite),
       _motionSeed:motionSeed,
@@ -1678,7 +1715,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   let bossEnraged = false, bossPts = 0;
   let bossVelX    = 0.028, bossFloatT = 0, nextBossFire = 0;
   let bossRevealHalo = null, bossIntroStartedAt = 0;
-  let bossPhaseState=guestAbilityQa?createBossPhaseStateV28(currentPlanetId):null;
+  let bossPhaseState=campaignCombatV3Enabled?createBossPhaseStateV28(currentPlanetId):null;
   let bossPhaseTransition=null;
   let bossCombatState=null;
   let bossAttackTelegraphs=[];
@@ -1753,7 +1790,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       const fire=()=>{
         if(battleSceneDisposed||gameOver||gameState!=='BOSS_FIGHT'
           ||!bossMesh||bossMesh.isDisposed?.()||bossHp<=0)return;
-        if(guestAbilityQa&&bossCombatState?.attackPlan?.id!==planId)return;
+        if(campaignCombatV3Enabled&&bossCombatState?.attackPlan?.id!==planId)return;
         fireEnemyBullet(
           new BABYLON.Vector3(projectile.origin.x,0,projectile.origin.z),
           projectile.velocity.x,projectile.velocity.z,{priority:'boss'},
@@ -1774,9 +1811,9 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     bossHp    = Math.floor((bossCfg.baseHp || 25000) * combat.environment.enemyHpMultiplier);
     bossMaxHp = bossHp; bossEnraged = false;
     bossPts   = isReplay ? Math.max(10, Math.floor((bossCfg.score||100)/3)) : (bossCfg.score||100);
-    bossPhaseState=guestAbilityQa?createBossPhaseStateV28(currentPlanetId):null;
+    bossPhaseState=campaignCombatV3Enabled?createBossPhaseStateV28(currentPlanetId):null;
     bossPhaseTransition=null;
-    bossCombatState=guestAbilityQa?createCampaignBossCombatStateV29({
+    bossCombatState=campaignCombatV3Enabled?createCampaignBossCombatStateV29({
       seed:stableSeed(currentPlanetId,currentStage,'final_boss'),nowMs:Date.now(),
     }):null;
     bossSupportGroups.clear();
@@ -1869,7 +1906,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     bossMesh.setEnabled(true);
     bossVisual?.setState('move');
     bossPanel.isVisible = !externalHud;
-    if(guestAbilityQa)bossCombatState=createCampaignBossCombatStateV29({
+    if(campaignCombatV3Enabled)bossCombatState=createCampaignBossCombatStateV29({
       seed:stableSeed(currentPlanetId,currentStage,'final_boss'),nowMs:Date.now(),
     });
     nextBossFire = Date.now() + bossIntroPlan.firstAttackDelayMs;
@@ -2532,7 +2569,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
           lang==='vi'?'HỘ TỐNG':'GUARDED','#ffd166');
       }
     }
-    const gateResult=guestAbilityQa
+    const gateResult=campaignCombatV3Enabled
       ?resolveBossDamageGateV28({
         state:bossPhaseState,hp:bossHp,maxHp:bossMaxHp,damage:Math.max(0,damage),
       })
@@ -2807,7 +2844,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       const dx = b.position.x - playerRoot.position.x;
       const dz = b.position.z - playerRoot.position.z;
       if (dx*dx + dz*dz < 1.44) {   // hit radius 1.2
-        damagePlayer({rawDamage:200,source:'projectile',damageType:'energy',hitId:b._damageHitId});
+        damagePlayer({rawDamage:b._rawDamage||200,source:'projectile',damageType:b._damageType||'energy',hitId:b._damageHitId});
         safeDispose(b); enemyBullets.splice(i,1);
       }
     }
@@ -2852,6 +2889,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
             e._choreographyState=createCampaignEnemyChoreographyStateV29({
               roleId:e._waveRole,lane:e._spawnLane,
               strafeDirection:e._spawnStrafeDirection,seed:e._motionSeed,nowMs:now,
+              routeVariant:e._routeVariant,
             });
           }
           if(e._chargerState)e._chargerState=createChargerMotionStateV26A3({nowMs:now});
@@ -2904,8 +2942,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
             cleanEnemy(e); enemies.splice(i,1); continue;
           }
           if (!choreography) {
-            // Frozen legacy movement fallback. It remains reachable only when
-            // there is no deterministic spawnSpec/choreography contract.
+            // Emergency/legacy movement fallback. It remains reachable only when
+            // the production director is disabled or no spawn contract exists.
             if (!e.canShoot) {
               const dx = playerRoot.position.x - e.mesh.position.x;
               const dz = playerRoot.position.z - e.mesh.position.z;
@@ -2942,7 +2980,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         const dx = e.mesh.position.x - playerRoot.position.x;
         const dz = e.mesh.position.z - playerRoot.position.z;
         if (dx*dx + dz*dz < 3.24) {   // hit radius 1.8
-          damagePlayer({rawDamage:e.tier===4?400:200,source:'contact',damageType:'kinetic',contactId:e._contactHitId});
+          damagePlayer({rawDamage:e._contactDamage||(e.tier===4?400:200),source:'contact',damageType:e._damageType||'kinetic',contactId:e._contactHitId});
           if (e._encounterKind === 'mini_boss' && e._miniBossAiState) {
             e._miniBossAiState = forceCampaignMiniBossRecoveryV281(e._miniBossAiState, now);
             disposeEncounterTelegraph(e);
@@ -3014,7 +3052,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       }else{
         bossMesh.scaling.x=1;
         bossMesh.scaling.z=1;
-        if(guestAbilityQa&&bossCombatState){
+        if(campaignCombatV3Enabled&&bossCombatState){
           const bossStep=stepCampaignBossCombatV29(bossCombatState,{
             nowMs:now,
             hpRatio:bossMaxHp>0?bossHp/bossMaxHp:0,
@@ -3063,7 +3101,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
             }
           }
         }else{
-          // Frozen legacy non-QA boss fallback.
+          // Emergency kill-switch legacy boss fallback.
           bossFloatT += .010 * frameFactor;
           bossMesh.position.z = (-ZOOM+7) + Math.sin(bossFloatT*.7) * .9;
           bossMesh.position.x += bossVelX * (bossEnraged ? 1.8 : 1) * frameFactor;

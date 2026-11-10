@@ -1,17 +1,23 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { PLANET_ENEMIES } from '../src/game/catalog/worlds.js';
 import {
+  ENEMY_COMBAT_CATALOG_VERSION,
   ENEMY_ARCHETYPES_V2,
+  ENEMY_RUNTIME_CATALOG_V3,
   BOSS_PHASES_V2,
   auditEnemyCombatCatalogV2,
   bossPhaseForHp,
+  enemyRuntimeFromCatalogV3,
 } from '../src/game/combat/EnemyCombatCatalogV2.js';
 import {
   CAMPAIGN_PLANET_PROFILES_V27,
   CAMPAIGN_WAVE_DIRECTOR_VERSION,
   CAMPAIGN_WAVE_TEMPLATES_V27,
+  auditCampaignEnemyDirectorV3,
   createEnemyDirectorV2,
+  resolveCampaignWavePowerV3,
   scaleEnemyStatsV2,
 } from '../src/game/combat/DeterministicEnemyDirectorV2.js';
 import {
@@ -36,6 +42,8 @@ import {
   trackBossPreviewLaneAttackPlanV282,
 } from '../src/game/combat/CampaignAttackTelegraphPlanV282.js';
 import {
+  CAMPAIGN_COMBAT_CHOREOGRAPHY_VERSION,
+  CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30,
   CAMPAIGN_ROLE_CHOREOGRAPHY_V29,
   auditCampaignCombatChoreographyV29,
   createCampaignBossPreviewMotionStateV29,
@@ -67,9 +75,23 @@ const stagePlan = (options = {}) => createEnemyDirectorV2({
   baseEnemies: options.baseEnemies ?? 40,
 });
 
-test('enemy V2 roles expose readable telegraphs, defense classes and bounded control resistance', () => {
+test('enemy V3 catalog is the single runtime source for six readable combat roles', () => {
+  assert.equal(ENEMY_COMBAT_CATALOG_VERSION, 'enemy-combat-v3.0.0');
   assert.deepEqual(auditEnemyCombatCatalogV2(), []);
   assert.equal(Object.keys(ENEMY_ARCHETYPES_V2).length, 6);
+  assert.deepEqual(Object.keys(ENEMY_RUNTIME_CATALOG_V3).sort(), Object.keys(ENEMY_ARCHETYPES_V2).sort());
+  for (const [roleId, archetype] of Object.entries(ENEMY_ARCHETYPES_V2)) {
+    const runtime = enemyRuntimeFromCatalogV3(roleId);
+    assert.equal(runtime.tier, archetype.tier);
+    assert.equal(runtime.cost, archetype.threatCost);
+    assert.equal(runtime.canShoot, archetype.canShoot);
+    assert.equal(runtime.hpMultiplier, archetype.hpMultiplier);
+    assert.equal(runtime.speedMultiplier, archetype.speedMultiplier);
+    assert.equal(runtime.contactDamage, archetype.contactDamage);
+    if (archetype.canShoot) {
+      assert.ok(runtime.shootMs > 0 && runtime.projectileSpeed > 0 && runtime.projectileDamage > 0);
+    }
+  }
   assert.equal(BOSS_PHASES_V2.length, 3);
   assert.equal(bossPhaseForHp(.8).id, 'phase_1');
   assert.equal(bossPhaseForHp(.5).id, 'phase_2');
@@ -117,7 +139,7 @@ test('boss plan telegraphs every attack and changes phase deterministically', ()
 });
 
 test('V2.8 combines deterministic pacing with mini-bosses and real Boss mechanic previews', () => {
-  assert.equal(CAMPAIGN_WAVE_DIRECTOR_VERSION, 'campaign-wave-director-v2.8.1');
+  assert.equal(CAMPAIGN_WAVE_DIRECTOR_VERSION, 'campaign-wave-director-v3.0.0');
   assert.equal(CAMPAIGN_ENCOUNTER_ESCALATION_VERSION, 'campaign-encounter-v2.8.1');
   assert.deepEqual(Object.keys(CAMPAIGN_PLANET_PROFILES_V27), ['1', '2', '3']);
   assert.ok(Object.keys(CAMPAIGN_WAVE_TEMPLATES_V27).length >= 14);
@@ -380,8 +402,90 @@ test('planet profiles create distinct deterministic compositions without changin
   assert.notEqual(signature(cryo), signature(inferno));
 });
 
-test('V2.9 catalog-backed enemy choreography uses finite readable phases instead of per-frame random patrol', () => {
+test('V3 wave power, planet identity and scout route mix are deterministic and materially different', () => {
+  assert.deepEqual(auditCampaignEnemyDirectorV3(), []);
+  const directorSource = fs.readFileSync(
+    new URL('../src/game/combat/DeterministicEnemyDirectorV2.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(directorSource, /LEGACY_ROLE_RUNTIME_V27/,
+    'role runtime values must be projected from EnemyCombatCatalogV2');
+
+  const alphaEarly = resolveCampaignWavePowerV3({
+    planetId: 1, stage: 5, wave: 1, totalWaves: 10, difficulty: 1.1, templateId: 'recon',
+  });
+  const alphaLate = resolveCampaignWavePowerV3({
+    planetId: 1, stage: 5, wave: 9, totalWaves: 10, difficulty: 1.1, templateId: 'recon',
+  });
+  const cryoEarly = resolveCampaignWavePowerV3({
+    planetId: 2, stage: 5, wave: 1, totalWaves: 10, difficulty: 1.1, templateId: 'recon',
+  });
+  const infernoEarly = resolveCampaignWavePowerV3({
+    planetId: 3, stage: 5, wave: 1, totalWaves: 10, difficulty: 1.1, templateId: 'recon',
+  });
+  assert.ok(alphaLate.hpMultiplier > alphaEarly.hpMultiplier);
+  assert.ok(alphaLate.damageMultiplier > alphaEarly.damageMultiplier);
+  assert.ok(alphaLate.speedMultiplier > alphaEarly.speedMultiplier);
+  assert.ok(alphaLate.fireCooldownMultiplier < alphaEarly.fireCooldownMultiplier);
+  assert.ok(cryoEarly.hpMultiplier > alphaEarly.hpMultiplier,
+    'Cryo must be the tougher control planet');
+  assert.ok(cryoEarly.speedMultiplier < alphaEarly.speedMultiplier,
+    'Cryo must be slower and more deliberate than Alpha');
+  assert.ok(infernoEarly.damageMultiplier > cryoEarly.damageMultiplier
+    && infernoEarly.speedMultiplier > alphaEarly.speedMultiplier,
+  'Inferno must be the faster, harder-hitting pressure planet');
+
+  const tierBase = (planetId, tier) => PLANET_ENEMIES[planetId].find(enemy => enemy.tier === tier);
+  for (const tier of [1, 2, 3, 4]) {
+    const alphaBase = tierBase(1, tier);
+    const cryoBase = tierBase(2, tier);
+    const infernoBase = tierBase(3, tier);
+    assert.ok(alphaBase && cryoBase && infernoBase);
+    assert.ok(cryoBase.baseHp > alphaBase.baseHp, `Cryo tier ${tier} must exceed Alpha base HP`);
+    assert.ok(infernoBase.baseHp > cryoBase.baseHp, `Inferno tier ${tier} must exceed Cryo base HP`);
+  }
+  const alphaTier1EffectiveHp = tierBase(1, 1).baseHp * alphaEarly.hpMultiplier;
+  const cryoTier1EffectiveHp = tierBase(2, 1).baseHp * cryoEarly.hpMultiplier;
+  const infernoTier1EffectiveHp = tierBase(3, 1).baseHp * infernoEarly.hpMultiplier;
+  assert.ok(alphaTier1EffectiveHp < cryoTier1EffectiveHp
+    && cryoTier1EffectiveHp < infernoTier1EffectiveHp);
+  assert.ok(infernoTier1EffectiveHp / alphaTier1EffectiveHp < 4,
+    'planet scaling must remain strong but bounded instead of multiplying the legacy environment HP twice');
+
+  const routeTotals = new Map([[1, { flyby: 0, hook_return: 0 }],
+    [2, { flyby: 0, hook_return: 0 }], [3, { flyby: 0, hook_return: 0 }]]);
+  for (const planetId of [1, 2, 3]) {
+    for (let seed = 1; seed <= 24; seed += 1) {
+      const plan = createEnemyDirectorV2({ seed, stage: 5, planetId, difficulty: 1.1 })
+        .buildCampaignStagePlan({ planetId, totalWaves: 10, hasBoss: true, baseEnemies: 20 });
+      for (const wave of plan.waves) {
+        for (const entry of wave.entries) {
+          assert.ok(ENEMY_RUNTIME_CATALOG_V3[entry.archetypeId]);
+          assert.ok(entry.hpMultiplier > 0 && entry.speedMultiplier > 0 && entry.contactDamage > 0);
+          assert.ok(Number.isFinite(entry.spawnOffsetMs) && Number.isFinite(entry.damageMultiplier));
+          if (entry.canShoot) {
+            assert.ok(entry.shootMs >= 650 && entry.projectileSpeed > 0 && entry.projectileDamage > 0);
+          }
+          if (entry.archetypeId === 'raider') routeTotals.get(planetId)[entry.routeVariant] += 1;
+        }
+      }
+    }
+  }
+  const ratio = planetId => {
+    const totals = routeTotals.get(planetId);
+    return totals.hook_return / (totals.hook_return + totals.flyby);
+  };
+  assert.ok(routeTotals.get(1).flyby > 0 && routeTotals.get(1).hook_return > 0);
+  assert.ok(routeTotals.get(2).flyby > 0 && routeTotals.get(2).hook_return > 0);
+  assert.ok(routeTotals.get(3).flyby > 0 && routeTotals.get(3).hook_return > 0);
+  assert.ok(ratio(1) > .55, `Alpha scouts should usually return, ratio=${ratio(1)}`);
+  assert.ok(ratio(2) > .65, `Cryo scouts should strongly favor return passes, ratio=${ratio(2)}`);
+  assert.ok(ratio(3) < .45, `Inferno scouts should favor aggressive flybys, ratio=${ratio(3)}`);
+  assert.ok(ratio(2) > ratio(1) && ratio(1) > ratio(3));
+});
+
+test('V3 catalog-backed choreography is fast, finite and supports both scout flyby and return routes', () => {
+  assert.equal(CAMPAIGN_COMBAT_CHOREOGRAPHY_VERSION, 'campaign-combat-choreography-v3.0.0');
   assert.deepEqual(auditCampaignCombatChoreographyV29(), []);
+  assert.deepEqual(Object.keys(CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30).sort(), ['flyby', 'hook_return']);
   assert.deepEqual(
     Object.values(ENEMY_ARCHETYPES_V2).map(archetype => archetype.behavior).sort(),
     Object.keys(CAMPAIGN_ROLE_CHOREOGRAPHY_V29).sort(),
@@ -390,10 +494,11 @@ test('V2.9 catalog-backed enemy choreography uses finite readable phases instead
   for (const roleId of Object.keys(ENEMY_ARCHETYPES_V2)) {
     const state = createCampaignEnemyChoreographyStateV29({
       roleId, lane: .4, strafeDirection: -1, seed: 77, nowMs: 0,
+      routeVariant: roleId === 'raider' ? 'hook_return' : null,
     });
     const first = stepCampaignEnemyChoreographyV29(state, {
-      nowMs: 0, frameScale: 1, baseSpeed: .05,
-      enemyX: 2, enemyZ: -7, playerX: 0, playerZ: 12,
+      nowMs: 0, frameScale: 1, baseSpeed: .035,
+      enemyX: 2, enemyZ: -16.8, playerX: 0, playerZ: 12,
       arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852,
       hudOcclusionLineZ: -9.3,
     });
@@ -404,94 +509,93 @@ test('V2.9 catalog-backed enemy choreography uses finite readable phases instead
     }
     assert.equal(first.handled, true);
     assert.equal(Number.isFinite(first.targetX) && Number.isFinite(first.targetZ), true);
-    assert.ok(Math.hypot(first.deltaX, first.deltaZ) <= .09);
     const lockedTarget = [state.targetX, state.targetZ];
     stepCampaignEnemyChoreographyV29(state, {
-      nowMs: 120, frameScale: 1, baseSpeed: .05,
-      enemyX: 2, enemyZ: -7, playerX: -6, playerZ: 8,
+      nowMs: 120, frameScale: 1, baseSpeed: .035,
+      enemyX: 2, enemyZ: -16.8, playerX: -6, playerZ: 8,
       arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852,
       hudOcclusionLineZ: -9.3,
     });
     assert.deepEqual([state.targetX, state.targetZ], lockedTarget,
       `${roleId} must not retarget every render frame`);
-
-    let result = first;
-    let nowMs = 500;
-    for (let guard = 0; guard < 10 && !result.completed; guard += 1) {
-      result = stepCampaignEnemyChoreographyV29(state, {
-        nowMs, frameScale: 1, baseSpeed: .05,
-        enemyX: state.targetX ?? 0, enemyZ: state.targetZ ?? 18,
-        playerX: 0, playerZ: 12,
-        arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852,
-        hudOcclusionLineZ: -9.3,
-      });
-      nowMs += 3500;
-    }
-    assert.equal(result.completed, true, `${roleId} must have a finite egress path`);
   }
 
-  // Exercise the actual steering loop at a deliberately slow catalog speed.
-  // Completion is legal only after the root is below the visible arena; this
-  // catches duration-only despawns that look like enemies disappearing while
-  // still fighting on screen.
-  for (const roleId of ['raider', 'gunner', 'shieldbearer', 'support', 'artillery']) {
+  const expectations = [
+    { roleId: 'raider', routeVariant: 'flyby', maxMs: 5600,
+      required: ['flank_approach', 'commit_cross', 'egress'] },
+    { roleId: 'raider', routeVariant: 'hook_return', maxMs: 8500,
+      required: ['flank_approach', 'commit_cross', 'hook_turn', 'return_pass', 'egress'] },
+    { roleId: 'gunner', maxMs: 7600,
+      required: ['firing_slot', 'strafe_a', 'strafe_b', 'egress'] },
+    { roleId: 'shieldbearer', maxMs: 7400,
+      required: ['guard_approach', 'guard_hold_a', 'guard_hold_b', 'egress'] },
+    { roleId: 'support', maxMs: 7800,
+      required: ['support_slot', 'orbit_0', 'orbit_1', 'orbit_2', 'egress'] },
+    { roleId: 'artillery', maxMs: 8200,
+      required: ['battery_approach', 'brace_a', 'battery_relocate', 'brace_b', 'egress'] },
+  ];
+
+  for (const expected of expectations) {
     const state = createCampaignEnemyChoreographyStateV29({
-      roleId, lane: .4, strafeDirection: -1, seed: 77, nowMs: 0,
+      roleId: expected.roleId,
+      routeVariant: expected.routeVariant,
+      lane: .4, strafeDirection: -1, seed: 77, nowMs: 0,
     });
     let enemyX = 2;
-    let enemyZ = -8.7;
+    let enemyZ = -16.8;
     let nowMs = 0;
     let result = null;
     let maxStep = 0;
-    const seenPhases = new Set();
-    for (let frame = 0; frame < 4200; frame += 1) {
+    let stationaryFrames = 0;
+    let sawFireWindow = false;
+    const seenPhases = [];
+    let lastPhase = null;
+    for (let frame = 0; frame < 900; frame += 1) {
       result = stepCampaignEnemyChoreographyV29(state, {
         nowMs, frameScale: 1, baseSpeed: .035,
         enemyX, enemyZ, playerX: 0, playerZ: 12,
         arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852,
         hudOcclusionLineZ: -9.3, separationX: 0, separationZ: 0,
+        fireCooldownMs: 1475,
       });
-      seenPhases.add(result.phaseId);
-      maxStep = Math.max(maxStep, Math.hypot(result.deltaX || 0, result.deltaZ || 0));
+      if (result.phaseId !== lastPhase) {
+        seenPhases.push(result.phaseId);
+        lastPhase = result.phaseId;
+      }
+      sawFireWindow ||= Boolean(result.mayFire);
+      const step = Math.hypot(result.deltaX || 0, result.deltaZ || 0);
+      maxStep = Math.max(maxStep, step);
+      if (step < .005) stationaryFrames += 1;
       if (result.completed) break;
       enemyX += result.deltaX;
       enemyZ += result.deltaZ;
       nowMs += 1000 / 60;
     }
-    assert.equal(result?.completed, true, `${roleId} must complete under real steering`);
-    assert.equal(seenPhases.has('egress'), true, `${roleId} must enter an authored egress`);
-    assert.ok(enemyZ >= 18.5,
-      `${roleId} may be removed only after leaving the visible arena, got z=${enemyZ}`);
-    assert.ok(maxStep <= .09, `${roleId} steering step must remain mobile-readable`);
+    assert.equal(result?.completed, true, `${expected.roleId}:${expected.routeVariant || 'default'} must complete`);
+    assert.ok(nowMs <= expected.maxMs,
+      `${expected.roleId}:${expected.routeVariant || 'default'} is too slow: ${nowMs}ms`);
+    assert.deepEqual(seenPhases.filter(id => id !== 'complete'), expected.required);
+    assert.ok(enemyZ >= 17.7,
+      `${expected.roleId} may be removed only after leaving the visible arena, got z=${enemyZ}`);
+    assert.ok(maxStep <= .15, `${expected.roleId} steering step must remain readable, got ${maxStep}`);
+    const stationaryLimit = expected.roleId === 'artillery' ? 90 : 16;
+    assert.ok(stationaryFrames <= stationaryLimit,
+      `${expected.roleId} must not spend the route drifting or idling (${stationaryFrames} frames)`);
+    if (['gunner', 'support', 'artillery'].includes(expected.roleId)) {
+      assert.equal(sawFireWindow, true, `${expected.roleId} must expose a moving/settled fire window`);
+    }
   }
 
-  const gunner = createCampaignEnemyChoreographyStateV29({ roleId: 'gunner', seed: 3, nowMs: 0 });
-  const approach = stepCampaignEnemyChoreographyV29(gunner, {
-    nowMs: 0, frameScale: 1, baseSpeed: .04,
-    enemyX: 0, enemyZ: -7, playerX: 0, playerZ: 12,
-    arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852, hudOcclusionLineZ: -9.3,
+  const flyby = createCampaignEnemyChoreographyStateV29({
+    roleId: 'raider', routeVariant: 'flyby', seed: 3, nowMs: 0,
   });
-  const slotSettling = stepCampaignEnemyChoreographyV29(gunner, {
-    nowMs: 20, frameScale: 1, baseSpeed: .04,
-    enemyX: approach.targetX, enemyZ: approach.targetZ, playerX: 0, playerZ: 12,
-    arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852, hudOcclusionLineZ: -9.3,
+  const returning = createCampaignEnemyChoreographyStateV29({
+    roleId: 'raider', routeVariant: 'hook_return', seed: 3, nowMs: 0,
   });
-  assert.equal(slotSettling.phaseId, 'firing_slot');
-  assert.equal(slotSettling.settled, true);
-  const enteredStrafe = stepCampaignEnemyChoreographyV29(gunner, {
-    nowMs: 360, frameScale: 1, baseSpeed: .04,
-    enemyX: approach.targetX, enemyZ: approach.targetZ, playerX: 0, playerZ: 12,
-    arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852, hudOcclusionLineZ: -9.3,
-  });
-  assert.equal(enteredStrafe.phaseId, 'strafe_a');
-  assert.equal(enteredStrafe.fireWindup, true);
-  const armed = stepCampaignEnemyChoreographyV29(gunner, {
-    nowMs: 1220, frameScale: 1, baseSpeed: .04,
-    enemyX: enteredStrafe.targetX, enemyZ: enteredStrafe.targetZ, playerX: 0, playerZ: 12,
-    arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852, hudOcclusionLineZ: -9.3,
-  });
-  assert.equal(armed.mayFire, true);
-  assert.equal(armed.fireCooldownMs, Math.trunc(ENEMY_ARCHETYPES_V2.gunner.attackCooldownTicks * (1000 / 30)));
+  assert.equal(flyby.routeVariant, 'flyby');
+  assert.equal(returning.routeVariant, 'hook_return');
+  assert.equal(CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30.flyby.phases.some(item => item.id === 'return_pass'), false);
+  assert.equal(CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30.hook_return.phases.some(item => item.id === 'return_pass'), true);
 });
 
 test('V2.9 Boss Preview and Mini-Boss motion preserve attack locks and a dynamic HUD-safe combat band', () => {
@@ -650,47 +754,63 @@ test('V2.9 final Boss uses deterministic reposition-aim-telegraph-fire-recover p
   assert.equal(fired.phase, 'recover');
 });
 
-test('Campaign source wires V2.8 encounters only in Guest QA and keeps the frozen non-QA fallback', () => {
+test('Campaign source enables V3 enemy combat in production while preserving V2.8/V2.8.2 contracts and an explicit kill switch', () => {
   const source = fs.readFileSync(new URL('../src/components/Campaign/CampaignScene.js', import.meta.url), 'utf8');
-  assert.match(source, /campaignWaveDirector=guestAbilityQa\?createEnemyDirectorV2/);
+  assert.match(source, /campaignCombatV3Enabled=import\.meta\.env\.VITE_SF_CAMPAIGN_COMBAT_V3!==['\"]false['\"]/);
+  assert.match(source, /campaignWaveDirector=campaignCombatV3Enabled\?createEnemyDirectorV2/);
+  assert.doesNotMatch(source, /campaignWaveDirector=guestAbilityQa\?createEnemyDirectorV2/);
+  assert.match(source, /stableSeed\(['\"]campaign-wave-v30['\"]/);
   assert.match(source, /buildCampaignStagePlan\(\{/);
   assert.match(source, /spawnEnemy\(nextSpec\)/);
   assert.match(source, /currentWavePlan\.entries\[waveSpawned\]/);
   assert.match(source, /currentWavePlan\?\.guaranteedDrop/);
+
   assert.match(source, /stepEncounterMechanic\(e,now\)/);
   assert.match(source, /buildReinforcementPlan\(\{/);
   assert.match(source, /resolveBossDamageGateV28\(\{/);
   assert.match(source, /beginBossPhaseTransition\(gateResult\.gate\)/);
-  assert.match(source, /bossPhaseState=guestAbilityQa\?createBossPhaseStateV28/);
+  assert.match(source, /bossPhaseState=campaignCombatV3Enabled\?createBossPhaseStateV28/);
   assert.match(source, /stepMiniBossEnemy\(e,now,enemyFrame,frameDeltaMs\)/);
   assert.match(source, /createMuzzleChargeTelegraph/);
-  assert.match(source, /telegraph\.kind === 'summon_ring'/);
+  assert.match(source, /telegraph\.kind === ['\"]summon_ring['\"]/);
   assert.match(source, /encounterLaneDangerMat/);
+
   assert.match(source, /createBossPreviewLaneAttackPlanV282/);
   assert.match(source, /trackBossPreviewLaneAttackPlanV282/);
   assert.match(source, /lockBossPreviewLaneAttackPlanV282/);
   assert.match(source, /projectilesFromBossPreviewLaneAttackPlanV282/);
   assert.match(source, /resolveEncounterMuzzleOrigin/);
-  assert.match(source, /_encounterTelegraphKind = 'attack_corridors'/);
+  assert.match(source, /_encounterTelegraphKind = ['\"]attack_corridors['\"]/);
   assert.match(source, /new BABYLON\.Vector3\(projectile\.origin\.x, 0, projectile\.origin\.z\)/);
   assert.doesNotMatch(source, /enemy\._encounterLaneXs/);
+
   const aiSource = fs.readFileSync(new URL('../src/game/combat/CampaignMiniBossAiV281.js', import.meta.url), 'utf8');
   assert.doesNotMatch(aiSource, /Math\.sin/);
   assert.match(source, /forceCampaignMiniBossRecoveryV281/);
   assert.match(source, /resolveCampaignMiniBossAnchorV29/);
   assert.match(source, /stepCampaignEnemyChoreographyV29/);
+  assert.match(source, /routeVariant:spawnSpec\.routeVariant/);
   assert.match(source, /stepCampaignBossPreviewMotionV29/);
   assert.match(source, /stepCampaignBossCombatV29/);
   assert.match(source, /createBossAttackTelegraph/);
   assert.match(source, /projectilesFromCampaignBossAttackPlanV29/);
-  assert.match(source, /guestAbilityQa&&bossCombatState/);
-  assert.match(source, /Frozen legacy non-QA boss fallback/);
+  assert.match(source, /campaignCombatV3Enabled&&bossCombatState/);
+  assert.match(source, /Emergency kill-switch legacy boss fallback/);
+
+  assert.match(source, /const spawnZ = spawnSpec \? -ZOOM - 1\.8 : -ZOOM - 3/);
+  assert.match(source, /const environmentHpMultiplier = spawnSpec \? 1 : combat\.environment\.enemyHpMultiplier/);
+  assert.match(source, /_projectileDamage:Math\.max\(1,Math\.round\(Number\(spawnSpec\?\.projectileDamage\)\|\|200\)\)/);
+  assert.match(source, /_contactDamage:Math\.max\(1,Math\.round\(Number\(spawnSpec\?\.contactDamage\)/);
+  assert.match(source, /rawDamage:b\._rawDamage\|\|200/);
+  assert.match(source, /rawDamage:e\._contactDamage\|\|\(e\.tier===4\?400:200\)/);
   assert.doesNotMatch(source, /const targetZ = -ZOOM \+ profile\.anchorOffsetZ/);
   assert.doesNotMatch(source, /CreateLines\(`enc_lane_/);
-  assert.match(source, /Frozen legacy fallback for non-QA lanes/);
+
+  // The old random lanes/boss remain only behind the explicit production kill
+  // switch; they must not be the default path.
+  assert.match(source, /Emergency\/legacy movement fallback/);
   assert.match(source, /waveCount\s*=\s*\(stageConfig\.baseEnemies\|\|5\)\s*\+\s*currentWave\s*\*\s*3/);
   assert.match(source, /spawnInterval\s*=\s*Math\.max\(300,\s*1500\s*-\s*\(currentStage\*100\s*\+\s*currentWave\*50\)\)/);
-  assert.doesNotMatch(source, /campaignWaveDirector\s*=\s*createEnemyDirectorV2/);
 
   const choreographySource = fs.readFileSync(
     new URL('../src/game/combat/CampaignCombatChoreographyV29.js', import.meta.url), 'utf8');
@@ -698,4 +818,6 @@ test('Campaign source wires V2.8 encounters only in Guest QA and keeps the froze
     new URL('../src/game/combat/CampaignBossCombatV29.js', import.meta.url), 'utf8');
   assert.doesNotMatch(choreographySource, /Math\.random/);
   assert.doesNotMatch(bossSource, /Math\.random/);
+  assert.match(choreographySource, /hardTravelTimeout/);
+  assert.match(choreographySource, /CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30/);
 });
