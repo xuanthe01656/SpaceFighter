@@ -36,13 +36,24 @@ import {
   trackBossPreviewLaneAttackPlanV282,
 } from '../src/game/combat/CampaignAttackTelegraphPlanV282.js';
 import {
-  CAMPAIGN_ENEMY_MOVEMENT_PROFILES_V283,
-  CAMPAIGN_ENEMY_MOVEMENT_VERSION,
-  createCampaignEnemyMovementStateV283,
-  resolveCampaignHudSafeBandV283,
-  resolveCampaignMiniBossAnchorZV283,
-  stepCampaignEnemyMovementV283,
-} from '../src/game/combat/CampaignEnemyMovementV283.js';
+  CAMPAIGN_ROLE_CHOREOGRAPHY_V29,
+  auditCampaignCombatChoreographyV29,
+  createCampaignBossPreviewMotionStateV29,
+  createCampaignEnemyChoreographyStateV29,
+  createCampaignMiniBossMotionStateV29,
+  resolveCampaignMiniBossAnchorV29,
+  stepCampaignBossPreviewMotionV29,
+  stepCampaignEnemyChoreographyV29,
+  stepCampaignMiniBossMotionV29,
+} from '../src/game/combat/CampaignCombatChoreographyV29.js';
+import {
+  CAMPAIGN_BOSS_PATTERN_CATALOG_V29,
+  auditCampaignBossCombatV29,
+  createCampaignBossAttackPlanV29,
+  createCampaignBossCombatStateV29,
+  projectilesFromCampaignBossAttackPlanV29,
+  stepCampaignBossCombatV29,
+} from '../src/game/combat/CampaignBossCombatV29.js';
 
 const stagePlan = (options = {}) => createEnemyDirectorV2({
   seed: options.seed ?? 12345,
@@ -222,86 +233,6 @@ test('V2.8.2 Boss Preview uses one immutable entity-origin plan for tracking, lo
   });
 });
 
-test('V2.8.3 gives scripted roles readable choreography, locks Boss Preview transforms and keeps Mini-Bosses below the HUD', () => {
-  assert.equal(CAMPAIGN_ENEMY_MOVEMENT_VERSION, 'campaign-enemy-movement-v2.8.3');
-  assert.deepEqual(Object.keys(CAMPAIGN_ENEMY_MOVEMENT_PROFILES_V283).sort(), [
-    'artillery', 'boss_preview', 'gunner', 'raider', 'shieldbearer', 'support',
-  ]);
-
-  const seedOptions = {
-    role: 'gunner', lane: .4, strafeDirection: -1, phaseOffset: 1.75, nowMs: 100,
-  };
-  const seededA = createCampaignEnemyMovementStateV283(seedOptions);
-  const seededB = createCampaignEnemyMovementStateV283(seedOptions);
-  assert.deepEqual(seededA, seededB);
-  assert.equal(Object.isFrozen(seededA), true);
-
-  const common = {
-    nowMs: 100,
-    arenaHalfWidth: 7,
-    worldHalfHeight: 15,
-    hudOcclusionLineZ: -9.4,
-    encounterScale: 1,
-    enemyX: 0,
-    enemyZ: -6,
-    playerX: 1.25,
-    playerZ: 10,
-  };
-  const roleModes = Object.fromEntries(['raider', 'gunner', 'shieldbearer', 'support', 'artillery']
-    .map((role, index) => {
-      const state = createCampaignEnemyMovementStateV283({
-        role, lane: (index - 2) * .2, strafeDirection: index % 2 ? -1 : 1,
-        phaseOffset: index * .35, nowMs: 100,
-      });
-      const first = stepCampaignEnemyMovementV283(state, common);
-      const repeat = stepCampaignEnemyMovementV283(state, common);
-      assert.deepEqual(first, repeat);
-      return [role, first.movement.mode];
-    }));
-  assert.match(roleModes.raider, /^raider_(flank|cross_pass|reset)$/);
-  assert.equal(roleModes.gunner, 'gunner_range_strafe');
-  assert.equal(roleModes.shieldbearer, 'shieldbearer_lane_guard');
-  assert.equal(roleModes.support, 'support_offset_orbit');
-  assert.equal(roleModes.artillery, 'artillery_backline_relocate');
-  assert.equal(new Set(Object.values(roleModes)).size, 5);
-
-  const previewState = createCampaignEnemyMovementStateV283({
-    role: 'artillery', encounterKind: 'boss_preview', lane: .4,
-    strafeDirection: 1, phaseOffset: .75, nowMs: 0,
-  });
-  const tracking = stepCampaignEnemyMovementV283(previewState, {
-    ...common, nowMs: 400, enemyX: 4.1, enemyZ: -6.2,
-    mechanicPhase: 'telegraph', attackPlanPhase: 'tracking', encounterScale: 1.28,
-  });
-  assert.equal(tracking.movement.mode, 'preview_attack_track');
-  assert.ok(tracking.movement.speedMultiplier > 0);
-  const locked = stepCampaignEnemyMovementV283(tracking.state, {
-    ...common, nowMs: 650, enemyX: 3.7, enemyZ: -5.8,
-    mechanicPhase: 'telegraph', attackPlanPhase: 'locked', encounterScale: 1.28,
-  });
-  assert.equal(locked.movement.mode, 'preview_lock_hold');
-  assert.equal(locked.movement.speedMultiplier, 0);
-  assert.equal(locked.movement.targetX, 3.7);
-  assert.equal(locked.movement.targetZ, -5.8);
-  assert.equal(locked.movement.facePlayer, false);
-
-  const phoneBand = resolveCampaignHudSafeBandV283({
-    worldHalfHeight: 15, hudOcclusionLineZ: -9.4, encounterScale: 1.42,
-  });
-  const oldFixedAnchor = -15 + 5.4;
-  const safeAnchor = resolveCampaignMiniBossAnchorZV283({
-    worldHalfHeight: 15, hudOcclusionLineZ: -9.4,
-    requestedOffsetZ: 5.4, encounterScale: 1.42,
-  });
-  assert.ok(phoneBand.topSafeZ > phoneBand.hudOcclusionLineZ);
-  assert.ok(safeAnchor >= phoneBand.miniBossAnchorZ);
-  assert.ok(safeAnchor > oldFixedAnchor);
-  assert.ok(safeAnchor > phoneBand.hudOcclusionLineZ);
-  const movementSource = fs.readFileSync(
-    new URL('../src/game/combat/CampaignEnemyMovementV283.js', import.meta.url), 'utf8');
-  assert.doesNotMatch(movementSource, /Math\.random/);
-});
-
 test('V2.8.1 mini-boss AI uses deliberate anchors and repeats attack cycles instead of one-shot sine patrol', () => {
   assert.equal(CAMPAIGN_MINI_BOSS_AI_VERSION, 'campaign-mini-boss-ai-v2.8.1');
   assert.deepEqual(Object.keys(CAMPAIGN_MINI_BOSS_AI_PROFILES_V281).sort(), [
@@ -449,6 +380,276 @@ test('planet profiles create distinct deterministic compositions without changin
   assert.notEqual(signature(cryo), signature(inferno));
 });
 
+test('V2.9 catalog-backed enemy choreography uses finite readable phases instead of per-frame random patrol', () => {
+  assert.deepEqual(auditCampaignCombatChoreographyV29(), []);
+  assert.deepEqual(
+    Object.values(ENEMY_ARCHETYPES_V2).map(archetype => archetype.behavior).sort(),
+    Object.keys(CAMPAIGN_ROLE_CHOREOGRAPHY_V29).sort(),
+  );
+
+  for (const roleId of Object.keys(ENEMY_ARCHETYPES_V2)) {
+    const state = createCampaignEnemyChoreographyStateV29({
+      roleId, lane: .4, strafeDirection: -1, seed: 77, nowMs: 0,
+    });
+    const first = stepCampaignEnemyChoreographyV29(state, {
+      nowMs: 0, frameScale: 1, baseSpeed: .05,
+      enemyX: 2, enemyZ: -7, playerX: 0, playerZ: 12,
+      arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852,
+      hudOcclusionLineZ: -9.3,
+    });
+    if (roleId === 'charger') {
+      assert.equal(first.handled, false);
+      assert.equal(state.externalController, 'CampaignRuntimeReliabilityV26A3');
+      continue;
+    }
+    assert.equal(first.handled, true);
+    assert.equal(Number.isFinite(first.targetX) && Number.isFinite(first.targetZ), true);
+    assert.ok(Math.hypot(first.deltaX, first.deltaZ) <= .09);
+    const lockedTarget = [state.targetX, state.targetZ];
+    stepCampaignEnemyChoreographyV29(state, {
+      nowMs: 120, frameScale: 1, baseSpeed: .05,
+      enemyX: 2, enemyZ: -7, playerX: -6, playerZ: 8,
+      arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852,
+      hudOcclusionLineZ: -9.3,
+    });
+    assert.deepEqual([state.targetX, state.targetZ], lockedTarget,
+      `${roleId} must not retarget every render frame`);
+
+    let result = first;
+    let nowMs = 500;
+    for (let guard = 0; guard < 10 && !result.completed; guard += 1) {
+      result = stepCampaignEnemyChoreographyV29(state, {
+        nowMs, frameScale: 1, baseSpeed: .05,
+        enemyX: state.targetX ?? 0, enemyZ: state.targetZ ?? 18,
+        playerX: 0, playerZ: 12,
+        arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852,
+        hudOcclusionLineZ: -9.3,
+      });
+      nowMs += 3500;
+    }
+    assert.equal(result.completed, true, `${roleId} must have a finite egress path`);
+  }
+
+  // Exercise the actual steering loop at a deliberately slow catalog speed.
+  // Completion is legal only after the root is below the visible arena; this
+  // catches duration-only despawns that look like enemies disappearing while
+  // still fighting on screen.
+  for (const roleId of ['raider', 'gunner', 'shieldbearer', 'support', 'artillery']) {
+    const state = createCampaignEnemyChoreographyStateV29({
+      roleId, lane: .4, strafeDirection: -1, seed: 77, nowMs: 0,
+    });
+    let enemyX = 2;
+    let enemyZ = -8.7;
+    let nowMs = 0;
+    let result = null;
+    let maxStep = 0;
+    const seenPhases = new Set();
+    for (let frame = 0; frame < 4200; frame += 1) {
+      result = stepCampaignEnemyChoreographyV29(state, {
+        nowMs, frameScale: 1, baseSpeed: .035,
+        enemyX, enemyZ, playerX: 0, playerZ: 12,
+        arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852,
+        hudOcclusionLineZ: -9.3, separationX: 0, separationZ: 0,
+      });
+      seenPhases.add(result.phaseId);
+      maxStep = Math.max(maxStep, Math.hypot(result.deltaX || 0, result.deltaZ || 0));
+      if (result.completed) break;
+      enemyX += result.deltaX;
+      enemyZ += result.deltaZ;
+      nowMs += 1000 / 60;
+    }
+    assert.equal(result?.completed, true, `${roleId} must complete under real steering`);
+    assert.equal(seenPhases.has('egress'), true, `${roleId} must enter an authored egress`);
+    assert.ok(enemyZ >= 18.5,
+      `${roleId} may be removed only after leaving the visible arena, got z=${enemyZ}`);
+    assert.ok(maxStep <= .09, `${roleId} steering step must remain mobile-readable`);
+  }
+
+  const gunner = createCampaignEnemyChoreographyStateV29({ roleId: 'gunner', seed: 3, nowMs: 0 });
+  const approach = stepCampaignEnemyChoreographyV29(gunner, {
+    nowMs: 0, frameScale: 1, baseSpeed: .04,
+    enemyX: 0, enemyZ: -7, playerX: 0, playerZ: 12,
+    arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852, hudOcclusionLineZ: -9.3,
+  });
+  const slotSettling = stepCampaignEnemyChoreographyV29(gunner, {
+    nowMs: 20, frameScale: 1, baseSpeed: .04,
+    enemyX: approach.targetX, enemyZ: approach.targetZ, playerX: 0, playerZ: 12,
+    arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852, hudOcclusionLineZ: -9.3,
+  });
+  assert.equal(slotSettling.phaseId, 'firing_slot');
+  assert.equal(slotSettling.settled, true);
+  const enteredStrafe = stepCampaignEnemyChoreographyV29(gunner, {
+    nowMs: 360, frameScale: 1, baseSpeed: .04,
+    enemyX: approach.targetX, enemyZ: approach.targetZ, playerX: 0, playerZ: 12,
+    arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852, hudOcclusionLineZ: -9.3,
+  });
+  assert.equal(enteredStrafe.phaseId, 'strafe_a');
+  assert.equal(enteredStrafe.fireWindup, true);
+  const armed = stepCampaignEnemyChoreographyV29(gunner, {
+    nowMs: 1220, frameScale: 1, baseSpeed: .04,
+    enemyX: enteredStrafe.targetX, enemyZ: enteredStrafe.targetZ, playerX: 0, playerZ: 12,
+    arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852, hudOcclusionLineZ: -9.3,
+  });
+  assert.equal(armed.mayFire, true);
+  assert.equal(armed.fireCooldownMs, Math.trunc(ENEMY_ARCHETYPES_V2.gunner.attackCooldownTicks * (1000 / 30)));
+});
+
+test('V2.9 Boss Preview and Mini-Boss motion preserve attack locks and a dynamic HUD-safe combat band', () => {
+  const compact = resolveCampaignMiniBossAnchorV29({
+    profileId: 'mechanical_warden', cycle: 0, targetLane: 0,
+    requestedOffsetZ: 5.4, arenaHalfWidth: 7, worldHalfHeight: 15,
+    viewportHeight: 852, hudOcclusionLineZ: -9.3,
+    entityScale: 1.1, hpBarOffsetPx: -36, hpBarHeightPx: 8, playerZ: 12,
+  });
+  const large = resolveCampaignMiniBossAnchorV29({
+    profileId: 'mechanical_warden', cycle: 0, targetLane: 0,
+    requestedOffsetZ: 5.4, arenaHalfWidth: 7, worldHalfHeight: 15,
+    viewportHeight: 852, hudOcclusionLineZ: -9.3,
+    entityScale: 1.8, hpBarOffsetPx: -52, hpBarHeightPx: 8, playerZ: 12,
+  });
+  assert.ok(compact.z >= compact.topSafeRootZ);
+  assert.ok(large.z >= large.topSafeRootZ);
+  assert.ok(large.z > compact.z, 'larger Mini-Boss must be placed farther below the HUD');
+
+  const miniMotion = createCampaignMiniBossMotionStateV29();
+  miniMotion.velocityX = .08;
+  miniMotion.velocityZ = .06;
+  const held = stepCampaignMiniBossMotionV29(miniMotion, {
+    profileId: 'mechanical_warden', mode: 'hold', frameScale: 1,
+    enemyX: 0, enemyZ: -6, targetX: 2, targetZ: -4, baseSpeed: .05,
+  });
+  assert.deepEqual([held.deltaX, held.deltaZ, held.velocityX, held.velocityZ], [0, 0, 0, 0]);
+
+  const preview = createCampaignBossPreviewMotionStateV29({
+    lane: .4, strafeDirection: 1, seed: 11, nowMs: 0,
+  });
+  const moving = stepCampaignBossPreviewMotionV29(preview, {
+    nowMs: 0, frameScale: 1, baseSpeed: .05,
+    enemyX: 2, enemyZ: -7, playerX: 0, playerZ: 12,
+    arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852,
+    hudOcclusionLineZ: -9.3, mechanicPhase: 'idle', attackPlanPhase: 'none',
+  });
+  const clockOnly = stepCampaignBossPreviewMotionV29(preview, {
+    nowMs: 5000, frameScale: 1, baseSpeed: .05,
+    enemyX: 2, enemyZ: -7, playerX: 0, playerZ: 12,
+    arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852,
+    hudOcclusionLineZ: -9.3, mechanicPhase: 'idle', attackPlanPhase: 'none',
+  });
+  assert.equal(clockOnly.phaseId, 'preposition');
+  assert.equal(clockOnly.canArm, false,
+    'Boss Preview may arm only after reaching its authored attack slot');
+  stepCampaignBossPreviewMotionV29(preview, {
+    nowMs: 5020, frameScale: 1, baseSpeed: .05,
+    enemyX: preview.targetX, enemyZ: preview.targetZ, playerX: 0, playerZ: 12,
+    arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852,
+    hudOcclusionLineZ: -9.3, mechanicPhase: 'idle', attackPlanPhase: 'none',
+  });
+  const ready = stepCampaignBossPreviewMotionV29(preview, {
+    nowMs: 5370, frameScale: 1, baseSpeed: .05,
+    enemyX: preview.targetX, enemyZ: preview.targetZ, playerX: 0, playerZ: 12,
+    arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852,
+    hudOcclusionLineZ: -9.3, mechanicPhase: 'idle', attackPlanPhase: 'none',
+  });
+  assert.equal(moving.handled, true);
+  assert.equal(ready.canArm, true);
+  const tracking = stepCampaignBossPreviewMotionV29(preview, {
+    nowMs: 5390, frameScale: 1, baseSpeed: .05,
+    enemyX: preview.targetX, enemyZ: preview.targetZ, playerX: 5, playerZ: 12,
+    arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852,
+    hudOcclusionLineZ: -9.3, mechanicPhase: 'telegraph',
+    attackPlanPhase: 'tracking', attackPlanId: 'preview-plan-right',
+  });
+  assert.equal(tracking.phaseId, 'tracking_drift');
+  assert.ok(Math.hypot(tracking.deltaX, tracking.deltaZ) > 0,
+    'Boss Preview should keep a bounded drift while the V2.8.2 plan tracks its muzzle');
+  const attackHold = stepCampaignBossPreviewMotionV29(preview, {
+    nowMs: 5420, frameScale: 1, baseSpeed: .05,
+    enemyX: preview.targetX + tracking.deltaX,
+    enemyZ: preview.targetZ + tracking.deltaZ,
+    playerX: 5, playerZ: 12,
+    arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852,
+    hudOcclusionLineZ: -9.3, mechanicPhase: 'telegraph',
+    attackPlanPhase: 'locked', attackPlanId: 'preview-plan-right',
+  });
+  assert.equal(attackHold.holdOrientation, true);
+  assert.equal(attackHold.deltaX, 0);
+  assert.equal(attackHold.deltaZ, 0);
+});
+
+test('V2.9 final Boss uses deterministic reposition-aim-telegraph-fire-recover plans shared by VFX and projectiles', () => {
+  assert.deepEqual(auditCampaignBossCombatV29(), []);
+  assert.deepEqual(
+    [...new Set(BOSS_PHASES_V2.flatMap(phase => phase.patterns))].sort(),
+    Object.keys(CAMPAIGN_BOSS_PATTERN_CATALOG_V29).sort(),
+  );
+  const radial = createCampaignBossAttackPlanV29({
+    pattern: 'radial_gap', origin: { x: 3, y: 0, z: -5 },
+    playerX: -1, playerZ: 11, arenaHalfWidth: 7, worldHalfHeight: 15,
+    createdAtMs: 1000, cycle: 2, phaseId: 'phase_3',
+  });
+  assert.equal(Object.isFrozen(radial), true);
+  assert.equal(Object.isFrozen(radial.paths), true);
+  assert.equal(radial.paths.length, 13);
+  assert.equal(radial.paths.every(path => path.origin.x === radial.origin.x
+    && path.origin.y === radial.origin.y && path.origin.z === radial.origin.z), true);
+  const projectiles = projectilesFromCampaignBossAttackPlanV29(radial);
+  assert.equal(projectiles.length, radial.paths.length);
+  projectiles.forEach((projectile, index) => {
+    assert.strictEqual(projectile.origin, radial.paths[index].origin);
+    assert.deepEqual(projectile.velocity, radial.paths[index].velocity);
+  });
+
+  const runToTelegraph = () => {
+    const state = createCampaignBossCombatStateV29({ seed: 91, nowMs: 0 });
+    const first = stepCampaignBossCombatV29(state, {
+      nowMs: 0, hpRatio: 1, frameScale: 1, baseSpeed: .045,
+      enemyX: 0, enemyZ: -7, playerX: 1, playerZ: 12,
+      origin: { x: 0, y: 0, z: -5.1 }, arenaHalfWidth: 7, worldHalfHeight: 15,
+      viewportHeight: 852, hudOcclusionLineZ: -9.3,
+    });
+    const clockOnly = stepCampaignBossCombatV29(state, {
+      nowMs: 5000, hpRatio: 1, frameScale: 1, baseSpeed: .045,
+      enemyX: 0, enemyZ: -7, playerX: 1, playerZ: 12,
+      origin: { x: 0, y: 0, z: -5.1 }, arenaHalfWidth: 7, worldHalfHeight: 15,
+      viewportHeight: 852, hudOcclusionLineZ: -9.3,
+    });
+    assert.equal(clockOnly.phase, 'reposition',
+      'Boss may aim only after reaching the selected combat anchor');
+    const aimed = stepCampaignBossCombatV29(state, {
+      nowMs: 5020, hpRatio: 1, frameScale: 1, baseSpeed: .045,
+      enemyX: state.targetX, enemyZ: state.targetZ, playerX: 1, playerZ: 12,
+      origin: { x: state.targetX, y: 0, z: state.targetZ + 1.9 },
+      arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852, hudOcclusionLineZ: -9.3,
+    });
+    assert.equal(first.phase, 'reposition');
+    assert.equal(aimed.phase, 'aim');
+    assert.equal(aimed.facePlayer, true);
+    const telegraph = stepCampaignBossCombatV29(state, {
+      nowMs: 5360, hpRatio: 1, frameScale: 1, baseSpeed: .045,
+      enemyX: state.targetX, enemyZ: state.targetZ, playerX: 1, playerZ: 12,
+      origin: { x: state.targetX + .25, y: 0, z: state.targetZ + 1.82 },
+      arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852, hudOcclusionLineZ: -9.3,
+    });
+    return { state, telegraph };
+  };
+  const a = runToTelegraph();
+  const b = runToTelegraph();
+  assert.equal(a.telegraph.events[0].type, 'telegraph_started');
+  assert.deepEqual(a.telegraph.events[0].plan, b.telegraph.events[0].plan);
+  assert.equal(a.telegraph.deltaX, 0);
+  assert.equal(a.telegraph.deltaZ, 0);
+  const plan = a.telegraph.events[0].plan;
+  const fired = stepCampaignBossCombatV29(a.state, {
+    nowMs: plan.telegraphEndsAtMs, hpRatio: 1, frameScale: 1, baseSpeed: .045,
+    enemyX: a.state.targetX, enemyZ: a.state.targetZ, playerX: -4, playerZ: 8,
+    origin: { x: -9, y: 0, z: -9 }, arenaHalfWidth: 7, worldHalfHeight: 15,
+    viewportHeight: 852, hudOcclusionLineZ: -9.3,
+  });
+  assert.equal(fired.events.some(event => event.type === 'fire_pattern'), true);
+  assert.strictEqual(fired.events.find(event => event.type === 'fire_pattern').plan, plan);
+  assert.equal(fired.phase, 'recover');
+});
+
 test('Campaign source wires V2.8 encounters only in Guest QA and keeps the frozen non-QA fallback', () => {
   const source = fs.readFileSync(new URL('../src/components/Campaign/CampaignScene.js', import.meta.url), 'utf8');
   assert.match(source, /campaignWaveDirector=guestAbilityQa\?createEnemyDirectorV2/);
@@ -462,13 +663,6 @@ test('Campaign source wires V2.8 encounters only in Guest QA and keeps the froze
   assert.match(source, /beginBossPhaseTransition\(gateResult\.gate\)/);
   assert.match(source, /bossPhaseState=guestAbilityQa\?createBossPhaseStateV28/);
   assert.match(source, /stepMiniBossEnemy\(e,now,enemyFrame,frameDeltaMs\)/);
-  assert.match(source, /applyCampaignEnemyMovementV283\(e,now,enemyFrame,frameDeltaMs\)/);
-  assert.match(source, /resolveCampaignMiniBossAnchorZV283\(\{/);
-  assert.match(source, /hudOcclusionLineZ:\s*enemyEntryPolicy\.engagementLineZ/);
-  assert.match(source, /_movementState:movementState/);
-  const previewMoveIndex = source.indexOf("if(e._encounterKind==='boss_preview'");
-  const mechanicStepIndex = source.indexOf('stepEncounterMechanic(e,now)', previewMoveIndex);
-  assert.ok(previewMoveIndex >= 0 && mechanicStepIndex > previewMoveIndex);
   assert.match(source, /createMuzzleChargeTelegraph/);
   assert.match(source, /telegraph\.kind === 'summon_ring'/);
   assert.match(source, /encounterLaneDangerMat/);
@@ -483,9 +677,25 @@ test('Campaign source wires V2.8 encounters only in Guest QA and keeps the froze
   const aiSource = fs.readFileSync(new URL('../src/game/combat/CampaignMiniBossAiV281.js', import.meta.url), 'utf8');
   assert.doesNotMatch(aiSource, /Math\.sin/);
   assert.match(source, /forceCampaignMiniBossRecoveryV281/);
+  assert.match(source, /resolveCampaignMiniBossAnchorV29/);
+  assert.match(source, /stepCampaignEnemyChoreographyV29/);
+  assert.match(source, /stepCampaignBossPreviewMotionV29/);
+  assert.match(source, /stepCampaignBossCombatV29/);
+  assert.match(source, /createBossAttackTelegraph/);
+  assert.match(source, /projectilesFromCampaignBossAttackPlanV29/);
+  assert.match(source, /guestAbilityQa&&bossCombatState/);
+  assert.match(source, /Frozen legacy non-QA boss fallback/);
+  assert.doesNotMatch(source, /const targetZ = -ZOOM \+ profile\.anchorOffsetZ/);
   assert.doesNotMatch(source, /CreateLines\(`enc_lane_/);
   assert.match(source, /Frozen legacy fallback for non-QA lanes/);
   assert.match(source, /waveCount\s*=\s*\(stageConfig\.baseEnemies\|\|5\)\s*\+\s*currentWave\s*\*\s*3/);
   assert.match(source, /spawnInterval\s*=\s*Math\.max\(300,\s*1500\s*-\s*\(currentStage\*100\s*\+\s*currentWave\*50\)\)/);
   assert.doesNotMatch(source, /campaignWaveDirector\s*=\s*createEnemyDirectorV2/);
+
+  const choreographySource = fs.readFileSync(
+    new URL('../src/game/combat/CampaignCombatChoreographyV29.js', import.meta.url), 'utf8');
+  const bossSource = fs.readFileSync(
+    new URL('../src/game/combat/CampaignBossCombatV29.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(choreographySource, /Math\.random/);
+  assert.doesNotMatch(bossSource, /Math\.random/);
 });
