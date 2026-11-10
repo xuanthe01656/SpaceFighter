@@ -29,8 +29,12 @@ test('C15 hostile shot adopts the Guest directional red-bolt presentation withou
   assert.equal(spec.style,'bolt');
   assert.ok(spec.length>spec.width);
   const guest=read('src/components/Campaign/CampaignScene.js');
-  assert.match(guest,/new BABYLON\.Color3\(1, \.28, \.34\)/);
-  assert.match(guest,/MeshBuilder\.CreateBox\(hitId/);
+  assert.match(guest,/createCampaignProjectileVisualFactoryV32/);
+  assert.match(guest,/hostileProjectileVisuals\.create/);
+  assert.doesNotMatch(guest,/MeshBuilder\.CreateBox\(hitId/);
+  const hostileVisual=read('src/game/rendering/CampaignProjectileVisualV32.js');
+  assert.match(hostileVisual,/drawCampaignProjectileTextureV32/);
+  assert.match(hostileVisual,/enemy_energy_dart/);
   const renderer=read('src/components/C15LocalAlpha1/C15LocalRenderer.js');
   assert.match(renderer,/c15Alpha1ProjectileAppearance\(hostile\)/);
   assert.match(renderer,/drawProjectileTexture\(ctx,spec\)/);

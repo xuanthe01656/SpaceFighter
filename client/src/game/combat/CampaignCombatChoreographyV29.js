@@ -1,14 +1,14 @@
 import { ENEMY_ARCHETYPES_V2 } from './EnemyCombatCatalogV2.js';
 
 /**
- * Campaign combat choreography V3.0.0
+ * Campaign combat choreography V3.2.0
  *
  * This module turns the existing EnemyCombatCatalogV2 behavior labels into
  * deterministic, finite combat paths. Targets are sampled only when a state is
  * entered; they are never recomputed every render frame. Runtime state is kept
  * mutable on purpose to avoid per-frame object churn on mobile devices.
  */
-export const CAMPAIGN_COMBAT_CHOREOGRAPHY_VERSION = 'campaign-combat-choreography-v3.0.0';
+export const CAMPAIGN_COMBAT_CHOREOGRAPHY_VERSION = 'campaign-combat-choreography-v3.2.0';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -104,19 +104,19 @@ export const CAMPAIGN_ROLE_CHOREOGRAPHY_V29 = freezeDeep({
   keep_range: {
     roleId: 'gunner',
     phases: [
-      phase('firing_slot', 820, 1.38, {
-        arrivalRadius: .5, slowRadius: .52, acceleration: .64,
-        speedFloor: .108, maxTravelMs: 3900, dwellMs: 80,
+      phase('firing_slot', 720, 1.52, {
+        arrivalRadius: .52, slowRadius: .44, acceleration: .72,
+        speedFloor: .122, maxTravelMs: 3300, dwellMs: 35,
       }),
-      phase('strafe_a', 760, 1.24, {
-        mayFire: true, facePlayer: true, arrivalRadius: .46,
-        slowRadius: .46, acceleration: .64, speedFloor: .088,
-        maxTravelMs: 2300, dwellMs: 90,
+      phase('strafe_a', 680, 1.40, {
+        mayFire: true, facePlayer: true, arrivalRadius: .48,
+        slowRadius: .38, acceleration: .72, speedFloor: .104,
+        maxTravelMs: 2050, dwellMs: 35,
       }),
-      phase('strafe_b', 760, 1.27, {
-        mayFire: true, facePlayer: true, arrivalRadius: .46,
-        slowRadius: .46, acceleration: .64, speedFloor: .090,
-        maxTravelMs: 2300, dwellMs: 90,
+      phase('strafe_b', 680, 1.44, {
+        mayFire: true, facePlayer: true, arrivalRadius: .48,
+        slowRadius: .38, acceleration: .72, speedFloor: .106,
+        maxTravelMs: 2050, dwellMs: 35,
       }),
       phase('egress', 900, 1.52, {
         egress: true, arrivalRadius: .9, slowRadius: .5,
@@ -132,17 +132,17 @@ export const CAMPAIGN_ROLE_CHOREOGRAPHY_V29 = freezeDeep({
   guard_lane: {
     roleId: 'shieldbearer',
     phases: [
-      phase('guard_approach', 900, 1.20, {
-        arrivalRadius: .46, slowRadius: .56, acceleration: .58,
-        speedFloor: .096, maxTravelMs: 3300, dwellMs: 90,
+      phase('guard_approach', 820, 1.30, {
+        arrivalRadius: .48, slowRadius: .46, acceleration: .66,
+        speedFloor: .104, maxTravelMs: 3000, dwellMs: 60,
       }),
-      phase('guard_hold_a', 720, 1.02, {
-        facePlayer: true, arrivalRadius: .42, slowRadius: .45,
-        acceleration: .60, speedFloor: .075, maxTravelMs: 1900, dwellMs: 130,
+      phase('guard_hold_a', 660, 1.16, {
+        facePlayer: true, arrivalRadius: .44, slowRadius: .38,
+        acceleration: .68, speedFloor: .086, maxTravelMs: 1750, dwellMs: 80,
       }),
-      phase('guard_hold_b', 720, 1.06, {
-        facePlayer: true, arrivalRadius: .42, slowRadius: .45,
-        acceleration: .60, speedFloor: .078, maxTravelMs: 1900, dwellMs: 130,
+      phase('guard_hold_b', 660, 1.20, {
+        facePlayer: true, arrivalRadius: .44, slowRadius: .38,
+        acceleration: .68, speedFloor: .089, maxTravelMs: 1750, dwellMs: 80,
       }),
       phase('egress', 980, 1.42, {
         egress: true, arrivalRadius: .9, slowRadius: .52,
@@ -153,24 +153,24 @@ export const CAMPAIGN_ROLE_CHOREOGRAPHY_V29 = freezeDeep({
   support_orbit: {
     roleId: 'support',
     phases: [
-      phase('support_slot', 820, 1.32, {
-        arrivalRadius: .48, slowRadius: .52, acceleration: .64,
-        speedFloor: .104, maxTravelMs: 3800, dwellMs: 70,
+      phase('support_slot', 720, 1.45, {
+        arrivalRadius: .5, slowRadius: .44, acceleration: .72,
+        speedFloor: .118, maxTravelMs: 3300, dwellMs: 30,
       }),
-      phase('orbit_0', 650, 1.14, {
-        mayFire: true, facePlayer: true, arrivalRadius: .42,
-        slowRadius: .44, acceleration: .64, speedFloor: .082,
-        maxTravelMs: 1900, dwellMs: 70,
+      phase('orbit_0', 590, 1.30, {
+        mayFire: true, facePlayer: true, arrivalRadius: .44,
+        slowRadius: .36, acceleration: .72, speedFloor: .096,
+        maxTravelMs: 1750, dwellMs: 25,
       }),
-      phase('orbit_1', 650, 1.17, {
-        mayFire: true, facePlayer: true, arrivalRadius: .42,
-        slowRadius: .44, acceleration: .64, speedFloor: .084,
-        maxTravelMs: 1900, dwellMs: 70,
+      phase('orbit_1', 590, 1.34, {
+        mayFire: true, facePlayer: true, arrivalRadius: .44,
+        slowRadius: .36, acceleration: .72, speedFloor: .098,
+        maxTravelMs: 1750, dwellMs: 25,
       }),
-      phase('orbit_2', 650, 1.20, {
-        mayFire: true, facePlayer: true, arrivalRadius: .42,
-        slowRadius: .44, acceleration: .64, speedFloor: .086,
-        maxTravelMs: 1900, dwellMs: 70,
+      phase('orbit_2', 590, 1.38, {
+        mayFire: true, facePlayer: true, arrivalRadius: .44,
+        slowRadius: .36, acceleration: .72, speedFloor: .100,
+        maxTravelMs: 1750, dwellMs: 25,
       }),
       phase('egress', 900, 1.48, {
         egress: true, arrivalRadius: .9, slowRadius: .5,
@@ -181,23 +181,23 @@ export const CAMPAIGN_ROLE_CHOREOGRAPHY_V29 = freezeDeep({
   telegraphed_zone: {
     roleId: 'artillery',
     phases: [
-      phase('battery_approach', 940, 1.18, {
-        arrivalRadius: .44, slowRadius: .58, acceleration: .58,
-        speedFloor: .092, maxTravelMs: 3500, dwellMs: 90,
+      phase('battery_approach', 860, 1.32, {
+        arrivalRadius: .46, slowRadius: .46, acceleration: .68,
+        speedFloor: .104, maxTravelMs: 3100, dwellMs: 55,
       }),
       phase('brace_a', 650, .24, {
         mayFire: true, fireRequiresArrival: true, facePlayer: true,
         arrivalRadius: .28, slowRadius: .42, speedFloor: .014,
-        acceleration: .68, maxTravelMs: 1600, dwellMs: 610, holdAtArrival: true,
+        acceleration: .68, maxTravelMs: 1500, dwellMs: 520, holdAtArrival: true,
       }),
-      phase('battery_relocate', 800, 1.16, {
-        arrivalRadius: .44, slowRadius: .5, acceleration: .62,
-        speedFloor: .088, maxTravelMs: 2300, dwellMs: 70,
+      phase('battery_relocate', 720, 1.34, {
+        arrivalRadius: .46, slowRadius: .40, acceleration: .72,
+        speedFloor: .102, maxTravelMs: 2050, dwellMs: 45,
       }),
       phase('brace_b', 650, .24, {
         mayFire: true, fireRequiresArrival: true, facePlayer: true,
         arrivalRadius: .28, slowRadius: .42, speedFloor: .014,
-        acceleration: .68, maxTravelMs: 1600, dwellMs: 610, holdAtArrival: true,
+        acceleration: .68, maxTravelMs: 1500, dwellMs: 520, holdAtArrival: true,
       }),
       phase('egress', 1020, 1.40, {
         egress: true, arrivalRadius: .9, slowRadius: .52,
@@ -308,13 +308,17 @@ export function createCampaignEnemyChoreographyStateV29({
     ? (CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30[routeVariant] ? routeVariant : 'hook_return')
     : (archetype.routeVariants?.[0] || archetype.behavior);
   const contract = choreographyForRole(archetype.id, resolvedRouteVariant);
+  const resolvedSeed = hashParts(seed, archetype.id, lane, strafeDirection);
   return {
     version: CAMPAIGN_COMBAT_CHOREOGRAPHY_VERSION,
     roleId: archetype.id,
     behavior: archetype.behavior,
     routeVariant: resolvedRouteVariant,
     externalController: contract.externalController || null,
-    seed: hashParts(seed, archetype.id, lane, strafeDirection),
+    seed: resolvedSeed,
+    timingJitterMs: (resolvedSeed % 121) - 60,
+    laneBiasNorm: (((resolvedSeed >>> 8) % 101) / 100 - .5) * .10,
+    depthBias: (((resolvedSeed >>> 16) % 101) / 100 - .5) * .90,
     laneNorm: clamp(finite(lane, 0), -.88, .88),
     side: Number(strafeDirection) < 0 ? -1 : 1,
     phaseIndex: 0,
@@ -338,7 +342,8 @@ const targetForEnemyPhase = (state, phaseContract, input, band) => {
   const playerX = clamp(finite(input.playerX, 0), -xBound, xBound);
   const playerZ = clamp(finite(input.playerZ, band.worldHalfHeight - 2.5),
     band.topSafeRootZ + 5, band.bottomSafeZ);
-  const baseX = clamp(state.laneNorm * xBound, -xBound, xBound);
+  const baseX = clamp((state.laneNorm + finite(state.laneBiasNorm, 0)) * xBound, -xBound, xBound);
+  const depthBias = finite(state.depthBias, 0);
   const side = state.side;
   const egressX = clamp((Math.abs(baseX) > xBound * .28 ? Math.sign(baseX) : side) * xBound * .82,
     -xBound, xBound);
@@ -365,15 +370,15 @@ const targetForEnemyPhase = (state, phaseContract, input, band) => {
 
   if (role === 'gunner') {
     if (phaseId === 'firing_slot') return {
-      x: clamp(baseX + side * .55, -xBound, xBound), z: band.rangedZ,
+      x: clamp(baseX + side * .55, -xBound, xBound), z: band.rangedZ + depthBias,
     };
     if (phaseId === 'strafe_a') return {
       x: clamp(baseX + side * Math.min(2.45, xBound * .38), -xBound, xBound),
-      z: band.rangedZ + .15,
+      z: band.rangedZ + .50 + depthBias * .55,
     };
     if (phaseId === 'strafe_b') return {
       x: clamp(baseX - side * Math.min(2.45, xBound * .38), -xBound, xBound),
-      z: band.rangedZ - .15,
+      z: band.rangedZ - .50 + depthBias * .55,
     };
     return { x: egressX, z: band.worldHalfHeight + 3.7 };
   }
@@ -393,15 +398,15 @@ const targetForEnemyPhase = (state, phaseContract, input, band) => {
   if (role === 'support') {
     const anchorX = clamp(baseX * .78 + playerX * .12, -xBound, xBound);
     const radiusX = Math.min(1.85, xBound * .30);
-    const radiusZ = .85;
-    if (phaseId === 'support_slot') return { x: anchorX, z: band.rangedZ - .7 };
+    const radiusZ = 1.12;
+    if (phaseId === 'support_slot') return { x: anchorX, z: band.rangedZ - .7 + depthBias };
     const point = phaseId === 'orbit_0' ? 0 : phaseId === 'orbit_1' ? 1 : phaseId === 'orbit_2' ? 2 : -1;
     if (point >= 0) {
       const angles = [Math.PI * .15, Math.PI * .85, Math.PI * 1.35];
       const angle = angles[(point + (state.seed % angles.length)) % angles.length] * side;
       return {
         x: clamp(anchorX + Math.cos(angle) * radiusX, -xBound, xBound),
-        z: clamp(band.rangedZ - .7 + Math.sin(angle) * radiusZ,
+        z: clamp(band.rangedZ - .7 + depthBias + Math.sin(angle) * radiusZ,
           band.midlineZ, band.bottomSafeZ - 1.4),
       };
     }
@@ -475,7 +480,7 @@ const steerState = (state, input, phaseContract, targetX, targetZ, options = {})
   const dz = targetZ - finite(input.enemyZ, 0);
   const distance = length2(dx, dz);
   const speedScale = distance < phaseContract.slowRadius
-    ? clamp(distance / Math.max(.01, phaseContract.slowRadius), .44, 1) : 1;
+    ? clamp(distance / Math.max(.01, phaseContract.slowRadius), .58, 1) : 1;
   const authoredSpeed = Math.max(
     baseSpeed * phaseContract.speedMultiplier,
     Math.max(0, finite(phaseContract.speedFloor, 0)),
@@ -500,7 +505,7 @@ const steerState = (state, input, phaseContract, targetX, targetZ, options = {})
     desiredZ = 0;
   }
   const maxDelta = Math.max(.0045,
-    Math.min(.034, Math.max(baseSpeed, authoredSpeed) * phaseContract.acceleration * frameScale));
+    Math.min(.045, Math.max(baseSpeed, authoredSpeed) * phaseContract.acceleration * frameScale));
   state.velocityX = approach(state.velocityX, desiredX, maxDelta);
   state.velocityZ = approach(state.velocityZ, desiredZ, maxDelta);
   return {
@@ -551,7 +556,8 @@ export function stepCampaignEnemyChoreographyV29(state, input = {}) {
     const arrivedOffscreen = current.egress && arrived
       && finite(input.enemyZ, 0) >= band.worldHalfHeight + 2.8;
     const dwellComplete = !current.egress && state.phaseArrivedAt != null
-      && nowMs - state.phaseArrivedAt >= Math.max(0, finite(current.dwellMs, 0));
+      && nowMs - state.phaseArrivedAt >= Math.max(0,
+        finite(current.dwellMs, 0) + finite(state.timingJitterMs, 0));
     const hardTravelTimeout = !current.egress && state.phaseArrivedAt == null
       && state.phaseDeadlineAt != null && nowMs >= state.phaseDeadlineAt + 1600;
     // Normal combat phases advance only after the entity reaches its authored
@@ -592,7 +598,10 @@ export function stepCampaignEnemyChoreographyV29(state, input = {}) {
     Math.trunc(Math.max(1, finite(archetype.attackCooldownTicks, 60)) * (1000 / 30)));
   const fireCooldownMs = Math.max(600,
     Math.trunc(finite(input.fireCooldownMs, archetype.fireCooldownMs || catalogCooldownMs)));
-  const fireDelayMs = Math.min(Math.max(220, telegraphMs), Math.max(220, current.durationMs - 280));
+  const fireDelayMs = Math.min(
+    Math.max(180, telegraphMs + finite(state.timingJitterMs, 0)),
+    Math.max(180, current.durationMs - 240),
+  );
   const fireClockStart = current.fireRequiresArrival
     ? state.phaseArrivedAt
     : state.phaseStartedAt;

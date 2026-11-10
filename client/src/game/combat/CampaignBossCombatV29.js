@@ -2,10 +2,10 @@ import { BOSS_PHASES_V2, bossPhaseForHp } from './EnemyCombatCatalogV2.js';
 import { resolveCampaignCombatSafeBandV29 } from './CampaignCombatChoreographyV29.js';
 
 /**
- * Deterministic final-boss movement and attack choreography for Campaign QA.
+ * Deterministic final-boss movement and attack choreography for Campaign production and QA.
  * One immutable attack plan is shared by warning VFX and spawned projectiles.
  */
-export const CAMPAIGN_BOSS_COMBAT_VERSION = 'campaign-boss-combat-v3.1.0';
+export const CAMPAIGN_BOSS_COMBAT_VERSION = 'campaign-boss-combat-v3.2.0';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -34,39 +34,46 @@ const hashParts = (...parts) => {
 
 export const CAMPAIGN_BOSS_PATTERN_CATALOG_V29 = freezeDeep({
   aimed_burst: {
-    telegraphMs: 620,
-    recoveryMs: 920,
-    projectileSpeed: .52,
-    width: .48,
+    telegraphMs: 560,
+    recoveryMs: 860,
+    projectileSpeed: .70,
+    width: .42,
     shotCount: 3,
-    spreadRadians: .07,
-    shotGapMs: 145,
+    spreadRadians: .065,
+    shotGapMs: 105,
+    visualId: 'boss_aimed_lance',
   },
   fan: {
-    telegraphMs: 720,
-    recoveryMs: 1080,
-    projectileSpeed: .43,
-    width: .52,
+    telegraphMs: 650,
+    recoveryMs: 960,
+    projectileSpeed: .60,
+    width: .46,
     shotCount: 7,
-    spreadRadians: .92,
-    shotGapMs: 35,
+    spreadRadians: .98,
+    shotGapMs: 24,
+    visualId: 'boss_fan_needle',
   },
   lane_sweep: {
-    telegraphMs: 900,
-    recoveryMs: 1180,
-    projectileSpeed: .42,
-    width: .82,
+    telegraphMs: 780,
+    recoveryMs: 1040,
+    projectileSpeed: .58,
+    width: .74,
     lanes: [-.72, -.24, .24, .72],
-    shotGapMs: 105,
+    shotGapMs: 86,
+    visualId: 'boss_lane_shard',
   },
   radial_gap: {
-    telegraphMs: 920,
-    recoveryMs: 1220,
-    projectileSpeed: .39,
-    width: .38,
-    radialSlots: 16,
+    // A portrait shooter needs a forward/down-screen pressure arc, not a full
+    // 360-degree ring that wastes bullets above the boss and misplaces the gap.
+    telegraphMs: 820,
+    recoveryMs: 1080,
+    projectileSpeed: .55,
+    width: .40,
+    radialSlots: 17,
     gapSlots: 3,
-    shotGapMs: 18,
+    arcHalfRadians: 1.22,
+    shotGapMs: 12,
+    visualId: 'boss_arc_ember',
   },
 });
 
@@ -138,6 +145,9 @@ export function auditCampaignBossCombatV29() {
     if (pattern.telegraphMs < 500) issues.push(`SHORT_TELEGRAPH:${id}`);
     if (pattern.recoveryMs < 600) issues.push(`SHORT_RECOVERY:${id}`);
     if (pattern.projectileSpeed <= 0) issues.push(`INVALID_SPEED:${id}`);
+    if (!String(pattern.visualId || '').startsWith('boss_')) issues.push(`INVALID_VISUAL:${id}`);
+    if (id === 'radial_gap' && !(pattern.arcHalfRadians > .6 && pattern.arcHalfRadians < Math.PI / 2))
+      issues.push('INVALID_FORWARD_ARC');
   }
   for (const phase of BOSS_PHASES_V2) {
     const combat = CAMPAIGN_BOSS_PHASE_COMBAT_V31[phase.id];
@@ -214,7 +224,7 @@ export function createCampaignBossAttackPlanV29({
   phaseId = 'phase_1',
 } = {}) {
   const contract = resolvePatternContractV31(pattern, phaseId);
-  if (!contract) throw new Error(`Unknown Campaign Boss V3.1 pattern: ${pattern}`);
+  if (!contract) throw new Error(`Unknown Campaign Boss V3.2 pattern: ${pattern}`);
   const phaseCombat = phaseCombatFor(phaseId);
   const ox = Number(origin?.x);
   const oz = Number(origin?.z);
@@ -256,22 +266,32 @@ export function createCampaignBossAttackPlanV29({
       }));
     });
   } else if (pattern === 'radial_gap') {
-    const slots = Math.max(8, Math.trunc(contract.radialSlots));
-    const gapSlots = clamp(Math.trunc(contract.gapSlots), 1, slots - 2);
-    const playerAngle = Math.atan2(playerDirection.z, playerDirection.x);
-    const step = Math.PI * 2 / slots;
-    const gapCenter = Math.round(playerAngle / step);
+    const slots = Math.max(9, Math.trunc(contract.radialSlots));
+    const gapSlots = clamp(Math.trunc(contract.gapSlots), 1, slots - 4);
+    const arcHalf = clamp(finite(contract.arcHalfRadians, 1.22), .6, Math.PI / 2 - .08);
+    const step = arcHalf * 2 / Math.max(1, slots - 1);
+    // Offset around the portrait-playfield forward axis (+Z). atan2(x,z) is
+    // intentionally used here; the old atan2(z,x) belonged to a full circle.
+    const playerOffset = clamp(Math.atan2(playerDirection.x, playerDirection.z), -arcHalf, arcHalf);
+    const halfGap = Math.floor(gapSlots / 2);
+    // Keep the full escape gap inside the authored arc even when the player is
+    // hugging an extreme lane. A clipped edge gap would silently add one extra
+    // projectile and make frenzy harder exactly where screen space is smallest.
+    const gapCenter = clamp(
+      Math.round((playerOffset + arcHalf) / step),
+      halfGap,
+      slots - 1 - halfGap,
+    );
     for (let slot = 0; slot < slots; slot += 1) {
-      let wrapped = ((slot - gapCenter + Math.floor(slots / 2)) % slots + slots) % slots
-        - Math.floor(slots / 2);
-      if (Math.abs(wrapped) <= Math.floor(gapSlots / 2)) continue;
-      const angle = slot * step;
+      if (Math.abs(slot - gapCenter) <= halfGap) continue;
+      const offset = -arcHalf + slot * step;
+      const direction = { x: Math.sin(offset), z: Math.cos(offset) };
       paths.push(makePath({
         origin: lockedOrigin,
-        direction: { x: Math.cos(angle), z: Math.sin(angle) },
+        direction,
         speed: contract.projectileSpeed,
         width: contract.width,
-        length: worldHalfHeight * 1.75,
+        length: worldHalfHeight * 1.82,
         fireOffsetMs: paths.length * contract.shotGapMs,
         index: paths.length,
       }));
@@ -295,6 +315,7 @@ export function createCampaignBossAttackPlanV29({
     telegraphEndsAtMs: startedAt + contract.telegraphMs,
     recoveryMs: contract.recoveryMs,
     projectileSpeed: contract.projectileSpeed,
+    visualId: contract.visualId,
     paths,
   });
 }
@@ -304,6 +325,7 @@ export function projectilesFromCampaignBossAttackPlanV29(plan) {
   return Object.freeze(plan.paths.map(path => Object.freeze({
     planId: plan.id,
     pattern: plan.pattern,
+    visualId: plan.visualId,
     origin: path.origin,
     endpoint: path.endpoint,
     velocity: path.velocity,

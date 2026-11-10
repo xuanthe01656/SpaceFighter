@@ -1,12 +1,17 @@
+import {
+  auditCampaignProjectileVisualV32,
+  resolveCampaignProjectileVisualV32,
+} from '../rendering/CampaignProjectileVisualV32.js';
+
 /**
- * Campaign enemy projectile fire-control V3.1.
+ * Campaign enemy projectile fire-control V3.2.
  *
  * Normal enemies share one deterministic shot contract: a finite muzzle-world
  * origin, a target snapshot, optional bounded lead, optional short soft
  * guidance, a finite lifetime and a visual profile. Boss/preview telegraphs
  * keep their own immutable attack-plan contracts and do not use this module.
  */
-export const CAMPAIGN_ENEMY_PROJECTILE_VERSION = 'campaign-enemy-projectile-v3.1.0';
+export const CAMPAIGN_ENEMY_PROJECTILE_VERSION = 'campaign-enemy-projectile-v3.2.0';
 
 export const CAMPAIGN_ENEMY_AIM_MODES_V31 = Object.freeze([
   'snapshot',
@@ -37,21 +42,8 @@ const wrapRadians = value => {
   return result;
 };
 
-export const CAMPAIGN_ENEMY_PROJECTILE_VISUALS_V31 = freezeDeep({
-  normal: { width: .28, length: .92, height: .14, pulse: .05 },
-  gunner: { width: .26, length: 1.04, height: .13, pulse: .04 },
-  support: { width: .34, length: .78, height: .16, pulse: .08 },
-  artillery: { width: .42, length: 1.18, height: .18, pulse: .06 },
-  boss_preview: { width: .38, length: 1.14, height: .18, pulse: .06 },
-  mini_boss: { width: .38, length: 1.16, height: .18, pulse: .06 },
-  boss: { width: .44, length: 1.34, height: .20, pulse: .07 },
-});
-
-export function resolveCampaignEnemyProjectileVisualV31({ sourceRole, priority } = {}) {
-  if (priority === 'boss') return CAMPAIGN_ENEMY_PROJECTILE_VISUALS_V31.boss;
-  if (sourceRole === 'mini_boss') return CAMPAIGN_ENEMY_PROJECTILE_VISUALS_V31.mini_boss;
-  return CAMPAIGN_ENEMY_PROJECTILE_VISUALS_V31[sourceRole]
-    || CAMPAIGN_ENEMY_PROJECTILE_VISUALS_V31.normal;
+export function resolveCampaignEnemyProjectileVisualV31({ sourceRole, priority, visualId, pattern } = {}) {
+  return resolveCampaignProjectileVisualV32({ sourceRole, priority, visualId, pattern });
 }
 
 /**
@@ -127,6 +119,8 @@ export function createCampaignEnemyShotPlanV31({
   sourceRole = null,
   priority = 'normal',
   damageType = 'energy',
+  visualId = null,
+  pattern = null,
   createdAtMs = 0,
 } = {}) {
   const ox = Number(origin?.x);
@@ -134,7 +128,7 @@ export function createCampaignEnemyShotPlanV31({
   const tx = Number(target?.x);
   const tz = Number(target?.z);
   if (![ox, oz, tx, tz].every(Number.isFinite)) {
-    throw new TypeError('Campaign enemy shot V3.1 requires finite world origin and target coordinates.');
+    throw new TypeError('Campaign enemy shot V3.2 requires finite world origin and target coordinates.');
   }
   const mode = CAMPAIGN_ENEMY_AIM_MODES_V31.includes(aimMode) ? aimMode : 'snapshot';
   const speed = Math.max(.08, finite(projectileSpeed, .34));
@@ -176,7 +170,9 @@ export function createCampaignEnemyShotPlanV31({
     sourceRole,
     priority,
     damageType,
-    visual: resolveCampaignEnemyProjectileVisualV31({ sourceRole, priority }),
+    visualId,
+    pattern,
+    visual: resolveCampaignEnemyProjectileVisualV31({ sourceRole, priority, visualId, pattern }),
   });
 }
 
@@ -235,12 +231,7 @@ export function advanceCampaignEnemyProjectileV31({
 }
 
 export function auditCampaignEnemyProjectileV31() {
-  const issues = [];
-  for (const [id, visual] of Object.entries(CAMPAIGN_ENEMY_PROJECTILE_VISUALS_V31)) {
-    if (!(visual.width > 0 && visual.length > visual.width && visual.height > 0)) {
-      issues.push(`VISUAL_DIMENSIONS:${id}`);
-    }
-  }
+  const issues = [...auditCampaignProjectileVisualV32()];
   const predictive = createCampaignEnemyShotPlanV31({
     origin: { x: 0, z: 0 }, target: { x: 0, z: 10 },
     targetVelocity: { x: .08, z: 0 }, projectileSpeed: .4,

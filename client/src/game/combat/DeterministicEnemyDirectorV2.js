@@ -281,6 +281,7 @@ function projectRuntimeV3(runtime, wavePower, elite = false) {
     projectileGuidanceMs: runtime.projectileGuidanceMs,
     projectileTurnRateRadians: runtime.projectileTurnRateRadians,
     projectileLifetimeMs: runtime.projectileLifetimeMs,
+    projectileVisualId: runtime.projectileVisualId,
     projectileDamage: Math.max(0, Math.round(runtime.projectileDamage * wavePower.damageMultiplier * eliteDamage)),
     contactDamage: Math.max(1, Math.round(runtime.contactDamage * wavePower.damageMultiplier * eliteDamage)),
   });

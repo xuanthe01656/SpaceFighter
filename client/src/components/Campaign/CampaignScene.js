@@ -94,6 +94,7 @@ import {
   legacyTierDefenseClass,
 } from '../../game/combat/GuestAbilityCatalogV2.js';
 import { createGuestAbilityVisualFeedbackV2 } from '../../game/rendering/GuestAbilityVisualFeedbackV2.js';
+import { createCampaignProjectileVisualFactoryV32 } from '../../game/rendering/CampaignProjectileVisualV32.js';
 import { canAutoLoadModel } from '../../game/config/PerformanceProfiles';
 import { resolveBattleBackground, legacyBattleBackgroundRequested, previewBg4Variant } from '../../game/catalog/BackgroundCatalog';
 import { createScrollingBattleBackground } from '../../game/rendering/ScrollingBackgroundRenderer';
@@ -798,12 +799,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   let nextRegenTime = 0;
 
   const mainGunBase = combat.gear.mainGun.base || GEAR_CATALOG.mainGun[0];
-  const enemyProjectileMaterials = Object.freeze({
-    energy: makeMat(scene, new BABYLON.Color3(1, .28, .34)),
-    ion: makeMat(scene, new BABYLON.Color3(.42, .72, 1)),
-    explosive: makeMat(scene, new BABYLON.Color3(1, .58, .12)),
-    boss: makeMat(scene, new BABYLON.Color3(1, .10, .08)),
-  });
+  const hostileProjectileVisuals = createCampaignProjectileVisualFactoryV32({ scene, BABYLON });
   const playerDamageGate = createPlayerDamageGateV25();
   let enemyProjectileSequence = 0;
   let playerVelocityFrame = Object.freeze({ x: 0, z: 0 });
@@ -847,7 +843,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   ];
   const fireEnemyBullet = (pos, vx = 0, vz = 0.24, {
     priority = 'normal', rawDamage = 200, damageType = 'energy', sourceRole = null,
-    shotPlan = null,
+    shotPlan = null, visualId = null, pattern = null,
   } = {}) => {
     if (enemyBullets.length >= runtimeLimits.maxEnemyProjectiles) {
       if (priority === 'boss') {
@@ -866,20 +862,19 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     }
     const hitId = `campaign-enemy-projectile-${++enemyProjectileSequence}`;
     const visual = shotPlan?.visual
-      || resolveCampaignEnemyProjectileVisualV31({ sourceRole, priority });
-    const b = BABYLON.MeshBuilder.CreateBox(hitId, {
-      width: visual.width,
-      depth: visual.length,
-      height: visual.height,
-    }, scene);
-    b.position = pos.clone(); b.position.y = .04;
-    const materialKey = priority === 'boss' ? 'boss'
-      : damageType === 'ion' ? 'ion'
-        : damageType === 'explosive' ? 'explosive' : 'energy';
-    b.material = enemyProjectileMaterials[materialKey];
-    b._vx = Number(shotPlan?.velocity?.x ?? vx) || 0;
-    b._vz = Number(shotPlan?.velocity?.z ?? vz) || .24;
-    b.rotation.y = Math.atan2(b._vx, b._vz);
+      || resolveCampaignEnemyProjectileVisualV31({ sourceRole, priority, visualId, pattern });
+    const resolvedVx = Number(shotPlan?.velocity?.x ?? vx) || 0;
+    const resolvedVz = Number(shotPlan?.velocity?.z ?? vz) || .24;
+    const b = hostileProjectileVisuals.create({
+      name: hitId,
+      visual,
+      position: pos.clone(),
+      vx: resolvedVx,
+      vz: resolvedVz,
+    });
+    if (!b) return false;
+    b._vx = resolvedVx;
+    b._vz = resolvedVz;
     b._shotPlan = shotPlan;
     b._visualPulse = Number(visual.pulse) || 0;
     b._createdAtMs = Number(shotPlan?.createdAtMs) || Date.now();
@@ -1440,6 +1435,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       sourceRole: enemy._waveRole || enemy._encounterKind || null,
       priority,
       damageType: enemy._damageType || 'energy',
+      visualId: enemy._projectileVisualId || null,
       createdAtMs: Date.now(),
     });
     return fireEnemyBullet(
@@ -1751,6 +1747,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       _projectileGuidanceMs:Math.max(0,Number(spawnSpec?.projectileGuidanceMs)||0),
       _projectileTurnRateRadians:Math.max(0,Number(spawnSpec?.projectileTurnRateRadians)||0),
       _projectileLifetimeMs:Math.max(1600,Number(spawnSpec?.projectileLifetimeMs)||4200),
+      _projectileVisualId:spawnSpec?.projectileVisualId||null,
       _contactDamage:Math.max(1,Math.round(Number(spawnSpec?.contactDamage)||(tier===4?400:200))),
       _damageMultiplier:Number(spawnSpec?.damageMultiplier)||1,
       _damageType:spawnSpec?.damageType||'kinetic',
@@ -1924,7 +1921,9 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         if(campaignCombatV3Enabled&&bossCombatState?.attackPlan?.id!==planId)return;
         fireEnemyBullet(
           new BABYLON.Vector3(projectile.origin.x,0,projectile.origin.z),
-          projectile.velocity.x,projectile.velocity.z,{priority:'boss',sourceRole:'boss'},
+          projectile.velocity.x,projectile.velocity.z,{
+            priority:'boss',sourceRole:'boss',visualId:projectile.visualId,pattern:projectile.pattern,
+          },
         );
       };
       if(projectile.fireOffsetMs>0)scheduleBattleTimer(fire,projectile.fireOffsetMs);
@@ -2980,24 +2979,18 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         b._vz = motion.velocity.z;
         b.position.x += motion.delta.x;
         b.position.z += motion.delta.z;
-        b.rotation.y = motion.yawRadians;
+        hostileProjectileVisuals.update(b,b._vx,b._vz,now,b._createdAtMs,b._visualPulse);
         if (motion.expired) {
           safeDispose(b); enemyBullets.splice(i,1); continue;
         }
       } else {
         b.position.x += b._vx * frameFactor;
         b.position.z += b._vz * frameFactor;
-        b.rotation.y = Math.atan2(b._vx, b._vz);
+        hostileProjectileVisuals.update(b,b._vx,b._vz,now,b._createdAtMs,b._visualPulse);
       }
       if (now >= b._expiresAtMs) {
         safeDispose(b); enemyBullets.splice(i,1); continue;
       }
-      if (b._visualPulse > 0) {
-        const pulse = 1 + b._visualPulse * Math.sin((now - b._createdAtMs) * .028);
-        b.scaling.x = pulse;
-        b.scaling.y = pulse;
-      }
-
       if (b.position.z > ZOOM+3 || b.position.z < -ZOOM-3 || Math.abs(b.position.x) > cullX) {
         safeDispose(b); enemyBullets.splice(i,1); continue;
       }
@@ -3287,9 +3280,19 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
             if (attackType===1) {
               for (let k=-3; k<=3; k++) fireEnemyBullet(bossMesh.position, k*.09, .45,{priority:'boss'});
             } else if (attackType===2) {
-              const cnt = isAlien ? 16 : 8;
-              for (let a=0; a < Math.PI*2; a += Math.PI*2/cnt)
-                fireEnemyBullet(bossMesh.position, Math.cos(a)*(isAlien?.52:.38), Math.sin(a)*(isAlien?.52:.38),{priority:'boss'});
+              // Even the emergency kill-switch path must not revive the old
+              // 360-degree ring that spent shots above the portrait arena.
+              const fallbackPattern=bossEnraged?'radial_gap':'fan';
+              const origin=resolveBossMuzzleOrigin()
+                ||Object.freeze({x:bossMesh.position.x,y:0,z:bossMesh.position.z});
+              const fallbackPlan=createCampaignBossAttackPlanV29({
+                pattern:fallbackPattern,origin,
+                playerX:playerRoot.position.x,playerZ:playerRoot.position.z,
+                arenaHalfWidth:boundX(),worldHalfHeight:ZOOM,
+                createdAtMs:now,cycle:bossCombatState?.cycle||0,
+                phaseId:bossEnraged?'phase_3':'phase_2',
+              });
+              fireBossAttackPlan(fallbackPlan);
             } else {
               const dx = playerRoot.position.x - bossMesh.position.x;
               const dz = playerRoot.position.z - bossMesh.position.z;
