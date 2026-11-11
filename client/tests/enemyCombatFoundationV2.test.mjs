@@ -66,6 +66,21 @@ import {
   resolveCampaignFireEnvelopeV36,
 } from '../src/game/combat/CampaignEnemyEngagementV36.js';
 import {
+  CAMPAIGN_ENEMY_COMBAT_SLOT_VERSION,
+  auditCampaignEnemyCombatSlotsV37,
+  createCampaignEnemyCombatSlotRegistryV37,
+  getCampaignEnemyCombatSlotV37,
+  resolveCampaignEnemyCombatSlotAnchorV37,
+  syncCampaignEnemyCombatSlotsV37,
+} from '../src/game/combat/CampaignEnemyCombatSlotsV37.js';
+import {
+  COMBAT_WEAPON_CATALOG_VERSION,
+  auditCombatWeaponCatalogV37,
+  resolveCampaignBossWeaponContractV37,
+  resolveCampaignEnemyWeaponContractV37,
+  resolveCampaignPlayerWeaponContractV37,
+} from '../src/game/combat/CombatWeaponCatalogV37.js';
+import {
   CAMPAIGN_BOSS_ARSENAL_VERSION,
   CAMPAIGN_BOSS_PATTERN_CATALOG_V33,
   CAMPAIGN_PLANET_BOSS_PROFILES_V33,
@@ -85,18 +100,18 @@ import {
   stepCampaignBossCombatV29,
 } from '../src/game/combat/CampaignBossCombatV29.js';
 import {
-  CAMPAIGN_BOSS_XSTATE_ALPHA_PILOT_PROFILE,
+  CAMPAIGN_BOSS_XSTATE_AUTHORITATIVE_PROFILES_V37,
   CAMPAIGN_BOSS_XSTATE_PACKAGE_VERSION,
   CAMPAIGN_BOSS_XSTATE_VERSION,
-  applyCampaignBossParityGateV36,
-  auditCampaignBossStatechartV36,
-  compareCampaignBossParityV36,
-  createCampaignBossStatechartControllerV36,
-  getCampaignBossStatechartSnapshotV36,
-  isCampaignBossXStatePilotV36,
-  stepCampaignBossStatechartV36,
-  stopCampaignBossStatechartControllerV36,
-} from '../src/game/combat/CampaignBossStatechartV36.js';
+  applyCampaignBossParityGateV37,
+  auditCampaignBossStatechartV37,
+  compareCampaignBossParityV37,
+  createCampaignBossStatechartControllerV37,
+  getCampaignBossStatechartSnapshotV37,
+  isCampaignBossXStateAuthoritativeV37,
+  stepCampaignBossStatechartV37,
+  stopCampaignBossStatechartControllerV37,
+} from '../src/game/combat/CampaignBossStatechartV37.js';
 import {
   CAMPAIGN_ENEMY_PROJECTILE_VERSION,
   advanceCampaignEnemyProjectileV31,
@@ -128,11 +143,13 @@ const stagePlan = (options = {}) => createEnemyDirectorV2({
   baseEnemies: options.baseEnemies ?? 40,
 });
 
-test('enemy V3.6 catalog is the single runtime source for six production role contracts', () => {
-  assert.equal(ENEMY_COMBAT_CATALOG_VERSION, 'enemy-combat-v3.6.0');
+test('enemy V3.7 catalog and common weapon projection are the single runtime sources for role combat contracts', () => {
+  assert.equal(ENEMY_COMBAT_CATALOG_VERSION, 'enemy-combat-v3.7.0');
   assert.equal(CAMPAIGN_ENEMY_ENGAGEMENT_VERSION, 'campaign-enemy-engagement-v3.6.0');
+  assert.equal(COMBAT_WEAPON_CATALOG_VERSION, 'combat-weapon-catalog-v3.7.0');
   assert.deepEqual(auditCampaignEnemyEngagementV36(), []);
   assert.deepEqual(auditEnemyCombatCatalogV2(), []);
+  assert.deepEqual(auditCombatWeaponCatalogV37(), []);
   assert.equal(CAMPAIGN_PROJECTILE_VISUAL_VERSION, 'campaign-projectile-visual-v3.5.0');
   assert.deepEqual(auditCampaignProjectileVisualV32(), []);
   assert.ok(Object.keys(CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32).length >= 19);
@@ -155,7 +172,16 @@ test('enemy V3.6 catalog is the single runtime source for six production role co
     assert.equal(runtime.engagementRangeLabel,
       CAMPAIGN_ENEMY_ROLE_CONTRACTS_V36[roleId].engagementRangeLabel);
     assert.equal(runtime.attackContract, CAMPAIGN_ENEMY_ROLE_CONTRACTS_V36[roleId].attackContract);
+    assert.equal(runtime.weaponId, archetype.weaponId);
+    assert.equal(runtime.bulletPattern, archetype.bulletPattern);
     assert.equal(runtime.rangeMetric, 'forward_depth');
+    const weapon = resolveCampaignEnemyWeaponContractV37(roleId);
+    assert.equal(weapon.id, archetype.weaponId);
+    assert.equal(weapon.bulletPattern, archetype.bulletPattern);
+    assert.equal(weapon.engagement.preferredRange, archetype.preferredRange);
+    assert.equal(weapon.engagement.minimumRange, archetype.fireRangeMin);
+    assert.equal(weapon.engagement.maximumRange, archetype.fireRangeMax);
+    assert.equal(weapon.cadence.cooldownMs, archetype.fireCooldownMs);
     if (archetype.engagementMode === 'diver') {
       assert.equal(archetype.id, 'charger');
       assert.equal(archetype.canCrossPlayer, true);
@@ -193,6 +219,26 @@ test('enemy V3.6 catalog is the single runtime source for six production role co
   assert.equal(bossPhaseForHp(.8).id, 'phase_1');
   assert.equal(bossPhaseForHp(.5).id, 'phase_2');
   assert.equal(bossPhaseForHp(.2).id, 'phase_3');
+
+  const playerGun = resolveCampaignPlayerWeaponContractV37('gun_laser');
+  assert.equal(playerGun.ownerType, 'player');
+  assert.equal(playerGun.bulletPattern, 'beam');
+  assert.equal(playerGun.runtimeGeometrySource, 'PlayerWeapons.describeMainSalvo');
+  assert.equal(playerGun.engagement.runtimeSource, 'PlayerWeapons.describeMainSalvo');
+  assert.equal(playerGun.projectile.runtimeSource, 'PlayerWeapons.describeMainSalvo');
+
+  const bossWeapon = resolveCampaignBossWeaponContractV37({
+    planetId: 3,
+    bossType: 'alien',
+    phaseId: 'phase_3',
+    patternId: 'inferno_doomstorm',
+  });
+  assert.equal(bossWeapon.ownerType, 'boss');
+  assert.equal(bossWeapon.ownerId, 'inferno_alien_demon');
+  assert.equal(bossWeapon.patternId, 'inferno_doomstorm');
+  assert.equal(bossWeapon.engagement.mode, 'phase_anchor');
+  assert.equal(bossWeapon.engagement.metric, 'attack_plan_geometry');
+  assert.ok(bossWeapon.projectile.speed > 0 && bossWeapon.projectile.damage > 0);
 });
 
 test('V3.4 enemy volley plans commit multiple readable shots without duplicate mutation', () => {
@@ -748,7 +794,7 @@ test('V3.5 progression makes Alpha onboarding gentle, late stages upgrade-driven
 });
 
 test('V3.6 every non-diver loops combat at an edge-aware authored firing range until destroyed', () => {
-  assert.equal(CAMPAIGN_COMBAT_CHOREOGRAPHY_VERSION, 'campaign-combat-choreography-v3.6.0');
+  assert.equal(CAMPAIGN_COMBAT_CHOREOGRAPHY_VERSION, 'campaign-combat-choreography-v3.7.0');
   assert.deepEqual(auditCampaignCombatChoreographyV29(), []);
   assert.deepEqual(Object.keys(CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30).sort(),
     ['double_hook_return', 'hook_return']);
@@ -961,6 +1007,117 @@ test('V3.6 edge engagement tracks both arena sides and never converts diagonal d
       assert.equal(state.completed, false);
     }
   }
+});
+
+test('V3.7 combat-slot leases keep every ranged enemy on a stable, distinct firing position at both screen edges', () => {
+  assert.equal(CAMPAIGN_ENEMY_COMBAT_SLOT_VERSION, 'campaign-enemy-combat-slots-v3.7.0');
+  assert.deepEqual(auditCampaignEnemyCombatSlotsV37(), []);
+
+  const roles = ['raider', 'gunner', 'shieldbearer', 'support', 'artillery'];
+  const descriptors = roles.flatMap(roleId => Array.from({ length: 8 }, (_, index) => ({
+    ownerId: `${roleId}-${index}`,
+    roleId,
+    seed: 3700 + index,
+    laneNorm: index % 2 === 0 ? -.55 : .55,
+    preferredRange: ENEMY_ARCHETYPES_V2[roleId].preferredRange,
+  })));
+  const registry = createCampaignEnemyCombatSlotRegistryV37();
+  syncCampaignEnemyCombatSlotsV37(registry, descriptors, { nowMs: 100 });
+  const firstAssignments = new Map(descriptors.map(descriptor => [
+    descriptor.ownerId,
+    getCampaignEnemyCombatSlotV37(registry, descriptor.ownerId),
+  ]));
+
+  // Reordering the live entity list must not reshuffle leases during combat.
+  syncCampaignEnemyCombatSlotsV37(registry, [...descriptors].reverse(), { nowMs: 200 });
+  for (const descriptor of descriptors) {
+    const before = firstAssignments.get(descriptor.ownerId);
+    const after = getCampaignEnemyCombatSlotV37(registry, descriptor.ownerId);
+    assert.equal(after.slotId, before.slotId, `${descriptor.ownerId} slot lease must be stable`);
+  }
+
+  for (const playerX of [-6.2, 0, 6.2]) {
+    for (const roleId of roles) {
+      const points = descriptors.filter(item => item.roleId === roleId).map(descriptor => {
+        const slot = getCampaignEnemyCombatSlotV37(registry, descriptor.ownerId);
+        const anchor = resolveCampaignEnemyCombatSlotAnchorV37({
+          slot, playerX, arenaHalfWidth: 7,
+        });
+        return {
+          x: anchor.x,
+          z: 12 - descriptor.preferredRange + slot.depthOffset,
+          id: descriptor.ownerId,
+        };
+      });
+      let minimumDistance = Infinity;
+      for (let i = 0; i < points.length; i += 1) {
+        for (let j = i + 1; j < points.length; j += 1) {
+          minimumDistance = Math.min(minimumDistance,
+            Math.hypot(points[i].x - points[j].x, points[i].z - points[j].z));
+        }
+      }
+      assert.ok(minimumDistance >= .85,
+        `${roleId} slots collapsed at playerX=${playerX}: ${minimumDistance}`);
+    }
+  }
+
+  const mixedDescriptors = [
+    ['raider', -.55], ['raider', .55],
+    ['gunner', -.45], ['gunner', .45],
+    ['shieldbearer', -.2], ['support', .2],
+    ['artillery', -.1], ['support', .65],
+  ].map(([roleId, laneNorm], index) => ({
+    ownerId: `mixed-${index}`, roleId, laneNorm, seed: 4700 + index,
+    preferredRange: ENEMY_ARCHETYPES_V2[roleId].preferredRange,
+  }));
+  const mixedRegistry = createCampaignEnemyCombatSlotRegistryV37();
+  syncCampaignEnemyCombatSlotsV37(mixedRegistry, mixedDescriptors, { nowMs: 300 });
+  for (const playerX of [-6.2, 0, 6.2]) {
+    const points = mixedDescriptors.map(descriptor => {
+      const slot = getCampaignEnemyCombatSlotV37(mixedRegistry, descriptor.ownerId);
+      const anchor = resolveCampaignEnemyCombatSlotAnchorV37({
+        slot, playerX, arenaHalfWidth: 7,
+      });
+      return {
+        x: anchor.x,
+        z: 12 - descriptor.preferredRange + slot.depthOffset,
+        roleId: descriptor.roleId,
+      };
+    });
+    let minimumDistance = Infinity;
+    for (let i = 0; i < points.length; i += 1) {
+      for (let j = i + 1; j < points.length; j += 1) {
+        minimumDistance = Math.min(minimumDistance,
+          Math.hypot(points[i].x - points[j].x, points[i].z - points[j].z));
+      }
+    }
+    assert.ok(minimumDistance >= 1.2,
+      `mixed-role combat slots collapsed at playerX=${playerX}: ${minimumDistance}`);
+  }
+
+  const gunnerStates = descriptors.filter(item => item.roleId === 'gunner').slice(0, 6)
+    .map(descriptor => ({
+      descriptor,
+      state: createCampaignEnemyChoreographyStateV29({
+        roleId: 'gunner', lane: descriptor.laneNorm,
+        seed: descriptor.seed, nowMs: 0,
+      }),
+    }));
+  const authoredTargets = gunnerStates.map(({ descriptor, state }) => {
+    const result = stepCampaignEnemyChoreographyV29(state, {
+      nowMs: 0, frameScale: 1, baseSpeed: .035,
+      enemyX: 0, enemyZ: -16.8, playerX: 6.2, playerZ: 12,
+      arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852,
+      hudOcclusionLineZ: -9.3, separationX: 0, separationZ: 0,
+      fireCooldownMs: 900,
+      combatSlot: getCampaignEnemyCombatSlotV37(registry, descriptor.ownerId),
+    });
+    assert.equal(result.combatSlotId,
+      getCampaignEnemyCombatSlotV37(registry, descriptor.ownerId).slotId);
+    return `${result.targetX.toFixed(2)}:${result.targetZ.toFixed(2)}`;
+  });
+  assert.ok(new Set(authoredTargets).size >= 5,
+    'six gunners must not converge on one player-relative firing target');
 });
 
 test('V2.9 Boss Preview and Mini-Boss motion preserve attack locks and a dynamic HUD-safe combat band', () => {
@@ -1213,89 +1370,113 @@ test('V3.3 final Boss preserves deterministic reposition-aim-telegraph-fire-reco
   assert.equal(fired.phase, 'recover');
 });
 
-test('V3.6 XState V5 shadows legacy Boss orchestration and pilots only Alpha Mech after a zero-drift parity gate', () => {
-  assert.equal(CAMPAIGN_BOSS_XSTATE_VERSION, 'campaign-boss-xstate-v3.6.0');
+test('V3.7 XState V5 is authoritative for all six Boss profiles with parallel lifecycle/phase/combat regions', () => {
+  assert.equal(CAMPAIGN_BOSS_XSTATE_VERSION, 'campaign-boss-xstate-v3.7.0');
   assert.equal(CAMPAIGN_BOSS_XSTATE_PACKAGE_VERSION, '5.33.4');
-  assert.equal(CAMPAIGN_BOSS_XSTATE_ALPHA_PILOT_PROFILE, 'alpha_mech_sentinel');
-  assert.deepEqual(auditCampaignBossStatechartV36(), []);
-  assert.equal(isCampaignBossXStatePilotV36({ planetId: 1, bossType: 'mech' }), true);
-  assert.equal(isCampaignBossXStatePilotV36({ planetId: 1, bossType: 'alien' }), false);
-  assert.equal(isCampaignBossXStatePilotV36({ planetId: 2, bossType: 'mech' }), false);
+  assert.equal(CAMPAIGN_BOSS_XSTATE_AUTHORITATIVE_PROFILES_V37.length, 6);
+  assert.deepEqual(auditCampaignBossStatechartV37(), []);
 
-  const seed = 731;
-  const legacyState = createCampaignBossCombatStateV29({
-    seed, nowMs: 0, planetId: 1, bossType: 'mech',
-  });
-  const controller = createCampaignBossStatechartControllerV36({
-    seed, nowMs: 0, planetId: 1, bossType: 'mech', mode: 'shadow',
-  });
-  let enemyX = 0;
-  let enemyZ = -7;
-  let nowMs = 0;
-  let telegraphs = 0;
-  let fires = 0;
-  let enrages = 0;
-  const seenPhases = new Set();
+  const profiles = [
+    [1, 'mech'], [1, 'alien'], [2, 'mech'],
+    [2, 'alien'], [3, 'mech'], [3, 'alien'],
+  ];
+  const profileIds = new Set();
+  for (const [planetId, bossType] of profiles) {
+    assert.equal(isCampaignBossXStateAuthoritativeV37({ planetId, bossType }), true);
+    const seed = 731 + planetId * 17 + (bossType === 'alien' ? 1 : 0);
+    const legacyState = createCampaignBossCombatStateV29({
+      seed, nowMs: 0, planetId, bossType,
+    });
+    const controller = createCampaignBossStatechartControllerV37({
+      seed, nowMs: 0, planetId, bossType,
+      mode: 'authoritative', allowLegacyFallback: true,
+    });
+    let enemyX = 0;
+    let enemyZ = -7;
+    let nowMs = 0;
+    let telegraphs = 0;
+    let fires = 0;
+    let enrages = 0;
+    const seenPhases = new Set();
 
-  for (let frame = 0; frame < 2600; frame += 1) {
-    const hpRatio = frame < 900 ? .9 : frame < 1650 ? .52 : .29;
-    const common = {
-      nowMs,
-      hpRatio,
-      frameScale: 1,
-      baseSpeed: .045,
-      enemyX,
-      enemyZ,
-      playerX: Math.sin(frame * .013) * 5.8,
-      playerZ: 12,
-      playerVelocityX: Math.cos(frame * .013) * .075,
-      playerVelocityZ: 0,
-      origin: { x: enemyX, y: 0, z: enemyZ + 1.9 },
-      arenaHalfWidth: 7,
-      worldHalfHeight: 15,
-      viewportHeight: 852,
-      hudOcclusionLineZ: -9.3,
-    };
-    const legacyStep = stepCampaignBossCombatV29(legacyState, common);
-    const xstateStep = stepCampaignBossStatechartV36(controller, common);
-    const parity = compareCampaignBossParityV36({ legacyStep, xstateStep, tolerance: 1e-9 });
-    assert.equal(parity.ok, true, `Boss parity drift at frame ${frame}: ${parity.issues.join(',')}`);
-    seenPhases.add(xstateStep.phase);
-    telegraphs += xstateStep.events.filter(event => event.type === 'telegraph_started').length;
-    fires += xstateStep.events.filter(event => event.type === 'fire_pattern').length;
-    enrages += xstateStep.events.filter(event => event.type === 'enrage_started').length;
-    enemyX += xstateStep.deltaX || 0;
-    enemyZ += xstateStep.deltaZ || 0;
-    nowMs += 1000 / 60;
+    for (let frame = 0; frame < 2200; frame += 1) {
+      const hpRatio = frame < 700 ? .9 : frame < 1400 ? .52 : .29;
+      const common = {
+        nowMs,
+        hpRatio,
+        frameScale: 1,
+        baseSpeed: .045,
+        enemyX,
+        enemyZ,
+        playerX: Math.sin(frame * .013) * 5.8,
+        playerZ: 12,
+        playerVelocityX: Math.cos(frame * .013) * .075,
+        playerVelocityZ: 0,
+        origin: { x: enemyX, y: 0, z: enemyZ + 1.9 },
+        arenaHalfWidth: 7,
+        worldHalfHeight: 15,
+        viewportHeight: 852,
+        hudOcclusionLineZ: -9.3,
+      };
+      const legacyStep = stepCampaignBossCombatV29(legacyState, common);
+      const xstateStep = stepCampaignBossStatechartV37(controller, common);
+      const parity = compareCampaignBossParityV37({ legacyStep, xstateStep, tolerance: 1e-9 });
+      assert.equal(parity.ok, true,
+        `${planetId}/${bossType} parity drift at frame ${frame}: ${parity.issues.join(',')}`);
+      assert.equal(applyCampaignBossParityGateV37(controller, parity), true);
+      seenPhases.add(xstateStep.phase);
+      telegraphs += xstateStep.events.filter(event => event.type === 'telegraph_started').length;
+      fires += xstateStep.events.filter(event => event.type === 'fire_pattern').length;
+      enrages += xstateStep.events.filter(event => event.type === 'enrage_started').length;
+      enemyX += xstateStep.deltaX || 0;
+      enemyZ += xstateStep.deltaZ || 0;
+      nowMs += 1000 / 60;
+    }
+
+    const snapshot = getCampaignBossStatechartSnapshotV37(controller);
+    profileIds.add(snapshot.profileId);
+    assert.equal(snapshot.mode, 'authoritative');
+    assert.equal(snapshot.regions.lifecycle, 'running');
+    assert.equal(snapshot.regions.hpPhase, 'phase_3');
+    assert.equal(snapshot.parityMismatches, 0);
+    assert.equal(snapshot.parityChecks, 2200);
+    assert.equal(snapshot.actorStatus, 'active');
+    assert.equal(snapshot.pilotBlocked, false);
+    assert.ok(telegraphs >= 2 && fires >= 2, `${snapshot.profileId} must complete attacks`);
+    assert.equal(enrages, 1);
+    for (const phase of ['reposition', 'aim', 'telegraph', 'recover', 'enrage']) {
+      assert.equal(seenPhases.has(phase), true, `${snapshot.profileId} must execute ${phase}`);
+    }
+    stopCampaignBossStatechartControllerV37(controller);
+    assert.equal(controller.actor.getSnapshot().status, 'stopped');
   }
+  assert.equal(profileIds.size, 6);
 
-  const snapshot = getCampaignBossStatechartSnapshotV36(controller);
-  assert.equal(snapshot.mode, 'shadow');
-  assert.equal(snapshot.profileId, 'alpha_mech_sentinel');
-  assert.equal(snapshot.parityMismatches, 0);
-  assert.equal(snapshot.parityChecks, 2600);
-  assert.equal(snapshot.actorStatus, 'active');
-  assert.equal(snapshot.pilotBlocked, false);
-  assert.ok(telegraphs >= 3 && fires >= 3);
-  assert.equal(enrages, 1);
-  for (const phase of ['reposition', 'aim', 'telegraph', 'recover', 'enrage']) {
-    assert.equal(seenPhases.has(phase), true, `XState Boss pilot must execute ${phase}`);
-  }
-  stopCampaignBossStatechartControllerV36(controller);
-  assert.equal(controller.actor.getSnapshot().status, 'stopped');
-
-  const pilot = createCampaignBossStatechartControllerV36({
-    seed, nowMs: 0, planetId: 1, bossType: 'mech', mode: 'pilot',
+  const fallback = createCampaignBossStatechartControllerV37({
+    seed: 731, nowMs: 0, planetId: 1, bossType: 'mech',
+    mode: 'authoritative', allowLegacyFallback: true,
   });
-  assert.equal(applyCampaignBossParityGateV36(pilot, { ok: true, issues: [] }), true);
-  assert.equal(applyCampaignBossParityGateV36(pilot, {
+  assert.equal(applyCampaignBossParityGateV37(fallback, { ok: true, issues: [] }), true);
+  assert.equal(applyCampaignBossParityGateV37(fallback, {
     ok: false, issues: ['SYNTHETIC_PARITY_DRIFT'],
   }), false);
-  const blockedSnapshot = getCampaignBossStatechartSnapshotV36(pilot);
-  assert.equal(blockedSnapshot.mode, 'shadow_failed');
+  const blockedSnapshot = getCampaignBossStatechartSnapshotV37(fallback);
+  assert.equal(blockedSnapshot.mode, 'legacy_fallback');
   assert.equal(blockedSnapshot.pilotBlocked, true);
   assert.deepEqual(blockedSnapshot.pilotBlockedReason, ['SYNTHETIC_PARITY_DRIFT']);
-  stopCampaignBossStatechartControllerV36(pilot);
+  stopCampaignBossStatechartControllerV37(fallback);
+
+  const parityOnly = createCampaignBossStatechartControllerV37({
+    seed: 732, nowMs: 0, planetId: 1, bossType: 'alien',
+    mode: 'authoritative', allowLegacyFallback: false,
+  });
+  assert.equal(applyCampaignBossParityGateV37(parityOnly, {
+    ok: false, issues: ['SYNTHETIC_FAIL_CLOSED'],
+  }), false);
+  const parityOnlySnapshot = getCampaignBossStatechartSnapshotV37(parityOnly);
+  assert.equal(parityOnlySnapshot.mode, 'parity_failed');
+  assert.equal(parityOnlySnapshot.pilotBlocked, true);
+  stopCampaignBossStatechartControllerV37(parityOnly);
 });
 
 test('V3.3 final Boss frenzy is a persistent phase upgrade inside each planet-specific arsenal', () => {
@@ -1395,14 +1576,21 @@ test('Campaign source enables V3 enemy combat in production while preserving V2.
   assert.match(source, /routeVariant:spawnSpec\.routeVariant/);
   assert.match(source, /stepCampaignBossPreviewMotionV29/);
   assert.match(source, /stepCampaignBossCombatV29/);
-  assert.match(source, /stepCampaignBossStatechartV36/);
-  assert.match(source, /compareCampaignBossParityV36/);
-  assert.match(source, /applyCampaignBossParityGateV36/);
-  assert.match(source, /shadow_failed/);
-  assert.match(source, /bossXStateAlphaPilotEnabled/);
-  assert.match(source, /bossXStateShadowEnabled/);
-  assert.match(source, /mode:pilot\?['"]pilot['"]:['"]shadow['"]/);
-  assert.match(source, /activeBossAttackPlanIdV36/);
+  assert.match(source, /stepCampaignBossStatechartV37/);
+  assert.match(source, /compareCampaignBossParityV37/);
+  assert.match(source, /applyCampaignBossParityGateV37/);
+  assert.match(source, /bossXStateEnabled/);
+  assert.match(source, /bossXStateParityEnabled/);
+  assert.match(source, /bossXStateLegacyFallbackEnabled/);
+  assert.match(source, /mode:['"]authoritative['"]/);
+  assert.match(source, /activeBossAttackPlanIdV37/);
+  assert.match(source, /shouldCreateLegacyBossRuntimeV37/);
+  assert.match(source, /mode!==['"]legacy_fallback['"]/);
+  assert.match(source, /syncCampaignEnemyCombatSlotsV37/);
+  assert.match(source, /getCampaignEnemyCombatSlotV37/);
+  assert.match(source, /resolveCampaignEnemyWeaponContractV37/);
+  assert.match(source, /_weaponContractId/);
+  assert.match(source, /_bulletPattern/);
   assert.match(source, /planetId:currentPlanetId,bossType:stageConfig\.bossType\|\|['"]mech['"]/);
   assert.doesNotMatch(source, /fallbackPattern=bossEnraged/);
   assert.doesNotMatch(source, /attackType = 1 \+ Math\.floor\(Math\.random\(\)\*3\)/);
@@ -1448,8 +1636,8 @@ test('Campaign source enables V3 enemy combat in production while preserving V2.
 
   assert.match(source, /const spawnZ = spawnSpec \? -ZOOM - 1\.8 : -ZOOM - 3/);
   assert.match(source, /const environmentHpMultiplier = spawnSpec \? 1 : combat\.environment\.enemyHpMultiplier/);
-  assert.match(source, /_projectileDamage:Math\.max\(1,Math\.round\(Number\(spawnSpec\?\.projectileDamage\)\|\|200\)\)/);
-  assert.match(source, /_contactDamage:Math\.max\(1,Math\.round\(Number\(spawnSpec\?\.contactDamage\)/);
+  assert.match(source, /_projectileDamage:Math\.max\(1,Math\.round\(Number\(spawnSpec\?\.projectileDamage\)[\s\S]{0,120}enemyWeaponContract\?\.projectile\?\.damage[\s\S]{0,40}\|\|200\)\)/);
+  assert.match(source, /_contactDamage:Math\.max\(1,Math\.round\(Number\(spawnSpec\?\.contactDamage\)[\s\S]{0,120}enemyWeaponContract\?\.contactDamage/);
   assert.match(source, /rawDamage:b\._rawDamage\|\|200/);
   assert.match(source, /rawDamage:e\._contactDamage\|\|\(e\.tier===4\?400:200\)/);
   assert.doesNotMatch(source, /const targetZ = -ZOOM \+ profile\.anchorOffsetZ/);
@@ -1468,7 +1656,11 @@ test('Campaign source enables V3 enemy combat in production while preserving V2.
   const bossSource = fs.readFileSync(
     new URL('../src/game/combat/CampaignBossCombatV29.js', import.meta.url), 'utf8');
   const bossStatechartSource = fs.readFileSync(
-    new URL('../src/game/combat/CampaignBossStatechartV36.js', import.meta.url), 'utf8');
+    new URL('../src/game/combat/CampaignBossStatechartV37.js', import.meta.url), 'utf8');
+  const combatSlotsSource = fs.readFileSync(
+    new URL('../src/game/combat/CampaignEnemyCombatSlotsV37.js', import.meta.url), 'utf8');
+  const weaponCatalogSource = fs.readFileSync(
+    new URL('../src/game/combat/CombatWeaponCatalogV37.js', import.meta.url), 'utf8');
   const projectileSource = fs.readFileSync(
     new URL('../src/game/combat/CampaignEnemyProjectileV31.js', import.meta.url), 'utf8');
   const projectileVisualSource = fs.readFileSync(
@@ -1492,9 +1684,22 @@ test('Campaign source enables V3 enemy combat in production while preserving V2.
   assert.match(bossStatechartSource, /from ['"]xstate['"]/);
   assert.match(bossStatechartSource, /createMachine/);
   assert.match(bossStatechartSource, /createActor/);
-  assert.match(bossStatechartSource, /CAMPAIGN_BOSS_XSTATE_ALPHA_PILOT_PROFILE/);
+  assert.match(bossStatechartSource, /type: ['"]parallel['"]/);
+  assert.match(bossStatechartSource, /CAMPAIGN_BOSS_XSTATE_AUTHORITATIVE_PROFILES_V37/);
+  for (const profileId of [
+    'alpha_mech_sentinel', 'alpha_alien_overseer',
+    'cryo_mech_warden', 'cryo_alien_dragon',
+    'inferno_mech_forge', 'inferno_alien_demon',
+  ]) assert.match(bossStatechartSource, new RegExp(profileId));
   assert.doesNotMatch(bossStatechartSource, /after\s*:|Date\.now|setTimeout|Math\.random/,
     'Boss statechart must advance only from deterministic runtime events/ticks');
+  assert.match(combatSlotsSource, /stable role-specific slot/);
+  assert.match(combatSlotsSource, /preferredRange/);
+  assert.match(combatSlotsSource, /effectiveTracking/);
+  assert.doesNotMatch(combatSlotsSource, /Date\.now|Math\.random|setTimeout/);
+  assert.match(weaponCatalogSource, /CAMPAIGN_ENEMY_WEAPON_CONTRACTS_V37/);
+  assert.match(weaponCatalogSource, /CAMPAIGN_PLAYER_WEAPON_CONTRACTS_V37/);
+  assert.match(weaponCatalogSource, /resolveCampaignBossPatternContractV33/);
   assert.doesNotMatch(projectileSource, /Math\.random/);
   assert.match(bossSource, /state\.phase = ['"]enrage['"]/);
   assert.match(bossSource, /extraBurstShots: 2/);

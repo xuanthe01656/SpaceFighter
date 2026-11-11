@@ -353,6 +353,8 @@ function projectRuntimeV3(runtime, wavePower, elite = false) {
   const eliteCooldown = elite ? .86 : 1;
   return Object.freeze({
     tier: runtime.tier,
+    weaponId: runtime.weaponId,
+    bulletPattern: runtime.bulletPattern,
     canShoot: runtime.canShoot,
     engagementMode: runtime.engagementMode,
     canCrossPlayer: runtime.canCrossPlayer,
@@ -587,6 +589,8 @@ export function auditCampaignEnemyDirectorV3() {
     if (runtime?.preferredRange !== archetype.preferredRange
       || runtime?.fireRangeMin !== archetype.fireRangeMin
       || runtime?.fireRangeMax !== archetype.fireRangeMax) issues.push(`RANGE_DRIFT:${id}`);
+    if (runtime?.weaponId !== archetype.weaponId
+      || runtime?.bulletPattern !== archetype.bulletPattern) issues.push(`WEAPON_DRIFT:${id}`);
   }
   for (const [planetId, profile] of Object.entries(CAMPAIGN_PLANET_PROFILES_V27)) {
     if (!(profile.spawnGapMultiplier > 0)) issues.push(`SPAWN_GAP:${planetId}`);

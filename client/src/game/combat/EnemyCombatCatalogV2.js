@@ -4,13 +4,13 @@ import {
 } from './CampaignEnemyEngagementV36.js';
 
 /**
- * Campaign enemy product catalog V3.5.
+ * Campaign enemy product catalog V3.7.
  *
  * This is the single source of truth for role identity, threat cost, combat
  * output and engagement geometry. The director may scale numeric output by
  * stage, wave, planet and elite state, but it must not redefine role behavior.
  */
-export const ENEMY_COMBAT_CATALOG_VERSION = 'enemy-combat-v3.6.0';
+export const ENEMY_COMBAT_CATALOG_VERSION = 'enemy-combat-v3.7.0';
 
 const freezeRole = value => Object.freeze({
   ...resolveCampaignEnemyRoleContractV36(value.id),
@@ -21,6 +21,7 @@ const freezeRole = value => Object.freeze({
 export const ENEMY_ARCHETYPES_V2 = Object.freeze({
   raider: freezeRole({
     id: 'raider', role: 'skirmisher', engagementMode: 'skirmisher',
+    weaponId: 'enemy_scout_pulse_v1', bulletPattern: 'attack_pass_burst',
     defenseClass: 'light', damageType: 'kinetic',
     tier: 1, threatCost: 1, canShoot: true, canCrossPlayer: false, reengages: true,
     unlockStage: 1, hpMultiplier: 0.82, damageMultiplier: 0.86, speedMultiplier: 1.18,
@@ -35,6 +36,7 @@ export const ENEMY_ARCHETYPES_V2 = Object.freeze({
   }),
   gunner: freezeRole({
     id: 'gunner', role: 'ranged', engagementMode: 'ranged',
+    weaponId: 'enemy_energy_dart_v1', bulletPattern: 'sustained_predictive_burst',
     defenseClass: 'balanced', damageType: 'energy',
     tier: 2, threatCost: 2, canShoot: true, canCrossPlayer: false, reengages: true,
     unlockStage: 1, hpMultiplier: 1.00, damageMultiplier: 1.00, speedMultiplier: 1.04,
@@ -49,6 +51,7 @@ export const ENEMY_ARCHETYPES_V2 = Object.freeze({
   }),
   charger: freezeRole({
     id: 'charger', role: 'diver', engagementMode: 'diver',
+    weaponId: 'enemy_contact_charge_v1', bulletPattern: 'telegraphed_contact_charge',
     defenseClass: 'armored', damageType: 'kinetic',
     tier: 4, threatCost: 3, canShoot: false, canCrossPlayer: true, reengages: true,
     unlockStage: 2, hpMultiplier: 1.22, damageMultiplier: 1.18, speedMultiplier: 1.04,
@@ -59,6 +62,7 @@ export const ENEMY_ARCHETYPES_V2 = Object.freeze({
   }),
   shieldbearer: freezeRole({
     id: 'shieldbearer', role: 'defender', engagementMode: 'guard',
+    weaponId: 'enemy_guard_pulse_v1', bulletPattern: 'guard_lane_spread',
     defenseClass: 'shielded', damageType: 'energy',
     tier: 3, threatCost: 4, canShoot: true, canCrossPlayer: false, reengages: true,
     unlockStage: 4, hpMultiplier: 1.42, damageMultiplier: 0.90, speedMultiplier: 0.88,
@@ -73,6 +77,7 @@ export const ENEMY_ARCHETYPES_V2 = Object.freeze({
   }),
   support: freezeRole({
     id: 'support', role: 'support', engagementMode: 'support',
+    weaponId: 'enemy_ion_comet_v1', bulletPattern: 'soft_homing_ion_pair',
     defenseClass: 'light', damageType: 'ion',
     tier: 2, threatCost: 4, canShoot: true, canCrossPlayer: false, reengages: true,
     unlockStage: 5, hpMultiplier: 0.90, damageMultiplier: 0.72, speedMultiplier: 0.98,
@@ -88,6 +93,7 @@ export const ENEMY_ARCHETYPES_V2 = Object.freeze({
   }),
   artillery: freezeRole({
     id: 'artillery', role: 'artillery', engagementMode: 'artillery',
+    weaponId: 'enemy_plasma_slug_v1', bulletPattern: 'telegraphed_heavy_pair',
     defenseClass: 'balanced', damageType: 'explosive',
     tier: 3, threatCost: 4, canShoot: true, canCrossPlayer: false, reengages: true,
     unlockStage: 6, hpMultiplier: 1.10, damageMultiplier: 1.30, speedMultiplier: 0.82,
@@ -109,6 +115,8 @@ export const ENEMY_ARCHETYPES_V2 = Object.freeze({
 export const ENEMY_RUNTIME_CATALOG_V3 = Object.freeze(Object.fromEntries(
   Object.values(ENEMY_ARCHETYPES_V2).map(archetype => [archetype.id, Object.freeze({
     id: archetype.id,
+    weaponId: archetype.weaponId,
+    bulletPattern: archetype.bulletPattern,
     tier: archetype.tier,
     cost: archetype.threatCost,
     canShoot: archetype.canShoot,
@@ -180,6 +188,8 @@ export function auditEnemyCombatCatalogV2() {
     if (enemy.rangeMetric !== 'forward_depth') issues.push(`RANGE_METRIC:${enemy.id}`);
     if (!enemy.combatClass || !enemy.movementContract || !enemy.attackContract)
       issues.push(`ROLE_CONTRACT:${enemy.id}`);
+    if (!String(enemy.weaponId || '').startsWith('enemy_') || !enemy.bulletPattern)
+      issues.push(`WEAPON_CONTRACT:${enemy.id}`);
     if (!Number.isInteger(enemy.tier) || enemy.tier < 1 || enemy.tier > 4) issues.push(`TIER:${enemy.id}`);
     if (!Number.isFinite(enemy.threatCost) || enemy.threatCost <= 0) issues.push(`THREAT_COST:${enemy.id}`);
     if (enemy.canCrossPlayer) crossPlayerCount += 1;
@@ -213,7 +223,9 @@ export function auditEnemyCombatCatalogV2() {
     if (!runtime || runtime.tier !== enemy.tier || runtime.cost !== enemy.threatCost
       || runtime.canShoot !== enemy.canShoot || runtime.engagementMode !== enemy.engagementMode
       || runtime.canCrossPlayer !== enemy.canCrossPlayer
-      || runtime.preferredRange !== enemy.preferredRange) issues.push(`RUNTIME_PROJECTION:${enemy.id}`);
+      || runtime.preferredRange !== enemy.preferredRange
+      || runtime.weaponId !== enemy.weaponId
+      || runtime.bulletPattern !== enemy.bulletPattern) issues.push(`RUNTIME_PROJECTION:${enemy.id}`);
   }
   if (crossPlayerCount !== 1 || ENEMY_ARCHETYPES_V2.charger.canCrossPlayer !== true)
     issues.push('ONLY_CHARGER_MAY_CROSS_PLAYER');

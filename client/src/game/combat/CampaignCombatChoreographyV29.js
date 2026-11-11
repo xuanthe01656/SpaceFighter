@@ -3,9 +3,10 @@ import {
   resolveCampaignEdgeAwareAnchorXV36,
   resolveCampaignFireEnvelopeV36,
 } from './CampaignEnemyEngagementV36.js';
+import { resolveCampaignEnemyCombatSlotAnchorV37 } from './CampaignEnemyCombatSlotsV37.js';
 
 /**
- * Campaign combat choreography V3.6.0
+ * Campaign combat choreography V3.7.0
  *
  * Production contract:
  * - every non-diver owns a repeatable engagement loop and remains in combat
@@ -13,11 +14,12 @@ import {
  * - only the charger may cross the player's depth;
  * - ranged roles maintain catalog-authored fire bands and re-position between
  *   volleys instead of drifting through the ship and disappearing;
- * - ranged targets continuously track the player inside edge-safe anchors;
+ * - ranged targets continuously track the player inside stable role-specific
+ *   combat slots, so a group cannot collapse onto one firing point;
  * - fire range is authored on the forward/depth axis, so horizontal edge play
  *   cannot make a visible target undetectable.
  */
-export const CAMPAIGN_COMBAT_CHOREOGRAPHY_VERSION = 'campaign-combat-choreography-v3.6.0';
+export const CAMPAIGN_COMBAT_CHOREOGRAPHY_VERSION = 'campaign-combat-choreography-v3.7.0';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -402,11 +404,31 @@ const targetForEnemyPhase = (state, phaseContract, input, band) => {
   const playerX = clamp(finite(input.playerX, 0), -xBound, xBound);
   const playerZ = clamp(finite(input.playerZ, band.worldHalfHeight - 2.5),
     band.topSafeRootZ + 5, band.bottomSafeZ);
-  const baseX = clamp((state.laneNorm + finite(state.laneBiasNorm, 0)) * xBound, -xBound, xBound);
+  const combatSlot = input.combatSlot || null;
+  const authoredBaseX = clamp((state.laneNorm + finite(state.laneBiasNorm, 0)) * xBound, -xBound, xBound);
+  const slotBase = combatSlot
+    ? resolveCampaignEnemyCombatSlotAnchorV37({
+      slot: combatSlot,
+      playerX,
+      arenaHalfWidth: halfWidth,
+      phaseOffsetX: 0,
+    })
+    : null;
+  const baseX = slotBase ? slotBase.x : authoredBaseX;
   const depthBias = finite(state.depthBias, 0);
-  const cycleSide = state.side * (state.cycleCount % 2 === 0 ? 1 : -1);
-  const edgeAnchorX = (desiredOffsetX = 0, trackingStrength = archetype.lateralTrackingStrength) =>
-    resolveCampaignEdgeAwareAnchorXV36({
+  const slotDepthOffset = finite(slotBase?.depthOffset, 0);
+  const cycleSide = (combatSlot?.side || state.side) * (state.cycleCount % 2 === 0 ? 1 : -1);
+  const edgeAnchorX = (desiredOffsetX = 0, trackingStrength = archetype.lateralTrackingStrength) => {
+    if (combatSlot) {
+      return resolveCampaignEnemyCombatSlotAnchorV37({
+        slot: combatSlot,
+        playerX,
+        arenaHalfWidth: halfWidth,
+        phaseOffsetX: desiredOffsetX,
+        trackingStrength: Math.min(trackingStrength, combatSlot.trackingStrength ?? trackingStrength),
+      }).x;
+    }
+    return resolveCampaignEdgeAwareAnchorXV36({
       roleId: role,
       playerX,
       baseLaneX: baseX,
@@ -415,16 +437,17 @@ const targetForEnemyPhase = (state, phaseContract, input, band) => {
       trackingStrength,
       edgeInset: archetype.edgeInset,
     }).x;
+  };
   const preferredRange = Math.max(3.5, finite(archetype.preferredRange, 7));
   const fireRangeMin = Math.max(2.5, finite(archetype.fireRangeMin, preferredRange - 1.2));
   const fireRangeMax = Math.max(preferredRange + .6, finite(archetype.fireRangeMax, preferredRange + 1.8));
   const combatZ = offset => clamp(
-    playerZ - preferredRange + depthBias * .45 + finite(offset, 0),
+    playerZ - preferredRange + depthBias * .45 + slotDepthOffset + finite(offset, 0),
     band.topSafeRootZ,
     playerZ - fireRangeMin - .18,
   );
   const retreatZ = offset => clamp(
-    playerZ - fireRangeMax + depthBias * .35 + finite(offset, 0),
+    playerZ - fireRangeMax + depthBias * .35 + slotDepthOffset * .72 + finite(offset, 0),
     band.topSafeRootZ,
     playerZ - preferredRange - .45,
   );
@@ -519,7 +542,8 @@ const refreshEnemyPhaseTargetV36 = (state, phaseContract, input, band) => {
   const fresh = targetForEnemyPhase(state, phaseContract, input, band);
   const frameScale = clamp(finite(input.frameScale, 1), 0, 4);
   const baseSpeed = Math.max(.006, Math.abs(finite(input.baseSpeed, .04)));
-  const tracking = clamp(finite(getArchetype(state.roleId).lateralTrackingStrength, .75), .35, 1);
+  const tracking = clamp(finite(input.combatSlot?.trackingStrength,
+    getArchetype(state.roleId).lateralTrackingStrength), .20, 1);
   const targetStepX = Math.max(.09, baseSpeed * (4.8 + tracking * 3.2) * frameScale);
   const targetStepZ = Math.max(.055, baseSpeed * 3.4 * frameScale);
   state.targetX = state.targetX == null ? fresh.x : approach(state.targetX, fresh.x, targetStepX);
@@ -749,6 +773,8 @@ export function stepCampaignEnemyChoreographyV29(state, input = {}) {
     fireRangeMax: archetype.fireRangeMax,
     canCrossPlayer: archetype.canCrossPlayer,
     maxCombatZ: finite(input.playerZ, 0) - archetype.fireRangeMin,
+    combatSlotId: input.combatSlot?.slotId || null,
+    combatSlotLaneNorm: input.combatSlot?.laneNorm ?? null,
     settled: state.phaseArrivedAt != null,
     facePlayer: current.facePlayer,
     retreat: current.retreat,
