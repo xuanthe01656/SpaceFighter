@@ -111,9 +111,14 @@ test('C6-E pinned resolver reuses identical C6-D seeded enemies, but a new QA co
   assert.equal(a.open().state.safeForCloudBattle,false);
   assert.equal(a.open().state.escaped,0);
 });
-test('C6-E client culling oracle is strictly z > ZOOM+5 and never a kill',()=>{
+test('C6-E culling oracle stays non-lethal while production enemies re-engage instead of escaping alive',()=>{
   const src=fs.readFileSync(path.resolve(__dirname,'../../client/src/components/Campaign/CampaignScene.js'),'utf8');
-  assert.match(src,/if\s*\(e\.mesh\.position\.z\s*>\s*ZOOM\s*\+\s*5\)\s*\{\s*cleanEnemy\(e\)/);
+  assert.match(src,/if\s*\(e\.mesh\.position\.z\s*>\s*ZOOM\s*\+\s*5\)\s*\{/);
+  assert.match(src,/if\s*\(e\._canCrossPlayer\s*&&\s*e\._chargerState\)/);
+  assert.match(src,/else\s+if\s*\(e\._reengages\s*&&\s*e\._choreographyState\)/);
+  assert.match(src,/fallbackMaxZ[\s\S]*?e\._choreographyState\.velocityZ\s*=\s*Math\.min\(0/);
+  assert.match(src,/else\s*\{\s*cleanEnemy\(e\);\s*enemies\.splice\(i,1\);\s*continue;/);
+  assert.doesNotMatch(src,/if\s*\(e\.mesh\.position\.z\s*>\s*ZOOM\s*\+\s*5\)\s*\{\s*cleanEnemy\(e\)/);
   assert.match(src,/const\s+alive\s*=\s*enemies\.filter\(e\s*=>\s*!e\._dead\)\.length/);
   assert.match(src,/else\s+if\s*\(!stageConfig\.hasBoss\)\s*\{\s*stageCleared\(\)/);
   assert.equal(shouldCullCampaignEnemy(20000,15000),false);

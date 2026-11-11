@@ -9,7 +9,7 @@ import {
   resolveCampaignWaveEncounterV28,
 } from './CampaignEncounterEscalationV28.js';
 
-export const CAMPAIGN_WAVE_DIRECTOR_VERSION = 'campaign-wave-director-v3.4.0';
+export const CAMPAIGN_WAVE_DIRECTOR_VERSION = 'campaign-wave-director-v3.5.0';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const round3 = value => Math.round(Number(value) * 1000) / 1000;
@@ -41,33 +41,104 @@ const LANE_NORMALIZED_X = Object.freeze([-0.80, -0.40, 0, 0.40, 0.80]);
  */
 export const CAMPAIGN_PLANET_PROFILES_V27 = Object.freeze({
   1: Object.freeze({
-    id: 'alpha_mechanical', budgetMultiplier: 1, spawnGapMultiplier: 1.00,
-    hpMultiplier: 1, damageMultiplier: 1, speedMultiplier: 1.02,
-    projectileSpeedMultiplier: 1, fireCooldownMultiplier: .98,
+    id: 'alpha_mechanical', campaignRankOffset: 0, powerStageStart: 1,
+    budgetMultiplier: 1, spawnGapMultiplier: 1.00,
+    hpMultiplier: 1, damageMultiplier: 1, speedMultiplier: 1,
+    projectileSpeedMultiplier: 1, fireCooldownMultiplier: 1,
     scoutReturnRatio: 1, scoutExtraReturnRatio: .16,
-    roleWeights: Object.freeze({ raider: 12, gunner: 11, charger: 6, shieldbearer: 7, support: 3, artillery: 5 }),
+    roleWeights: Object.freeze({ raider: 12, gunner: 11, charger: 5, shieldbearer: 7, support: 3, artillery: 4 }),
     preferredFormations: Object.freeze(['line', 'crossfire', 'escort', 'stagger']),
     modifierId: 'mechanical_formations',
   }),
   2: Object.freeze({
-    id: 'cryo_ion', budgetMultiplier: 1.08, spawnGapMultiplier: .88,
-    hpMultiplier: 1.14, damageMultiplier: 1.10, speedMultiplier: 1.05,
-    projectileSpeedMultiplier: 1.08, fireCooldownMultiplier: .88,
+    id: 'cryo_ion', campaignRankOffset: 4, powerStageStart: 7.5,
+    budgetMultiplier: 1.18, spawnGapMultiplier: .84,
+    hpMultiplier: 1.25, damageMultiplier: 1.22, speedMultiplier: 1.07,
+    projectileSpeedMultiplier: 1.16, fireCooldownMultiplier: .82,
     scoutReturnRatio: 1, scoutExtraReturnRatio: .36,
-    roleWeights: Object.freeze({ raider: 7, gunner: 12, charger: 5, shieldbearer: 9, support: 8, artillery: 10 }),
+    roleWeights: Object.freeze({ raider: 6, gunner: 12, charger: 5, shieldbearer: 10, support: 9, artillery: 9 }),
     preferredFormations: Object.freeze(['crossfire', 'stagger', 'lane_sweep', 'escort']),
     modifierId: 'cryo_lane_control',
   }),
   3: Object.freeze({
-    id: 'inferno_swarm', budgetMultiplier: 1.16, spawnGapMultiplier: .74,
-    hpMultiplier: 1.20, damageMultiplier: 1.24, speedMultiplier: 1.14,
-    projectileSpeedMultiplier: 1.16, fireCooldownMultiplier: .76,
+    id: 'inferno_swarm', campaignRankOffset: 8, powerStageStart: 9,
+    budgetMultiplier: 1.34, spawnGapMultiplier: .70,
+    hpMultiplier: 1.48, damageMultiplier: 1.48, speedMultiplier: 1.16,
+    projectileSpeedMultiplier: 1.30, fireCooldownMultiplier: .68,
     scoutReturnRatio: 1, scoutExtraReturnRatio: .62,
-    roleWeights: Object.freeze({ raider: 14, gunner: 7, charger: 12, shieldbearer: 4, support: 4, artillery: 8 }),
+    roleWeights: Object.freeze({ raider: 13, gunner: 8, charger: 13, shieldbearer: 5, support: 5, artillery: 9 }),
     preferredFormations: Object.freeze(['pincer', 'swarm', 'stagger', 'center_push']),
     modifierId: 'inferno_pressure',
   }),
 });
+
+/**
+ * Authored local-stage curve. Stages 1-5 form the beginner/onboarding arc;
+ * stages 6-10 deliberately create an upgrade requirement. Planet profiles and
+ * PLANET_ENEMIES then layer campaign-wide progression without reading the
+ * player's combat power, so difficulty is deterministic and non-adaptive.
+ */
+export const CAMPAIGN_STAGE_POWER_CURVE_V35 = Object.freeze({
+  1: Object.freeze({ id: 'onboarding_1', hp: .72, damage: .72, speed: .94, projectile: .92, fire: 1.18, budget: .68, spawn: 1.14 }),
+  2: Object.freeze({ id: 'onboarding_2', hp: .79, damage: .78, speed: .96, projectile: .95, fire: 1.12, budget: .76, spawn: 1.10 }),
+  3: Object.freeze({ id: 'onboarding_3', hp: .87, damage: .85, speed: .98, projectile: .98, fire: 1.07, budget: .84, spawn: 1.06 }),
+  4: Object.freeze({ id: 'onboarding_4', hp: .95, damage: .92, speed: 1.00, projectile: 1.00, fire: 1.02, budget: .92, spawn: 1.02 }),
+  5: Object.freeze({ id: 'onboarding_exam', hp: 1.04, damage: 1.00, speed: 1.01, projectile: 1.02, fire: .98, budget: 1.00, spawn: .98 }),
+  6: Object.freeze({ id: 'upgrade_1', hp: 1.16, damage: 1.10, speed: 1.03, projectile: 1.04, fire: .93, budget: 1.10, spawn: .93 }),
+  7: Object.freeze({ id: 'upgrade_2', hp: 1.30, damage: 1.20, speed: 1.05, projectile: 1.06, fire: .88, budget: 1.20, spawn: .89 }),
+  8: Object.freeze({ id: 'upgrade_3', hp: 1.45, damage: 1.30, speed: 1.07, projectile: 1.08, fire: .83, budget: 1.30, spawn: .85 }),
+  9: Object.freeze({ id: 'upgrade_4', hp: 1.62, damage: 1.40, speed: 1.09, projectile: 1.10, fire: .79, budget: 1.40, spawn: .81 }),
+  10: Object.freeze({ id: 'upgrade_final', hp: 1.80, damage: 1.52, speed: 1.11, projectile: 1.12, fire: .75, budget: 1.50, spawn: .77 }),
+});
+
+export function resolveCampaignStagePowerV35(stage = 1, planetId = 1) {
+  const safeStage = clamp(Math.trunc(Number(stage) || 1), 1, 10);
+  const profile = CAMPAIGN_PLANET_PROFILES_V27[planetId] || CAMPAIGN_PLANET_PROFILES_V27[1];
+  const start = clamp(Number(profile.powerStageStart) || 1, 1, 10);
+  const effectiveStage = start + (safeStage - 1) / 9 * (10 - start);
+  const lowerStage = clamp(Math.floor(effectiveStage), 1, 10);
+  const upperStage = clamp(Math.ceil(effectiveStage), 1, 10);
+  const mix = effectiveStage - lowerStage;
+  const lower = CAMPAIGN_STAGE_POWER_CURVE_V35[lowerStage];
+  const upper = CAMPAIGN_STAGE_POWER_CURVE_V35[upperStage];
+  const interpolate = key => round3(lower[key] + (upper[key] - lower[key]) * mix);
+  return Object.freeze({
+    id: `${profile.id}_stage_${safeStage}`,
+    effectiveStage: round3(effectiveStage),
+    hp: interpolate('hp'),
+    damage: interpolate('damage'),
+    speed: interpolate('speed'),
+    projectile: interpolate('projectile'),
+    fire: interpolate('fire'),
+    budget: interpolate('budget'),
+    spawn: interpolate('spawn'),
+  });
+}
+
+export function resolveCampaignProgressionRankV35(planetId = 1, stage = 1) {
+  const profile = CAMPAIGN_PLANET_PROFILES_V27[planetId] || CAMPAIGN_PLANET_PROFILES_V27[1];
+  return clamp(Math.trunc(Number(stage) || 1) + profile.campaignRankOffset, 1, 18);
+}
+
+/**
+ * Persistent V3.5 enemies no longer disappear at the lower arena edge, so a
+ * wave must be bounded independently from the historical active-entity limit.
+ * The cap grows with the campaign chapter and local stage, but always leaves
+ * headroom for deterministic reinforcements, Boss Preview summons and impact
+ * effects on mobile devices. Difficulty continues through role composition,
+ * stats and fire tempo instead of an unbounded wall of simultaneous entities.
+ */
+export function resolveCampaignWaveEntityCapV35(planetId = 1, stage = 1) {
+  const safePlanetId = CAMPAIGN_PLANET_PROFILES_V27[planetId] ? Number(planetId) : 1;
+  const safeStage = clamp(Math.trunc(Number(stage) || 1), 1, 10);
+  const range = {
+    1: Object.freeze({ start: 8, end: 24 }),
+    2: Object.freeze({ start: 14, end: 28 }),
+    3: Object.freeze({ start: 18, end: 32 }),
+  }[safePlanetId];
+  const progress = (safeStage - 1) / 9;
+  return Math.round(range.start + (range.end - range.start) * progress);
+}
 
 const TEMPLATE = (id, options) => Object.freeze({
   id,
@@ -218,22 +289,28 @@ export function resolveCampaignWavePowerV3({
 } = {}) {
   const profile = CAMPAIGN_PLANET_PROFILES_V27[planetId] || CAMPAIGN_PLANET_PROFILES_V27[1];
   const template = CAMPAIGN_WAVE_TEMPLATES_V27[templateId] || CAMPAIGN_WAVE_TEMPLATES_V27.recon;
-  const safeStage = clamp(Math.trunc(Number(stage) || 1), 1, 100);
+  const safeStage = clamp(Math.trunc(Number(stage) || 1), 1, 10);
   const safeWave = clamp(Math.trunc(Number(wave) || 1), 1, 20);
   const playableWaves = Math.max(1, Math.trunc(Number(totalWaves) || 1) - (templateId === 'boss' ? 1 : 0));
   const progress = playableWaves <= 1 ? 0 : clamp((safeWave - 1) / (playableWaves - 1), 0, 1);
-  const stageProgress = clamp((safeStage - 1) / 9, 0, 1.5);
-  const d = clamp(Number(difficulty) || 1, .75, 3);
+  const stagePower = resolveCampaignStagePowerV35(safeStage, planetId);
+  const d = clamp(Number(difficulty) || 1, .85, 1.25);
   return Object.freeze({
     progress: round3(progress),
-    hpMultiplier: round3(profile.hpMultiplier * template.hpMultiplier
-      * (1 + progress * .28 + stageProgress * .10 + (d - 1) * .08)),
-    damageMultiplier: round3(profile.damageMultiplier * template.damageMultiplier
-      * (1 + progress * .22 + stageProgress * .08 + (d - 1) * .08)),
-    speedMultiplier: round3(profile.speedMultiplier * template.speedMultiplier
-      * (1 + progress * .07 + stageProgress * .035)),
-    projectileSpeedMultiplier: round3(profile.projectileSpeedMultiplier * (1 + progress * .10)),
-    fireCooldownMultiplier: round3(clamp(profile.fireCooldownMultiplier * (1 - progress * .18), .62, 1.10)),
+    stagePowerId: stagePower.id,
+    campaignRank: resolveCampaignProgressionRankV35(planetId, safeStage),
+    hpMultiplier: round3(profile.hpMultiplier * stagePower.hp * template.hpMultiplier
+      * (1 + progress * .24) * (1 + (d - 1) * .06)),
+    damageMultiplier: round3(profile.damageMultiplier * stagePower.damage * template.damageMultiplier
+      * (1 + progress * .18) * (1 + (d - 1) * .06)),
+    speedMultiplier: round3(profile.speedMultiplier * stagePower.speed * template.speedMultiplier
+      * (1 + progress * .055)),
+    projectileSpeedMultiplier: round3(profile.projectileSpeedMultiplier * stagePower.projectile
+      * (1 + progress * .075)),
+    fireCooldownMultiplier: round3(clamp(profile.fireCooldownMultiplier * stagePower.fire
+      * (1 - progress * .14), .50, 1.24)),
+    budgetMultiplier: round3(profile.budgetMultiplier * stagePower.budget),
+    spawnGapMultiplier: round3(profile.spawnGapMultiplier * stagePower.spawn),
   });
 }
 
@@ -277,6 +354,12 @@ function projectRuntimeV3(runtime, wavePower, elite = false) {
   return Object.freeze({
     tier: runtime.tier,
     canShoot: runtime.canShoot,
+    engagementMode: runtime.engagementMode,
+    canCrossPlayer: runtime.canCrossPlayer,
+    reengages: runtime.reengages,
+    preferredRange: runtime.preferredRange,
+    fireRangeMin: runtime.fireRangeMin,
+    fireRangeMax: runtime.fireRangeMax,
     shootMs: runtime.shootMs > 0
       ? Math.max(560, Math.round(runtime.shootMs * wavePower.fireCooldownMultiplier * eliteCooldown)) : 0,
     hpMultiplier: round3(runtime.hpMultiplier * wavePower.hpMultiplier * eliteHp),
@@ -313,26 +396,29 @@ function buildCampaignEntries({
   const next = rng32(seed);
   const formation = resolveFormation(template, profile, next);
   const lanes = FORMATION_LANES[formation] || FORMATION_LANES.line;
-  const baseBudget = clamp(Math.round(
-    5 + stage * 1.35 + wave * 1.05 + Math.sqrt(Math.max(1, baseEnemies)) * 1.45,
-  ), 8, 38);
-  const threatBudget = clamp(Math.round(
-    baseBudget * profile.budgetMultiplier * template.budgetMultiplier * clamp(difficulty, .75, 2),
-  ), 6, 46);
-  const gapMs = clamp(Math.round(
-    (735 - stage * 11 - wave * 8) * profile.spawnGapMultiplier * template.spawnGapMultiplier,
-  ), 260, 850);
+  const progressionRank = resolveCampaignProgressionRankV35(planetId, stage);
   const wavePower = resolveCampaignWavePowerV3({
     planetId, stage, wave, totalWaves, difficulty, templateId: template.id,
   });
+  const baseBudget = clamp(Math.round(
+    5 + progressionRank * 1.18 + wave * 1.02 + Math.sqrt(Math.max(1, baseEnemies)) * 1.35,
+  ), 7, 42);
+  const threatBudget = clamp(Math.round(
+    baseBudget * wavePower.budgetMultiplier * template.budgetMultiplier * clamp(difficulty, .85, 1.25),
+  ), 5, 58);
+  const gapMs = clamp(Math.round(
+    (760 - progressionRank * 9 - wave * 7) * wavePower.spawnGapMultiplier * template.spawnGapMultiplier,
+  ), 220, 920);
+  const entityCap = resolveCampaignWaveEntityCapV35(planetId, stage);
   const allowedRoles = template.roles.filter(role =>
-    ENEMY_RUNTIME_CATALOG_V3[role] && (ENEMY_ARCHETYPES_V2[role]?.unlockStage || 1) <= stage);
-  if (!allowedRoles.length) allowedRoles.push(stage <= 1 ? 'raider' : 'gunner');
+    ENEMY_RUNTIME_CATALOG_V3[role]
+      && (ENEMY_ARCHETYPES_V2[role]?.unlockStage || 1) <= progressionRank);
+  if (!allowedRoles.length) allowedRoles.push(progressionRank <= 1 ? 'raider' : 'gunner');
   const entries = [];
   let spent = 0;
   let previousRole = null;
   let safety = 0;
-  while (spent < threatBudget && safety++ < 80) {
+  while (spent < threatBudget && entries.length < entityCap && safety++ < 80) {
     const scriptedRole = allowedRoles[entries.length % allowedRoles.length];
     const role = entries.length < allowedRoles.length
       ? scriptedRole : weightedRole(next, allowedRoles, profile, previousRole);
@@ -363,7 +449,15 @@ function buildCampaignEntries({
     spent += runtime.cost + (elite ? 3 : 0);
     previousRole = role;
   }
-  return Object.freeze({ entries: freezeList(entries), threatBudget, spawnGapMs: gapMs, formation, wavePower });
+  return Object.freeze({
+    entries: freezeList(entries),
+    threatBudget,
+    spawnGapMs: gapMs,
+    formation,
+    wavePower,
+    progressionRank,
+    entityCap,
+  });
 }
 
 function roleRuntimeV28(role) {
@@ -487,6 +581,12 @@ export function auditCampaignEnemyDirectorV3() {
     const runtime = ENEMY_RUNTIME_CATALOG_V3[id];
     if (!runtime) issues.push(`MISSING_RUNTIME:${id}`);
     if (runtime?.tier !== archetype.tier || runtime?.cost !== archetype.threatCost) issues.push(`RUNTIME_DRIFT:${id}`);
+    if (runtime?.engagementMode !== archetype.engagementMode
+      || runtime?.canCrossPlayer !== archetype.canCrossPlayer
+      || runtime?.reengages !== archetype.reengages) issues.push(`ENGAGEMENT_DRIFT:${id}`);
+    if (runtime?.preferredRange !== archetype.preferredRange
+      || runtime?.fireRangeMin !== archetype.fireRangeMin
+      || runtime?.fireRangeMax !== archetype.fireRangeMax) issues.push(`RANGE_DRIFT:${id}`);
   }
   for (const [planetId, profile] of Object.entries(CAMPAIGN_PLANET_PROFILES_V27)) {
     if (!(profile.spawnGapMultiplier > 0)) issues.push(`SPAWN_GAP:${planetId}`);
@@ -494,6 +594,25 @@ export function auditCampaignEnemyDirectorV3() {
     if (!(profile.scoutExtraReturnRatio >= 0 && profile.scoutExtraReturnRatio <= 1))
       issues.push(`SCOUT_EXTRA_RETURN:${planetId}`);
     if (!(profile.damageMultiplier > 0 && profile.speedMultiplier > 0)) issues.push(`PLANET_POWER:${planetId}`);
+    if (!Number.isInteger(profile.campaignRankOffset) || profile.campaignRankOffset < 0)
+      issues.push(`PLANET_RANK_OFFSET:${planetId}`);
+    if (!(profile.powerStageStart >= 1 && profile.powerStageStart <= 10))
+      issues.push(`PLANET_POWER_STAGE_START:${planetId}`);
+  }
+  for (const planetId of [1, 2, 3]) {
+    const stagePowers = Array.from({ length: 10 }, (_, index) =>
+      resolveCampaignStagePowerV35(index + 1, planetId));
+    for (let index = 1; index < stagePowers.length; index += 1) {
+      const previous = stagePowers[index - 1];
+      const current = stagePowers[index];
+      if (!(current.hp > previous.hp && current.damage > previous.damage
+        && current.budget > previous.budget && current.fire < previous.fire
+        && current.spawn < previous.spawn)) issues.push(`STAGE_CURVE_ORDER:${planetId}:${index + 1}`);
+    }
+    const caps = Array.from({ length: 10 }, (_, index) =>
+      resolveCampaignWaveEntityCapV35(planetId, index + 1));
+    if (caps.some((value, index) => value > 32 || (index > 0 && value < caps[index - 1])))
+      issues.push(`ENTITY_CAP_ORDER:${planetId}`);
   }
   const alpha = CAMPAIGN_PLANET_PROFILES_V27[1];
   const cryo = CAMPAIGN_PLANET_PROFILES_V27[2];
@@ -508,16 +627,28 @@ export function auditCampaignEnemyDirectorV3() {
     && cryo.fireCooldownMultiplier > inferno.fireCooldownMultiplier)) issues.push('PLANET_FIRE_RATE_ORDER');
   if (!(alpha.spawnGapMultiplier > cryo.spawnGapMultiplier
     && cryo.spawnGapMultiplier > inferno.spawnGapMultiplier)) issues.push('PLANET_SPAWN_TEMPO_ORDER');
+  const alphaLate = resolveCampaignWavePowerV3({ planetId: 1, stage: 10, wave: 1, totalWaves: 5 });
+  const cryoEntry = resolveCampaignWavePowerV3({ planetId: 2, stage: 1, wave: 1, totalWaves: 5 });
+  const cryoLate = resolveCampaignWavePowerV3({ planetId: 2, stage: 10, wave: 1, totalWaves: 5 });
+  const infernoEntry = resolveCampaignWavePowerV3({ planetId: 3, stage: 1, wave: 1, totalWaves: 5 });
+  if (!(cryoEntry.hpMultiplier >= alphaLate.hpMultiplier * .92
+    && cryoEntry.damageMultiplier >= alphaLate.damageMultiplier * .90))
+    issues.push('CRYO_CHAPTER_CARRY');
+  if (!(infernoEntry.hpMultiplier > cryoLate.hpMultiplier
+    && infernoEntry.damageMultiplier > cryoLate.damageMultiplier))
+    issues.push('INFERNO_CHAPTER_CARRY');
   return Object.freeze(issues);
 }
 
 export function createEnemyDirectorV2({ seed = 1, stage = 1, difficulty = 1, planetId = 1 } = {}) {
   const next = rng32(seed);
-  const safeStage = clamp(Math.trunc(Number(stage) || 1), 1, 100);
-  const safeDifficulty = clamp(Number(difficulty) || 1, .75, 3);
+  const safeStage = clamp(Math.trunc(Number(stage) || 1), 1, 10);
+  const safeDifficulty = clamp(Number(difficulty) || 1, .85, 1.25);
   const safePlanetId = CAMPAIGN_PLANET_PROFILES_V27[planetId] ? Number(planetId) : 1;
 
-  const available = () => Object.values(ENEMY_ARCHETYPES_V2).filter(enemy => enemy.unlockStage <= safeStage);
+  const safeProgressionRank = resolveCampaignProgressionRankV35(safePlanetId, safeStage);
+  const available = () => Object.values(ENEMY_ARCHETYPES_V2)
+    .filter(enemy => enemy.unlockStage <= safeProgressionRank);
 
   function chooseArchetype(previousId = null) {
     const pool = available();
@@ -525,7 +656,7 @@ export function createEnemyDirectorV2({ seed = 1, stage = 1, difficulty = 1, pla
     for (const enemy of pool) {
       let weight = 10;
       if (enemy.id === 'raider' || enemy.id === 'gunner') weight += 8;
-      if (enemy.unlockStage === safeStage) weight -= 2;
+      if (enemy.unlockStage === safeProgressionRank) weight -= 2;
       if (enemy.id === previousId) weight = Math.max(2, Math.floor(weight * .35));
       for (let count = 0; count < weight; count += 1) weighted.push(enemy);
     }
@@ -535,7 +666,7 @@ export function createEnemyDirectorV2({ seed = 1, stage = 1, difficulty = 1, pla
   function buildWavePlan({ wave = 1, count = 8, startTick = 0 } = {}) {
     const safeWave = clamp(Math.trunc(Number(wave) || 1), 1, 20);
     const safeCount = clamp(Math.trunc(Number(count) || 1), 1, 100);
-    const interval = clamp(Math.round(66 - safeStage * 2 - safeWave * 1.5), 24, 66);
+    const interval = clamp(Math.round(66 - safeProgressionRank * 2 - safeWave * 1.5), 24, 66);
     const plan = [];
     let previousId = null;
     for (let index = 0; index < safeCount; index += 1) {
@@ -576,7 +707,10 @@ export function createEnemyDirectorV2({ seed = 1, stage = 1, difficulty = 1, pla
       if (template.boss) {
         return Object.freeze({
           wave: index + 1, templateId, label: template.label, boss: true, bossPreview: false,
-          entries: Object.freeze([]), threatBudget: 0, spawnGapMs: 0, formation: template.formation,
+          entries: Object.freeze([]), threatBudget: 0,
+          entityCap: 0,
+          progressionRank: resolveCampaignProgressionRankV35(resolvedPlanetId, safeStage),
+          spawnGapMs: 0, formation: template.formation,
           interWaveDelayMs: 0, guaranteedDrop: null, planetProfileId: profile.id,
           wavePower: resolveCampaignWavePowerV3({
             planetId: resolvedPlanetId, stage: safeStage, wave: index + 1,
@@ -606,6 +740,8 @@ export function createEnemyDirectorV2({ seed = 1, stage = 1, difficulty = 1, pla
         miniBoss: encounter?.kind === 'mini_boss',
         entries: encounterEntries,
         threatBudget: built.threatBudget,
+        entityCap: built.entityCap,
+        progressionRank: built.progressionRank,
         spawnGapMs: built.spawnGapMs,
         formation: built.formation,
         interWaveDelayMs: encounter?.kind === 'mini_boss'
@@ -623,6 +759,7 @@ export function createEnemyDirectorV2({ seed = 1, stage = 1, difficulty = 1, pla
       planetId: resolvedPlanetId,
       planetProfileId: profile.id,
       stage: safeStage,
+      progressionRank: resolveCampaignProgressionRankV35(resolvedPlanetId, safeStage),
       totalWaves: waves.length,
       hasBoss: Boolean(hasBoss),
       encounterVersion: CAMPAIGN_ENCOUNTER_ESCALATION_VERSION,

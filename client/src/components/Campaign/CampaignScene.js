@@ -228,7 +228,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     seed:stableSeed('campaign-wave-v30',currentPlanetId,currentStage),
     stage:currentStage,
     planetId:currentPlanetId,
-    difficulty:clamp(0.9+currentPlanetId*.1+currentStage*.015,1,1.35),
+    difficulty:1,
   }):null;
   const campaignStagePlan=campaignWaveDirector?.buildCampaignStagePlan({
     planetId:currentPlanetId,
@@ -1564,6 +1564,17 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     const beforeZ = enemy.mesh.position.z;
     enemy.mesh.position.x = clamp(enemy.mesh.position.x + result.deltaX, -boundX() + .35, boundX() - .35);
     enemy.mesh.position.z += result.deltaZ;
+    enemy._maxCombatZ = Number.isFinite(Number(result.maxCombatZ)) ? Number(result.maxCombatZ) : null;
+    // Production range roles are not allowed to drift through the player. The
+    // choreography already retreats before this boundary; this clamp is the
+    // fail-closed guard for large delta-time spikes and resume frames.
+    if (!result.canCrossPlayer && enemy._maxCombatZ != null
+      && enemy.mesh.position.z > enemy._maxCombatZ) {
+      enemy.mesh.position.z = enemy._maxCombatZ;
+      if (enemy._choreographyState) {
+        enemy._choreographyState.velocityZ = Math.min(0, enemy._choreographyState.velocityZ || 0);
+      }
+    }
     if (result.facePlayer) {
       updateEnemyFacing(enemy,
         playerRoot.position.x - enemy.mesh.position.x,
@@ -1819,6 +1830,13 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       _damageMultiplier:Number(spawnSpec?.damageMultiplier)||1,
       _damageType:spawnSpec?.damageType||'kinetic',
       _waveRole:spawnSpec?.archetypeId||null,
+      _engagementMode:spawnSpec?.engagementMode||(tier===4||!legacyMotion?.canShoot?'diver':'ranged'),
+      _canCrossPlayer:spawnSpec?Boolean(spawnSpec.canCrossPlayer):Boolean(tier===4||!legacyMotion?.canShoot),
+      _reengages:spawnSpec?Boolean(spawnSpec.reengages):Boolean(tier===4),
+      _preferredRange:Math.max(0,Number(spawnSpec?.preferredRange)||0),
+      _fireRangeMin:Math.max(0,Number(spawnSpec?.fireRangeMin)||0),
+      _fireRangeMax:Math.max(0,Number(spawnSpec?.fireRangeMax)||0),
+      _maxCombatZ:null,
       _waveElite:Boolean(spawnSpec?.elite),
       _motionSeed:motionSeed,
       _spawnLane:Number(spawnSpec?.lane)||0,
@@ -2162,6 +2180,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   let spawnInterval = 1200;
   let currentWavePlan = null;
   let currentWaveStartedAt = 0;
+  let nextCapacitySpawnRetryAt = 0;
   let waveRecoveryDropSpawned = false;
   let gameOver      = false;
   let gameState     = 'TRANSITION';  // PLAYING | BOSS_INTRO | BOSS_FIGHT | TRANSITION | GAMEOVER | CLEAR
@@ -2223,6 +2242,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     currentWave   = n;
     currentWavePlan=campaignStagePlan?.waves?.[n-1]||null;
     waveRecoveryDropSpawned=false;
+    nextCapacitySpawnRetryAt=0;
     if(currentWavePlan){
       waveCount=currentWavePlan.entries.length;
       spawnInterval=currentWavePlan.spawnGapMs||1200;
@@ -3139,9 +3159,19 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         const beforeX=e.mesh.position.x;
         const beforeZ=e.mesh.position.z;
         if (!e.canShoot && e.tier===4) {
+          const chargerReturnX=clamp(
+            e._spawnLane*boundX()*.72+e._spawnStrafeDirection*.62,
+            -boundX()+.75,boundX()-.75,
+          );
+          const chargerReturnZ=clamp(
+            playerRoot.position.z-8.5,
+            -ZOOM+4.8,
+            playerRoot.position.z-6.5,
+          );
           const charge=stepChargerMotionV26A3(e._chargerState,{
             nowMs:now,enemyX:e.mesh.position.x,enemyZ:e.mesh.position.z,
             targetX:playerRoot.position.x,targetZ:playerRoot.position.z,
+            returnTargetX:chargerReturnX,returnTargetZ:chargerReturnZ,
           });
           e._chargerState=charge.state;
           if(charge.event==='telegraph_started')createChargeTelegraph(e,charge.direction);
@@ -3149,7 +3179,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
             disposeChargeTelegraph(e);
             if(e._encounterMechanicId==='charge_rush')completeEncounterMechanic(e);
           }
-          if(charge.event==='recovery_started')disposeChargeTelegraph(e);
+          if(charge.event==='recovery_started'||charge.event==='return_started')disposeChargeTelegraph(e);
           if(charge.state.phase==='telegraph')e.visual?.setState('attack');
           else if(charge.state.phase==='recovery')e.visual?.setState('idle');
           else e.visual?.setState('move');
@@ -3195,26 +3225,54 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       }
 
 
-      // Cull past screen bottom
-      if (e.mesh.position.z > ZOOM + 5) { cleanEnemy(e); enemies.splice(i,1); continue; }
+      // Production enemies do not clear a wave by escaping alive. Ranged
+      // roles loop their authored engagement band until destroyed. The charger
+      // is the sole diver: a missed charge is clamped just off-screen, then its
+      // state machine returns it to the upper combat lane for another cycle.
+      if (e.mesh.position.z > ZOOM + 5) {
+        if (e._canCrossPlayer && e._chargerState) {
+          e.mesh.position.z = ZOOM + 3.8;
+        } else if (e._reengages && e._choreographyState) {
+          const fallbackMaxZ=Number.isFinite(Number(e._maxCombatZ))
+            ?Number(e._maxCombatZ):playerRoot.position.z-Math.max(3.2,e._fireRangeMin||4.6);
+          e.mesh.position.z=Math.min(e.mesh.position.z,fallbackMaxZ);
+          e._choreographyState.velocityZ=Math.min(0,e._choreographyState.velocityZ||0);
+        } else {
+          cleanEnemy(e); enemies.splice(i,1); continue;
+        }
+      }
 
       // Collision with player
       {
         const dx = e.mesh.position.x - playerRoot.position.x;
         const dz = e.mesh.position.z - playerRoot.position.z;
         if (dx*dx + dz*dz < 3.24) {   // hit radius 1.8
-          damagePlayer({rawDamage:e._contactDamage||(e.tier===4?400:200),source:'contact',damageType:e._damageType||'kinetic',contactId:e._contactHitId});
-          if (e._encounterKind === 'mini_boss' && e._miniBossAiState) {
-            e._miniBossAiState = forceCampaignMiniBossRecoveryV281(e._miniBossAiState, now);
-            disposeEncounterTelegraph(e);
-            disposeChargeTelegraph(e);
+          if (!e._canCrossPlayer && e._encounterKind !== 'mini_boss') {
+            // A ranged/guard enemy never converts an accidental overlap into a
+            // suicide attack. Push it back into its authored range band and let
+            // the normal volley loop continue; only diver-class enemies own a
+            // direct ship collision contract.
             const pushLength = Math.hypot(dx, dz) || 1;
-            e.mesh.position.x += dx / pushLength * .45;
-            e.mesh.position.z += dz / pushLength * .45;
-            explode(e.mesh.position, .85);
+            e.mesh.position.x = clamp(e.mesh.position.x + dx / pushLength * .34,
+              -boundX()+.35,boundX()-.35);
+            const safeZ=Number.isFinite(Number(e._maxCombatZ))
+              ?Number(e._maxCombatZ):playerRoot.position.z-Math.max(3.2,e._fireRangeMin||4.6);
+            e.mesh.position.z=Math.min(e.mesh.position.z-dz/pushLength*.54,safeZ);
+            if(e._choreographyState)e._choreographyState.velocityZ=Math.min(0,e._choreographyState.velocityZ||0);
           } else {
-            explode(e.mesh.position, 1.5);
-            cleanEnemy(e); enemies.splice(i,1); continue;
+            damagePlayer({rawDamage:e._contactDamage||(e.tier===4?400:200),source:'contact',damageType:e._damageType||'kinetic',contactId:e._contactHitId});
+            if (e._encounterKind === 'mini_boss' && e._miniBossAiState) {
+              e._miniBossAiState = forceCampaignMiniBossRecoveryV281(e._miniBossAiState, now);
+              disposeEncounterTelegraph(e);
+              disposeChargeTelegraph(e);
+              const pushLength = Math.hypot(dx, dz) || 1;
+              e.mesh.position.x += dx / pushLength * .45;
+              e.mesh.position.z += dz / pushLength * .45;
+              explode(e.mesh.position, .85);
+            } else {
+              explode(e.mesh.position, 1.5);
+              cleanEnemy(e); enemies.splice(i,1); continue;
+            }
           }
         }
       }
@@ -3431,12 +3489,22 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         if(currentWavePlan){
           const elapsed=Math.max(0,now-currentWaveStartedAt);
           let spawnedThisFrame=0;
-          while(waveSpawned<waveCount&&spawnedThisFrame<2){
-            const nextSpec=currentWavePlan.entries[waveSpawned];
-            if(!nextSpec||elapsed<nextSpec.spawnOffsetMs)break;
-            if(!spawnEnemy(nextSpec))break;
-            waveSpawned++;
-            spawnedThisFrame++;
+          if(now>=nextCapacitySpawnRetryAt){
+            while(waveSpawned<waveCount&&spawnedThisFrame<2){
+              const nextSpec=currentWavePlan.entries[waveSpawned];
+              if(!nextSpec||elapsed<nextSpec.spawnOffsetMs)break;
+              if(!spawnEnemy(nextSpec)){
+                // Persistent enemies can legitimately fill the active cap when
+                // the loadout is underpowered. Queue the authored entry and
+                // retry at a bounded cadence instead of hammering spawn every
+                // render frame or silently dropping the enemy from the wave.
+                nextCapacitySpawnRetryAt=now+240;
+                break;
+              }
+              waveSpawned++;
+              spawnedThisFrame++;
+              nextCapacitySpawnRetryAt=0;
+            }
           }
         }else if (now > lastSpawn + spawnInterval) {
           if (spawnEnemy()) waveSpawned++;

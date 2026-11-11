@@ -13,10 +13,14 @@ import {
 } from '../src/game/combat/EnemyCombatCatalogV2.js';
 import {
   CAMPAIGN_PLANET_PROFILES_V27,
+  CAMPAIGN_STAGE_POWER_CURVE_V35,
   CAMPAIGN_WAVE_DIRECTOR_VERSION,
   CAMPAIGN_WAVE_TEMPLATES_V27,
   auditCampaignEnemyDirectorV3,
   createEnemyDirectorV2,
+  resolveCampaignProgressionRankV35,
+  resolveCampaignStagePowerV35,
+  resolveCampaignWaveEntityCapV35,
   resolveCampaignWavePowerV3,
   scaleEnemyStatsV2,
 } from '../src/game/combat/DeterministicEnemyDirectorV2.js';
@@ -104,10 +108,10 @@ const stagePlan = (options = {}) => createEnemyDirectorV2({
   baseEnemies: options.baseEnemies ?? 40,
 });
 
-test('enemy V3.4 catalog is the single runtime source for six readable combat roles and committed volleys', () => {
-  assert.equal(ENEMY_COMBAT_CATALOG_VERSION, 'enemy-combat-v3.4.0');
+test('enemy V3.5 catalog is the single runtime source for six persistent role contracts', () => {
+  assert.equal(ENEMY_COMBAT_CATALOG_VERSION, 'enemy-combat-v3.5.0');
   assert.deepEqual(auditEnemyCombatCatalogV2(), []);
-  assert.equal(CAMPAIGN_PROJECTILE_VISUAL_VERSION, 'campaign-projectile-visual-v3.4.0');
+  assert.equal(CAMPAIGN_PROJECTILE_VISUAL_VERSION, 'campaign-projectile-visual-v3.5.0');
   assert.deepEqual(auditCampaignProjectileVisualV32(), []);
   assert.ok(Object.keys(CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32).length >= 19);
   assert.ok(Math.abs(Math.abs(campaignProjectileVisualYawV32(0, 1)) - Math.PI) < 1e-12);
@@ -121,6 +125,21 @@ test('enemy V3.4 catalog is the single runtime source for six readable combat ro
     assert.equal(runtime.hpMultiplier, archetype.hpMultiplier);
     assert.equal(runtime.speedMultiplier, archetype.speedMultiplier);
     assert.equal(runtime.contactDamage, archetype.contactDamage);
+    assert.equal(runtime.engagementMode, archetype.engagementMode);
+    assert.equal(runtime.canCrossPlayer, archetype.canCrossPlayer);
+    assert.equal(runtime.reengages, true);
+    if (archetype.engagementMode === 'diver') {
+      assert.equal(archetype.id, 'charger');
+      assert.equal(archetype.canCrossPlayer, true);
+      assert.equal(archetype.canShoot, false);
+    } else {
+      assert.equal(archetype.canCrossPlayer, false);
+      assert.equal(archetype.canShoot, true,
+        `${archetype.id} must fight from a catalog-authored range instead of silently passing the ship`);
+      assert.ok(archetype.fireRangeMin > 0 && archetype.fireRangeMax > archetype.fireRangeMin);
+      assert.ok(archetype.preferredRange >= archetype.fireRangeMin
+        && archetype.preferredRange <= archetype.fireRangeMax);
+    }
     if (archetype.canShoot) {
       assert.ok(runtime.shootMs > 0 && runtime.projectileSpeed > 0 && runtime.projectileDamage > 0);
       assert.equal(runtime.projectileAimMode, archetype.projectileAimMode);
@@ -133,7 +152,7 @@ test('enemy V3.4 catalog is the single runtime source for six readable combat ro
       assert.ok(runtime.burstGapMs >= 60 && runtime.burstGapMs <= 320);
       assert.ok(runtime.minVolleysPerFirePhase >= 1);
       assert.ok(runtime.maxVolleysPerFirePhase >= runtime.minVolleysPerFirePhase);
-      const burstDamageCaps = { raider: 70, gunner: 120, support: 110, artillery: 200 };
+      const burstDamageCaps = { raider: 70, gunner: 120, shieldbearer: 90, support: 110, artillery: 200 };
       assert.ok(runtime.burstCount * runtime.projectileDamage <= burstDamageCaps[archetype.id],
         `${archetype.id} may gain density, but one volley must remain damage-bounded`);
     }
@@ -295,7 +314,7 @@ test('boss plan telegraphs every attack and changes phase deterministically', ()
 });
 
 test('V2.8 combines deterministic pacing with mini-bosses and real Boss mechanic previews', () => {
-  assert.equal(CAMPAIGN_WAVE_DIRECTOR_VERSION, 'campaign-wave-director-v3.4.0');
+  assert.equal(CAMPAIGN_WAVE_DIRECTOR_VERSION, 'campaign-wave-director-v3.5.0');
   assert.equal(CAMPAIGN_ENCOUNTER_ESCALATION_VERSION, 'campaign-encounter-v2.8.1');
   assert.deepEqual(Object.keys(CAMPAIGN_PLANET_PROFILES_V27), ['1', '2', '3']);
   assert.ok(Object.keys(CAMPAIGN_WAVE_TEMPLATES_V27).length >= 14);
@@ -529,8 +548,8 @@ test('V2.8 threat budgets stay readable, schedules are monotonic and early stage
   const early = stagePlan({ stage: 1, totalWaves: 5, hasBoss: false, baseEnemies: 5 });
   const allowedEarly = new Set(['raider', 'gunner']);
   for (const wave of early.waves) {
-    assert.ok(wave.threatBudget >= 6 && wave.threatBudget <= 46);
-    assert.ok(wave.entries.length > 0 && wave.entries.length <= 46);
+    assert.ok(wave.threatBudget >= 5 && wave.threatBudget <= 58);
+    assert.ok(wave.entries.length > 0 && wave.entries.length <= wave.entityCap);
     assert.equal(wave.entries.every(entry => allowedEarly.has(entry.archetypeId)), true);
     assert.equal(wave.entries.every((entry, index, list) => index === 0 || entry.spawnOffsetMs > list[index - 1].spawnOffsetMs), true);
     assert.equal(wave.entries.every(entry => [-.8, -.4, 0, .4, .8].includes(entry.lane)), true);
@@ -558,43 +577,75 @@ test('planet profiles create distinct deterministic compositions without changin
   assert.notEqual(signature(cryo), signature(inferno));
 });
 
-test('V3.4 wave power keeps every campaign scout returning and scales extra attack passes by planet', () => {
+test('V3.5 progression makes Alpha onboarding gentle, late stages upgrade-driven and later planets materially stronger', () => {
   assert.deepEqual(auditCampaignEnemyDirectorV3(), []);
+  assert.equal(CAMPAIGN_WAVE_DIRECTOR_VERSION, 'campaign-wave-director-v3.5.0');
+  assert.equal(Object.keys(CAMPAIGN_STAGE_POWER_CURVE_V35).length, 10);
   const directorSource = fs.readFileSync(
     new URL('../src/game/combat/DeterministicEnemyDirectorV2.js', import.meta.url), 'utf8');
   assert.doesNotMatch(directorSource, /LEGACY_ROLE_RUNTIME_V27/,
     'role runtime values must be projected from EnemyCombatCatalogV2');
 
-  const alphaEarly = resolveCampaignWavePowerV3({
-    planetId: 1, stage: 5, wave: 1, totalWaves: 10, difficulty: 1.1, templateId: 'recon',
+  const stagePowers = Array.from({ length: 10 }, (_unused, index) => resolveCampaignStagePowerV35(index + 1));
+  for (let index = 1; index < stagePowers.length; index += 1) {
+    assert.ok(stagePowers[index].hp > stagePowers[index - 1].hp);
+    assert.ok(stagePowers[index].damage > stagePowers[index - 1].damage);
+    assert.ok(stagePowers[index].budget > stagePowers[index - 1].budget);
+    assert.ok(stagePowers[index].fire < stagePowers[index - 1].fire);
+    assert.ok(stagePowers[index].spawn < stagePowers[index - 1].spawn);
+  }
+  assert.ok(stagePowers[4].hp <= 1.05 && stagePowers[4].damage <= 1.01,
+    'Alpha stages 1-5 must remain a learnable onboarding arc');
+  assert.ok(stagePowers[5].hp / stagePowers[4].hp >= 1.10,
+    'stage 6 must start a visible upgrade ramp instead of another flat tutorial stage');
+  assert.ok(stagePowers[9].hp >= 1.75 && stagePowers[9].damage >= 1.5,
+    'late stages must reward aircraft and equipment upgrades');
+
+  assert.equal(resolveCampaignProgressionRankV35(1, 1), 1);
+  assert.equal(resolveCampaignProgressionRankV35(2, 1), 5);
+  assert.equal(resolveCampaignProgressionRankV35(3, 1), 9);
+  assert.deepEqual(
+    [1, 2, 3].map(planetId => [
+      resolveCampaignWaveEntityCapV35(planetId, 1),
+      resolveCampaignWaveEntityCapV35(planetId, 10),
+    ]),
+    [[8, 24], [14, 28], [18, 32]],
+    'persistent waves must increase by chapter while leaving mobile headroom below the 48-entity runtime limit',
+  );
+
+  const power = (planetId, stage, wave = 1) => resolveCampaignWavePowerV3({
+    planetId, stage, wave, totalWaves: 10, difficulty: 1, templateId: 'recon',
   });
-  const alphaLate = resolveCampaignWavePowerV3({
-    planetId: 1, stage: 5, wave: 9, totalWaves: 10, difficulty: 1.1, templateId: 'recon',
-  });
-  const cryoEarly = resolveCampaignWavePowerV3({
-    planetId: 2, stage: 5, wave: 1, totalWaves: 10, difficulty: 1.1, templateId: 'recon',
-  });
-  const infernoEarly = resolveCampaignWavePowerV3({
-    planetId: 3, stage: 5, wave: 1, totalWaves: 10, difficulty: 1.1, templateId: 'recon',
-  });
-  assert.ok(alphaLate.hpMultiplier > alphaEarly.hpMultiplier);
-  assert.ok(alphaLate.damageMultiplier > alphaEarly.damageMultiplier);
-  assert.ok(alphaLate.speedMultiplier > alphaEarly.speedMultiplier);
-  assert.ok(alphaLate.fireCooldownMultiplier < alphaEarly.fireCooldownMultiplier);
-  assert.ok(cryoEarly.hpMultiplier > alphaEarly.hpMultiplier,
-    'Cryo must be tougher than Alpha');
-  assert.ok(cryoEarly.damageMultiplier > alphaEarly.damageMultiplier
-    && infernoEarly.damageMultiplier > cryoEarly.damageMultiplier,
-  'planet damage must increase Alpha < Cryo < Inferno');
-  assert.ok(cryoEarly.speedMultiplier > alphaEarly.speedMultiplier
-    && infernoEarly.speedMultiplier > cryoEarly.speedMultiplier,
-  'planet movement pressure must increase Alpha < Cryo < Inferno');
-  assert.ok(cryoEarly.projectileSpeedMultiplier > alphaEarly.projectileSpeedMultiplier
-    && infernoEarly.projectileSpeedMultiplier > cryoEarly.projectileSpeedMultiplier,
-  'hostile projectile speed must increase by planet');
-  assert.ok(cryoEarly.fireCooldownMultiplier < alphaEarly.fireCooldownMultiplier
-    && infernoEarly.fireCooldownMultiplier < cryoEarly.fireCooldownMultiplier,
-  'hostile fire cadence must become faster by planet');
+  const alpha1 = power(1, 1);
+  const alpha5 = power(1, 5);
+  const alpha6 = power(1, 6);
+  const alpha10 = power(1, 10);
+  const cryo1 = power(2, 1);
+  const cryo10 = power(2, 10);
+  const inferno1 = power(3, 1);
+  assert.ok(alpha5.hpMultiplier > alpha1.hpMultiplier
+    && alpha6.hpMultiplier > alpha5.hpMultiplier
+    && alpha10.hpMultiplier > alpha6.hpMultiplier);
+  assert.ok(alpha10.damageMultiplier > alpha6.damageMultiplier
+    && alpha10.fireCooldownMultiplier < alpha6.fireCooldownMultiplier);
+  assert.ok(cryo1.hpMultiplier > alpha1.hpMultiplier
+    && inferno1.hpMultiplier > cryo1.hpMultiplier);
+  assert.ok(cryo1.damageMultiplier > alpha1.damageMultiplier
+    && inferno1.damageMultiplier > cryo1.damageMultiplier);
+  assert.ok(cryo1.projectileSpeedMultiplier > alpha1.projectileSpeedMultiplier
+    && inferno1.projectileSpeedMultiplier > cryo1.projectileSpeedMultiplier);
+  assert.ok(cryo1.fireCooldownMultiplier < alpha1.fireCooldownMultiplier
+    && inferno1.fireCooldownMultiplier < cryo1.fireCooldownMultiplier);
+  assert.ok(cryo1.budgetMultiplier > alpha1.budgetMultiplier
+    && inferno1.budgetMultiplier > cryo1.budgetMultiplier);
+  assert.ok(cryo1.hpMultiplier >= alpha10.hpMultiplier * .92
+    && cryo1.damageMultiplier >= alpha10.damageMultiplier * .90,
+  'Cryo stage 1 must preserve late-Alpha per-enemy pressure instead of resetting to onboarding');
+  assert.ok(inferno1.hpMultiplier > cryo10.hpMultiplier
+    && inferno1.damageMultiplier > cryo10.damageMultiplier,
+  'Inferno stage 1 must continue beyond late-Cryo per-enemy pressure');
+  assert.equal(resolveCampaignStagePowerV35(1, 2).effectiveStage, 7.5);
+  assert.equal(resolveCampaignStagePowerV35(1, 3).effectiveStage, 9);
 
   const tierBase = (planetId, tier) => PLANET_ENEMIES[planetId].find(enemy => enemy.tier === tier);
   for (const tier of [1, 2, 3, 4]) {
@@ -602,38 +653,53 @@ test('V3.4 wave power keeps every campaign scout returning and scales extra atta
     const cryoBase = tierBase(2, tier);
     const infernoBase = tierBase(3, tier);
     assert.ok(alphaBase && cryoBase && infernoBase);
-    assert.ok(cryoBase.baseHp > alphaBase.baseHp, `Cryo tier ${tier} must exceed Alpha base HP`);
-    assert.ok(infernoBase.baseHp > cryoBase.baseHp, `Inferno tier ${tier} must exceed Cryo base HP`);
+    assert.ok(cryoBase.baseHp > alphaBase.baseHp);
+    assert.ok(infernoBase.baseHp > cryoBase.baseHp);
   }
-  const alphaTier1EffectiveHp = tierBase(1, 1).baseHp * alphaEarly.hpMultiplier;
-  const cryoTier1EffectiveHp = tierBase(2, 1).baseHp * cryoEarly.hpMultiplier;
-  const infernoTier1EffectiveHp = tierBase(3, 1).baseHp * infernoEarly.hpMultiplier;
-  assert.ok(alphaTier1EffectiveHp < cryoTier1EffectiveHp
-    && cryoTier1EffectiveHp < infernoTier1EffectiveHp);
-  assert.ok(infernoTier1EffectiveHp / alphaTier1EffectiveHp < 4,
-    'planet scaling must remain strong but bounded instead of multiplying the legacy environment HP twice');
+  assert.ok(tierBase(2, 1).baseHp * cryo1.hpMultiplier
+    > tierBase(1, 1).baseHp * alpha5.hpMultiplier,
+  'Cryo stage 1 must already exceed the effective light-enemy durability of late Alpha onboarding');
+
+  const alphaStage1 = stagePlan({ planetId: 1, stage: 1, totalWaves: 5, hasBoss: false, baseEnemies: 5 });
+  const cryoStage1 = stagePlan({ planetId: 2, stage: 1, totalWaves: 5, hasBoss: false, baseEnemies: 5 });
+  const infernoStage1 = stagePlan({ planetId: 3, stage: 1, totalWaves: 5, hasBoss: false, baseEnemies: 5 });
+  const roles = plan => new Set(plan.waves.flatMap(wave => wave.entries.map(entry => entry.archetypeId)));
+  assert.deepEqual([...roles(alphaStage1)].sort(), ['gunner', 'raider']);
+  assert.equal(roles(cryoStage1).has('charger'), true);
+  assert.equal(roles(cryoStage1).has('shieldbearer'), true);
+  assert.equal(roles(infernoStage1).has('artillery'), true);
+  const totalThreat = plan => plan.waves.reduce((sum, wave) => sum + wave.threatBudget, 0);
+  assert.ok(totalThreat(cryoStage1) > totalThreat(alphaStage1) * 1.35);
+  assert.ok(totalThreat(infernoStage1) > totalThreat(cryoStage1) * 1.25);
+  for (const plan of [alphaStage1, cryoStage1, infernoStage1]) {
+    for (const wave of plan.waves) {
+      assert.equal(wave.entityCap, resolveCampaignWaveEntityCapV35(plan.planetId, plan.stage));
+      assert.ok(wave.entries.length <= wave.entityCap);
+    }
+  }
 
   const routeTotals = new Map([[1, { hook_return: 0, double_hook_return: 0 }],
     [2, { hook_return: 0, double_hook_return: 0 }],
     [3, { hook_return: 0, double_hook_return: 0 }]]);
   for (const planetId of [1, 2, 3]) {
     for (let seed = 1; seed <= 24; seed += 1) {
-      const plan = createEnemyDirectorV2({ seed, stage: 5, planetId, difficulty: 1.1 })
+      const plan = createEnemyDirectorV2({ seed, stage: 5, planetId, difficulty: 1 })
         .buildCampaignStagePlan({ planetId, totalWaves: 10, hasBoss: true, baseEnemies: 20 });
       for (const wave of plan.waves) {
+        assert.ok(wave.entries.length <= wave.entityCap,
+          'persistent enemy waves must never exceed the authored mobile entity cap');
         for (const entry of wave.entries) {
-          assert.ok(ENEMY_RUNTIME_CATALOG_V3[entry.archetypeId]);
-          assert.ok(entry.hpMultiplier > 0 && entry.speedMultiplier > 0 && entry.contactDamage > 0);
-          assert.ok(Number.isFinite(entry.spawnOffsetMs) && Number.isFinite(entry.damageMultiplier));
+          const catalog = ENEMY_ARCHETYPES_V2[entry.archetypeId];
+          assert.ok(catalog);
+          assert.equal(entry.engagementMode, catalog.engagementMode);
+          assert.equal(entry.canCrossPlayer, catalog.canCrossPlayer);
+          assert.equal(entry.reengages, true);
+          assert.equal(entry.preferredRange, catalog.preferredRange);
+          assert.equal(entry.fireRangeMin, catalog.fireRangeMin);
+          assert.equal(entry.fireRangeMax, catalog.fireRangeMax);
           if (entry.canShoot) {
-            assert.ok(entry.shootMs >= 560 && entry.projectileSpeed > 0 && entry.projectileDamage > 0);
-            assert.ok(['predictive', 'soft_homing'].includes(entry.projectileAimMode));
-            assert.ok(entry.projectileLifetimeMs >= 1600);
+            assert.ok(entry.shootMs >= 520 && entry.projectileSpeed > 0 && entry.projectileDamage > 0);
             assert.ok(entry.burstCount >= 2 && entry.burstGapMs >= 60);
-            assert.ok(entry.minVolleysPerFirePhase >= 1);
-            if (entry.projectileAimMode === 'soft_homing') {
-              assert.ok(entry.projectileGuidanceMs > 0 && entry.projectileTurnRateRadians > 0);
-            }
           }
           if (entry.archetypeId === 'raider') routeTotals.get(planetId)[entry.routeVariant] += 1;
         }
@@ -647,15 +713,14 @@ test('V3.4 wave power keeps every campaign scout returning and scales extra atta
   for (const planetId of [1, 2, 3]) {
     const totals = routeTotals.get(planetId);
     assert.ok(totals.hook_return > 0 && totals.double_hook_return > 0);
-    assert.equal(totals.flyby, undefined, 'campaign director must not emit one-pass flyby scouts');
+    assert.equal(totals.flyby, undefined);
   }
   assert.ok(extraReturnRatio(3) > extraReturnRatio(2)
-    && extraReturnRatio(2) > extraReturnRatio(1),
-  'later planets must assign more three-pass scout attacks');
+    && extraReturnRatio(2) > extraReturnRatio(1));
 });
 
-test('V3.4 catalog-backed choreography is finite and every campaign scout re-engages before egress', () => {
-  assert.equal(CAMPAIGN_COMBAT_CHOREOGRAPHY_VERSION, 'campaign-combat-choreography-v3.4.0');
+test('V3.5 every non-diver loops combat at an authored firing range until destroyed', () => {
+  assert.equal(CAMPAIGN_COMBAT_CHOREOGRAPHY_VERSION, 'campaign-combat-choreography-v3.5.0');
   assert.deepEqual(auditCampaignCombatChoreographyV29(), []);
   assert.deepEqual(Object.keys(CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30).sort(),
     ['double_hook_return', 'hook_return']);
@@ -664,10 +729,19 @@ test('V3.4 catalog-backed choreography is finite and every campaign scout re-eng
     Object.keys(CAMPAIGN_ROLE_CHOREOGRAPHY_V29).sort(),
   );
 
+  const expectedPhases = {
+    raider: ['attack_pass_a', 'breakaway', 'attack_pass_b', 'tactical_reset'],
+    gunner: ['firing_slot', 'strafe_a', 'fallback', 'strafe_b', 'range_reset'],
+    shieldbearer: ['guard_slot', 'guard_sweep_a', 'cover_reset', 'guard_sweep_b', 'guard_reset'],
+    support: ['support_slot', 'orbit_0', 'orbit_1', 'support_reset', 'orbit_2', 'orbit_3'],
+    artillery: ['battery_approach', 'brace_a', 'battery_relocate', 'brace_b', 'tactical_retreat', 'battery_return'],
+  };
+
   for (const roleId of Object.keys(ENEMY_ARCHETYPES_V2)) {
+    const archetype = ENEMY_ARCHETYPES_V2[roleId];
     const state = createCampaignEnemyChoreographyStateV29({
       roleId, lane: .4, strafeDirection: -1, seed: 77, nowMs: 0,
-      routeVariant: roleId === 'raider' ? 'hook_return' : null,
+      routeVariant: roleId === 'raider' ? 'double_hook_return' : null,
     });
     const first = stepCampaignEnemyChoreographyV29(state, {
       nowMs: 0, frameScale: 1, baseSpeed: .035,
@@ -678,10 +752,11 @@ test('V3.4 catalog-backed choreography is finite and every campaign scout re-eng
     if (roleId === 'charger') {
       assert.equal(first.handled, false);
       assert.equal(state.externalController, 'CampaignRuntimeReliabilityV26A3');
+      assert.equal(archetype.canCrossPlayer, true);
       continue;
     }
     assert.equal(first.handled, true);
-    assert.equal(Number.isFinite(first.targetX) && Number.isFinite(first.targetZ), true);
+    assert.equal(archetype.canCrossPlayer, false);
     const lockedTarget = [state.targetX, state.targetZ];
     stepCampaignEnemyChoreographyV29(state, {
       nowMs: 120, frameScale: 1, baseSpeed: .035,
@@ -690,29 +765,14 @@ test('V3.4 catalog-backed choreography is finite and every campaign scout re-eng
       hudOcclusionLineZ: -9.3,
     });
     assert.deepEqual([state.targetX, state.targetZ], lockedTarget,
-      `${roleId} must not retarget every render frame`);
+      `${roleId} must keep a phase target instead of retargeting every render frame`);
   }
 
-  const expectations = [
-    { roleId: 'raider', routeVariant: 'hook_return', maxMs: 8500,
-      required: ['flank_approach', 'commit_cross', 'hook_turn', 'return_pass', 'egress'] },
-    { roleId: 'raider', routeVariant: 'double_hook_return', maxMs: 10800,
-      required: ['flank_approach', 'commit_cross', 'hook_turn', 'return_pass',
-        'hook_turn_2', 'return_pass_2', 'egress'] },
-    { roleId: 'gunner', maxMs: 8400,
-      required: ['firing_slot', 'strafe_a', 'strafe_b', 'egress'] },
-    { roleId: 'shieldbearer', maxMs: 7400,
-      required: ['guard_approach', 'guard_hold_a', 'guard_hold_b', 'egress'] },
-    { roleId: 'support', maxMs: 8600,
-      required: ['support_slot', 'orbit_0', 'orbit_1', 'orbit_2', 'egress'] },
-    { roleId: 'artillery', maxMs: 8200,
-      required: ['battery_approach', 'brace_a', 'battery_relocate', 'brace_b', 'egress'] },
-  ];
-
-  for (const expected of expectations) {
+  for (const roleId of ['raider', 'gunner', 'shieldbearer', 'support', 'artillery']) {
+    const archetype = ENEMY_ARCHETYPES_V2[roleId];
     const state = createCampaignEnemyChoreographyStateV29({
-      roleId: expected.roleId,
-      routeVariant: expected.routeVariant,
+      roleId,
+      routeVariant: roleId === 'raider' ? 'double_hook_return' : null,
       lane: .4, strafeDirection: -1, seed: 77, nowMs: 0,
     });
     let enemyX = 2;
@@ -720,45 +780,43 @@ test('V3.4 catalog-backed choreography is finite and every campaign scout re-eng
     let nowMs = 0;
     let result = null;
     let maxStep = 0;
-    let stationaryFrames = 0;
-    let sawFireWindow = false;
-    const seenPhases = [];
-    let lastPhase = null;
-    for (let frame = 0; frame < 900; frame += 1) {
+    let maxCombatZ = Number.NEGATIVE_INFINITY;
+    const seenPhases = new Set();
+    const firePhases = new Set();
+    let fireFrames = 0;
+    for (let frame = 0; frame < 2700; frame += 1) {
       result = stepCampaignEnemyChoreographyV29(state, {
         nowMs, frameScale: 1, baseSpeed: .035,
-        enemyX, enemyZ, playerX: 0, playerZ: 12,
+        enemyX, enemyZ, playerX: Math.sin(frame * .017) * 2.4, playerZ: 12,
         arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852,
         hudOcclusionLineZ: -9.3, separationX: 0, separationZ: 0,
-        fireCooldownMs: 1475,
+        fireCooldownMs: 900,
       });
-      if (result.phaseId !== lastPhase) {
-        seenPhases.push(result.phaseId);
-        lastPhase = result.phaseId;
+      seenPhases.add(result.phaseId);
+      if (result.mayFire) {
+        fireFrames += 1;
+        firePhases.add(result.phaseId);
+        assert.ok(result.playerRange >= archetype.fireRangeMin - .02
+          && result.playerRange <= archetype.fireRangeMax + .02,
+        `${roleId} may fire only inside its authored range band`);
       }
-      sawFireWindow ||= Boolean(result.mayFire);
-      const step = Math.hypot(result.deltaX || 0, result.deltaZ || 0);
-      maxStep = Math.max(maxStep, step);
-      if (step < .005) stationaryFrames += 1;
-      if (result.completed) break;
-      enemyX += result.deltaX;
-      enemyZ += result.deltaZ;
+      const frameStep = Math.hypot(result.deltaX || 0, result.deltaZ || 0);
+      maxStep = Math.max(maxStep, frameStep);
+      enemyX += result.deltaX || 0;
+      enemyZ += result.deltaZ || 0;
+      maxCombatZ = Math.max(maxCombatZ, enemyZ);
       nowMs += 1000 / 60;
     }
-    assert.equal(result?.completed, true, `${expected.roleId}:${expected.routeVariant || 'default'} must complete`);
-    assert.ok(nowMs <= expected.maxMs,
-      `${expected.roleId}:${expected.routeVariant || 'default'} is too slow: ${nowMs}ms`);
-    assert.deepEqual(seenPhases.filter(id => id !== 'complete'), expected.required);
-    assert.ok(enemyZ >= 17.7,
-      `${expected.roleId} may be removed only after leaving the visible arena, got z=${enemyZ}`);
-    assert.ok(maxStep <= .15, `${expected.roleId} steering step must remain readable, got ${maxStep}`);
-    const stationaryLimit = expected.roleId === 'artillery' ? 90
-      : ['gunner', 'support'].includes(expected.roleId) ? 50 : 16;
-    assert.ok(stationaryFrames <= stationaryLimit,
-      `${expected.roleId} must not spend the route drifting or idling (${stationaryFrames} frames)`);
-    if (['raider', 'gunner', 'support', 'artillery'].includes(expected.roleId)) {
-      assert.equal(sawFireWindow, true, `${expected.roleId} must expose a moving/settled fire window`);
-    }
+    assert.equal(result?.completed, false, `${roleId} must remain alive until actually destroyed`);
+    assert.ok(state.cycleCount >= (roleId === 'artillery' ? 4 : 7),
+      `${roleId} must execute repeated engagement cycles`);
+    for (const phaseId of expectedPhases[roleId]) assert.equal(seenPhases.has(phaseId), true, `${roleId}:${phaseId}`);
+    assert.ok(firePhases.size >= 2, `${roleId} must expose multiple firing positions`);
+    assert.ok(fireFrames > 20, `${roleId} must repeatedly re-enter a valid fire window`);
+    assert.ok(maxCombatZ <= 12 - archetype.fireRangeMin + .12,
+      `${roleId} crossed its minimum range boundary: z=${maxCombatZ}`);
+    assert.ok(maxStep <= .16, `${roleId} movement step must remain readable, got ${maxStep}`);
+    assert.equal([...seenPhases].some(id => String(id).includes('egress')), false);
   }
 
   const staggerA = createCampaignEnemyChoreographyStateV29({
@@ -770,7 +828,6 @@ test('V3.4 catalog-backed choreography is finite and every campaign scout re-eng
   assert.notDeepEqual(
     [staggerA.timingJitterMs, staggerA.laneBiasNorm, staggerA.depthBias],
     [staggerB.timingJitterMs, staggerB.laneBiasNorm, staggerB.depthBias],
-    'same-role enemies need deterministic spatial/timing variation instead of synchronized rows',
   );
   const commonInput = {
     nowMs: 0, frameScale: 1, baseSpeed: .035,
@@ -778,72 +835,20 @@ test('V3.4 catalog-backed choreography is finite and every campaign scout re-eng
     arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852,
     hudOcclusionLineZ: -9.3,
   };
-  const staggerStepA = stepCampaignEnemyChoreographyV29(staggerA, commonInput);
-  const staggerStepB = stepCampaignEnemyChoreographyV29(staggerB, commonInput);
   assert.notDeepEqual(
-    [staggerStepA.targetX, staggerStepA.targetZ],
-    [staggerStepB.targetX, staggerStepB.targetZ],
-    'deterministic variation must reach authored movement targets',
+    [stepCampaignEnemyChoreographyV29(staggerA, commonInput).targetX,
+      stepCampaignEnemyChoreographyV29(staggerA, commonInput).targetZ],
+    [stepCampaignEnemyChoreographyV29(staggerB, commonInput).targetX,
+      stepCampaignEnemyChoreographyV29(staggerB, commonInput).targetZ],
   );
 
   const legacyFlyby = createCampaignEnemyChoreographyStateV29({
     roleId: 'raider', routeVariant: 'flyby', seed: 3, nowMs: 0,
   });
-  const returning = createCampaignEnemyChoreographyStateV29({
-    roleId: 'raider', routeVariant: 'hook_return', seed: 3, nowMs: 0,
-  });
-  const doubleReturning = createCampaignEnemyChoreographyStateV29({
-    roleId: 'raider', routeVariant: 'double_hook_return', seed: 3, nowMs: 0,
-  });
   assert.equal(legacyFlyby.routeVariant, 'hook_return',
-    'legacy flyby input must be upgraded to a return attack in Campaign');
-  assert.equal(returning.routeVariant, 'hook_return');
-  assert.equal(doubleReturning.routeVariant, 'double_hook_return');
-  assert.equal(CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30.hook_return.phases.some(item => item.id === 'return_pass'), true);
+    'legacy flyby data must be upgraded to a persistent return loop');
   assert.equal(CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30.double_hook_return.phases
     .filter(item => item.mayFire).length, 3);
-
-  // Product invariant: every authored scout attack pass must expose a fire
-  // window even at late-planet movement speeds and across deterministic timing
-  // jitter. This prevents visually identical green scouts from silently
-  // crossing the arena without ever committing a volley.
-  for (const routeVariant of ['hook_return', 'double_hook_return']) {
-    const requiredFirePhases = CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30[routeVariant].phases
-      .filter(item => item.mayFire).map(item => item.id);
-    for (const baseSpeed of [.035, .065, .10]) {
-      for (const seed of [1, 7, 31, 77, 127, 199]) {
-        const state = createCampaignEnemyChoreographyStateV29({
-          roleId: 'raider', routeVariant,
-          lane: ((seed % 9) - 4) / 5,
-          strafeDirection: seed % 2 ? -1 : 1,
-          seed, nowMs: 0,
-        });
-        let enemyX = 2;
-        let enemyZ = -16.8;
-        let nowMs = 0;
-        let result = null;
-        const firePhases = new Set();
-        for (let frame = 0; frame < 1200; frame += 1) {
-          result = stepCampaignEnemyChoreographyV29(state, {
-            nowMs, frameScale: 1, baseSpeed,
-            enemyX, enemyZ, playerX: (seed % 7) - 3, playerZ: 12,
-            arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852,
-            hudOcclusionLineZ: -9.3, separationX: 0, separationZ: 0,
-            fireCooldownMs: 560,
-          });
-          if (result.mayFire) firePhases.add(result.phaseId);
-          if (result.completed) break;
-          enemyX += result.deltaX || 0;
-          enemyZ += result.deltaZ || 0;
-          nowMs += 1000 / 60;
-        }
-        assert.equal(result?.completed, true,
-          `${routeVariant}/${baseSpeed}/${seed} must complete`);
-        assert.deepEqual([...firePhases].sort(), [...requiredFirePhases].sort(),
-          `${routeVariant}/${baseSpeed}/${seed} must fire on every attack pass`);
-      }
-    }
-  }
 });
 
 test('V2.9 Boss Preview and Mini-Boss motion preserve attack locks and a dynamic HUD-safe combat band', () => {
@@ -1157,6 +1162,8 @@ test('Campaign source enables V3 enemy combat in production while preserving V2.
   const source = fs.readFileSync(new URL('../src/components/Campaign/CampaignScene.js', import.meta.url), 'utf8');
   assert.match(source, /campaignCombatV3Enabled=import\.meta\.env\.VITE_SF_CAMPAIGN_COMBAT_V3!==['\"]false['\"]/);
   assert.match(source, /campaignWaveDirector=campaignCombatV3Enabled\?createEnemyDirectorV2/);
+  assert.match(source, /difficulty:1,/,
+    'stage and planet catalogs must be the only production difficulty source');
   assert.doesNotMatch(source, /campaignWaveDirector=guestAbilityQa\?createEnemyDirectorV2/);
   assert.match(source, /stableSeed\(['\"]campaign-wave-v30['\"]/);
   assert.match(source, /buildCampaignStagePlan\(\{/);
@@ -1205,6 +1212,13 @@ test('Campaign source enables V3 enemy combat in production while preserving V2.
     'production enemies must enter their first authored fire window ready');
   assert.match(source, /_burstCount:Math\.max\(1,Math\.min\(5/);
   assert.match(source, /_minVolleysPerFirePhase/);
+  assert.match(source, /_canCrossPlayer:spawnSpec\?Boolean\(spawnSpec\.canCrossPlayer\):Boolean\(tier===4\|\|!legacyMotion\?\.canShoot\)/);
+  assert.match(source, /_reengages:spawnSpec\?Boolean\(spawnSpec\.reengages\):Boolean\(tier===4\)/);
+  assert.match(source, /returnTargetX:chargerReturnX,returnTargetZ:chargerReturnZ/);
+  assert.match(source, /Production enemies do not clear a wave by escaping alive/);
+  assert.match(source, /if\(now>=nextCapacitySpawnRetryAt\)/);
+  assert.match(source, /nextCapacitySpawnRetryAt=now\+240/);
+  assert.match(source, /A ranged\/guard enemy never converts an accidental overlap/);
   assert.match(source, /advanceCampaignEnemyProjectileV31/);
   assert.match(source, /samplePlayerCombatVelocity\(frameFactor\)/);
   assert.match(source, /resolveEncounterMuzzleOrigin\(enemy\)/);

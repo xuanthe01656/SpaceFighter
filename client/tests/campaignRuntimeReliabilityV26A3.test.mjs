@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {
   CAMPAIGN_BOSS_INTRO_PLAN_V26A3,
+  CAMPAIGN_CHARGER_RETURN_POLICY_VERSION_V35,
+  CAMPAIGN_RUNTIME_RELIABILITY_VERSION,
   CAMPAIGN_RUNTIME_LIMITS_V26A3,
   createBossIntroPlanV26A3,
   createCampaignRuntimeMonitorV26A3,
@@ -140,6 +142,43 @@ test('fast charger telegraphs a locked direction before charging and recovering'
   step = stepChargerMotionV26A3(step.state, { nowMs: 2250, enemyX: 0, enemyZ: 0, targetX: -1, targetZ: 0 });
   assert.equal(step.event, 'tracking_resumed');
   assert.equal(step.state.phase, 'tracking');
+});
+
+test('charger that misses the ship returns to an upper lane and rearms instead of despawning', () => {
+  assert.equal(CAMPAIGN_RUNTIME_RELIABILITY_VERSION, 'campaign-runtime-reliability-v2.6a3');
+  assert.equal(CAMPAIGN_CHARGER_RETURN_POLICY_VERSION_V35, 'campaign-charger-return-v3.5.0');
+  let state = createChargerMotionStateV26A3({ nowMs: 0 });
+  let step = stepChargerMotionV26A3(state, {
+    nowMs: 450, enemyX: 0, enemyZ: -3, targetX: 0, targetZ: 12,
+    returnTargetX: -2, returnTargetZ: 3,
+  });
+  assert.equal(step.state.phase, 'telegraph');
+  step = stepChargerMotionV26A3(step.state, {
+    nowMs: 1100, enemyX: 0, enemyZ: -3, targetX: 0, targetZ: 12,
+    returnTargetX: -2, returnTargetZ: 3,
+  });
+  assert.equal(step.state.phase, 'charge');
+  step = stepChargerMotionV26A3(step.state, {
+    nowMs: 1800, enemyX: 0, enemyZ: 15, targetX: 0, targetZ: 12,
+    returnTargetX: -2, returnTargetZ: 3,
+  });
+  assert.equal(step.event, 'recovery_started');
+  assert.equal(step.state.chargeCount, 1);
+  step = stepChargerMotionV26A3(step.state, {
+    nowMs: 2250, enemyX: 0, enemyZ: 15, targetX: 0, targetZ: 12,
+    returnTargetX: -2, returnTargetZ: 3,
+  });
+  assert.equal(step.event, 'return_started');
+  assert.equal(step.state.phase, 'return');
+  assert.ok(step.direction.z < 0, 'the missed charger must travel back toward the upper combat lane');
+  assert.ok(step.speedMultiplier > 1);
+  step = stepChargerMotionV26A3(step.state, {
+    nowMs: 2500, enemyX: -2, enemyZ: 3, targetX: 1, targetZ: 12,
+    returnTargetX: -2, returnTargetZ: 3,
+  });
+  assert.equal(step.event, 'tracking_resumed');
+  assert.equal(step.state.phase, 'tracking');
+  assert.ok(step.state.nextChargeAtMs > 2500);
 });
 
 test('boss intro has one warning, one hidden reveal and one fight transition', () => {

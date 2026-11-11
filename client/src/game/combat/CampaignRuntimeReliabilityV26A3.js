@@ -8,6 +8,7 @@ import { resolveEnemyGameplayYawV26A4 } from '../assets/EnemyVisualHeadingV26A4.
  * deterministic limits, watchdog state, enemy-facing math and intro timing.
  */
 export const CAMPAIGN_RUNTIME_RELIABILITY_VERSION = 'campaign-runtime-reliability-v2.6a3';
+export const CAMPAIGN_CHARGER_RETURN_POLICY_VERSION_V35 = 'campaign-charger-return-v3.5.0';
 
 export const CAMPAIGN_RUNTIME_LIMITS_V26A3 = Object.freeze({
   maxActiveEnemies: 48,
@@ -35,6 +36,8 @@ export const CAMPAIGN_CHARGER_POLICY_V26A3 = Object.freeze({
   trackingSpeedMultiplier: 0.55,
   chargeSpeedMultiplier: 1.75,
   recoverySpeedMultiplier: 0.12,
+  returnSpeedMultiplier: 1.28,
+  returnArrivalRadius: 0.48,
 });
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -71,6 +74,9 @@ export function createChargerMotionStateV26A3({ nowMs = 0 } = {}) {
     nextChargeAtMs: now + CAMPAIGN_CHARGER_POLICY_V26A3.acquireDelayMs,
     lockedDirectionX: 0,
     lockedDirectionZ: 1,
+    returnTargetX: null,
+    returnTargetZ: null,
+    chargeCount: 0,
   };
 }
 
@@ -84,6 +90,8 @@ export function stepChargerMotionV26A3(state, {
   enemyZ = 0,
   targetX = 0,
   targetZ = 0,
+  returnTargetX = null,
+  returnTargetZ = null,
 } = {}) {
   const policy = CAMPAIGN_CHARGER_POLICY_V26A3;
   const now = Math.max(0, finite(nowMs, 0));
@@ -104,12 +112,49 @@ export function stepChargerMotionV26A3(state, {
   } else if (current.phase === 'charge' && now >= current.phaseEndsAtMs) {
     current.phase = 'recovery';
     current.phaseEndsAtMs = now + policy.recoveryMs;
+    current.chargeCount = Math.max(0, Math.trunc(finite(current.chargeCount, 0))) + 1;
     event = 'recovery_started';
   } else if (current.phase === 'recovery' && now >= current.phaseEndsAtMs) {
-    current.phase = 'tracking';
-    current.phaseEndsAtMs = 0;
-    current.nextChargeAtMs = now + policy.rearmMs;
-    event = 'tracking_resumed';
+    const hasReturnTarget = returnTargetX != null && returnTargetZ != null
+      && Number.isFinite(Number(returnTargetX)) && Number.isFinite(Number(returnTargetZ));
+    if (hasReturnTarget) {
+      current.phase = 'return';
+      current.phaseEndsAtMs = 0;
+      current.returnTargetX = Number(returnTargetX);
+      current.returnTargetZ = Number(returnTargetZ);
+      event = 'return_started';
+    } else {
+      current.phase = 'tracking';
+      current.phaseEndsAtMs = 0;
+      current.nextChargeAtMs = now + policy.rearmMs;
+      event = 'tracking_resumed';
+    }
+  } else if (current.phase === 'return') {
+    const returnDirection = directionTo(
+      enemyX,
+      enemyZ,
+      current.returnTargetX,
+      current.returnTargetZ,
+    );
+    const returnDistance = Math.hypot(
+      finite(current.returnTargetX, enemyX) - finite(enemyX, 0),
+      finite(current.returnTargetZ, enemyZ) - finite(enemyZ, 0),
+    );
+    if (returnDistance <= policy.returnArrivalRadius) {
+      current.phase = 'tracking';
+      current.phaseEndsAtMs = 0;
+      current.nextChargeAtMs = now + policy.rearmMs;
+      current.returnTargetX = null;
+      current.returnTargetZ = null;
+      event = 'tracking_resumed';
+    } else {
+      return {
+        state: current,
+        direction: returnDirection,
+        speedMultiplier: policy.returnSpeedMultiplier,
+        event,
+      };
+    }
   }
 
   const locked = {
@@ -124,6 +169,14 @@ export function stepChargerMotionV26A3(state, {
   }
   if (current.phase === 'recovery') {
     return { state: current, direction: locked, speedMultiplier: policy.recoverySpeedMultiplier, event };
+  }
+  if (current.phase === 'return') {
+    return {
+      state: current,
+      direction: directionTo(enemyX, enemyZ, current.returnTargetX, current.returnTargetZ),
+      speedMultiplier: policy.returnSpeedMultiplier,
+      event,
+    };
   }
   return {
     state: current,
