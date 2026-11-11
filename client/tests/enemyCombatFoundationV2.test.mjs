@@ -81,6 +81,11 @@ import {
   resolveCampaignEnemyProjectileVisualV31,
 } from '../src/game/combat/CampaignEnemyProjectileV31.js';
 import {
+  CAMPAIGN_ENEMY_VOLLEY_VERSION,
+  auditCampaignEnemyVolleyV34,
+  createCampaignEnemyVolleyPlanV34,
+} from '../src/game/combat/CampaignEnemyVolleyV34.js';
+import {
   CAMPAIGN_PROJECTILE_VISUAL_VERSION,
   CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32,
   auditCampaignProjectileVisualV32,
@@ -99,12 +104,12 @@ const stagePlan = (options = {}) => createEnemyDirectorV2({
   baseEnemies: options.baseEnemies ?? 40,
 });
 
-test('enemy V3 catalog is the single runtime source for six readable combat roles', () => {
-  assert.equal(ENEMY_COMBAT_CATALOG_VERSION, 'enemy-combat-v3.3.0');
+test('enemy V3.4 catalog is the single runtime source for six readable combat roles and committed volleys', () => {
+  assert.equal(ENEMY_COMBAT_CATALOG_VERSION, 'enemy-combat-v3.4.0');
   assert.deepEqual(auditEnemyCombatCatalogV2(), []);
-  assert.equal(CAMPAIGN_PROJECTILE_VISUAL_VERSION, 'campaign-projectile-visual-v3.3.0');
+  assert.equal(CAMPAIGN_PROJECTILE_VISUAL_VERSION, 'campaign-projectile-visual-v3.4.0');
   assert.deepEqual(auditCampaignProjectileVisualV32(), []);
-  assert.ok(Object.keys(CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32).length >= 18);
+  assert.ok(Object.keys(CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32).length >= 19);
   assert.ok(Math.abs(Math.abs(campaignProjectileVisualYawV32(0, 1)) - Math.PI) < 1e-12);
   assert.equal(Object.keys(ENEMY_ARCHETYPES_V2).length, 6);
   assert.deepEqual(Object.keys(ENEMY_RUNTIME_CATALOG_V3).sort(), Object.keys(ENEMY_ARCHETYPES_V2).sort());
@@ -124,12 +129,37 @@ test('enemy V3 catalog is the single runtime source for six readable combat role
       assert.ok(['predictive', 'soft_homing'].includes(runtime.projectileAimMode));
       assert.ok(runtime.projectileSpeed >= .66);
       assert.ok(runtime.shootMs <= 1650);
+      assert.ok(runtime.burstCount >= 2 && runtime.burstCount <= 5);
+      assert.ok(runtime.burstGapMs >= 60 && runtime.burstGapMs <= 320);
+      assert.ok(runtime.minVolleysPerFirePhase >= 1);
+      assert.ok(runtime.maxVolleysPerFirePhase >= runtime.minVolleysPerFirePhase);
+      const burstDamageCaps = { raider: 70, gunner: 120, support: 110, artillery: 200 };
+      assert.ok(runtime.burstCount * runtime.projectileDamage <= burstDamageCaps[archetype.id],
+        `${archetype.id} may gain density, but one volley must remain damage-bounded`);
     }
   }
+  assert.equal(ENEMY_ARCHETYPES_V2.raider.canShoot, true,
+    'the green campaign scout must always own a real weapon contract');
+  assert.equal(ENEMY_ARCHETYPES_V2.raider.projectileVisualId, 'enemy_scout_pulse');
+  assert.deepEqual(ENEMY_ARCHETYPES_V2.raider.routeVariants, ['hook_return', 'double_hook_return']);
   assert.equal(BOSS_PHASES_V2.length, 3);
   assert.equal(bossPhaseForHp(.8).id, 'phase_1');
   assert.equal(bossPhaseForHp(.5).id, 'phase_2');
   assert.equal(bossPhaseForHp(.2).id, 'phase_3');
+});
+
+test('V3.4 enemy volley plans commit multiple readable shots without duplicate mutation', () => {
+  assert.equal(CAMPAIGN_ENEMY_VOLLEY_VERSION, 'campaign-enemy-volley-v3.4.0');
+  assert.deepEqual(auditCampaignEnemyVolleyV34(), []);
+  const plan = createCampaignEnemyVolleyPlanV34({
+    roleId: 'raider', phaseId: 'return_pass', sequence: 4,
+    burstCount: 2, burstGapMs: 105, projectileDamage: 38, createdAtMs: 2000,
+  });
+  assert.equal(Object.isFrozen(plan), true);
+  assert.equal(Object.isFrozen(plan.shots), true);
+  assert.deepEqual(plan.shots.map(shot => shot.fireOffsetMs), [0, 105]);
+  assert.deepEqual(plan.shots.map(shot => shot.rawDamage), [38, 38]);
+  assert.equal(plan.latestFireOffsetMs, 105);
 });
 
 test('V3.2 enemy fire-control leads moving targets, guides support shots briefly and expires every projectile', () => {
@@ -265,7 +295,7 @@ test('boss plan telegraphs every attack and changes phase deterministically', ()
 });
 
 test('V2.8 combines deterministic pacing with mini-bosses and real Boss mechanic previews', () => {
-  assert.equal(CAMPAIGN_WAVE_DIRECTOR_VERSION, 'campaign-wave-director-v3.3.0');
+  assert.equal(CAMPAIGN_WAVE_DIRECTOR_VERSION, 'campaign-wave-director-v3.4.0');
   assert.equal(CAMPAIGN_ENCOUNTER_ESCALATION_VERSION, 'campaign-encounter-v2.8.1');
   assert.deepEqual(Object.keys(CAMPAIGN_PLANET_PROFILES_V27), ['1', '2', '3']);
   assert.ok(Object.keys(CAMPAIGN_WAVE_TEMPLATES_V27).length >= 14);
@@ -528,7 +558,7 @@ test('planet profiles create distinct deterministic compositions without changin
   assert.notEqual(signature(cryo), signature(inferno));
 });
 
-test('V3 wave power, planet identity and scout route mix are deterministic and materially different', () => {
+test('V3.4 wave power keeps every campaign scout returning and scales extra attack passes by planet', () => {
   assert.deepEqual(auditCampaignEnemyDirectorV3(), []);
   const directorSource = fs.readFileSync(
     new URL('../src/game/combat/DeterministicEnemyDirectorV2.js', import.meta.url), 'utf8');
@@ -583,8 +613,9 @@ test('V3 wave power, planet identity and scout route mix are deterministic and m
   assert.ok(infernoTier1EffectiveHp / alphaTier1EffectiveHp < 4,
     'planet scaling must remain strong but bounded instead of multiplying the legacy environment HP twice');
 
-  const routeTotals = new Map([[1, { flyby: 0, hook_return: 0 }],
-    [2, { flyby: 0, hook_return: 0 }], [3, { flyby: 0, hook_return: 0 }]]);
+  const routeTotals = new Map([[1, { hook_return: 0, double_hook_return: 0 }],
+    [2, { hook_return: 0, double_hook_return: 0 }],
+    [3, { hook_return: 0, double_hook_return: 0 }]]);
   for (const planetId of [1, 2, 3]) {
     for (let seed = 1; seed <= 24; seed += 1) {
       const plan = createEnemyDirectorV2({ seed, stage: 5, planetId, difficulty: 1.1 })
@@ -598,6 +629,8 @@ test('V3 wave power, planet identity and scout route mix are deterministic and m
             assert.ok(entry.shootMs >= 560 && entry.projectileSpeed > 0 && entry.projectileDamage > 0);
             assert.ok(['predictive', 'soft_homing'].includes(entry.projectileAimMode));
             assert.ok(entry.projectileLifetimeMs >= 1600);
+            assert.ok(entry.burstCount >= 2 && entry.burstGapMs >= 60);
+            assert.ok(entry.minVolleysPerFirePhase >= 1);
             if (entry.projectileAimMode === 'soft_homing') {
               assert.ok(entry.projectileGuidanceMs > 0 && entry.projectileTurnRateRadians > 0);
             }
@@ -607,23 +640,25 @@ test('V3 wave power, planet identity and scout route mix are deterministic and m
       }
     }
   }
-  const ratio = planetId => {
+  const extraReturnRatio = planetId => {
     const totals = routeTotals.get(planetId);
-    return totals.hook_return / (totals.hook_return + totals.flyby);
+    return totals.double_hook_return / (totals.hook_return + totals.double_hook_return);
   };
-  assert.ok(routeTotals.get(1).flyby > 0 && routeTotals.get(1).hook_return > 0);
-  assert.ok(routeTotals.get(2).flyby > 0 && routeTotals.get(2).hook_return > 0);
-  assert.ok(routeTotals.get(3).flyby > 0 && routeTotals.get(3).hook_return > 0);
-  assert.ok(ratio(1) > .55, `Alpha scouts should usually return, ratio=${ratio(1)}`);
-  assert.ok(ratio(2) > .65, `Cryo scouts should strongly favor return passes, ratio=${ratio(2)}`);
-  assert.ok(ratio(3) < .45, `Inferno scouts should favor aggressive flybys, ratio=${ratio(3)}`);
-  assert.ok(ratio(2) > ratio(1) && ratio(1) > ratio(3));
+  for (const planetId of [1, 2, 3]) {
+    const totals = routeTotals.get(planetId);
+    assert.ok(totals.hook_return > 0 && totals.double_hook_return > 0);
+    assert.equal(totals.flyby, undefined, 'campaign director must not emit one-pass flyby scouts');
+  }
+  assert.ok(extraReturnRatio(3) > extraReturnRatio(2)
+    && extraReturnRatio(2) > extraReturnRatio(1),
+  'later planets must assign more three-pass scout attacks');
 });
 
-test('V3 catalog-backed choreography is fast, finite and supports both scout flyby and return routes', () => {
-  assert.equal(CAMPAIGN_COMBAT_CHOREOGRAPHY_VERSION, 'campaign-combat-choreography-v3.2.0');
+test('V3.4 catalog-backed choreography is finite and every campaign scout re-engages before egress', () => {
+  assert.equal(CAMPAIGN_COMBAT_CHOREOGRAPHY_VERSION, 'campaign-combat-choreography-v3.4.0');
   assert.deepEqual(auditCampaignCombatChoreographyV29(), []);
-  assert.deepEqual(Object.keys(CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30).sort(), ['flyby', 'hook_return']);
+  assert.deepEqual(Object.keys(CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30).sort(),
+    ['double_hook_return', 'hook_return']);
   assert.deepEqual(
     Object.values(ENEMY_ARCHETYPES_V2).map(archetype => archetype.behavior).sort(),
     Object.keys(CAMPAIGN_ROLE_CHOREOGRAPHY_V29).sort(),
@@ -659,15 +694,16 @@ test('V3 catalog-backed choreography is fast, finite and supports both scout fly
   }
 
   const expectations = [
-    { roleId: 'raider', routeVariant: 'flyby', maxMs: 5600,
-      required: ['flank_approach', 'commit_cross', 'egress'] },
     { roleId: 'raider', routeVariant: 'hook_return', maxMs: 8500,
       required: ['flank_approach', 'commit_cross', 'hook_turn', 'return_pass', 'egress'] },
-    { roleId: 'gunner', maxMs: 7600,
+    { roleId: 'raider', routeVariant: 'double_hook_return', maxMs: 10800,
+      required: ['flank_approach', 'commit_cross', 'hook_turn', 'return_pass',
+        'hook_turn_2', 'return_pass_2', 'egress'] },
+    { roleId: 'gunner', maxMs: 8400,
       required: ['firing_slot', 'strafe_a', 'strafe_b', 'egress'] },
     { roleId: 'shieldbearer', maxMs: 7400,
       required: ['guard_approach', 'guard_hold_a', 'guard_hold_b', 'egress'] },
-    { roleId: 'support', maxMs: 7800,
+    { roleId: 'support', maxMs: 8600,
       required: ['support_slot', 'orbit_0', 'orbit_1', 'orbit_2', 'egress'] },
     { roleId: 'artillery', maxMs: 8200,
       required: ['battery_approach', 'brace_a', 'battery_relocate', 'brace_b', 'egress'] },
@@ -716,10 +752,11 @@ test('V3 catalog-backed choreography is fast, finite and supports both scout fly
     assert.ok(enemyZ >= 17.7,
       `${expected.roleId} may be removed only after leaving the visible arena, got z=${enemyZ}`);
     assert.ok(maxStep <= .15, `${expected.roleId} steering step must remain readable, got ${maxStep}`);
-    const stationaryLimit = expected.roleId === 'artillery' ? 90 : 16;
+    const stationaryLimit = expected.roleId === 'artillery' ? 90
+      : ['gunner', 'support'].includes(expected.roleId) ? 50 : 16;
     assert.ok(stationaryFrames <= stationaryLimit,
       `${expected.roleId} must not spend the route drifting or idling (${stationaryFrames} frames)`);
-    if (['gunner', 'support', 'artillery'].includes(expected.roleId)) {
+    if (['raider', 'gunner', 'support', 'artillery'].includes(expected.roleId)) {
       assert.equal(sawFireWindow, true, `${expected.roleId} must expose a moving/settled fire window`);
     }
   }
@@ -749,16 +786,64 @@ test('V3 catalog-backed choreography is fast, finite and supports both scout fly
     'deterministic variation must reach authored movement targets',
   );
 
-  const flyby = createCampaignEnemyChoreographyStateV29({
+  const legacyFlyby = createCampaignEnemyChoreographyStateV29({
     roleId: 'raider', routeVariant: 'flyby', seed: 3, nowMs: 0,
   });
   const returning = createCampaignEnemyChoreographyStateV29({
     roleId: 'raider', routeVariant: 'hook_return', seed: 3, nowMs: 0,
   });
-  assert.equal(flyby.routeVariant, 'flyby');
+  const doubleReturning = createCampaignEnemyChoreographyStateV29({
+    roleId: 'raider', routeVariant: 'double_hook_return', seed: 3, nowMs: 0,
+  });
+  assert.equal(legacyFlyby.routeVariant, 'hook_return',
+    'legacy flyby input must be upgraded to a return attack in Campaign');
   assert.equal(returning.routeVariant, 'hook_return');
-  assert.equal(CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30.flyby.phases.some(item => item.id === 'return_pass'), false);
+  assert.equal(doubleReturning.routeVariant, 'double_hook_return');
   assert.equal(CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30.hook_return.phases.some(item => item.id === 'return_pass'), true);
+  assert.equal(CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30.double_hook_return.phases
+    .filter(item => item.mayFire).length, 3);
+
+  // Product invariant: every authored scout attack pass must expose a fire
+  // window even at late-planet movement speeds and across deterministic timing
+  // jitter. This prevents visually identical green scouts from silently
+  // crossing the arena without ever committing a volley.
+  for (const routeVariant of ['hook_return', 'double_hook_return']) {
+    const requiredFirePhases = CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30[routeVariant].phases
+      .filter(item => item.mayFire).map(item => item.id);
+    for (const baseSpeed of [.035, .065, .10]) {
+      for (const seed of [1, 7, 31, 77, 127, 199]) {
+        const state = createCampaignEnemyChoreographyStateV29({
+          roleId: 'raider', routeVariant,
+          lane: ((seed % 9) - 4) / 5,
+          strafeDirection: seed % 2 ? -1 : 1,
+          seed, nowMs: 0,
+        });
+        let enemyX = 2;
+        let enemyZ = -16.8;
+        let nowMs = 0;
+        let result = null;
+        const firePhases = new Set();
+        for (let frame = 0; frame < 1200; frame += 1) {
+          result = stepCampaignEnemyChoreographyV29(state, {
+            nowMs, frameScale: 1, baseSpeed,
+            enemyX, enemyZ, playerX: (seed % 7) - 3, playerZ: 12,
+            arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852,
+            hudOcclusionLineZ: -9.3, separationX: 0, separationZ: 0,
+            fireCooldownMs: 560,
+          });
+          if (result.mayFire) firePhases.add(result.phaseId);
+          if (result.completed) break;
+          enemyX += result.deltaX || 0;
+          enemyZ += result.deltaZ || 0;
+          nowMs += 1000 / 60;
+        }
+        assert.equal(result?.completed, true,
+          `${routeVariant}/${baseSpeed}/${seed} must complete`);
+        assert.deepEqual([...firePhases].sort(), [...requiredFirePhases].sort(),
+          `${routeVariant}/${baseSpeed}/${seed} must fire on every attack pass`);
+      }
+    }
+  }
 });
 
 test('V2.9 Boss Preview and Mini-Boss motion preserve attack locks and a dynamic HUD-safe combat band', () => {
@@ -1114,6 +1199,12 @@ test('Campaign source enables V3 enemy combat in production while preserving V2.
   assert.match(source, /campaignCombatV3Enabled&&bossCombatState/);
   assert.match(source, /Emergency kill-switch legacy boss fallback/);
   assert.match(source, /createCampaignEnemyShotPlanV31/);
+  assert.match(source, /createCampaignEnemyVolleyPlanV34/);
+  assert.match(source, /tryFireCampaignEnemyVolley\(enemy, result, nowMs\)/);
+  assert.match(source, /lastShoot: spawnSpec\?spawnedAtMs-resolvedShootMs/,
+    'production enemies must enter their first authored fire window ready');
+  assert.match(source, /_burstCount:Math\.max\(1,Math\.min\(5/);
+  assert.match(source, /_minVolleysPerFirePhase/);
   assert.match(source, /advanceCampaignEnemyProjectileV31/);
   assert.match(source, /samplePlayerCombatVelocity\(frameFactor\)/);
   assert.match(source, /resolveEncounterMuzzleOrigin\(enemy\)/);

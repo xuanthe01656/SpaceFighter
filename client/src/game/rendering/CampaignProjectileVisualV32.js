@@ -6,7 +6,7 @@
  * authoritative velocity. Canvas textures are generated once per style; a
  * deterministic low-poly fallback is used by NullEngine/non-DOM hosts.
  */
-export const CAMPAIGN_PROJECTILE_VISUAL_VERSION = 'campaign-projectile-visual-v3.3.0';
+export const CAMPAIGN_PROJECTILE_VISUAL_VERSION = 'campaign-projectile-visual-v3.4.0';
 
 const freezeDeep = value => {
   if (Array.isArray(value)) return Object.freeze(value.map(freezeDeep));
@@ -18,6 +18,10 @@ const freezeDeep = value => {
 };
 
 export const CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32 = freezeDeep({
+  enemy_scout_pulse: {
+    id: 'enemy_scout_pulse', style: 'dart', color: '#56ff78', core: '#f3fff6', edge: '#031d0a',
+    width: .30, length: 1.02, pulse: .050, glow: .94,
+  },
   enemy_energy_dart: {
     id: 'enemy_energy_dart', style: 'dart', color: '#ff3f59', core: '#fff4f6', edge: '#24050d',
     width: .34, length: 1.18, pulse: .035, glow: .92,
@@ -114,6 +118,7 @@ export function resolveCampaignProjectileVisualV32({ visualId, sourceRole, prior
     if (pattern === 'radial_gap') return CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32.boss_arc_ember;
     return CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32.boss_aimed_lance;
   }
+  if (sourceRole === 'raider') return CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32.enemy_scout_pulse;
   if (sourceRole === 'support') return CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32.enemy_ion_comet;
   if (sourceRole === 'artillery') return CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32.enemy_plasma_slug;
   if (sourceRole === 'boss_preview') return CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32.boss_preview_pulse;

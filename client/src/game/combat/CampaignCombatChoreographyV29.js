@@ -1,14 +1,14 @@
 import { ENEMY_ARCHETYPES_V2 } from './EnemyCombatCatalogV2.js';
 
 /**
- * Campaign combat choreography V3.2.0
+ * Campaign combat choreography V3.4.0
  *
  * This module turns the existing EnemyCombatCatalogV2 behavior labels into
  * deterministic, finite combat paths. Targets are sampled only when a state is
  * entered; they are never recomputed every render frame. Runtime state is kept
  * mutable on purpose to avoid per-frame object churn on mobile devices.
  */
-export const CAMPAIGN_COMBAT_CHOREOGRAPHY_VERSION = 'campaign-combat-choreography-v3.2.0';
+export const CAMPAIGN_COMBAT_CHOREOGRAPHY_VERSION = 'campaign-combat-choreography-v3.4.0';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -54,23 +54,6 @@ const phase = (id, durationMs, speedMultiplier, options = {}) => Object.freeze({
 });
 
 export const CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30 = freezeDeep({
-  flyby: {
-    roleId: 'raider',
-    phases: [
-      phase('flank_approach', 760, 1.62, {
-        arrivalRadius: .58, slowRadius: .48, acceleration: .72,
-        speedFloor: .124, maxTravelMs: 3600,
-      }),
-      phase('commit_cross', 620, 1.78, {
-        arrivalRadius: .68, slowRadius: .42, acceleration: .76,
-        speedFloor: .142, maxTravelMs: 2200,
-      }),
-      phase('egress', 760, 1.70, {
-        egress: true, arrivalRadius: .9, slowRadius: .48,
-        acceleration: .72, speedFloor: .142,
-      }),
-    ],
-  },
   hook_return: {
     roleId: 'raider',
     phases: [
@@ -79,6 +62,7 @@ export const CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30 = freezeDeep({
         speedFloor: .124, maxTravelMs: 3600,
       }),
       phase('commit_cross', 620, 1.76, {
+        mayFire: true,
         arrivalRadius: .68, slowRadius: .42, acceleration: .76,
         speedFloor: .140, maxTravelMs: 2200,
       }),
@@ -87,6 +71,7 @@ export const CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30 = freezeDeep({
         speedFloor: .130, maxTravelMs: 2300,
       }),
       phase('return_pass', 620, 1.80, {
+        mayFire: true,
         arrivalRadius: .7, slowRadius: .40, acceleration: .78,
         speedFloor: .144, maxTravelMs: 2200,
       }),
@@ -96,17 +81,54 @@ export const CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30 = freezeDeep({
       }),
     ],
   },
+  double_hook_return: {
+    roleId: 'raider',
+    phases: [
+      phase('flank_approach', 760, 1.62, {
+        arrivalRadius: .58, slowRadius: .48, acceleration: .72,
+        speedFloor: .124, maxTravelMs: 3600,
+      }),
+      phase('commit_cross', 620, 1.76, {
+        mayFire: true,
+        arrivalRadius: .68, slowRadius: .42, acceleration: .76,
+        speedFloor: .140, maxTravelMs: 2200,
+      }),
+      phase('hook_turn', 660, 1.64, {
+        arrivalRadius: .62, slowRadius: .46, acceleration: .74,
+        speedFloor: .130, maxTravelMs: 2300,
+      }),
+      phase('return_pass', 620, 1.80, {
+        mayFire: true,
+        arrivalRadius: .7, slowRadius: .40, acceleration: .78,
+        speedFloor: .144, maxTravelMs: 2200,
+      }),
+      phase('hook_turn_2', 640, 1.68, {
+        arrivalRadius: .62, slowRadius: .44, acceleration: .76,
+        speedFloor: .134, maxTravelMs: 2250,
+      }),
+      phase('return_pass_2', 600, 1.84, {
+        mayFire: true,
+        arrivalRadius: .72, slowRadius: .38, acceleration: .80,
+        speedFloor: .148, maxTravelMs: 2150,
+      }),
+      phase('egress', 720, 1.76, {
+        egress: true, arrivalRadius: .9, slowRadius: .44,
+        acceleration: .76, speedFloor: .148,
+      }),
+    ],
+  },
 });
 
 export const CAMPAIGN_ROLE_CHOREOGRAPHY_V29 = freezeDeep({
-  // Compatibility/default route. Runtime raiders select flyby or hook_return.
+  // Compatibility/default route. Production Campaign raiders always re-engage before egress.
   strafe: CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30.hook_return,
   keep_range: {
     roleId: 'gunner',
     phases: [
       phase('firing_slot', 720, 1.52, {
+        mayFire: true, fireRequiresArrival: true, holdAtArrival: true,
         arrivalRadius: .52, slowRadius: .44, acceleration: .72,
-        speedFloor: .122, maxTravelMs: 3300, dwellMs: 35,
+        speedFloor: .122, maxTravelMs: 3300, dwellMs: 680,
       }),
       phase('strafe_a', 680, 1.40, {
         mayFire: true, facePlayer: true, arrivalRadius: .48,
@@ -154,8 +176,9 @@ export const CAMPAIGN_ROLE_CHOREOGRAPHY_V29 = freezeDeep({
     roleId: 'support',
     phases: [
       phase('support_slot', 720, 1.45, {
+        mayFire: true, fireRequiresArrival: true, holdAtArrival: true,
         arrivalRadius: .5, slowRadius: .44, acceleration: .72,
-        speedFloor: .118, maxTravelMs: 3300, dwellMs: 30,
+        speedFloor: .118, maxTravelMs: 3300, dwellMs: 680,
       }),
       phase('orbit_0', 590, 1.30, {
         mayFire: true, facePlayer: true, arrivalRadius: .44,
@@ -357,14 +380,19 @@ const targetForEnemyPhase = (state, phaseContract, input, band) => {
       x: clamp(playerX - side * Math.min(2.45, xBound * .38), -xBound, xBound),
       z: clamp(playerZ + .65, band.rangedZ + 2.4, band.bottomSafeZ + .35),
     };
-    if (phaseId === 'hook_turn') return {
+    if (phaseId === 'hook_turn' || phaseId === 'hook_turn_2') return {
       x: clamp(playerX - side * Math.min(3.05, xBound * .46), -xBound, xBound),
-      z: clamp(band.rangedZ - 2.55, band.midlineZ + .55, playerZ - 5.65),
+      z: clamp(band.rangedZ - (phaseId === 'hook_turn_2' ? 2.15 : 2.55),
+        band.midlineZ + .55, playerZ - 5.35),
     };
-    if (phaseId === 'return_pass') return {
-      x: clamp(playerX + side * Math.min(2.65, xBound * .40), -xBound, xBound),
-      z: clamp(playerZ + .85, band.rangedZ + 2.6, band.bottomSafeZ + .45),
-    };
+    if (phaseId === 'return_pass' || phaseId === 'return_pass_2') {
+      const passSide = phaseId === 'return_pass_2' ? -side : side;
+      return {
+        x: clamp(playerX + passSide * Math.min(2.65, xBound * .40), -xBound, xBound),
+        z: clamp(playerZ + (phaseId === 'return_pass_2' ? .35 : .85),
+          band.rangedZ + 2.3, band.bottomSafeZ + .45),
+      };
+    }
     return { x: egressX, z: band.worldHalfHeight + 3.7 };
   }
 

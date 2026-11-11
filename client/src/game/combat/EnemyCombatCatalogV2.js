@@ -5,28 +5,33 @@
  * combat output and movement behavior. The director may scale these values by
  * stage, wave, planet and elite state, but must not duplicate role constants.
  */
-export const ENEMY_COMBAT_CATALOG_VERSION = 'enemy-combat-v3.3.0';
+export const ENEMY_COMBAT_CATALOG_VERSION = 'enemy-combat-v3.4.0';
 
 const freezeRole = value => Object.freeze({ ...value });
 
 export const ENEMY_ARCHETYPES_V2 = Object.freeze({
   raider: freezeRole({
     id: 'raider', role: 'skirmisher', defenseClass: 'light', damageType: 'kinetic',
-    tier: 1, threatCost: 1, canShoot: false,
+    tier: 1, threatCost: 1, canShoot: true,
     unlockStage: 1, hpMultiplier: 0.82, damageMultiplier: 0.88, speedMultiplier: 1.22,
     behavior: 'strafe', preferredRange: 5.2, telegraphTicks: 18, attackCooldownTicks: 60,
-    fireCooldownMs: 0, projectileSpeed: 0, projectileDamage: 0, contactDamage: 170,
-    routeVariants: Object.freeze(['flyby', 'hook_return']), controlResistance: 0.05,
+    fireCooldownMs: 980, projectileSpeed: 0.78, projectileDamage: 30, contactDamage: 150,
+    projectileAimMode: 'predictive', projectileLeadFactor: 0.58, projectileMaxLeadMs: 360,
+    projectileGuidanceMs: 0, projectileTurnRateRadians: 0, projectileLifetimeMs: 2500,
+    projectileVisualId: 'enemy_scout_pulse',
+    burstCount: 2, burstGapMs: 105, minVolleysPerFirePhase: 1, maxVolleysPerFirePhase: 1,
+    routeVariants: Object.freeze(['hook_return', 'double_hook_return']), controlResistance: 0.05,
   }),
   gunner: freezeRole({
     id: 'gunner', role: 'ranged', defenseClass: 'balanced', damageType: 'energy',
     tier: 2, threatCost: 2, canShoot: true,
     unlockStage: 1, hpMultiplier: 1.00, damageMultiplier: 1.00, speedMultiplier: 1.04,
     behavior: 'keep_range', preferredRange: 7.6, telegraphTicks: 18, attackCooldownTicks: 54,
-    fireCooldownMs: 1120, projectileSpeed: 0.72, projectileDamage: 110, contactDamage: 180,
+    fireCooldownMs: 1120, projectileSpeed: 0.72, projectileDamage: 36, contactDamage: 180,
     projectileAimMode: 'predictive', projectileLeadFactor: 0.92, projectileMaxLeadMs: 560,
     projectileGuidanceMs: 0, projectileTurnRateRadians: 0, projectileLifetimeMs: 2900,
     projectileVisualId: 'enemy_energy_dart',
+    burstCount: 3, burstGapMs: 92, minVolleysPerFirePhase: 1, maxVolleysPerFirePhase: 1,
     routeVariants: Object.freeze(['range_strafe']), controlResistance: 0.10,
   }),
   charger: freezeRole({
@@ -50,10 +55,11 @@ export const ENEMY_ARCHETYPES_V2 = Object.freeze({
     tier: 2, threatCost: 4, canShoot: true,
     unlockStage: 5, hpMultiplier: 0.90, damageMultiplier: 0.72, speedMultiplier: 0.98,
     behavior: 'support_orbit', preferredRange: 8.6, telegraphTicks: 21, attackCooldownTicks: 66,
-    fireCooldownMs: 1380, projectileSpeed: 0.66, projectileDamage: 100, contactDamage: 150,
+    fireCooldownMs: 1380, projectileSpeed: 0.66, projectileDamage: 38, contactDamage: 150,
     projectileAimMode: 'soft_homing', projectileLeadFactor: 0.34, projectileMaxLeadMs: 320,
     projectileGuidanceMs: 560, projectileTurnRateRadians: 0.050, projectileLifetimeMs: 3200,
     projectileVisualId: 'enemy_ion_comet',
+    burstCount: 2, burstGapMs: 120, minVolleysPerFirePhase: 1, maxVolleysPerFirePhase: 1,
     routeVariants: Object.freeze(['support_orbit']),
     supportPulseTicks: 150, supportRatio: 0.08, controlResistance: 0.10,
   }),
@@ -62,10 +68,11 @@ export const ENEMY_ARCHETYPES_V2 = Object.freeze({
     tier: 3, threatCost: 4, canShoot: true,
     unlockStage: 6, hpMultiplier: 1.10, damageMultiplier: 1.32, speedMultiplier: 0.80,
     behavior: 'telegraphed_zone', preferredRange: 11.4, telegraphTicks: 33, attackCooldownTicks: 75,
-    fireCooldownMs: 1650, projectileSpeed: 0.70, projectileDamage: 185, contactDamage: 200,
+    fireCooldownMs: 1650, projectileSpeed: 0.70, projectileDamage: 92, contactDamage: 200,
     projectileAimMode: 'predictive', projectileLeadFactor: 1.0, projectileMaxLeadMs: 700,
     projectileGuidanceMs: 0, projectileTurnRateRadians: 0, projectileLifetimeMs: 3600,
     projectileVisualId: 'enemy_plasma_slug',
+    burstCount: 2, burstGapMs: 155, minVolleysPerFirePhase: 1, maxVolleysPerFirePhase: 1,
     routeVariants: Object.freeze(['battery_relocate']), controlResistance: 0.15,
   }),
 });
@@ -94,6 +101,10 @@ export const ENEMY_RUNTIME_CATALOG_V3 = Object.freeze(Object.fromEntries(
     projectileTurnRateRadians: archetype.projectileTurnRateRadians || 0,
     projectileLifetimeMs: archetype.projectileLifetimeMs || 3600,
     projectileVisualId: archetype.projectileVisualId || 'enemy_energy_dart',
+    burstCount: archetype.burstCount || 1,
+    burstGapMs: archetype.burstGapMs || 0,
+    minVolleysPerFirePhase: archetype.minVolleysPerFirePhase || 1,
+    maxVolleysPerFirePhase: archetype.maxVolleysPerFirePhase || 1,
     contactDamage: archetype.contactDamage,
     damageType: archetype.damageType,
     defenseClass: archetype.defenseClass,
@@ -136,6 +147,12 @@ export function auditEnemyCombatCatalogV2() {
       issues.push(`PROJECTILE_LIFETIME:${enemy.id}`);
     if (enemy.canShoot && !String(enemy.projectileVisualId || '').startsWith('enemy_'))
       issues.push(`PROJECTILE_VISUAL:${enemy.id}`);
+    if (enemy.canShoot && (!(enemy.burstCount >= 2) || enemy.burstCount > 5
+      || !(enemy.burstGapMs >= 60) || enemy.burstGapMs > 320))
+      issues.push(`PROJECTILE_BURST:${enemy.id}`);
+    if (enemy.canShoot && (!(enemy.minVolleysPerFirePhase >= 1)
+      || enemy.maxVolleysPerFirePhase < enemy.minVolleysPerFirePhase
+      || enemy.maxVolleysPerFirePhase > 3)) issues.push(`VOLLEY_LIMIT:${enemy.id}`);
     if (enemy.projectileAimMode === 'soft_homing'
       && (!(enemy.projectileGuidanceMs > 0) || !(enemy.projectileTurnRateRadians > 0)))
       issues.push(`PROJECTILE_GUIDANCE:${enemy.id}`);

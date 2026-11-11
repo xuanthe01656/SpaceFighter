@@ -71,6 +71,7 @@ import {
   resolveCampaignEnemyInterceptV31,
   resolveCampaignEnemyProjectileVisualV31,
 } from '../../game/combat/CampaignEnemyProjectileV31.js';
+import { createCampaignEnemyVolleyPlanV34 } from '../../game/combat/CampaignEnemyVolleyV34.js';
 import { createGuestAbilityRuntimeV2 } from '../../game/combat/GuestAbilityRuntimeV2.js';
 import { deriveGuestAbilityActivationGateV2 } from '../../game/combat/GuestAbilityActivationGateV2.js';
 import { resolveGuestCombatQaRuntimeFromViteEnv } from '../../game/combat/GuestCombatQaBuildGateV2.js';
@@ -1424,7 +1425,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     return true;
   };
 
-  const fireAimedEnemyBullet = (enemy, speed = null, priority = 'normal') => {
+  const fireAimedEnemyBullet = (enemy, speed = null, priority = 'normal', options = {}) => {
     if (!enemy?.mesh?.position) return false;
     const origin = resolveEncounterMuzzleOrigin(enemy)
       || Object.freeze({ x: enemy.mesh.position.x, y: 0, z: enemy.mesh.position.z });
@@ -1453,12 +1454,58 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       shotPlan.velocity.z,
       {
         priority,
-        rawDamage: enemy._projectileDamage || 200,
+        rawDamage: options.rawDamage ?? enemy._projectileDamage ?? 200,
         damageType: enemy._damageType || 'energy',
         sourceRole: enemy._waveRole || enemy._encounterKind || null,
         shotPlan,
       },
     );
+  };
+
+  const fireCampaignEnemyVolley = (enemy, phaseId, nowMs) => {
+    if (!enemy?.canShoot || enemy._dead || enemy.mesh?.isDisposed?.()) return false;
+    const plan = createCampaignEnemyVolleyPlanV34({
+      roleId: enemy._waveRole || 'gunner',
+      phaseId,
+      sequence: ++enemy._volleySequence,
+      burstCount: enemy._burstCount,
+      burstGapMs: enemy._burstGapMs,
+      projectileDamage: enemy._projectileDamage,
+      createdAtMs: nowMs,
+    });
+    let committed = false;
+    for (const shot of plan.shots) {
+      const fire = () => {
+        if (enemy._dead || enemy.mesh?.isDisposed?.()
+          || !enemyEntryPolicy.isEngageable(enemy._entryState)) return;
+        fireAimedEnemyBullet(enemy, null, 'normal', { rawDamage: shot.rawDamage });
+      };
+      if (shot.fireOffsetMs > 0) scheduleBattleTimer(fire, shot.fireOffsetMs);
+      else fire();
+      committed = true;
+    }
+    enemy._lastVolleyPlanId = plan.id;
+    return committed;
+  };
+
+  const tryFireCampaignEnemyVolley = (enemy, choreography, nowMs) => {
+    if (!choreography?.mayFire || !enemy?.canShoot || guestAbilities?.modifiers().cloaked) return false;
+    if (enemy._firePhaseId !== choreography.phaseId) {
+      enemy._firePhaseId = choreography.phaseId;
+      enemy._phaseVolleysFired = 0;
+    }
+    const minimum = Math.max(1, Math.trunc(enemy._minVolleysPerFirePhase || 1));
+    const maximum = Math.max(minimum, Math.trunc(enemy._maxVolleysPerFirePhase || minimum));
+    if (enemy._phaseVolleysFired >= maximum) return false;
+    const guaranteedVolley = enemy._phaseVolleysFired < minimum;
+    const cooldown = choreography.fireCooldownMs || enemy.shootMs;
+    const cooldownReady = nowMs >= enemy.lastShoot + cooldown;
+    if (!guaranteedVolley && !cooldownReady) return false;
+    if (!fireCampaignEnemyVolley(enemy, choreography.phaseId, nowMs)) return false;
+    enemy._phaseVolleysFired += 1;
+    enemy.lastShoot = nowMs;
+    enemy.visual?.setState('attack');
+    return true;
   };
 
   const resolveEnemySeparation = enemy => {
@@ -1531,12 +1578,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
 
     if (result.fireWindup) enemy.visual?.setState('attack');
     else if (result.egress) enemy.visual?.setState('move');
-    if (result.mayFire && enemy.canShoot && !guestAbilities?.modifiers().cloaked
-      && nowMs > enemy.lastShoot + (result.fireCooldownMs || enemy.shootMs)) {
-      fireAimedEnemyBullet(enemy);
-      enemy.visual?.setState('attack');
-      enemy.lastShoot = nowMs;
-    }
+    tryFireCampaignEnemyVolley(enemy, result, nowMs);
     return result;
   };
 
@@ -1737,14 +1779,20 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         seed:motionSeed,nowMs:Date.now(),
       }):null;
     const miniBossMotionState=miniBossAiState?createCampaignMiniBossMotionStateV29():null;
+    const resolvedShootMs=spawnSpec?.shootMs||legacyMotion?.shootMs||2200;
+    const spawnedAtMs=Date.now();
     enemies.push({
       mesh, visual, hp: baseHp, maxHp: baseHp, tier, speed,
       velX: spawnSpec?(tier===4?0:(Number(spawnSpec.strafeDirection)||1)*.035):legacyMotion.velX,
       sineOff: spawnSpec?Number(spawnSpec.sinePhase)||0:legacyMotion.sineOff,
       isBoss: false, isEnraged: false,
       canShoot: spawnSpec?Boolean(spawnSpec.canShoot):legacyMotion.canShoot,
-      lastShoot: spawnSpec?Date.now():legacyMotion.lastShoot,
-      shootMs: spawnSpec?.shootMs||legacyMotion?.shootMs||2200,
+      // Production entries enter combat with the first authored volley ready.
+      // Choreography telegraph/arrival still gates the actual shot; this only
+      // removes the old spawn-time cooldown that caused identical green scouts
+      // to leave their fire window without shooting at all.
+      lastShoot: spawnSpec?spawnedAtMs-resolvedShootMs:legacyMotion.lastShoot,
+      shootMs: resolvedShootMs,
       points: pts, miniHpBg, miniHp, entryHalo, _dead: false,
       _routeVariant:spawnSpec?.routeVariant||null,
       _projectileSpeed:Math.max(.52,Number(spawnSpec?.projectileSpeed)||.58),
@@ -1757,6 +1805,16 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       _projectileTurnRateRadians:Math.max(0,Number(spawnSpec?.projectileTurnRateRadians)||0),
       _projectileLifetimeMs:Math.max(1600,Number(spawnSpec?.projectileLifetimeMs)||4200),
       _projectileVisualId:spawnSpec?.projectileVisualId||null,
+      _burstCount:Math.max(1,Math.min(5,Math.trunc(Number(spawnSpec?.burstCount)||1))),
+      _burstGapMs:Math.max(0,Math.min(320,Math.trunc(Number(spawnSpec?.burstGapMs)||0))),
+      _minVolleysPerFirePhase:Math.max(1,Math.min(3,
+        Math.trunc(Number(spawnSpec?.minVolleysPerFirePhase)||1))),
+      _maxVolleysPerFirePhase:Math.max(1,Math.min(3,
+        Math.trunc(Number(spawnSpec?.maxVolleysPerFirePhase)||1))),
+      _firePhaseId:null,
+      _phaseVolleysFired:0,
+      _volleySequence:0,
+      _lastVolleyPlanId:null,
       _contactDamage:Math.max(1,Math.round(Number(spawnSpec?.contactDamage)||(tier===4?400:200))),
       _damageMultiplier:Number(spawnSpec?.damageMultiplier)||1,
       _damageType:spawnSpec?.damageType||'kinetic',

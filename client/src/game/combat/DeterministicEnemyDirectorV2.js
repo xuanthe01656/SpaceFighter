@@ -9,7 +9,7 @@ import {
   resolveCampaignWaveEncounterV28,
 } from './CampaignEncounterEscalationV28.js';
 
-export const CAMPAIGN_WAVE_DIRECTOR_VERSION = 'campaign-wave-director-v3.3.0';
+export const CAMPAIGN_WAVE_DIRECTOR_VERSION = 'campaign-wave-director-v3.4.0';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const round3 = value => Math.round(Number(value) * 1000) / 1000;
@@ -44,7 +44,7 @@ export const CAMPAIGN_PLANET_PROFILES_V27 = Object.freeze({
     id: 'alpha_mechanical', budgetMultiplier: 1, spawnGapMultiplier: 1.00,
     hpMultiplier: 1, damageMultiplier: 1, speedMultiplier: 1.02,
     projectileSpeedMultiplier: 1, fireCooldownMultiplier: .98,
-    scoutReturnRatio: .68,
+    scoutReturnRatio: 1, scoutExtraReturnRatio: .16,
     roleWeights: Object.freeze({ raider: 12, gunner: 11, charger: 6, shieldbearer: 7, support: 3, artillery: 5 }),
     preferredFormations: Object.freeze(['line', 'crossfire', 'escort', 'stagger']),
     modifierId: 'mechanical_formations',
@@ -53,7 +53,7 @@ export const CAMPAIGN_PLANET_PROFILES_V27 = Object.freeze({
     id: 'cryo_ion', budgetMultiplier: 1.08, spawnGapMultiplier: .88,
     hpMultiplier: 1.14, damageMultiplier: 1.10, speedMultiplier: 1.05,
     projectileSpeedMultiplier: 1.08, fireCooldownMultiplier: .88,
-    scoutReturnRatio: .78,
+    scoutReturnRatio: 1, scoutExtraReturnRatio: .36,
     roleWeights: Object.freeze({ raider: 7, gunner: 12, charger: 5, shieldbearer: 9, support: 8, artillery: 10 }),
     preferredFormations: Object.freeze(['crossfire', 'stagger', 'lane_sweep', 'escort']),
     modifierId: 'cryo_lane_control',
@@ -62,7 +62,7 @@ export const CAMPAIGN_PLANET_PROFILES_V27 = Object.freeze({
     id: 'inferno_swarm', budgetMultiplier: 1.16, spawnGapMultiplier: .74,
     hpMultiplier: 1.20, damageMultiplier: 1.24, speedMultiplier: 1.14,
     projectileSpeedMultiplier: 1.16, fireCooldownMultiplier: .76,
-    scoutReturnRatio: .34,
+    scoutReturnRatio: 1, scoutExtraReturnRatio: .62,
     roleWeights: Object.freeze({ raider: 14, gunner: 7, charger: 12, shieldbearer: 4, support: 4, artillery: 8 }),
     preferredFormations: Object.freeze(['pincer', 'swarm', 'stagger', 'center_push']),
     modifierId: 'inferno_pressure',
@@ -257,8 +257,16 @@ function resolveFormation(template, profile, next) {
 function resolveRouteVariantV3(role, profile, template, next) {
   const archetype = ENEMY_ARCHETYPES_V2[role] || ENEMY_ARCHETYPES_V2.raider;
   if (role !== 'raider') return archetype.routeVariants?.[0] || archetype.behavior;
-  const returnRatio = clamp(profile.scoutReturnRatio + Number(template.scoutReturnBias || 0), .18, .88);
-  return (next() % 1000) < Math.round(returnRatio * 1000) ? 'hook_return' : 'flyby';
+  // Campaign scouts always re-engage at least once. Planet/template identity
+  // now controls whether they perform a third attack pass, never whether they
+  // simply fly through the screen and disappear.
+  const extraReturnRatio = clamp(
+    Number(profile.scoutExtraReturnRatio || 0) + Number(template.scoutReturnBias || 0) * .55,
+    .05,
+    .90,
+  );
+  return (next() % 1000) < Math.round(extraReturnRatio * 1000)
+    ? 'double_hook_return' : 'hook_return';
 }
 
 function projectRuntimeV3(runtime, wavePower, elite = false) {
@@ -282,6 +290,10 @@ function projectRuntimeV3(runtime, wavePower, elite = false) {
     projectileTurnRateRadians: runtime.projectileTurnRateRadians,
     projectileLifetimeMs: runtime.projectileLifetimeMs,
     projectileVisualId: runtime.projectileVisualId,
+    burstCount: runtime.burstCount,
+    burstGapMs: runtime.burstGapMs,
+    minVolleysPerFirePhase: runtime.minVolleysPerFirePhase,
+    maxVolleysPerFirePhase: runtime.maxVolleysPerFirePhase,
     projectileDamage: Math.max(0, Math.round(runtime.projectileDamage * wavePower.damageMultiplier * eliteDamage)),
     contactDamage: Math.max(1, Math.round(runtime.contactDamage * wavePower.damageMultiplier * eliteDamage)),
   });
@@ -478,7 +490,9 @@ export function auditCampaignEnemyDirectorV3() {
   }
   for (const [planetId, profile] of Object.entries(CAMPAIGN_PLANET_PROFILES_V27)) {
     if (!(profile.spawnGapMultiplier > 0)) issues.push(`SPAWN_GAP:${planetId}`);
-    if (!(profile.scoutReturnRatio >= 0 && profile.scoutReturnRatio <= 1)) issues.push(`SCOUT_ROUTE:${planetId}`);
+    if (profile.scoutReturnRatio !== 1) issues.push(`SCOUT_MUST_RETURN:${planetId}`);
+    if (!(profile.scoutExtraReturnRatio >= 0 && profile.scoutExtraReturnRatio <= 1))
+      issues.push(`SCOUT_EXTRA_RETURN:${planetId}`);
     if (!(profile.damageMultiplier > 0 && profile.speedMultiplier > 0)) issues.push(`PLANET_POWER:${planetId}`);
   }
   const alpha = CAMPAIGN_PLANET_PROFILES_V27[1];
