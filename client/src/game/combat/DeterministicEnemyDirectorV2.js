@@ -9,7 +9,7 @@ import {
   resolveCampaignWaveEncounterV28,
 } from './CampaignEncounterEscalationV28.js';
 
-export const CAMPAIGN_WAVE_DIRECTOR_VERSION = 'campaign-wave-director-v3.1.0';
+export const CAMPAIGN_WAVE_DIRECTOR_VERSION = 'campaign-wave-director-v3.3.0';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const round3 = value => Math.round(Number(value) * 1000) / 1000;
@@ -41,27 +41,27 @@ const LANE_NORMALIZED_X = Object.freeze([-0.80, -0.40, 0, 0.40, 0.80]);
  */
 export const CAMPAIGN_PLANET_PROFILES_V27 = Object.freeze({
   1: Object.freeze({
-    id: 'alpha_mechanical', budgetMultiplier: 1, spawnGapMultiplier: .88,
-    hpMultiplier: 1, damageMultiplier: 1, speedMultiplier: 1.03,
-    projectileSpeedMultiplier: 1, fireCooldownMultiplier: .96,
+    id: 'alpha_mechanical', budgetMultiplier: 1, spawnGapMultiplier: 1.00,
+    hpMultiplier: 1, damageMultiplier: 1, speedMultiplier: 1.02,
+    projectileSpeedMultiplier: 1, fireCooldownMultiplier: .98,
     scoutReturnRatio: .68,
     roleWeights: Object.freeze({ raider: 12, gunner: 11, charger: 6, shieldbearer: 7, support: 3, artillery: 5 }),
     preferredFormations: Object.freeze(['line', 'crossfire', 'escort', 'stagger']),
     modifierId: 'mechanical_formations',
   }),
   2: Object.freeze({
-    id: 'cryo_ion', budgetMultiplier: 1.06, spawnGapMultiplier: .95,
-    hpMultiplier: 1.12, damageMultiplier: 1.06, speedMultiplier: .97,
-    projectileSpeedMultiplier: .96, fireCooldownMultiplier: 1.04,
+    id: 'cryo_ion', budgetMultiplier: 1.08, spawnGapMultiplier: .88,
+    hpMultiplier: 1.14, damageMultiplier: 1.10, speedMultiplier: 1.05,
+    projectileSpeedMultiplier: 1.08, fireCooldownMultiplier: .88,
     scoutReturnRatio: .78,
     roleWeights: Object.freeze({ raider: 7, gunner: 12, charger: 5, shieldbearer: 9, support: 8, artillery: 10 }),
     preferredFormations: Object.freeze(['crossfire', 'stagger', 'lane_sweep', 'escort']),
     modifierId: 'cryo_lane_control',
   }),
   3: Object.freeze({
-    id: 'inferno_swarm', budgetMultiplier: 1.12, spawnGapMultiplier: .78,
-    hpMultiplier: 1.06, damageMultiplier: 1.18, speedMultiplier: 1.12,
-    projectileSpeedMultiplier: 1.08, fireCooldownMultiplier: .86,
+    id: 'inferno_swarm', budgetMultiplier: 1.16, spawnGapMultiplier: .74,
+    hpMultiplier: 1.20, damageMultiplier: 1.24, speedMultiplier: 1.14,
+    projectileSpeedMultiplier: 1.16, fireCooldownMultiplier: .76,
     scoutReturnRatio: .34,
     roleWeights: Object.freeze({ raider: 14, gunner: 7, charger: 12, shieldbearer: 4, support: 4, artillery: 8 }),
     preferredFormations: Object.freeze(['pincer', 'swarm', 'stagger', 'center_push']),
@@ -232,8 +232,8 @@ export function resolveCampaignWavePowerV3({
       * (1 + progress * .22 + stageProgress * .08 + (d - 1) * .08)),
     speedMultiplier: round3(profile.speedMultiplier * template.speedMultiplier
       * (1 + progress * .07 + stageProgress * .035)),
-    projectileSpeedMultiplier: round3(profile.projectileSpeedMultiplier * (1 + progress * .05)),
-    fireCooldownMultiplier: round3(clamp(profile.fireCooldownMultiplier * (1 - progress * .13), .68, 1.18)),
+    projectileSpeedMultiplier: round3(profile.projectileSpeedMultiplier * (1 + progress * .10)),
+    fireCooldownMultiplier: round3(clamp(profile.fireCooldownMultiplier * (1 - progress * .18), .62, 1.10)),
   });
 }
 
@@ -265,12 +265,12 @@ function projectRuntimeV3(runtime, wavePower, elite = false) {
   const eliteHp = elite ? 1.68 : 1;
   const eliteDamage = elite ? 1.18 : 1;
   const eliteSpeed = elite ? 1.035 : 1;
-  const eliteCooldown = elite ? .90 : 1;
+  const eliteCooldown = elite ? .86 : 1;
   return Object.freeze({
     tier: runtime.tier,
     canShoot: runtime.canShoot,
     shootMs: runtime.shootMs > 0
-      ? Math.max(650, Math.round(runtime.shootMs * wavePower.fireCooldownMultiplier * eliteCooldown)) : 0,
+      ? Math.max(560, Math.round(runtime.shootMs * wavePower.fireCooldownMultiplier * eliteCooldown)) : 0,
     hpMultiplier: round3(runtime.hpMultiplier * wavePower.hpMultiplier * eliteHp),
     damageMultiplier: round3(runtime.damageMultiplier * wavePower.damageMultiplier * eliteDamage),
     speedMultiplier: round3(runtime.speedMultiplier * wavePower.speedMultiplier * eliteSpeed),
@@ -309,7 +309,7 @@ function buildCampaignEntries({
   ), 6, 46);
   const gapMs = clamp(Math.round(
     (735 - stage * 11 - wave * 8) * profile.spawnGapMultiplier * template.spawnGapMultiplier,
-  ), 300, 850);
+  ), 260, 850);
   const wavePower = resolveCampaignWavePowerV3({
     planetId, stage, wave, totalWaves, difficulty, templateId: template.id,
   });
@@ -481,6 +481,19 @@ export function auditCampaignEnemyDirectorV3() {
     if (!(profile.scoutReturnRatio >= 0 && profile.scoutReturnRatio <= 1)) issues.push(`SCOUT_ROUTE:${planetId}`);
     if (!(profile.damageMultiplier > 0 && profile.speedMultiplier > 0)) issues.push(`PLANET_POWER:${planetId}`);
   }
+  const alpha = CAMPAIGN_PLANET_PROFILES_V27[1];
+  const cryo = CAMPAIGN_PLANET_PROFILES_V27[2];
+  const inferno = CAMPAIGN_PLANET_PROFILES_V27[3];
+  if (!(alpha.budgetMultiplier < cryo.budgetMultiplier && cryo.budgetMultiplier < inferno.budgetMultiplier))
+    issues.push('PLANET_BUDGET_ORDER');
+  if (!(alpha.damageMultiplier < cryo.damageMultiplier && cryo.damageMultiplier < inferno.damageMultiplier))
+    issues.push('PLANET_DAMAGE_ORDER');
+  if (!(alpha.projectileSpeedMultiplier < cryo.projectileSpeedMultiplier
+    && cryo.projectileSpeedMultiplier < inferno.projectileSpeedMultiplier)) issues.push('PLANET_PROJECTILE_ORDER');
+  if (!(alpha.fireCooldownMultiplier > cryo.fireCooldownMultiplier
+    && cryo.fireCooldownMultiplier > inferno.fireCooldownMultiplier)) issues.push('PLANET_FIRE_RATE_ORDER');
+  if (!(alpha.spawnGapMultiplier > cryo.spawnGapMultiplier
+    && cryo.spawnGapMultiplier > inferno.spawnGapMultiplier)) issues.push('PLANET_SPAWN_TEMPO_ORDER');
   return Object.freeze(issues);
 }
 

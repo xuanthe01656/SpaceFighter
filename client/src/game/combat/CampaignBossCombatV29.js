@@ -1,11 +1,18 @@
 import { BOSS_PHASES_V2, bossPhaseForHp } from './EnemyCombatCatalogV2.js';
 import { resolveCampaignCombatSafeBandV29 } from './CampaignCombatChoreographyV29.js';
+import {
+  CAMPAIGN_BOSS_PATTERN_CATALOG_V33,
+  auditCampaignBossArsenalV33,
+  resolveCampaignBossPatternContractV33,
+  resolveCampaignBossPatternV33,
+  resolveCampaignBossProfileV33,
+} from './CampaignBossArsenalV33.js';
 
 /**
  * Deterministic final-boss movement and attack choreography for Campaign production and QA.
  * One immutable attack plan is shared by warning VFX and spawned projectiles.
  */
-export const CAMPAIGN_BOSS_COMBAT_VERSION = 'campaign-boss-combat-v3.2.0';
+export const CAMPAIGN_BOSS_COMBAT_VERSION = 'campaign-boss-combat-v3.3.0';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -32,51 +39,7 @@ const hashParts = (...parts) => {
   return hash >>> 0 || 1;
 };
 
-export const CAMPAIGN_BOSS_PATTERN_CATALOG_V29 = freezeDeep({
-  aimed_burst: {
-    telegraphMs: 560,
-    recoveryMs: 860,
-    projectileSpeed: .70,
-    width: .42,
-    shotCount: 3,
-    spreadRadians: .065,
-    shotGapMs: 105,
-    visualId: 'boss_aimed_lance',
-  },
-  fan: {
-    telegraphMs: 650,
-    recoveryMs: 960,
-    projectileSpeed: .60,
-    width: .46,
-    shotCount: 7,
-    spreadRadians: .98,
-    shotGapMs: 24,
-    visualId: 'boss_fan_needle',
-  },
-  lane_sweep: {
-    telegraphMs: 780,
-    recoveryMs: 1040,
-    projectileSpeed: .58,
-    width: .74,
-    lanes: [-.72, -.24, .24, .72],
-    shotGapMs: 86,
-    visualId: 'boss_lane_shard',
-  },
-  radial_gap: {
-    // A portrait shooter needs a forward/down-screen pressure arc, not a full
-    // 360-degree ring that wastes bullets above the boss and misplaces the gap.
-    telegraphMs: 820,
-    recoveryMs: 1080,
-    projectileSpeed: .55,
-    width: .40,
-    radialSlots: 17,
-    gapSlots: 3,
-    arcHalfRadians: 1.22,
-    shotGapMs: 12,
-    visualId: 'boss_arc_ember',
-  },
-});
-
+export const CAMPAIGN_BOSS_PATTERN_CATALOG_V29 = CAMPAIGN_BOSS_PATTERN_CATALOG_V33;
 
 export const CAMPAIGN_BOSS_PHASE_COMBAT_V31 = freezeDeep({
   phase_1: {
@@ -84,6 +47,8 @@ export const CAMPAIGN_BOSS_PHASE_COMBAT_V31 = freezeDeep({
     movementMultiplier: 1,
     recoveryMultiplier: 1,
     projectileSpeedMultiplier: 1,
+    telegraphMultiplier: 1,
+    damageMultiplier: 1,
     extraBurstShots: 0,
     extraRadialSlots: 0,
     enrageHoldMs: 0,
@@ -92,7 +57,9 @@ export const CAMPAIGN_BOSS_PHASE_COMBAT_V31 = freezeDeep({
     frenzyLevel: 1,
     movementMultiplier: 1.10,
     recoveryMultiplier: .88,
-    projectileSpeedMultiplier: 1.06,
+    projectileSpeedMultiplier: 1.07,
+    telegraphMultiplier: .96,
+    damageMultiplier: 1.08,
     extraBurstShots: 0,
     extraRadialSlots: 0,
     enrageHoldMs: 0,
@@ -102,6 +69,8 @@ export const CAMPAIGN_BOSS_PHASE_COMBAT_V31 = freezeDeep({
     movementMultiplier: 1.32,
     recoveryMultiplier: .62,
     projectileSpeedMultiplier: 1.14,
+    telegraphMultiplier: .90,
+    damageMultiplier: 1.18,
     extraBurstShots: 2,
     extraRadialSlots: 2,
     enrageHoldMs: 900,
@@ -111,49 +80,22 @@ export const CAMPAIGN_BOSS_PHASE_COMBAT_V31 = freezeDeep({
 const phaseCombatFor = phaseId => CAMPAIGN_BOSS_PHASE_COMBAT_V31[phaseId]
   || CAMPAIGN_BOSS_PHASE_COMBAT_V31.phase_1;
 
-const resolvePatternContractV31 = (pattern, phaseId) => {
-  const base = CAMPAIGN_BOSS_PATTERN_CATALOG_V29[pattern];
-  if (!base) return null;
-  const phase = phaseCombatFor(phaseId);
-  const contract = {
-    ...base,
-    projectileSpeed: base.projectileSpeed * phase.projectileSpeedMultiplier,
-    recoveryMs: Math.max(600, Math.round(base.recoveryMs * phase.recoveryMultiplier)),
-  };
-  if ((pattern === 'aimed_burst' || pattern === 'fan') && phase.extraBurstShots > 0) {
-    contract.shotCount = base.shotCount + phase.extraBurstShots;
-  }
-  if (pattern === 'radial_gap' && phase.extraRadialSlots > 0) {
-    contract.radialSlots = base.radialSlots + phase.extraRadialSlots;
-  }
-  if (pattern === 'lane_sweep' && phase.frenzyLevel >= 2) {
-    contract.lanes = [-.78, -.39, 0, .39, .78];
-  }
-  return freezeDeep(contract);
-};
+const resolvePatternContractV31 = ({ pattern, profile, phaseId }) =>
+  resolveCampaignBossPatternContractV33({
+    pattern,
+    profile,
+    phaseId,
+    phaseCombat: phaseCombatFor(phaseId),
+  });
 
 export function auditCampaignBossCombatV29() {
-  const issues = [];
-  const catalogPatterns = new Set(Object.keys(CAMPAIGN_BOSS_PATTERN_CATALOG_V29));
-  for (const phase of BOSS_PHASES_V2) {
-    if (!phase.patterns?.length) issues.push(`EMPTY_PHASE:${phase.id}`);
-    for (const pattern of phase.patterns || []) {
-      if (!catalogPatterns.has(pattern)) issues.push(`MISSING_PATTERN:${phase.id}:${pattern}`);
-    }
-  }
-  for (const [id, pattern] of Object.entries(CAMPAIGN_BOSS_PATTERN_CATALOG_V29)) {
-    if (pattern.telegraphMs < 500) issues.push(`SHORT_TELEGRAPH:${id}`);
-    if (pattern.recoveryMs < 600) issues.push(`SHORT_RECOVERY:${id}`);
-    if (pattern.projectileSpeed <= 0) issues.push(`INVALID_SPEED:${id}`);
-    if (!String(pattern.visualId || '').startsWith('boss_')) issues.push(`INVALID_VISUAL:${id}`);
-    if (id === 'radial_gap' && !(pattern.arcHalfRadians > .6 && pattern.arcHalfRadians < Math.PI / 2))
-      issues.push('INVALID_FORWARD_ARC');
-  }
+  const issues = [...auditCampaignBossArsenalV33()];
   for (const phase of BOSS_PHASES_V2) {
     const combat = CAMPAIGN_BOSS_PHASE_COMBAT_V31[phase.id];
     if (!combat) issues.push(`MISSING_PHASE_COMBAT:${phase.id}`);
     else if (!(combat.movementMultiplier > 0 && combat.recoveryMultiplier > 0
-      && combat.projectileSpeedMultiplier > 0)) issues.push(`INVALID_PHASE_COMBAT:${phase.id}`);
+      && combat.projectileSpeedMultiplier > 0 && combat.damageMultiplier > 0
+      && combat.telegraphMultiplier > 0)) issues.push(`INVALID_PHASE_COMBAT:${phase.id}`);
   }
   if (!(CAMPAIGN_BOSS_PHASE_COMBAT_V31.phase_3.frenzyLevel
     > CAMPAIGN_BOSS_PHASE_COMBAT_V31.phase_2.frenzyLevel)) issues.push('FRENZY_LEVEL_ORDER');
@@ -213,108 +155,218 @@ const makePathTo = ({ origin, endpoint, speed, width, fireOffsetMs = 0, index = 
 };
 
 export function createCampaignBossAttackPlanV29({
-  pattern,
+  pattern = null,
   origin,
   playerX = 0,
   playerZ = 10,
+  playerVelocityX = 0,
+  playerVelocityZ = 0,
   arenaHalfWidth = 7,
   worldHalfHeight = 15,
   createdAtMs = 0,
   cycle = 0,
   phaseId = 'phase_1',
+  planetId = 1,
+  bossType = 'mech',
+  profileId = null,
 } = {}) {
-  const contract = resolvePatternContractV31(pattern, phaseId);
-  if (!contract) throw new Error(`Unknown Campaign Boss V3.2 pattern: ${pattern}`);
+  const profile = resolveCampaignBossProfileV33({ planetId, bossType, profileId });
+  const profileFamily = profile.planetId === 1 ? 'alpha' : profile.planetId === 2 ? 'cryo' : 'inferno';
+  const requestedPattern = CAMPAIGN_BOSS_PATTERN_CATALOG_V33[pattern];
+  const resolvedPattern = requestedPattern?.family === profileFamily
+    ? pattern : resolveCampaignBossPatternV33({ profile, phaseId, cycle });
+  const contract = resolvePatternContractV31({ pattern: resolvedPattern, profile, phaseId });
+  if (!contract) throw new Error(`Unknown Campaign Boss V3.3 pattern: ${resolvedPattern || pattern}`);
   const phaseCombat = phaseCombatFor(phaseId);
   const ox = Number(origin?.x);
   const oz = Number(origin?.z);
   if (!Number.isFinite(ox) || !Number.isFinite(oz)) {
-    throw new TypeError('Campaign Boss V2.9 attack plan requires a finite world origin.');
+    throw new TypeError('Campaign Boss V3.3 attack plan requires a finite world origin.');
   }
   const lockedOrigin = Object.freeze({ x: ox, y: finite(origin?.y, 0), z: oz });
-  const playerDirection = normalize(finite(playerX, 0) - ox, finite(playerZ, 10) - oz);
+  const halfWidth = Math.max(2.8, finite(arenaHalfWidth, 7));
+  const targetZ = Math.max(4, finite(worldHalfHeight, 15)) + 1.5;
+  const leadFrames = Math.max(0, finite(contract.leadMs, 0)) / (1000 / 60);
+  const predictedPlayer = Object.freeze({
+    x: clamp(finite(playerX, 0) + finite(playerVelocityX, 0) * leadFrames, -halfWidth * .92, halfWidth * .92),
+    z: finite(playerZ, 10) + finite(playerVelocityZ, 0) * leadFrames,
+  });
+  const playerDirection = normalize(predictedPlayer.x - ox, predictedPlayer.z - oz);
+  const baseAngle = Math.atan2(playerDirection.x, playerDirection.z);
+  const toDirection = angle => ({ x: Math.sin(angle), z: Math.cos(angle) });
   const paths = [];
+  const addDirectionalPath = ({ direction, fireOffsetMs = 0, index = paths.length }) => {
+    paths.push(makePath({
+      origin: lockedOrigin,
+      direction,
+      speed: contract.projectileSpeed,
+      width: contract.width,
+      length: worldHalfHeight * 2.08,
+      fireOffsetMs,
+      index,
+    }));
+  };
+  const addLanePath = ({ lane, fireOffsetMs = 0, index = paths.length }) => {
+    paths.push(makePathTo({
+      origin: lockedOrigin,
+      endpoint: { x: clamp(lane, -.92, .92) * halfWidth, z: targetZ },
+      speed: contract.projectileSpeed,
+      width: contract.width,
+      fireOffsetMs,
+      index,
+    }));
+  };
 
-  if (pattern === 'aimed_burst' || pattern === 'fan') {
-    const count = Math.max(1, Math.trunc(contract.shotCount));
+  if (contract.geometry === 'predictive_burst') {
+    const count = Math.max(1, Math.trunc(contract.shotCount + phaseCombat.extraBurstShots));
     for (let index = 0; index < count; index += 1) {
       const normalizedIndex = count === 1 ? 0 : index / (count - 1) - .5;
-      const angle = Math.atan2(playerDirection.z, playerDirection.x)
-        + normalizedIndex * contract.spreadRadians;
-      const direction = { x: Math.cos(angle), z: Math.sin(angle) };
-      paths.push(makePath({
-        origin: lockedOrigin,
-        direction,
-        speed: contract.projectileSpeed,
-        width: contract.width,
-        length: worldHalfHeight * 2.05,
+      addDirectionalPath({
+        direction: toDirection(baseAngle + normalizedIndex * contract.spreadRadians),
         fireOffsetMs: index * contract.shotGapMs,
-        index,
-      }));
+      });
     }
-  } else if (pattern === 'lane_sweep') {
-    const halfWidth = Math.max(2.8, finite(arenaHalfWidth, 7));
-    const targetZ = Math.max(4, finite(worldHalfHeight, 15)) + 1.5;
-    contract.lanes.forEach((lane, index) => {
-      paths.push(makePathTo({
-        origin: lockedOrigin,
-        endpoint: { x: clamp(lane, -.9, .9) * halfWidth, z: targetZ },
-        speed: contract.projectileSpeed,
-        width: contract.width,
-        fireOffsetMs: index * contract.shotGapMs,
-        index,
-      }));
-    });
-  } else if (pattern === 'radial_gap') {
-    const slots = Math.max(9, Math.trunc(contract.radialSlots));
+  } else if (contract.geometry === 'alternating_fan' || contract.geometry === 'fan_volley') {
+    const frenzyVolley = phaseCombat.frenzyLevel >= 2 && contract.geometry === 'fan_volley' ? 1 : 0;
+    const volleys = Math.max(1, Math.trunc(contract.volleys + frenzyVolley));
+    const count = Math.max(3, Math.trunc(contract.shotCount + phaseCombat.extraBurstShots));
+    for (let volley = 0; volley < volleys; volley += 1) {
+      const swing = (volley % 2 === 0 ? -1 : 1) * contract.centerSwingRadians;
+      for (let index = 0; index < count; index += 1) {
+        const normalizedIndex = count === 1 ? 0 : index / (count - 1) - .5;
+        addDirectionalPath({
+          direction: toDirection(baseAngle + swing + normalizedIndex * contract.spreadRadians),
+          fireOffsetMs: volley * contract.volleyGapMs + index * contract.shotGapMs,
+        });
+      }
+    }
+  } else if (contract.geometry === 'lane_sequence') {
+    const lanes = [...contract.laneOrder];
+    if (phaseCombat.frenzyLevel >= 2) lanes.push(-.48, .48);
+    lanes.forEach((lane, index) => addLanePath({ lane, fireOffsetMs: index * contract.shotGapMs }));
+  } else if (contract.geometry === 'gap_fan') {
+    const slots = Math.max(9, Math.trunc(contract.radialSlots + phaseCombat.extraRadialSlots));
     const gapSlots = clamp(Math.trunc(contract.gapSlots), 1, slots - 4);
-    const arcHalf = clamp(finite(contract.arcHalfRadians, 1.22), .6, Math.PI / 2 - .08);
+    const arcHalf = clamp(finite(contract.arcHalfRadians, 1.05), .65, Math.PI / 2 - .06);
     const step = arcHalf * 2 / Math.max(1, slots - 1);
-    // Offset around the portrait-playfield forward axis (+Z). atan2(x,z) is
-    // intentionally used here; the old atan2(z,x) belonged to a full circle.
     const playerOffset = clamp(Math.atan2(playerDirection.x, playerDirection.z), -arcHalf, arcHalf);
     const halfGap = Math.floor(gapSlots / 2);
-    // Keep the full escape gap inside the authored arc even when the player is
-    // hugging an extreme lane. A clipped edge gap would silently add one extra
-    // projectile and make frenzy harder exactly where screen space is smallest.
-    const gapCenter = clamp(
-      Math.round((playerOffset + arcHalf) / step),
-      halfGap,
-      slots - 1 - halfGap,
-    );
+    const baseGap = clamp(Math.round((playerOffset + arcHalf) / step), halfGap, slots - 1 - halfGap);
+    for (let volley = 0; volley < Math.max(1, contract.volleys); volley += 1) {
+      const shiftedGap = clamp(baseGap + (volley % 2 === 0 ? -1 : 1), halfGap, slots - 1 - halfGap);
+      let localIndex = 0;
+      for (let slot = 0; slot < slots; slot += 1) {
+        if (Math.abs(slot - shiftedGap) <= halfGap) continue;
+        const offset = -arcHalf + slot * step;
+        addDirectionalPath({
+          direction: toDirection(offset),
+          fireOffsetMs: volley * contract.volleyGapMs + localIndex * contract.shotGapMs,
+        });
+        localIndex += 1;
+      }
+    }
+  } else if (contract.geometry === 'lane_wall_gap') {
+    let laneCount = Math.max(5, Math.trunc(contract.laneCount + (phaseCombat.frenzyLevel >= 2 ? 2 : 0)));
+    if (laneCount % 2 === 0) laneCount += 1;
+    const lanes = Array.from({ length: laneCount }, (_, index) => -.84 + index * (1.68 / (laneCount - 1)));
+    const closestGap = lanes.reduce((best, lane, index) =>
+      Math.abs(lane * halfWidth - predictedPlayer.x) < Math.abs(lanes[best] * halfWidth - predictedPlayer.x)
+        ? index : best, 0);
+    const wallCount = Math.max(1, Math.trunc(contract.wallCount + (phaseCombat.frenzyLevel >= 2 ? 1 : 0)));
+    for (let wall = 0; wall < wallCount; wall += 1) {
+      const shift = wall === 0 ? 0 : (wall % 2 === 1 ? 1 : -1) * Math.ceil(wall / 2);
+      const gapIndex = clamp(closestGap + shift, 0, lanes.length - 1);
+      let localIndex = 0;
+      lanes.forEach((lane, index) => {
+        if (Math.abs(index - gapIndex) <= Math.floor(contract.gapSlots / 2)) return;
+        addLanePath({
+          lane,
+          fireOffsetMs: wall * contract.volleyGapMs + localIndex * contract.shotGapMs,
+        });
+        localIndex += 1;
+      });
+    }
+  } else if (contract.geometry === 'staggered_tridents') {
+    const volleys = Math.max(1, Math.trunc(contract.volleys + (phaseCombat.frenzyLevel >= 2 ? 1 : 0)));
+    const centers = [-contract.centerSwingRadians, 0, contract.centerSwingRadians, 0];
+    for (let volley = 0; volley < volleys; volley += 1) {
+      const center = centers[volley % centers.length];
+      const count = Math.max(3, Math.trunc(contract.shotCount));
+      for (let index = 0; index < count; index += 1) {
+        const normalizedIndex = count === 1 ? 0 : index / (count - 1) - .5;
+        addDirectionalPath({
+          direction: toDirection(baseAngle + center + normalizedIndex * contract.spreadRadians),
+          fireOffsetMs: volley * contract.volleyGapMs + index * contract.shotGapMs,
+        });
+      }
+    }
+  } else if (contract.geometry === 'target_cluster') {
+    const count = Math.max(3, Math.trunc(contract.shotCount + phaseCombat.extraBurstShots));
+    for (let index = 0; index < count; index += 1) {
+      const scatter = contract.scatter[index % Math.max(1, contract.scatter.length)] || 0;
+      const laneX = clamp(predictedPlayer.x + scatter * halfWidth * .52, -halfWidth * .88, halfWidth * .88);
+      paths.push(makePathTo({
+        origin: lockedOrigin,
+        endpoint: { x: laneX, z: targetZ },
+        speed: contract.projectileSpeed,
+        width: contract.width,
+        fireOffsetMs: index * contract.shotGapMs,
+        index: paths.length,
+      }));
+    }
+  } else if (contract.geometry === 'forward_arc_gap') {
+    const slots = Math.max(11, Math.trunc(contract.radialSlots + phaseCombat.extraRadialSlots));
+    const gapSlots = clamp(Math.trunc(contract.gapSlots), 1, slots - 4);
+    const arcHalf = clamp(finite(contract.arcHalfRadians, 1.22), .65, Math.PI / 2 - .06);
+    const step = arcHalf * 2 / Math.max(1, slots - 1);
+    const playerOffset = clamp(Math.atan2(playerDirection.x, playerDirection.z), -arcHalf, arcHalf);
+    const halfGap = Math.floor(gapSlots / 2);
+    const gapCenter = clamp(Math.round((playerOffset + arcHalf) / step), halfGap, slots - 1 - halfGap);
     for (let slot = 0; slot < slots; slot += 1) {
       if (Math.abs(slot - gapCenter) <= halfGap) continue;
       const offset = -arcHalf + slot * step;
-      const direction = { x: Math.sin(offset), z: Math.cos(offset) };
-      paths.push(makePath({
-        origin: lockedOrigin,
-        direction,
-        speed: contract.projectileSpeed,
-        width: contract.width,
-        length: worldHalfHeight * 1.82,
+      addDirectionalPath({
+        direction: toDirection(offset),
         fireOffsetMs: paths.length * contract.shotGapMs,
-        index: paths.length,
-      }));
+      });
     }
   }
 
   const startedAt = Math.max(0, finite(createdAtMs, 0));
+  const latestFireOffsetMs = paths.reduce((latest, path) => Math.max(latest, path.fireOffsetMs), 0);
+  const postVolleyHoldMs = phaseCombat.frenzyLevel >= 2 ? 100
+    : phaseCombat.frenzyLevel === 1 ? 160 : 240;
+  // Recovery owns the entire projectile schedule. Without this floor, a dense
+  // multi-volley pattern can transition to the next cycle before its last
+  // delayed shots spawn; the stale-plan guard would then suppress those shots.
+  // Frenzy shortens the pause *after* the final shot instead of deleting shots.
+  const recoveryMs = Math.max(contract.recoveryMs, latestFireOffsetMs + postVolleyHoldMs);
   return freezeDeep({
     version: CAMPAIGN_BOSS_COMBAT_VERSION,
-    id: `boss-v29-${phaseId}-${cycle}-${pattern}`,
+    id: `boss-v33-${profile.id}-${phaseId}-${cycle}-${resolvedPattern}`,
+    bossProfileId: profile.id,
+    planetId: profile.planetId,
+    bossType: profile.bossType,
+    powerRank: profile.powerRank,
     phaseId,
     frenzyLevel: phaseCombat.frenzyLevel,
     phaseCombat,
     cycle: Math.max(0, Math.trunc(finite(cycle, 0))),
-    pattern,
+    pattern: resolvedPattern,
+    patternFamily: contract.family,
     originSpace: 'world',
     originKind: 'boss_muzzle',
     origin: lockedOrigin,
+    predictedPlayer,
     lockedPlayerDirection: playerDirection,
     telegraphStartedAtMs: startedAt,
     telegraphEndsAtMs: startedAt + contract.telegraphMs,
-    recoveryMs: contract.recoveryMs,
+    recoveryMs,
+    latestFireOffsetMs,
+    postVolleyHoldMs,
     projectileSpeed: contract.projectileSpeed,
+    projectileDamage: contract.projectileDamage,
+    damageType: contract.damageType,
     visualId: contract.visualId,
     paths,
   });
@@ -326,6 +378,11 @@ export function projectilesFromCampaignBossAttackPlanV29(plan) {
     planId: plan.id,
     pattern: plan.pattern,
     visualId: plan.visualId,
+    bossProfileId: plan.bossProfileId,
+    planetId: plan.planetId,
+    bossType: plan.bossType,
+    rawDamage: plan.projectileDamage,
+    damageType: plan.damageType,
     origin: path.origin,
     endpoint: path.endpoint,
     velocity: path.velocity,
@@ -334,10 +391,16 @@ export function projectilesFromCampaignBossAttackPlanV29(plan) {
   })));
 }
 
-export function createCampaignBossCombatStateV29({ seed = 1, nowMs = 0 } = {}) {
+export function createCampaignBossCombatStateV29({
+  seed = 1, nowMs = 0, planetId = 1, bossType = 'mech', profileId = null,
+} = {}) {
+  const profile = resolveCampaignBossProfileV33({ planetId, bossType, profileId });
   return {
     version: CAMPAIGN_BOSS_COMBAT_VERSION,
-    seed: hashParts(seed, 'campaign_final_boss_v29'),
+    seed: hashParts(seed, 'campaign_final_boss_v33', profile.id),
+    planetId: profile.planetId,
+    bossType: profile.bossType,
+    profileId: profile.id,
     phase: 'reposition',
     phaseStartedAt: Math.max(0, finite(nowMs, 0)),
     cycle: 0,
@@ -353,12 +416,11 @@ export function createCampaignBossCombatStateV29({ seed = 1, nowMs = 0 } = {}) {
 
 const phaseIndexOf = id => Math.max(0, BOSS_PHASES_V2.findIndex(phase => phase.id === id));
 
-const selectPattern = (state, hpPhase) => {
-  const patterns = hpPhase.patterns;
-  const phaseIndex = phaseIndexOf(hpPhase.id);
-  const index = (state.seed + state.cycle * 5 + phaseIndex * 11) % patterns.length;
-  return patterns[index];
-};
+const selectPattern = (state, hpPhase, profile) => resolveCampaignBossPatternV33({
+  profile,
+  phaseId: hpPhase.id,
+  cycle: state.cycle,
+});
 
 const resolveBossAnchor = (state, input, band) => {
   const halfWidth = Math.max(3, finite(input.arenaHalfWidth, 7));
@@ -427,6 +489,9 @@ export function stepCampaignBossCombatV29(state, input = {}) {
   const hpRatio = clamp(finite(input.hpRatio, 1), 0, 1);
   const events = [];
   const hpPhase = bossPhaseForHp(hpRatio);
+  const profile = resolveCampaignBossProfileV33({
+    planetId: state.planetId, bossType: state.bossType, profileId: state.profileId,
+  });
 
   if (input.suspended) {
     if (state.attackPlan) events.push(Object.freeze({ type: 'telegraph_cancelled', planId: state.attackPlan.id }));
@@ -524,7 +589,7 @@ export function stepCampaignBossCombatV29(state, input = {}) {
     }
     const phaseCombat = phaseCombatFor(hpPhase.id);
     const motion = steerBoss(state, input, { x: state.targetX, z: state.targetZ },
-      phaseCombat.movementMultiplier);
+      phaseCombat.movementMultiplier * profile.movementMultiplier);
     return Object.freeze({
       state, events: Object.freeze(events), phase: state.phase,
       holdOrientation: false, visualState: 'move',
@@ -535,17 +600,22 @@ export function stepCampaignBossCombatV29(state, input = {}) {
   if (state.phase === 'aim') {
     const motion = stopBoss(state);
     if (nowMs - state.phaseStartedAt >= 320) {
-      const pattern = selectPattern(state, hpPhase);
+      const pattern = selectPattern(state, hpPhase, profile);
       state.attackPlan = createCampaignBossAttackPlanV29({
         pattern,
         origin: input.origin,
         playerX: input.playerX,
         playerZ: input.playerZ,
+        playerVelocityX: input.playerVelocityX,
+        playerVelocityZ: input.playerVelocityZ,
         arenaHalfWidth: input.arenaHalfWidth,
         worldHalfHeight: input.worldHalfHeight,
         createdAtMs: nowMs,
         cycle: state.cycle,
         phaseId: hpPhase.id,
+        planetId: profile.planetId,
+        bossType: profile.bossType,
+        profileId: profile.id,
       });
       state.phase = 'telegraph';
       state.phaseStartedAt = nowMs;
@@ -576,7 +646,7 @@ export function stepCampaignBossCombatV29(state, input = {}) {
   }
 
   const motion = holdBoss(state, input);
-  const recoveryMs = Math.max(600, finite(state.attackPlan?.recoveryMs, 1000));
+  const recoveryMs = Math.max(360, finite(state.attackPlan?.recoveryMs, 1000));
   if (nowMs - state.phaseStartedAt >= recoveryMs) {
     state.cycle += 1;
     state.phase = 'reposition';

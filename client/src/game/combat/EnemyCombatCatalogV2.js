@@ -5,7 +5,7 @@
  * combat output and movement behavior. The director may scale these values by
  * stage, wave, planet and elite state, but must not duplicate role constants.
  */
-export const ENEMY_COMBAT_CATALOG_VERSION = 'enemy-combat-v3.2.0';
+export const ENEMY_COMBAT_CATALOG_VERSION = 'enemy-combat-v3.3.0';
 
 const freezeRole = value => Object.freeze({ ...value });
 
@@ -23,9 +23,9 @@ export const ENEMY_ARCHETYPES_V2 = Object.freeze({
     tier: 2, threatCost: 2, canShoot: true,
     unlockStage: 1, hpMultiplier: 1.00, damageMultiplier: 1.00, speedMultiplier: 1.04,
     behavior: 'keep_range', preferredRange: 7.6, telegraphTicks: 18, attackCooldownTicks: 54,
-    fireCooldownMs: 1300, projectileSpeed: 0.60, projectileDamage: 125, contactDamage: 180,
-    projectileAimMode: 'predictive', projectileLeadFactor: 0.90, projectileMaxLeadMs: 620,
-    projectileGuidanceMs: 0, projectileTurnRateRadians: 0, projectileLifetimeMs: 3400,
+    fireCooldownMs: 1120, projectileSpeed: 0.72, projectileDamage: 110, contactDamage: 180,
+    projectileAimMode: 'predictive', projectileLeadFactor: 0.92, projectileMaxLeadMs: 560,
+    projectileGuidanceMs: 0, projectileTurnRateRadians: 0, projectileLifetimeMs: 2900,
     projectileVisualId: 'enemy_energy_dart',
     routeVariants: Object.freeze(['range_strafe']), controlResistance: 0.10,
   }),
@@ -50,9 +50,9 @@ export const ENEMY_ARCHETYPES_V2 = Object.freeze({
     tier: 2, threatCost: 4, canShoot: true,
     unlockStage: 5, hpMultiplier: 0.90, damageMultiplier: 0.72, speedMultiplier: 0.98,
     behavior: 'support_orbit', preferredRange: 8.6, telegraphTicks: 21, attackCooldownTicks: 66,
-    fireCooldownMs: 1650, projectileSpeed: 0.52, projectileDamage: 115, contactDamage: 150,
-    projectileAimMode: 'soft_homing', projectileLeadFactor: 0.32, projectileMaxLeadMs: 360,
-    projectileGuidanceMs: 620, projectileTurnRateRadians: 0.045, projectileLifetimeMs: 3800,
+    fireCooldownMs: 1380, projectileSpeed: 0.66, projectileDamage: 100, contactDamage: 150,
+    projectileAimMode: 'soft_homing', projectileLeadFactor: 0.34, projectileMaxLeadMs: 320,
+    projectileGuidanceMs: 560, projectileTurnRateRadians: 0.050, projectileLifetimeMs: 3200,
     projectileVisualId: 'enemy_ion_comet',
     routeVariants: Object.freeze(['support_orbit']),
     supportPulseTicks: 150, supportRatio: 0.08, controlResistance: 0.10,
@@ -62,9 +62,9 @@ export const ENEMY_ARCHETYPES_V2 = Object.freeze({
     tier: 3, threatCost: 4, canShoot: true,
     unlockStage: 6, hpMultiplier: 1.10, damageMultiplier: 1.32, speedMultiplier: 0.80,
     behavior: 'telegraphed_zone', preferredRange: 11.4, telegraphTicks: 33, attackCooldownTicks: 75,
-    fireCooldownMs: 2050, projectileSpeed: 0.58, projectileDamage: 220, contactDamage: 200,
-    projectileAimMode: 'predictive', projectileLeadFactor: 1.0, projectileMaxLeadMs: 760,
-    projectileGuidanceMs: 0, projectileTurnRateRadians: 0, projectileLifetimeMs: 4300,
+    fireCooldownMs: 1650, projectileSpeed: 0.70, projectileDamage: 185, contactDamage: 200,
+    projectileAimMode: 'predictive', projectileLeadFactor: 1.0, projectileMaxLeadMs: 700,
+    projectileGuidanceMs: 0, projectileTurnRateRadians: 0, projectileLifetimeMs: 3600,
     projectileVisualId: 'enemy_plasma_slug',
     routeVariants: Object.freeze(['battery_relocate']), controlResistance: 0.15,
   }),

@@ -55,6 +55,15 @@ import {
   stepCampaignMiniBossMotionV29,
 } from '../src/game/combat/CampaignCombatChoreographyV29.js';
 import {
+  CAMPAIGN_BOSS_ARSENAL_VERSION,
+  CAMPAIGN_BOSS_PATTERN_CATALOG_V33,
+  CAMPAIGN_PLANET_BOSS_PROFILES_V33,
+  CAMPAIGN_PLANET_HOSTILE_FIRE_TEMPO_V33,
+  auditCampaignBossArsenalV33,
+  resolveCampaignBossPatternV33,
+  resolveCampaignBossProfileV33,
+} from '../src/game/combat/CampaignBossArsenalV33.js';
+import {
   CAMPAIGN_BOSS_COMBAT_VERSION,
   CAMPAIGN_BOSS_PATTERN_CATALOG_V29,
   CAMPAIGN_BOSS_PHASE_COMBAT_V31,
@@ -91,11 +100,11 @@ const stagePlan = (options = {}) => createEnemyDirectorV2({
 });
 
 test('enemy V3 catalog is the single runtime source for six readable combat roles', () => {
-  assert.equal(ENEMY_COMBAT_CATALOG_VERSION, 'enemy-combat-v3.2.0');
+  assert.equal(ENEMY_COMBAT_CATALOG_VERSION, 'enemy-combat-v3.3.0');
   assert.deepEqual(auditEnemyCombatCatalogV2(), []);
-  assert.equal(CAMPAIGN_PROJECTILE_VISUAL_VERSION, 'campaign-projectile-visual-v3.2.0');
+  assert.equal(CAMPAIGN_PROJECTILE_VISUAL_VERSION, 'campaign-projectile-visual-v3.3.0');
   assert.deepEqual(auditCampaignProjectileVisualV32(), []);
-  assert.ok(Object.keys(CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32).length >= 8);
+  assert.ok(Object.keys(CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32).length >= 18);
   assert.ok(Math.abs(Math.abs(campaignProjectileVisualYawV32(0, 1)) - Math.PI) < 1e-12);
   assert.equal(Object.keys(ENEMY_ARCHETYPES_V2).length, 6);
   assert.deepEqual(Object.keys(ENEMY_RUNTIME_CATALOG_V3).sort(), Object.keys(ENEMY_ARCHETYPES_V2).sort());
@@ -113,8 +122,8 @@ test('enemy V3 catalog is the single runtime source for six readable combat role
       assert.equal(runtime.projectileLifetimeMs, archetype.projectileLifetimeMs);
       assert.equal(runtime.projectileVisualId, archetype.projectileVisualId);
       assert.ok(['predictive', 'soft_homing'].includes(runtime.projectileAimMode));
-      assert.ok(runtime.projectileSpeed >= .5);
-      assert.ok(runtime.shootMs <= 2050);
+      assert.ok(runtime.projectileSpeed >= .66);
+      assert.ok(runtime.shootMs <= 1650);
     }
   }
   assert.equal(BOSS_PHASES_V2.length, 3);
@@ -256,7 +265,7 @@ test('boss plan telegraphs every attack and changes phase deterministically', ()
 });
 
 test('V2.8 combines deterministic pacing with mini-bosses and real Boss mechanic previews', () => {
-  assert.equal(CAMPAIGN_WAVE_DIRECTOR_VERSION, 'campaign-wave-director-v3.1.0');
+  assert.equal(CAMPAIGN_WAVE_DIRECTOR_VERSION, 'campaign-wave-director-v3.3.0');
   assert.equal(CAMPAIGN_ENCOUNTER_ESCALATION_VERSION, 'campaign-encounter-v2.8.1');
   assert.deepEqual(Object.keys(CAMPAIGN_PLANET_PROFILES_V27), ['1', '2', '3']);
   assert.ok(Object.keys(CAMPAIGN_WAVE_TEMPLATES_V27).length >= 14);
@@ -543,12 +552,19 @@ test('V3 wave power, planet identity and scout route mix are deterministic and m
   assert.ok(alphaLate.speedMultiplier > alphaEarly.speedMultiplier);
   assert.ok(alphaLate.fireCooldownMultiplier < alphaEarly.fireCooldownMultiplier);
   assert.ok(cryoEarly.hpMultiplier > alphaEarly.hpMultiplier,
-    'Cryo must be the tougher control planet');
-  assert.ok(cryoEarly.speedMultiplier < alphaEarly.speedMultiplier,
-    'Cryo must be slower and more deliberate than Alpha');
-  assert.ok(infernoEarly.damageMultiplier > cryoEarly.damageMultiplier
-    && infernoEarly.speedMultiplier > alphaEarly.speedMultiplier,
-  'Inferno must be the faster, harder-hitting pressure planet');
+    'Cryo must be tougher than Alpha');
+  assert.ok(cryoEarly.damageMultiplier > alphaEarly.damageMultiplier
+    && infernoEarly.damageMultiplier > cryoEarly.damageMultiplier,
+  'planet damage must increase Alpha < Cryo < Inferno');
+  assert.ok(cryoEarly.speedMultiplier > alphaEarly.speedMultiplier
+    && infernoEarly.speedMultiplier > cryoEarly.speedMultiplier,
+  'planet movement pressure must increase Alpha < Cryo < Inferno');
+  assert.ok(cryoEarly.projectileSpeedMultiplier > alphaEarly.projectileSpeedMultiplier
+    && infernoEarly.projectileSpeedMultiplier > cryoEarly.projectileSpeedMultiplier,
+  'hostile projectile speed must increase by planet');
+  assert.ok(cryoEarly.fireCooldownMultiplier < alphaEarly.fireCooldownMultiplier
+    && infernoEarly.fireCooldownMultiplier < cryoEarly.fireCooldownMultiplier,
+  'hostile fire cadence must become faster by planet');
 
   const tierBase = (planetId, tier) => PLANET_ENEMIES[planetId].find(enemy => enemy.tier === tier);
   for (const tier of [1, 2, 3, 4]) {
@@ -579,7 +595,7 @@ test('V3 wave power, planet identity and scout route mix are deterministic and m
           assert.ok(entry.hpMultiplier > 0 && entry.speedMultiplier > 0 && entry.contactDamage > 0);
           assert.ok(Number.isFinite(entry.spawnOffsetMs) && Number.isFinite(entry.damageMultiplier));
           if (entry.canShoot) {
-            assert.ok(entry.shootMs >= 650 && entry.projectileSpeed > 0 && entry.projectileDamage > 0);
+            assert.ok(entry.shootMs >= 560 && entry.projectileSpeed > 0 && entry.projectileDamage > 0);
             assert.ok(['predictive', 'soft_homing'].includes(entry.projectileAimMode));
             assert.ok(entry.projectileLifetimeMs >= 1600);
             if (entry.projectileAimMode === 'soft_homing') {
@@ -827,54 +843,129 @@ test('V2.9 Boss Preview and Mini-Boss motion preserve attack locks and a dynamic
   assert.equal(attackHold.deltaZ, 0);
 });
 
-test('V2.9 final Boss uses deterministic reposition-aim-telegraph-fire-recover plans shared by VFX and projectiles', () => {
+test('V3.3 Boss arsenal gives all six final Bosses distinct deterministic mechanics and ordered planet power', () => {
+  assert.equal(CAMPAIGN_BOSS_ARSENAL_VERSION, 'campaign-boss-arsenal-v3.3.0');
+  assert.equal(CAMPAIGN_BOSS_COMBAT_VERSION, 'campaign-boss-combat-v3.3.0');
+  assert.deepEqual(auditCampaignBossArsenalV33(), []);
   assert.deepEqual(auditCampaignBossCombatV29(), []);
-  assert.deepEqual(
-    [...new Set(BOSS_PHASES_V2.flatMap(phase => phase.patterns))].sort(),
-    Object.keys(CAMPAIGN_BOSS_PATTERN_CATALOG_V29).sort(),
-  );
-  const radial = createCampaignBossAttackPlanV29({
-    pattern: 'radial_gap', origin: { x: 3, y: 0, z: -5 },
-    playerX: -1, playerZ: 11, arenaHalfWidth: 7, worldHalfHeight: 15,
-    createdAtMs: 1000, cycle: 2, phaseId: 'phase_3',
-  });
-  assert.equal(Object.isFrozen(radial), true);
-  assert.equal(Object.isFrozen(radial.paths), true);
-  assert.equal(radial.paths.length, 16);
-  assert.equal(radial.paths.every(path => path.direction.z > 0), true,
-    'frenzy arc must pressure down-screen and never waste bullets above the Boss');
-  for (const playerX of [-20, 20]) {
-    const edgeGap = createCampaignBossAttackPlanV29({
-      pattern: 'radial_gap', origin: { x: 0, y: 0, z: -5 },
-      playerX, playerZ: 11, arenaHalfWidth: 7, worldHalfHeight: 15,
-      createdAtMs: 1000, cycle: 2, phaseId: 'phase_3',
-    });
-    assert.equal(edgeGap.paths.length, 16,
-      'frenzy must preserve the full three-slot escape gap at extreme lanes');
-    assert.equal(edgeGap.paths.every(path => path.direction.z > 0), true);
-  }
-  assert.equal(radial.visualId, 'boss_arc_ember');
-  assert.equal(radial.paths.every(path => path.origin.x === radial.origin.x
-    && path.origin.y === radial.origin.y && path.origin.z === radial.origin.z), true);
-  const projectiles = projectilesFromCampaignBossAttackPlanV29(radial);
-  assert.equal(projectiles.length, radial.paths.length);
-  projectiles.forEach((projectile, index) => {
-    assert.strictEqual(projectile.origin, radial.paths[index].origin);
-    assert.deepEqual(projectile.velocity, radial.paths[index].velocity);
-    assert.equal(projectile.visualId, 'boss_arc_ember');
-  });
+  assert.equal(Object.keys(CAMPAIGN_BOSS_PATTERN_CATALOG_V33).length, 12);
+  assert.strictEqual(CAMPAIGN_BOSS_PATTERN_CATALOG_V29, CAMPAIGN_BOSS_PATTERN_CATALOG_V33);
 
+  const profiles = [1, 2, 3].flatMap(planetId =>
+    ['mech', 'alien'].map(bossType => resolveCampaignBossProfileV33({ planetId, bossType })));
+  assert.equal(profiles.length, 6);
+  assert.deepEqual(profiles.map(profile => profile.powerRank), [1, 2, 3, 4, 5, 6]);
+  assert.equal(new Set(profiles.map(profile => profile.id)).size, 6);
+  assert.equal(new Set(profiles.map(profile => Object.values(profile.phasePatterns).flat().join('|'))).size, 6);
+  for (let index = 1; index < profiles.length; index += 1) {
+    assert.ok(profiles[index].baseProjectileDamage > profiles[index - 1].baseProjectileDamage);
+    assert.ok(profiles[index].projectileSpeedMultiplier >= profiles[index - 1].projectileSpeedMultiplier);
+    assert.ok(profiles[index].recoveryMultiplier < profiles[index - 1].recoveryMultiplier);
+  }
+  for (const profile of profiles) {
+    for (const [phaseId, patternIds] of Object.entries(profile.phasePatterns)) {
+      for (const pattern of patternIds) {
+        const plan = createCampaignBossAttackPlanV29({
+          pattern, planetId: profile.planetId, bossType: profile.bossType,
+          origin: { x: 0, y: 0, z: -6 }, playerX: 1.5, playerZ: 11,
+          playerVelocityX: .06, playerVelocityZ: 0,
+          arenaHalfWidth: 7, worldHalfHeight: 15, createdAtMs: 1000,
+          cycle: 2, phaseId,
+        });
+        assert.equal(plan.bossProfileId, profile.id);
+        assert.equal(plan.planetId, profile.planetId);
+        assert.equal(plan.bossType, profile.bossType);
+        assert.ok(plan.paths.length > 0, `${profile.id}:${pattern} needs a non-empty projectile plan`);
+        const latestOffset = Math.max(...plan.paths.map(path => path.fireOffsetMs));
+        assert.equal(plan.latestFireOffsetMs, latestOffset);
+        assert.ok(plan.recoveryMs >= latestOffset + plan.postVolleyHoldMs,
+          `${profile.id}:${pattern} recovery must retain the plan until every delayed shot has spawned`);
+        assert.ok(plan.postVolleyHoldMs >= 100);
+        assert.equal(Object.isFrozen(plan), true);
+      }
+    }
+  }
+  assert.ok(CAMPAIGN_PLANET_HOSTILE_FIRE_TEMPO_V33[1].previewProjectileSpeed
+    < CAMPAIGN_PLANET_HOSTILE_FIRE_TEMPO_V33[2].previewProjectileSpeed);
+  assert.ok(CAMPAIGN_PLANET_HOSTILE_FIRE_TEMPO_V33[2].previewProjectileSpeed
+    < CAMPAIGN_PLANET_HOSTILE_FIRE_TEMPO_V33[3].previewProjectileSpeed);
+  assert.ok(CAMPAIGN_PLANET_HOSTILE_FIRE_TEMPO_V33[1].miniBossProjectileSpeedMultiplier
+    < CAMPAIGN_PLANET_HOSTILE_FIRE_TEMPO_V33[2].miniBossProjectileSpeedMultiplier);
+  assert.ok(CAMPAIGN_PLANET_HOSTILE_FIRE_TEMPO_V33[2].miniBossProjectileSpeedMultiplier
+    < CAMPAIGN_PLANET_HOSTILE_FIRE_TEMPO_V33[3].miniBossProjectileSpeedMultiplier);
+
+  const alpha = createCampaignBossAttackPlanV29({
+    pattern: 'alpha_lock_burst', planetId: 1, bossType: 'mech',
+    origin: { x: -2, y: 0, z: -6 }, playerX: 0, playerZ: 11,
+    playerVelocityX: .08, playerVelocityZ: 0,
+    arenaHalfWidth: 7, worldHalfHeight: 15, createdAtMs: 1000, cycle: 0, phaseId: 'phase_1',
+  });
+  assert.equal(alpha.bossProfileId, 'alpha_mech_sentinel');
+  assert.equal(alpha.patternFamily, 'alpha');
+  assert.equal(alpha.paths.length, 3);
+  assert.ok(alpha.predictedPlayer.x > 0, 'Alpha rail burst must lead a moving player');
+  assert.equal(alpha.visualId, 'boss_alpha_rail');
+
+  const cryo = createCampaignBossAttackPlanV29({
+    pattern: 'cryo_absolute_zero', planetId: 2, bossType: 'alien',
+    origin: { x: 1, y: 0, z: -6 }, playerX: -4, playerZ: 11,
+    arenaHalfWidth: 7, worldHalfHeight: 15, createdAtMs: 1000, cycle: 2, phaseId: 'phase_3',
+  });
+  assert.equal(cryo.bossProfileId, 'cryo_alien_dragon');
+  assert.equal(cryo.patternFamily, 'cryo');
+  assert.equal(cryo.visualId, 'boss_cryo_wall');
+  assert.equal(cryo.paths.length, 30, 'Cryo Absolute Zero must produce three shifting lane walls with one readable gap');
+  assert.equal(cryo.paths.every(path => path.direction.z > 0), true);
+
+  const inferno = createCampaignBossAttackPlanV29({
+    pattern: 'inferno_eruption', planetId: 3, bossType: 'mech',
+    origin: { x: 3, y: 0, z: -5 }, playerX: -1, playerZ: 11,
+    arenaHalfWidth: 7, worldHalfHeight: 15, createdAtMs: 1000, cycle: 2, phaseId: 'phase_3',
+  });
+  assert.equal(inferno.bossProfileId, 'inferno_mech_forge');
+  assert.equal(inferno.patternFamily, 'inferno');
+  assert.equal(inferno.paths.length, 18,
+    'Inferno frenzy arc must keep a three-slot escape gap in a 21-slot forward arc');
+  assert.equal(inferno.paths.every(path => path.direction.z > 0), true,
+    'Inferno eruption must pressure down-screen and never shoot above the Boss');
+  assert.equal(inferno.visualId, 'boss_inferno_ember');
+
+  assert.notEqual(alpha.pattern, cryo.pattern);
+  assert.notEqual(cryo.pattern, inferno.pattern);
+  assert.ok(cryo.projectileDamage > alpha.projectileDamage);
+  assert.ok(cryo.projectileSpeed > alpha.projectileSpeed);
+  assert.ok(inferno.projectileSpeed > cryo.projectileSpeed);
+  assert.ok(inferno.recoveryMs < cryo.recoveryMs,
+    'Inferno must trade denser pressure and shorter recovery for fewer lane-wall bullets');
+
+  const projectiles = projectilesFromCampaignBossAttackPlanV29(inferno);
+  assert.equal(projectiles.length, inferno.paths.length);
+  projectiles.forEach((projectile, index) => {
+    assert.strictEqual(projectile.origin, inferno.paths[index].origin);
+    assert.deepEqual(projectile.velocity, inferno.paths[index].velocity);
+    assert.equal(projectile.rawDamage, inferno.projectileDamage);
+    assert.equal(projectile.damageType, 'explosive');
+    assert.equal(projectile.bossProfileId, 'inferno_mech_forge');
+  });
+});
+
+test('V3.3 final Boss preserves deterministic reposition-aim-telegraph-fire-recover plans per profile', () => {
   const runToTelegraph = () => {
-    const state = createCampaignBossCombatStateV29({ seed: 91, nowMs: 0 });
+    const state = createCampaignBossCombatStateV29({
+      seed: 91, nowMs: 0, planetId: 2, bossType: 'alien',
+    });
+    assert.equal(state.profileId, 'cryo_alien_dragon');
     const first = stepCampaignBossCombatV29(state, {
       nowMs: 0, hpRatio: 1, frameScale: 1, baseSpeed: .045,
       enemyX: 0, enemyZ: -7, playerX: 1, playerZ: 12,
+      playerVelocityX: .05, playerVelocityZ: 0,
       origin: { x: 0, y: 0, z: -5.1 }, arenaHalfWidth: 7, worldHalfHeight: 15,
       viewportHeight: 852, hudOcclusionLineZ: -9.3,
     });
     const clockOnly = stepCampaignBossCombatV29(state, {
       nowMs: 5000, hpRatio: 1, frameScale: 1, baseSpeed: .045,
       enemyX: 0, enemyZ: -7, playerX: 1, playerZ: 12,
+      playerVelocityX: .05, playerVelocityZ: 0,
       origin: { x: 0, y: 0, z: -5.1 }, arenaHalfWidth: 7, worldHalfHeight: 15,
       viewportHeight: 852, hudOcclusionLineZ: -9.3,
     });
@@ -883,6 +974,7 @@ test('V2.9 final Boss uses deterministic reposition-aim-telegraph-fire-recover p
     const aimed = stepCampaignBossCombatV29(state, {
       nowMs: 5020, hpRatio: 1, frameScale: 1, baseSpeed: .045,
       enemyX: state.targetX, enemyZ: state.targetZ, playerX: 1, playerZ: 12,
+      playerVelocityX: .05, playerVelocityZ: 0,
       origin: { x: state.targetX, y: 0, z: state.targetZ + 1.9 },
       arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852, hudOcclusionLineZ: -9.3,
     });
@@ -892,6 +984,7 @@ test('V2.9 final Boss uses deterministic reposition-aim-telegraph-fire-recover p
     const telegraph = stepCampaignBossCombatV29(state, {
       nowMs: 5360, hpRatio: 1, frameScale: 1, baseSpeed: .045,
       enemyX: state.targetX, enemyZ: state.targetZ, playerX: 1, playerZ: 12,
+      playerVelocityX: .05, playerVelocityZ: 0,
       origin: { x: state.targetX + .25, y: 0, z: state.targetZ + 1.82 },
       arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852, hudOcclusionLineZ: -9.3,
     });
@@ -901,12 +994,15 @@ test('V2.9 final Boss uses deterministic reposition-aim-telegraph-fire-recover p
   const b = runToTelegraph();
   assert.equal(a.telegraph.events[0].type, 'telegraph_started');
   assert.deepEqual(a.telegraph.events[0].plan, b.telegraph.events[0].plan);
+  assert.equal(a.telegraph.events[0].plan.bossProfileId, 'cryo_alien_dragon');
+  assert.equal(a.telegraph.events[0].plan.patternFamily, 'cryo');
   assert.equal(a.telegraph.deltaX, 0);
   assert.equal(a.telegraph.deltaZ, 0);
   const plan = a.telegraph.events[0].plan;
   const fired = stepCampaignBossCombatV29(a.state, {
     nowMs: plan.telegraphEndsAtMs, hpRatio: 1, frameScale: 1, baseSpeed: .045,
     enemyX: a.state.targetX, enemyZ: a.state.targetZ, playerX: -4, playerZ: 8,
+    playerVelocityX: -.12, playerVelocityZ: 0,
     origin: { x: -9, y: 0, z: -9 }, arenaHalfWidth: 7, worldHalfHeight: 15,
     viewportHeight: 852, hudOcclusionLineZ: -9.3,
   });
@@ -915,28 +1011,32 @@ test('V2.9 final Boss uses deterministic reposition-aim-telegraph-fire-recover p
   assert.equal(fired.phase, 'recover');
 });
 
-test('V3.2 final Boss has a real frenzy state with persistent stronger phase-three plans', () => {
-  assert.equal(CAMPAIGN_BOSS_COMBAT_VERSION, 'campaign-boss-combat-v3.2.0');
+test('V3.3 final Boss frenzy is a persistent phase upgrade inside each planet-specific arsenal', () => {
   assert.ok(CAMPAIGN_BOSS_PHASE_COMBAT_V31.phase_3.movementMultiplier
     > CAMPAIGN_BOSS_PHASE_COMBAT_V31.phase_2.movementMultiplier);
   assert.ok(CAMPAIGN_BOSS_PHASE_COMBAT_V31.phase_3.recoveryMultiplier
     < CAMPAIGN_BOSS_PHASE_COMBAT_V31.phase_2.recoveryMultiplier);
 
   const calm = createCampaignBossAttackPlanV29({
-    pattern: 'aimed_burst', origin: { x: 0, y: 0, z: -5 },
-    playerX: 2, playerZ: 10, createdAtMs: 1000, cycle: 0, phaseId: 'phase_1',
+    pattern: 'inferno_meteor_burst', planetId: 3, bossType: 'alien',
+    origin: { x: 0, y: 0, z: -5 }, playerX: 2, playerZ: 10,
+    createdAtMs: 1000, cycle: 0, phaseId: 'phase_1',
   });
   const frenzy = createCampaignBossAttackPlanV29({
-    pattern: 'aimed_burst', origin: { x: 0, y: 0, z: -5 },
-    playerX: 2, playerZ: 10, createdAtMs: 1000, cycle: 0, phaseId: 'phase_3',
+    pattern: 'inferno_meteor_burst', planetId: 3, bossType: 'alien',
+    origin: { x: 0, y: 0, z: -5 }, playerX: 2, playerZ: 10,
+    createdAtMs: 1000, cycle: 0, phaseId: 'phase_3',
   });
-  assert.equal(calm.paths.length, 3);
-  assert.equal(frenzy.paths.length, 5);
+  assert.equal(calm.paths.length, 6);
+  assert.equal(frenzy.paths.length, 8);
   assert.ok(frenzy.projectileSpeed > calm.projectileSpeed);
+  assert.ok(frenzy.projectileDamage > calm.projectileDamage);
   assert.ok(frenzy.recoveryMs < calm.recoveryMs);
   assert.equal(frenzy.frenzyLevel, 2);
 
-  const state = createCampaignBossCombatStateV29({ seed: 23, nowMs: 0 });
+  const state = createCampaignBossCombatStateV29({
+    seed: 23, nowMs: 0, planetId: 3, bossType: 'alien',
+  });
   const entered = stepCampaignBossCombatV29(state, {
     nowMs: 100, hpRatio: .29, frameScale: 1, baseSpeed: .045,
     enemyX: 0, enemyZ: -6, playerX: 0, playerZ: 12,
@@ -949,6 +1049,7 @@ test('V3.2 final Boss has a real frenzy state with persistent stronger phase-thr
   assert.equal(entered.visualState, 'enrage');
   assert.equal(entered.events.some(event => event.type === 'enrage_started'), true);
   assert.equal(state.currentPhaseId, 'phase_3');
+  assert.equal(state.profileId, 'inferno_alien_demon');
 
   const held = stepCampaignBossCombatV29(state, {
     nowMs: 950, hpRatio: .29, frameScale: 1, baseSpeed: .045,
@@ -1005,6 +1106,9 @@ test('Campaign source enables V3 enemy combat in production while preserving V2.
   assert.match(source, /routeVariant:spawnSpec\.routeVariant/);
   assert.match(source, /stepCampaignBossPreviewMotionV29/);
   assert.match(source, /stepCampaignBossCombatV29/);
+  assert.match(source, /planetId:currentPlanetId,bossType:stageConfig\.bossType\|\|['"]mech['"]/);
+  assert.doesNotMatch(source, /fallbackPattern=bossEnraged/);
+  assert.doesNotMatch(source, /attackType = 1 \+ Math\.floor\(Math\.random\(\)\*3\)/);
   assert.match(source, /createBossAttackTelegraph/);
   assert.match(source, /projectilesFromCampaignBossAttackPlanV29/);
   assert.match(source, /campaignCombatV3Enabled&&bossCombatState/);
@@ -1023,6 +1127,14 @@ test('Campaign source enables V3 enemy combat in production while preserving V2.
   assert.doesNotMatch(source, /for \(let a=0; a < Math\.PI\*2/,
     'the emergency Boss fallback must not restore a full-circle portrait-arena barrage');
   assert.match(source, /event\.type===['"]enrage_started['"]/);
+  assert.match(source, /resolveCampaignHostileFireTempoV33\(currentPlanetId\)/);
+  assert.match(source, /planetId:currentPlanetId,bossType:bType/);
+  assert.match(source, /planetId:currentPlanetId,bossType:stageConfig\.bossType\|\|['"]mech['"]/);
+  assert.match(source, /playerVelocityX:playerVelocityFrame\.x/);
+  assert.match(source, /rawDamage:projectile\.rawDamage,damageType:projectile\.damageType/);
+  assert.match(source, /miniBossProjectileSpeedMultiplier/);
+  assert.doesNotMatch(source, /projectileSpeed: \.38,/,
+    'Boss Preview projectile speed must come from the planet hostile-fire contract');
 
   assert.match(source, /const spawnZ = spawnSpec \? -ZOOM - 1\.8 : -ZOOM - 3/);
   assert.match(source, /const environmentHpMultiplier = spawnSpec \? 1 : combat\.environment\.enemyHpMultiplier/);
@@ -1047,8 +1159,14 @@ test('Campaign source enables V3 enemy combat in production while preserving V2.
     new URL('../src/game/combat/CampaignEnemyProjectileV31.js', import.meta.url), 'utf8');
   const projectileVisualSource = fs.readFileSync(
     new URL('../src/game/rendering/CampaignProjectileVisualV32.js', import.meta.url), 'utf8');
+  const bossArsenalSource = fs.readFileSync(
+    new URL('../src/game/combat/CampaignBossArsenalV33.js', import.meta.url), 'utf8');
   assert.match(bossSource, /Math\.atan2\(playerDirection\.x, playerDirection\.z\)/);
-  assert.match(bossSource, /direction = \{ x: Math\.sin\(offset\), z: Math\.cos\(offset\) \}/);
+  assert.match(bossSource, /toDirection = angle => \(\{ x: Math\.sin\(angle\), z: Math\.cos\(angle\) \}\)/);
+  assert.match(bossArsenalSource, /alpha_lock_burst/);
+  assert.match(bossArsenalSource, /cryo_absolute_zero/);
+  assert.match(bossArsenalSource, /inferno_doomstorm/);
+  assert.doesNotMatch(bossArsenalSource, /Math\.random/);
   assert.match(projectileVisualSource, /DynamicTexture/);
   assert.match(projectileVisualSource, /Canvas texture|createLinearGradient/);
   assert.doesNotMatch(choreographySource, /Math\.random/);

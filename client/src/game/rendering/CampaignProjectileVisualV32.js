@@ -1,12 +1,12 @@
 /**
- * Production hostile-projectile presentation V3.2.
+ * Production hostile-projectile presentation V3.3.
  *
  * Gameplay remains owned by CampaignEnemyProjectileV31/CampaignBossCombatV29.
  * This adapter only creates cached emissive visuals and rotates them along the
  * authoritative velocity. Canvas textures are generated once per style; a
  * deterministic low-poly fallback is used by NullEngine/non-DOM hosts.
  */
-export const CAMPAIGN_PROJECTILE_VISUAL_VERSION = 'campaign-projectile-visual-v3.2.0';
+export const CAMPAIGN_PROJECTILE_VISUAL_VERSION = 'campaign-projectile-visual-v3.3.0';
 
 const freezeDeep = value => {
   if (Array.isArray(value)) return Object.freeze(value.map(freezeDeep));
@@ -46,6 +46,42 @@ export const CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32 = freezeDeep({
     id: 'boss_arc_ember', style: 'ember', color: '#ff174f', core: '#fff7fb', edge: '#260008',
     width: .46, length: .94, pulse: .085, glow: 1,
   },
+  boss_alpha_rail: {
+    id: 'boss_alpha_rail', style: 'lance', color: '#39e6ff', core: '#ffffff', edge: '#031b2b',
+    width: .34, length: 1.74, pulse: .022, glow: 1,
+  },
+  boss_alpha_matrix: {
+    id: 'boss_alpha_matrix', style: 'slug', color: '#4aa8ff', core: '#eef9ff', edge: '#04152c',
+    width: .50, length: 1.38, pulse: .035, glow: .98,
+  },
+  boss_alpha_cross: {
+    id: 'boss_alpha_cross', style: 'dart', color: '#8ce7ff', core: '#ffffff', edge: '#06192a',
+    width: .35, length: 1.42, pulse: .032, glow: .98,
+  },
+  boss_cryo_prism: {
+    id: 'boss_cryo_prism', style: 'slug', color: '#8ff8ff', core: '#ffffff', edge: '#062333',
+    width: .45, length: 1.34, pulse: .050, glow: 1,
+  },
+  boss_cryo_wall: {
+    id: 'boss_cryo_wall', style: 'comet', color: '#55b8ff', core: '#f4ffff', edge: '#06182c',
+    width: .58, length: 1.18, pulse: .070, glow: .96,
+  },
+  boss_cryo_shard: {
+    id: 'boss_cryo_shard', style: 'dart', color: '#a9d8ff', core: '#ffffff', edge: '#07162d',
+    width: .42, length: 1.46, pulse: .042, glow: .98,
+  },
+  boss_inferno_meteor: {
+    id: 'boss_inferno_meteor', style: 'ember', color: '#ff8a20', core: '#fff6c8', edge: '#321000',
+    width: .52, length: 1.08, pulse: .090, glow: 1,
+  },
+  boss_inferno_lance: {
+    id: 'boss_inferno_lance', style: 'lance', color: '#ff3b16', core: '#fff7df', edge: '#320500',
+    width: .38, length: 1.60, pulse: .030, glow: 1,
+  },
+  boss_inferno_ember: {
+    id: 'boss_inferno_ember', style: 'ember', color: '#ff174f', core: '#fff1d9', edge: '#330006',
+    width: .46, length: 1.02, pulse: .095, glow: 1,
+  },
   boss_preview_pulse: {
     id: 'boss_preview_pulse', style: 'lance', color: '#ff4d2e', core: '#fff8e8', edge: '#2d0800',
     width: .42, length: 1.42, pulse: .04, glow: .96,
@@ -61,6 +97,18 @@ export function resolveCampaignProjectileVisualV32({ visualId, sourceRole, prior
     return CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32[visualId];
   }
   if (priority === 'boss') {
+    if (String(pattern || '').startsWith('alpha_lane')) return CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32.boss_alpha_matrix;
+    if (String(pattern || '').startsWith('alpha_cross') || String(pattern || '').startsWith('alpha_overdrive'))
+      return CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32.boss_alpha_cross;
+    if (String(pattern || '').startsWith('alpha_')) return CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32.boss_alpha_rail;
+    if (String(pattern || '').startsWith('cryo_wall') || String(pattern || '').startsWith('cryo_absolute'))
+      return CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32.boss_cryo_wall;
+    if (String(pattern || '').startsWith('cryo_shard')) return CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32.boss_cryo_shard;
+    if (String(pattern || '').startsWith('cryo_')) return CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32.boss_cryo_prism;
+    if (String(pattern || '').startsWith('inferno_meteor') || String(pattern || '').startsWith('inferno_doom'))
+      return CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32.boss_inferno_meteor;
+    if (String(pattern || '').startsWith('inferno_furnace')) return CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32.boss_inferno_lance;
+    if (String(pattern || '').startsWith('inferno_')) return CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32.boss_inferno_ember;
     if (pattern === 'fan') return CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32.boss_fan_needle;
     if (pattern === 'lane_sweep') return CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32.boss_lane_shard;
     if (pattern === 'radial_gap') return CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32.boss_arc_ember;

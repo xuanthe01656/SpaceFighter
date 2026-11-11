@@ -64,6 +64,7 @@ import {
   projectilesFromCampaignBossAttackPlanV29,
   stepCampaignBossCombatV29,
 } from '../../game/combat/CampaignBossCombatV29.js';
+import { resolveCampaignHostileFireTempoV33 } from '../../game/combat/CampaignBossArsenalV33.js';
 import {
   advanceCampaignEnemyProjectileV31,
   createCampaignEnemyShotPlanV31,
@@ -1202,7 +1203,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
         createdAtMs: nowMs,
         telegraphMs,
         lockLeadMs: 200,
-        projectileSpeed: .38,
+        projectileSpeed: resolveCampaignHostileFireTempoV33(currentPlanetId).previewProjectileSpeed,
       });
       enemy._encounterAttackPlan = plan;
       enemy._encounterMechanicFireAt = plan.telegraphEndsAtMs;
@@ -1241,7 +1242,11 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     if (!enemy?.mesh?.position) return;
     const origin = resolveEncounterMuzzleOrigin(enemy)
       || Object.freeze({ x: enemy.mesh.position.x, y: 0, z: enemy.mesh.position.z });
-    const speed = Math.max(.34, Number(event?.projectileSpeed) || .38);
+    const hostileTempo = resolveCampaignHostileFireTempoV33(currentPlanetId);
+    const speed = Math.max(
+      hostileTempo.previewProjectileSpeed * .82,
+      (Number(event?.projectileSpeed) || .38) * hostileTempo.miniBossProjectileSpeedMultiplier,
+    );
     const intercept = resolveCampaignEnemyInterceptV31({
       origin,
       target: { x: playerRoot.position.x, z: playerRoot.position.z },
@@ -1274,7 +1279,11 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     if (!enemy?.mesh?.position) return;
     const origin = resolveEncounterMuzzleOrigin(enemy)
       || Object.freeze({ x: enemy.mesh.position.x, y: 0, z: enemy.mesh.position.z });
-    const speed = Math.max(.34, Number(event?.projectileSpeed) || .38);
+    const hostileTempo = resolveCampaignHostileFireTempoV33(currentPlanetId);
+    const speed = Math.max(
+      hostileTempo.previewProjectileSpeed * .82,
+      (Number(event?.projectileSpeed) || .38) * hostileTempo.miniBossProjectileSpeedMultiplier,
+    );
     for (const lane of event?.lanes || []) {
       const targetX = clamp(Number(lane) || 0, -.9, .9) * boundX();
       const targetZ = ZOOM + 2;
@@ -1420,7 +1429,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     const origin = resolveEncounterMuzzleOrigin(enemy)
       || Object.freeze({ x: enemy.mesh.position.x, y: 0, z: enemy.mesh.position.z });
     const projectileSpeed = Number.isFinite(Number(speed))
-      ? Number(speed) : Math.max(.18, Number(enemy._projectileSpeed) || .34);
+      ? Math.max(.52, Number(speed)) : Math.max(.52, Number(enemy._projectileSpeed) || .58);
     const shotPlan = createCampaignEnemyShotPlanV31({
       origin,
       target: { x: playerRoot.position.x, z: playerRoot.position.z },
@@ -1738,7 +1747,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       shootMs: spawnSpec?.shootMs||legacyMotion?.shootMs||2200,
       points: pts, miniHpBg, miniHp, entryHalo, _dead: false,
       _routeVariant:spawnSpec?.routeVariant||null,
-      _projectileSpeed:Math.max(.12,Number(spawnSpec?.projectileSpeed)||.24),
+      _projectileSpeed:Math.max(.52,Number(spawnSpec?.projectileSpeed)||.58),
       _projectileDamage:Math.max(1,Math.round(Number(spawnSpec?.projectileDamage)||200)),
       _projectileAimMode:spawnSpec?.projectileAimMode||'predictive',
       _projectileLeadFactor:Number.isFinite(Number(spawnSpec?.projectileLeadFactor))
@@ -1923,6 +1932,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
           new BABYLON.Vector3(projectile.origin.x,0,projectile.origin.z),
           projectile.velocity.x,projectile.velocity.z,{
             priority:'boss',sourceRole:'boss',visualId:projectile.visualId,pattern:projectile.pattern,
+            rawDamage:projectile.rawDamage,damageType:projectile.damageType,
           },
         );
       };
@@ -1946,6 +1956,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     bossPhaseTransition=null;
     bossCombatState=campaignCombatV3Enabled?createCampaignBossCombatStateV29({
       seed:stableSeed(currentPlanetId,currentStage,'final_boss'),nowMs:Date.now(),
+      planetId:currentPlanetId,bossType:bType,
     }):null;
     bossSupportGroups.clear();
     disposeBossAttackTelegraph();
@@ -2039,6 +2050,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     bossPanel.isVisible = !externalHud;
     if(campaignCombatV3Enabled)bossCombatState=createCampaignBossCombatStateV29({
       seed:stableSeed(currentPlanetId,currentStage,'final_boss'),nowMs:Date.now(),
+      planetId:currentPlanetId,bossType:stageConfig.bossType||'mech',
     });
     nextBossFire = Date.now() + bossIntroPlan.firstAttackDelayMs;
     setGameState('BOSS_FIGHT');
@@ -3115,7 +3127,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
               }
               updateEnemyFacing(e,e.mesh.position.x-beforeX,e.mesh.position.z-beforeZ,frameDeltaMs);
               if (!guestAbilities?.modifiers().cloaked&&now > e.lastShoot + e.shootMs) {
-                fireAimedEnemyBullet(e,.24);
+                fireAimedEnemyBullet(e,Math.max(.56,e._projectileSpeed||0));
                 e.visual?.setState('attack');
                 e.lastShoot = now;
               }
@@ -3215,6 +3227,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
             enemyZ:bossMesh.position.z,
             playerX:playerRoot.position.x,
             playerZ:playerRoot.position.z,
+            playerVelocityX:playerVelocityFrame.x,
+            playerVelocityZ:playerVelocityFrame.z,
             origin:resolveBossMuzzleOrigin(),
             arenaHalfWidth:boundX(),
             worldHalfHeight:ZOOM,
@@ -3275,32 +3289,23 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
 
           if (now > nextBossFire) {
             bossVisual?.setState('attack');
-            const isAlien    = stageConfig.bossType==='alien';
-            const attackType = 1 + Math.floor(Math.random()*3);
-            if (attackType===1) {
-              for (let k=-3; k<=3; k++) fireEnemyBullet(bossMesh.position, k*.09, .45,{priority:'boss'});
-            } else if (attackType===2) {
-              // Even the emergency kill-switch path must not revive the old
-              // 360-degree ring that spent shots above the portrait arena.
-              const fallbackPattern=bossEnraged?'radial_gap':'fan';
-              const origin=resolveBossMuzzleOrigin()
-                ||Object.freeze({x:bossMesh.position.x,y:0,z:bossMesh.position.z});
-              const fallbackPlan=createCampaignBossAttackPlanV29({
-                pattern:fallbackPattern,origin,
-                playerX:playerRoot.position.x,playerZ:playerRoot.position.z,
-                arenaHalfWidth:boundX(),worldHalfHeight:ZOOM,
-                createdAtMs:now,cycle:bossCombatState?.cycle||0,
-                phaseId:bossEnraged?'phase_3':'phase_2',
-              });
-              fireBossAttackPlan(fallbackPlan);
-            } else {
-              const dx = playerRoot.position.x - bossMesh.position.x;
-              const dz = playerRoot.position.z - bossMesh.position.z;
-              const dn = Math.sqrt(dx*dx+dz*dz)||1;
-              fireEnemyBullet(bossMesh.position, (dx/dn)*.58, (dz/dn)*.58,{priority:'boss'});
-            }
-            const base = isAlien ? 700+Math.random()*600 : 1100+Math.random()*900;
-            nextBossFire = now + (bossEnraged ? base*.5 : base);
+            // Emergency kill switch still uses the planet/Boss arsenal. It may
+            // skip the production movement state machine, but it must never
+            // resurrect the old shared random fan/ring behavior.
+            const fallbackOrigin=resolveBossMuzzleOrigin()
+              ||Object.freeze({x:bossMesh.position.x,y:0,z:bossMesh.position.z});
+            const fallbackPhase=bossEnraged?'phase_3':'phase_2';
+            const fallbackCycle=Math.max(0,Math.trunc(now/700));
+            const fallbackPlan=createCampaignBossAttackPlanV29({
+              origin:fallbackOrigin,
+              playerX:playerRoot.position.x,playerZ:playerRoot.position.z,
+              playerVelocityX:playerVelocityFrame.x,playerVelocityZ:playerVelocityFrame.z,
+              arenaHalfWidth:boundX(),worldHalfHeight:ZOOM,
+              createdAtMs:now,cycle:fallbackCycle,phaseId:fallbackPhase,
+              planetId:currentPlanetId,bossType:stageConfig.bossType||'mech',
+            });
+            fireBossAttackPlan(fallbackPlan);
+            nextBossFire=now+Math.max(550,fallbackPlan.recoveryMs);
           }
         }
       }
