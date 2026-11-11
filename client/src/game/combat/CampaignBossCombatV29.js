@@ -483,6 +483,17 @@ const stopBoss = state => {
   };
 };
 
+// Shared deterministic mechanics used by the XState V3.6 orchestration pilot.
+// XState owns state transitions; these helpers continue to own movement math
+// and immutable attack-plan construction so presentation/gameplay contracts do
+// not fork between legacy and pilot paths.
+export const resolveCampaignBossPhaseCombatV31 = phaseCombatFor;
+export const selectCampaignBossPatternForStateV33 = selectPattern;
+export const resolveCampaignBossAnchorV29 = resolveBossAnchor;
+export const stepCampaignBossSteeringV29 = steerBoss;
+export const stepCampaignBossHoldV29 = holdBoss;
+export const stopCampaignBossMotionV29 = stopBoss;
+
 export function stepCampaignBossCombatV29(state, input = {}) {
   if (!state) return Object.freeze({ state: null, events: Object.freeze([]), deltaX: 0, deltaZ: 0 });
   const nowMs = Math.max(0, finite(input.nowMs, 0));

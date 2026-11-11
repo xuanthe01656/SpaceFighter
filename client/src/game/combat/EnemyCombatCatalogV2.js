@@ -1,3 +1,8 @@
+import {
+  auditCampaignEnemyEngagementV36,
+  resolveCampaignEnemyRoleContractV36,
+} from './CampaignEnemyEngagementV36.js';
+
 /**
  * Campaign enemy product catalog V3.5.
  *
@@ -5,9 +10,13 @@
  * output and engagement geometry. The director may scale numeric output by
  * stage, wave, planet and elite state, but it must not redefine role behavior.
  */
-export const ENEMY_COMBAT_CATALOG_VERSION = 'enemy-combat-v3.5.0';
+export const ENEMY_COMBAT_CATALOG_VERSION = 'enemy-combat-v3.6.0';
 
-const freezeRole = value => Object.freeze({ ...value });
+const freezeRole = value => Object.freeze({
+  ...resolveCampaignEnemyRoleContractV36(value.id),
+  rangeMetric: 'forward_depth',
+  ...value,
+});
 
 export const ENEMY_ARCHETYPES_V2 = Object.freeze({
   raider: freezeRole({
@@ -104,6 +113,13 @@ export const ENEMY_RUNTIME_CATALOG_V3 = Object.freeze(Object.fromEntries(
     cost: archetype.threatCost,
     canShoot: archetype.canShoot,
     engagementMode: archetype.engagementMode,
+    combatClass: archetype.combatClass,
+    movementContract: archetype.movementContract,
+    engagementRangeLabel: archetype.engagementRangeLabel,
+    attackContract: archetype.attackContract,
+    rangeMetric: archetype.rangeMetric,
+    lateralTrackingStrength: archetype.lateralTrackingStrength,
+    edgeInset: archetype.edgeInset,
     canCrossPlayer: archetype.canCrossPlayer,
     reengages: archetype.reengages,
     preferredRange: archetype.preferredRange,
@@ -149,7 +165,7 @@ export function bossPhaseForHp(hpRatio) {
 }
 
 export function auditEnemyCombatCatalogV2() {
-  const issues = [];
+  const issues = [...auditCampaignEnemyEngagementV36()];
   const values = Object.values(ENEMY_ARCHETYPES_V2);
   if (new Set(values.map(value => value.id)).size !== values.length) issues.push('DUPLICATE_ENEMY_ID');
   let crossPlayerCount = 0;
@@ -161,6 +177,9 @@ export function auditEnemyCombatCatalogV2() {
       issues.push(`DEFENSE_CLASS:${enemy.id}`);
     if (!['skirmisher','ranged','diver','guard','support','artillery'].includes(enemy.engagementMode))
       issues.push(`ENGAGEMENT_MODE:${enemy.id}`);
+    if (enemy.rangeMetric !== 'forward_depth') issues.push(`RANGE_METRIC:${enemy.id}`);
+    if (!enemy.combatClass || !enemy.movementContract || !enemy.attackContract)
+      issues.push(`ROLE_CONTRACT:${enemy.id}`);
     if (!Number.isInteger(enemy.tier) || enemy.tier < 1 || enemy.tier > 4) issues.push(`TIER:${enemy.id}`);
     if (!Number.isFinite(enemy.threatCost) || enemy.threatCost <= 0) issues.push(`THREAT_COST:${enemy.id}`);
     if (enemy.canCrossPlayer) crossPlayerCount += 1;

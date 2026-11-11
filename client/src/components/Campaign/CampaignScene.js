@@ -66,6 +66,16 @@ import {
 } from '../../game/combat/CampaignBossCombatV29.js';
 import { resolveCampaignHostileFireTempoV33 } from '../../game/combat/CampaignBossArsenalV33.js';
 import {
+  applyCampaignBossParityGateV36,
+  compareCampaignBossParityV36,
+  createCampaignBossStatechartControllerV36,
+  getCampaignBossStatechartSnapshotV36,
+  isCampaignBossXStatePilotV36,
+  resetCampaignBossStatechartControllerV36,
+  stepCampaignBossStatechartV36,
+  stopCampaignBossStatechartControllerV36,
+} from '../../game/combat/CampaignBossStatechartV36.js';
+import {
   advanceCampaignEnemyProjectileV31,
   createCampaignEnemyShotPlanV31,
   resolveCampaignEnemyInterceptV31,
@@ -224,6 +234,13 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   // loadout/navigation/progress isolation; it no longer gates enemy AI itself.
   // Set VITE_SF_CAMPAIGN_COMBAT_V3=false only as an emergency rollback switch.
   const campaignCombatV3Enabled=import.meta.env.VITE_SF_CAMPAIGN_COMBAT_V3!=='false';
+  // XState V5 owns final-boss orchestration only. Alpha Mech is the first
+  // production pilot; the other bosses stay legacy-authoritative and can run
+  // the statechart in shadow mode during Guest QA or explicit parity sessions.
+  const bossXStateAlphaPilotEnabled=campaignCombatV3Enabled
+    &&import.meta.env.VITE_SF_BOSS_XSTATE_ALPHA_PILOT!=='false';
+  const bossXStateShadowEnabled=campaignCombatV3Enabled
+    &&(guestAbilityQa||import.meta.env.VITE_SF_BOSS_XSTATE_SHADOW==='true');
   const campaignWaveDirector=campaignCombatV3Enabled?createEnemyDirectorV2({
     seed:stableSeed('campaign-wave-v30',currentPlanetId,currentStage),
     stage:currentStage,
@@ -1899,10 +1916,37 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
   let bossPhaseState=campaignCombatV3Enabled?createBossPhaseStateV28(currentPlanetId):null;
   let bossPhaseTransition=null;
   let bossCombatState=null;
+  let bossStatechartController=null;
+  let bossStatechartParity=null;
+  let bossStatechartParityWarningCount=0;
   let bossAttackTelegraphs=[];
   let bossSupportSequence=0;
   const bossSupportGroups=new Map();
   const bossMuzzleLocal=new BABYLON.Vector3(0,0,1.9);
+
+  const createBossStatechartRuntimeV36=(nowMs,bType)=>{
+    if(!campaignCombatV3Enabled)return null;
+    const profileArgs={planetId:currentPlanetId,bossType:bType};
+    const pilot=bossXStateAlphaPilotEnabled&&isCampaignBossXStatePilotV36(profileArgs);
+    if(!pilot&&!bossXStateShadowEnabled)return null;
+    return createCampaignBossStatechartControllerV36({
+      seed:stableSeed(currentPlanetId,currentStage,'final_boss'),
+      nowMs,planetId:currentPlanetId,bossType:bType,
+      mode:pilot?'pilot':'shadow',
+    });
+  };
+
+  const activeBossAttackPlanIdV36=()=>{
+    if(bossStatechartController?.mode==='pilot'){
+      return getCampaignBossStatechartSnapshotV36(bossStatechartController)?.attackPlan?.id||null;
+    }
+    return bossCombatState?.attackPlan?.id||null;
+  };
+
+  scene.onDisposeObservable.add(()=>{
+    stopCampaignBossStatechartControllerV36(bossStatechartController);
+    bossStatechartController=null;
+  });
 
   const buildFallbackBoss = (bType) => {
     const m = BABYLON.MeshBuilder.CreateSphere('bFb', { diameter: 3.8, segments: 24 }, scene);
@@ -2003,7 +2047,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       const fire=()=>{
         if(battleSceneDisposed||gameOver||gameState!=='BOSS_FIGHT'
           ||!bossMesh||bossMesh.isDisposed?.()||bossHp<=0)return;
-        if(campaignCombatV3Enabled&&bossCombatState?.attackPlan?.id!==planId)return;
+        if(campaignCombatV3Enabled&&activeBossAttackPlanIdV36()!==planId)return;
         fireEnemyBullet(
           new BABYLON.Vector3(projectile.origin.x,0,projectile.origin.z),
           projectile.velocity.x,projectile.velocity.z,{
@@ -2030,10 +2074,15 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     bossPts   = isReplay ? Math.max(10, Math.floor((bossCfg.score||100)/3)) : (bossCfg.score||100);
     bossPhaseState=campaignCombatV3Enabled?createBossPhaseStateV28(currentPlanetId):null;
     bossPhaseTransition=null;
+    const bossRuntimeNow=Date.now();
     bossCombatState=campaignCombatV3Enabled?createCampaignBossCombatStateV29({
-      seed:stableSeed(currentPlanetId,currentStage,'final_boss'),nowMs:Date.now(),
+      seed:stableSeed(currentPlanetId,currentStage,'final_boss'),nowMs:bossRuntimeNow,
       planetId:currentPlanetId,bossType:bType,
     }):null;
+    stopCampaignBossStatechartControllerV36(bossStatechartController);
+    bossStatechartController=createBossStatechartRuntimeV36(bossRuntimeNow,bType);
+    bossStatechartParity=null;
+    bossStatechartParityWarningCount=0;
     bossSupportGroups.clear();
     disposeBossAttackTelegraph();
 
@@ -2101,6 +2150,7 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       bossCombatState.velocityX=0;
       bossCombatState.velocityZ=0;
     }
+    resetCampaignBossStatechartControllerV36(bossStatechartController,{nowMs});
     bossPhaseTransition=Object.freeze({gate,startedAt:nowMs,endsAt:nowMs+gate.transitionMs});
     for(let index=enemyBullets.length-1;index>=0;index--){
       if(enemyBullets[index]?._priority==='boss'){
@@ -2124,10 +2174,18 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     bossMesh.setEnabled(true);
     bossVisual?.setState('move');
     bossPanel.isVisible = !externalHud;
-    if(campaignCombatV3Enabled)bossCombatState=createCampaignBossCombatStateV29({
-      seed:stableSeed(currentPlanetId,currentStage,'final_boss'),nowMs:Date.now(),
-      planetId:currentPlanetId,bossType:stageConfig.bossType||'mech',
-    });
+    if(campaignCombatV3Enabled){
+      const bossRuntimeNow=Date.now();
+      const bossType=stageConfig.bossType||'mech';
+      bossCombatState=createCampaignBossCombatStateV29({
+        seed:stableSeed(currentPlanetId,currentStage,'final_boss'),nowMs:bossRuntimeNow,
+        planetId:currentPlanetId,bossType,
+      });
+      stopCampaignBossStatechartControllerV36(bossStatechartController);
+      bossStatechartController=createBossStatechartRuntimeV36(bossRuntimeNow,bossType);
+      bossStatechartParity=null;
+      bossStatechartParityWarningCount=0;
+    }
     nextBossFire = Date.now() + bossIntroPlan.firstAttackDelayMs;
     setGameState('BOSS_FIGHT');
     return true;
@@ -2829,6 +2887,9 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
     disposeBossAttackTelegraph();
     disposeBossFrenzyAura();
     bossCombatState=null;
+    stopCampaignBossStatechartControllerV36(bossStatechartController);
+    bossStatechartController=null;
+    bossStatechartParity=null;
     deathVisuals.capture(bossVisual);
     bossVisual=null;
     safeDispose(bossMesh);bossMesh=null;
@@ -3333,8 +3394,8 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
       }else{
         bossMesh.scaling.x=1;
         bossMesh.scaling.z=1;
-        if(campaignCombatV3Enabled&&bossCombatState){
-          const bossStep=stepCampaignBossCombatV29(bossCombatState,{
+        if(campaignCombatV3Enabled&&(bossCombatState||bossStatechartController)){
+          const bossInput={
             nowMs:now,
             hpRatio:bossMaxHp>0?bossHp/bossMaxHp:0,
             frameScale:frameFactor,
@@ -3351,8 +3412,39 @@ export const createCampaignScene = (scene, canvas, engine, data) => {
             viewportHeight:battleViewportMetrics.cssH,
             hudOcclusionLineZ:enemyEntryPolicy.engagementLineZ,
             entityScale:1.7,
-          });
-          bossCombatState=bossStep.state;
+          };
+          const legacyBossStep=bossCombatState
+            ?stepCampaignBossCombatV29(bossCombatState,bossInput):null;
+          let xstateBossStep=null;
+          let bossStep=legacyBossStep;
+          if(bossStatechartController){
+            xstateBossStep=stepCampaignBossStatechartV36(bossStatechartController,bossInput);
+            bossStatechartController=xstateBossStep.controller;
+            if(legacyBossStep){
+              bossStatechartParity=compareCampaignBossParityV36({
+                legacyStep:legacyBossStep,
+                xstateStep:xstateBossStep,
+                tolerance:1e-9,
+              });
+              const pilotApproved=applyCampaignBossParityGateV36(
+                bossStatechartController,
+                bossStatechartParity,
+              );
+              if(!bossStatechartParity.ok&&bossStatechartParityWarningCount<3){
+                bossStatechartParityWarningCount+=1;
+                console.warn('[BOSS_XSTATE_V36_PARITY]',bossStatechartParity);
+              }
+              if(pilotApproved)bossStep=xstateBossStep;
+              else if(bossStatechartController.mode==='shadow_failed')bossStep=legacyBossStep;
+            }else if(bossStatechartController.mode==='pilot'){
+              // A pilot must always be checked against the legacy shadow. If
+              // the shadow is unavailable, fail closed to the existing path.
+              bossStatechartController.mode='shadow_failed';
+              bossStatechartController.pilotBlocked=true;
+              bossStatechartController.pilotBlockedReason=Object.freeze(['MISSING_LEGACY_SHADOW']);
+            }
+          }
+          if(legacyBossStep)bossCombatState=legacyBossStep.state;
           const beforeX=bossMesh.position.x;
           const beforeZ=bossMesh.position.z;
           bossMesh.position.x=clamp(bossMesh.position.x+bossStep.deltaX,-boundX()+1.25,boundX()-1.25);

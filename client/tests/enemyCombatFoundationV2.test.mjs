@@ -59,6 +59,13 @@ import {
   stepCampaignMiniBossMotionV29,
 } from '../src/game/combat/CampaignCombatChoreographyV29.js';
 import {
+  CAMPAIGN_ENEMY_ENGAGEMENT_VERSION,
+  CAMPAIGN_ENEMY_ROLE_CONTRACTS_V36,
+  auditCampaignEnemyEngagementV36,
+  resolveCampaignEdgeAwareAnchorXV36,
+  resolveCampaignFireEnvelopeV36,
+} from '../src/game/combat/CampaignEnemyEngagementV36.js';
+import {
   CAMPAIGN_BOSS_ARSENAL_VERSION,
   CAMPAIGN_BOSS_PATTERN_CATALOG_V33,
   CAMPAIGN_PLANET_BOSS_PROFILES_V33,
@@ -77,6 +84,19 @@ import {
   projectilesFromCampaignBossAttackPlanV29,
   stepCampaignBossCombatV29,
 } from '../src/game/combat/CampaignBossCombatV29.js';
+import {
+  CAMPAIGN_BOSS_XSTATE_ALPHA_PILOT_PROFILE,
+  CAMPAIGN_BOSS_XSTATE_PACKAGE_VERSION,
+  CAMPAIGN_BOSS_XSTATE_VERSION,
+  applyCampaignBossParityGateV36,
+  auditCampaignBossStatechartV36,
+  compareCampaignBossParityV36,
+  createCampaignBossStatechartControllerV36,
+  getCampaignBossStatechartSnapshotV36,
+  isCampaignBossXStatePilotV36,
+  stepCampaignBossStatechartV36,
+  stopCampaignBossStatechartControllerV36,
+} from '../src/game/combat/CampaignBossStatechartV36.js';
 import {
   CAMPAIGN_ENEMY_PROJECTILE_VERSION,
   advanceCampaignEnemyProjectileV31,
@@ -108,8 +128,10 @@ const stagePlan = (options = {}) => createEnemyDirectorV2({
   baseEnemies: options.baseEnemies ?? 40,
 });
 
-test('enemy V3.5 catalog is the single runtime source for six persistent role contracts', () => {
-  assert.equal(ENEMY_COMBAT_CATALOG_VERSION, 'enemy-combat-v3.5.0');
+test('enemy V3.6 catalog is the single runtime source for six production role contracts', () => {
+  assert.equal(ENEMY_COMBAT_CATALOG_VERSION, 'enemy-combat-v3.6.0');
+  assert.equal(CAMPAIGN_ENEMY_ENGAGEMENT_VERSION, 'campaign-enemy-engagement-v3.6.0');
+  assert.deepEqual(auditCampaignEnemyEngagementV36(), []);
   assert.deepEqual(auditEnemyCombatCatalogV2(), []);
   assert.equal(CAMPAIGN_PROJECTILE_VISUAL_VERSION, 'campaign-projectile-visual-v3.5.0');
   assert.deepEqual(auditCampaignProjectileVisualV32(), []);
@@ -128,6 +150,12 @@ test('enemy V3.5 catalog is the single runtime source for six persistent role co
     assert.equal(runtime.engagementMode, archetype.engagementMode);
     assert.equal(runtime.canCrossPlayer, archetype.canCrossPlayer);
     assert.equal(runtime.reengages, true);
+    assert.equal(runtime.combatClass, CAMPAIGN_ENEMY_ROLE_CONTRACTS_V36[roleId].combatClass);
+    assert.equal(runtime.movementContract, CAMPAIGN_ENEMY_ROLE_CONTRACTS_V36[roleId].movementContract);
+    assert.equal(runtime.engagementRangeLabel,
+      CAMPAIGN_ENEMY_ROLE_CONTRACTS_V36[roleId].engagementRangeLabel);
+    assert.equal(runtime.attackContract, CAMPAIGN_ENEMY_ROLE_CONTRACTS_V36[roleId].attackContract);
+    assert.equal(runtime.rangeMetric, 'forward_depth');
     if (archetype.engagementMode === 'diver') {
       assert.equal(archetype.id, 'charger');
       assert.equal(archetype.canCrossPlayer, true);
@@ -719,8 +747,8 @@ test('V3.5 progression makes Alpha onboarding gentle, late stages upgrade-driven
     && extraReturnRatio(2) > extraReturnRatio(1));
 });
 
-test('V3.5 every non-diver loops combat at an authored firing range until destroyed', () => {
-  assert.equal(CAMPAIGN_COMBAT_CHOREOGRAPHY_VERSION, 'campaign-combat-choreography-v3.5.0');
+test('V3.6 every non-diver loops combat at an edge-aware authored firing range until destroyed', () => {
+  assert.equal(CAMPAIGN_COMBAT_CHOREOGRAPHY_VERSION, 'campaign-combat-choreography-v3.6.0');
   assert.deepEqual(auditCampaignCombatChoreographyV29(), []);
   assert.deepEqual(Object.keys(CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30).sort(),
     ['double_hook_return', 'hook_return']);
@@ -757,15 +785,17 @@ test('V3.5 every non-diver loops combat at an authored firing range until destro
     }
     assert.equal(first.handled, true);
     assert.equal(archetype.canCrossPlayer, false);
-    const lockedTarget = [state.targetX, state.targetZ];
+    const initialTarget = [state.targetX, state.targetZ];
     stepCampaignEnemyChoreographyV29(state, {
       nowMs: 120, frameScale: 1, baseSpeed: .035,
       enemyX: 2, enemyZ: -16.8, playerX: -6, playerZ: 8,
       arenaHalfWidth: 7, worldHalfHeight: 15, viewportHeight: 852,
       hudOcclusionLineZ: -9.3,
     });
-    assert.deepEqual([state.targetX, state.targetZ], lockedTarget,
-      `${roleId} must keep a phase target instead of retargeting every render frame`);
+    assert.notDeepEqual([state.targetX, state.targetZ], initialTarget,
+      `${roleId} must refresh its authored anchor when the player changes to an edge lane`);
+    assert.ok(Math.abs(state.targetX - initialTarget[0]) >= .08,
+      `${roleId} must materially refresh its phase anchor instead of remaining on its spawn lane`);
   }
 
   for (const roleId of ['raider', 'gunner', 'shieldbearer', 'support', 'artillery']) {
@@ -849,6 +879,88 @@ test('V3.5 every non-diver loops combat at an authored firing range until destro
     'legacy flyby data must be upgraded to a persistent return loop');
   assert.equal(CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30.double_hook_return.phases
     .filter(item => item.mayFire).length, 3);
+});
+
+test('V3.6 edge engagement tracks both arena sides and never converts diagonal distance into lost target detection', () => {
+  const diagonalEnvelope = resolveCampaignFireEnvelopeV36({
+    canShoot: true,
+    enemyX: 6.2,
+    enemyZ: 3,
+    playerX: -6.2,
+    playerZ: 12,
+    fireRangeMin: 6.3,
+    fireRangeMax: 9.6,
+  });
+  assert.equal(diagonalEnvelope.rangeMetric, 'forward_depth');
+  assert.equal(diagonalEnvelope.forwardDepth, 9);
+  assert.ok(diagonalEnvelope.directDistance > 15,
+    'the regression fixture must be outside the old Euclidean range gate');
+  assert.equal(diagonalEnvelope.rangeReady, true,
+    'a player at an opposite horizontal edge remains targetable inside the authored depth band');
+
+  const leftAnchor = resolveCampaignEdgeAwareAnchorXV36({
+    roleId: 'gunner', playerX: -6.2, baseLaneX: 4.5,
+    desiredOffsetX: -1.2, arenaHalfWidth: 7,
+  });
+  const rightAnchor = resolveCampaignEdgeAwareAnchorXV36({
+    roleId: 'gunner', playerX: 6.2, baseLaneX: -4.5,
+    desiredOffsetX: 1.2, arenaHalfWidth: 7,
+  });
+  assert.equal(leftAnchor.edgeSide, 'left');
+  assert.equal(rightAnchor.edgeSide, 'right');
+  assert.ok(leftAnchor.x < 0 && rightAnchor.x > 0);
+  assert.ok(Math.abs(leftAnchor.x) <= leftAnchor.bound && Math.abs(rightAnchor.x) <= rightAnchor.bound);
+
+  for (const playerX of [-6.2, 6.2]) {
+    for (const roleId of ['raider', 'gunner', 'shieldbearer', 'support', 'artillery']) {
+      const state = createCampaignEnemyChoreographyStateV29({
+        roleId,
+        routeVariant: roleId === 'raider' ? 'double_hook_return' : null,
+        lane: playerX < 0 ? .85 : -.85,
+        strafeDirection: playerX < 0 ? 1 : -1,
+        seed: 913 + roleId.length,
+        nowMs: 0,
+      });
+      let enemyX = -playerX;
+      let enemyZ = -16.8;
+      let nowMs = 0;
+      let fireFrames = 0;
+      let minimumLateralDistance = Infinity;
+      for (let frame = 0; frame < 2700; frame += 1) {
+        const result = stepCampaignEnemyChoreographyV29(state, {
+          nowMs,
+          frameScale: 1,
+          baseSpeed: .035,
+          enemyX,
+          enemyZ,
+          playerX,
+          playerZ: 12,
+          arenaHalfWidth: 7,
+          worldHalfHeight: 15,
+          viewportHeight: 852,
+          hudOcclusionLineZ: -9.3,
+          separationX: 0,
+          separationZ: 0,
+          fireCooldownMs: 900,
+        });
+        enemyX += result.deltaX || 0;
+        enemyZ += result.deltaZ || 0;
+        minimumLateralDistance = Math.min(minimumLateralDistance, Math.abs(playerX - enemyX));
+        if (result.mayFire) {
+          fireFrames += 1;
+          assert.equal(result.rangeMetric, 'forward_depth');
+          assert.equal(result.targetAhead, true);
+        }
+        nowMs += 1000 / 60;
+      }
+      assert.ok(fireFrames > 12,
+        `${roleId} must repeatedly acquire and fire at playerX=${playerX}`);
+      const lateralAcquisitionLimit = roleId === 'artillery' ? 4.8 : 4.2;
+      assert.ok(minimumLateralDistance < lateralAcquisitionLimit,
+        `${roleId} must reposition toward playerX=${playerX} instead of staying on the opposite lane`);
+      assert.equal(state.completed, false);
+    }
+  }
 });
 
 test('V2.9 Boss Preview and Mini-Boss motion preserve attack locks and a dynamic HUD-safe combat band', () => {
@@ -1101,6 +1213,91 @@ test('V3.3 final Boss preserves deterministic reposition-aim-telegraph-fire-reco
   assert.equal(fired.phase, 'recover');
 });
 
+test('V3.6 XState V5 shadows legacy Boss orchestration and pilots only Alpha Mech after a zero-drift parity gate', () => {
+  assert.equal(CAMPAIGN_BOSS_XSTATE_VERSION, 'campaign-boss-xstate-v3.6.0');
+  assert.equal(CAMPAIGN_BOSS_XSTATE_PACKAGE_VERSION, '5.33.4');
+  assert.equal(CAMPAIGN_BOSS_XSTATE_ALPHA_PILOT_PROFILE, 'alpha_mech_sentinel');
+  assert.deepEqual(auditCampaignBossStatechartV36(), []);
+  assert.equal(isCampaignBossXStatePilotV36({ planetId: 1, bossType: 'mech' }), true);
+  assert.equal(isCampaignBossXStatePilotV36({ planetId: 1, bossType: 'alien' }), false);
+  assert.equal(isCampaignBossXStatePilotV36({ planetId: 2, bossType: 'mech' }), false);
+
+  const seed = 731;
+  const legacyState = createCampaignBossCombatStateV29({
+    seed, nowMs: 0, planetId: 1, bossType: 'mech',
+  });
+  const controller = createCampaignBossStatechartControllerV36({
+    seed, nowMs: 0, planetId: 1, bossType: 'mech', mode: 'shadow',
+  });
+  let enemyX = 0;
+  let enemyZ = -7;
+  let nowMs = 0;
+  let telegraphs = 0;
+  let fires = 0;
+  let enrages = 0;
+  const seenPhases = new Set();
+
+  for (let frame = 0; frame < 2600; frame += 1) {
+    const hpRatio = frame < 900 ? .9 : frame < 1650 ? .52 : .29;
+    const common = {
+      nowMs,
+      hpRatio,
+      frameScale: 1,
+      baseSpeed: .045,
+      enemyX,
+      enemyZ,
+      playerX: Math.sin(frame * .013) * 5.8,
+      playerZ: 12,
+      playerVelocityX: Math.cos(frame * .013) * .075,
+      playerVelocityZ: 0,
+      origin: { x: enemyX, y: 0, z: enemyZ + 1.9 },
+      arenaHalfWidth: 7,
+      worldHalfHeight: 15,
+      viewportHeight: 852,
+      hudOcclusionLineZ: -9.3,
+    };
+    const legacyStep = stepCampaignBossCombatV29(legacyState, common);
+    const xstateStep = stepCampaignBossStatechartV36(controller, common);
+    const parity = compareCampaignBossParityV36({ legacyStep, xstateStep, tolerance: 1e-9 });
+    assert.equal(parity.ok, true, `Boss parity drift at frame ${frame}: ${parity.issues.join(',')}`);
+    seenPhases.add(xstateStep.phase);
+    telegraphs += xstateStep.events.filter(event => event.type === 'telegraph_started').length;
+    fires += xstateStep.events.filter(event => event.type === 'fire_pattern').length;
+    enrages += xstateStep.events.filter(event => event.type === 'enrage_started').length;
+    enemyX += xstateStep.deltaX || 0;
+    enemyZ += xstateStep.deltaZ || 0;
+    nowMs += 1000 / 60;
+  }
+
+  const snapshot = getCampaignBossStatechartSnapshotV36(controller);
+  assert.equal(snapshot.mode, 'shadow');
+  assert.equal(snapshot.profileId, 'alpha_mech_sentinel');
+  assert.equal(snapshot.parityMismatches, 0);
+  assert.equal(snapshot.parityChecks, 2600);
+  assert.equal(snapshot.actorStatus, 'active');
+  assert.equal(snapshot.pilotBlocked, false);
+  assert.ok(telegraphs >= 3 && fires >= 3);
+  assert.equal(enrages, 1);
+  for (const phase of ['reposition', 'aim', 'telegraph', 'recover', 'enrage']) {
+    assert.equal(seenPhases.has(phase), true, `XState Boss pilot must execute ${phase}`);
+  }
+  stopCampaignBossStatechartControllerV36(controller);
+  assert.equal(controller.actor.getSnapshot().status, 'stopped');
+
+  const pilot = createCampaignBossStatechartControllerV36({
+    seed, nowMs: 0, planetId: 1, bossType: 'mech', mode: 'pilot',
+  });
+  assert.equal(applyCampaignBossParityGateV36(pilot, { ok: true, issues: [] }), true);
+  assert.equal(applyCampaignBossParityGateV36(pilot, {
+    ok: false, issues: ['SYNTHETIC_PARITY_DRIFT'],
+  }), false);
+  const blockedSnapshot = getCampaignBossStatechartSnapshotV36(pilot);
+  assert.equal(blockedSnapshot.mode, 'shadow_failed');
+  assert.equal(blockedSnapshot.pilotBlocked, true);
+  assert.deepEqual(blockedSnapshot.pilotBlockedReason, ['SYNTHETIC_PARITY_DRIFT']);
+  stopCampaignBossStatechartControllerV36(pilot);
+});
+
 test('V3.3 final Boss frenzy is a persistent phase upgrade inside each planet-specific arsenal', () => {
   assert.ok(CAMPAIGN_BOSS_PHASE_COMBAT_V31.phase_3.movementMultiplier
     > CAMPAIGN_BOSS_PHASE_COMBAT_V31.phase_2.movementMultiplier);
@@ -1198,12 +1395,20 @@ test('Campaign source enables V3 enemy combat in production while preserving V2.
   assert.match(source, /routeVariant:spawnSpec\.routeVariant/);
   assert.match(source, /stepCampaignBossPreviewMotionV29/);
   assert.match(source, /stepCampaignBossCombatV29/);
+  assert.match(source, /stepCampaignBossStatechartV36/);
+  assert.match(source, /compareCampaignBossParityV36/);
+  assert.match(source, /applyCampaignBossParityGateV36/);
+  assert.match(source, /shadow_failed/);
+  assert.match(source, /bossXStateAlphaPilotEnabled/);
+  assert.match(source, /bossXStateShadowEnabled/);
+  assert.match(source, /mode:pilot\?['"]pilot['"]:['"]shadow['"]/);
+  assert.match(source, /activeBossAttackPlanIdV36/);
   assert.match(source, /planetId:currentPlanetId,bossType:stageConfig\.bossType\|\|['"]mech['"]/);
   assert.doesNotMatch(source, /fallbackPattern=bossEnraged/);
   assert.doesNotMatch(source, /attackType = 1 \+ Math\.floor\(Math\.random\(\)\*3\)/);
   assert.match(source, /createBossAttackTelegraph/);
   assert.match(source, /projectilesFromCampaignBossAttackPlanV29/);
-  assert.match(source, /campaignCombatV3Enabled&&bossCombatState/);
+  assert.match(source, /campaignCombatV3Enabled&&\(bossCombatState\|\|bossStatechartController\)/);
   assert.match(source, /Emergency kill-switch legacy boss fallback/);
   assert.match(source, /createCampaignEnemyShotPlanV31/);
   assert.match(source, /createCampaignEnemyVolleyPlanV34/);
@@ -1258,8 +1463,12 @@ test('Campaign source enables V3 enemy combat in production while preserving V2.
 
   const choreographySource = fs.readFileSync(
     new URL('../src/game/combat/CampaignCombatChoreographyV29.js', import.meta.url), 'utf8');
+  const engagementSource = fs.readFileSync(
+    new URL('../src/game/combat/CampaignEnemyEngagementV36.js', import.meta.url), 'utf8');
   const bossSource = fs.readFileSync(
     new URL('../src/game/combat/CampaignBossCombatV29.js', import.meta.url), 'utf8');
+  const bossStatechartSource = fs.readFileSync(
+    new URL('../src/game/combat/CampaignBossStatechartV36.js', import.meta.url), 'utf8');
   const projectileSource = fs.readFileSync(
     new URL('../src/game/combat/CampaignEnemyProjectileV31.js', import.meta.url), 'utf8');
   const projectileVisualSource = fs.readFileSync(
@@ -1275,10 +1484,26 @@ test('Campaign source enables V3 enemy combat in production while preserving V2.
   assert.match(projectileVisualSource, /DynamicTexture/);
   assert.match(projectileVisualSource, /Canvas texture|createLinearGradient/);
   assert.doesNotMatch(choreographySource, /Math\.random/);
+  assert.match(choreographySource, /resolveCampaignFireEnvelopeV36/);
+  assert.match(choreographySource, /refreshEnemyPhaseTargetV36/);
+  assert.match(engagementSource, /rangeMetric: ['"]forward_depth['"]/);
+  assert.doesNotMatch(engagementSource, /Date\.now|Math\.random|setTimeout/);
   assert.doesNotMatch(bossSource, /Math\.random/);
+  assert.match(bossStatechartSource, /from ['"]xstate['"]/);
+  assert.match(bossStatechartSource, /createMachine/);
+  assert.match(bossStatechartSource, /createActor/);
+  assert.match(bossStatechartSource, /CAMPAIGN_BOSS_XSTATE_ALPHA_PILOT_PROFILE/);
+  assert.doesNotMatch(bossStatechartSource, /after\s*:|Date\.now|setTimeout|Math\.random/,
+    'Boss statechart must advance only from deterministic runtime events/ticks');
   assert.doesNotMatch(projectileSource, /Math\.random/);
   assert.match(bossSource, /state\.phase = ['"]enrage['"]/);
   assert.match(bossSource, /extraBurstShots: 2/);
   assert.match(choreographySource, /hardTravelTimeout/);
   assert.match(choreographySource, /CAMPAIGN_RAIDER_ROUTE_VARIANTS_V30/);
+
+  const packageJson = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  const packageLock = JSON.parse(fs.readFileSync(new URL('../package-lock.json', import.meta.url), 'utf8'));
+  assert.equal(packageJson.dependencies.xstate, '5.33.4');
+  assert.equal(packageLock.packages[''].dependencies.xstate, '5.33.4');
+  assert.equal(packageLock.packages['node_modules/xstate'].version, '5.33.4');
 });
