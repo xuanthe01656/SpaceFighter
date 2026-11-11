@@ -1,0 +1,212 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {
+  CAMPAIGN_GAMEPLAY_FOUNDATION_LOCK_RC1,
+  auditCampaignGameplayFoundationLockRC1,
+} from '../src/game/combat/CampaignGameplayFoundationLockRC1.js';
+import {
+  DUNGEON_PARITY_FOUNDATION_VERSION,
+  DUNGEON_RUNTIME_PROFILES_V38,
+  auditDungeonEncounterCatalogV38,
+  isDungeonParityFoundationEnabledV38,
+  resolveDungeonRuntimeProfileV38,
+} from '../src/game/dungeon/DungeonEncounterCatalogV38.js';
+import {
+  DUNGEON_ENCOUNTER_DIRECTOR_VERSION,
+  auditDungeonEncounterDirectorV38,
+  buildDungeonRoomSpawnPlanV38,
+  createDungeonEncounterDirectorV38,
+  getDungeonEncounterSnapshotV38,
+  stepDungeonEncounterDirectorV38,
+} from '../src/game/dungeon/DungeonEncounterDirectorV38.js';
+import {
+  DUNGEON_COMBAT_ADAPTER_VERSION,
+  auditDungeonCombatAdapterV38,
+  createDungeonCombatSlotDescriptorV38,
+  resolveDungeonEnemySpecV38,
+} from '../src/game/dungeon/DungeonCombatAdapterV38.js';
+import {
+  DUNGEON_BOSS_ADAPTER_VERSION,
+  auditDungeonBossAdapterV38,
+  projectilesFromDungeonBossAttackPlanV38,
+  resolveDungeonBossBindingV38,
+} from '../src/game/dungeon/DungeonBossAdapterV38.js';
+import {
+  createCampaignEnemyCombatSlotRegistryV37,
+  getCampaignEnemyCombatSlotV37,
+  syncCampaignEnemyCombatSlotsV37,
+} from '../src/game/combat/CampaignEnemyCombatSlotsV37.js';
+import { ENEMY_ARCHETYPES_V2 } from '../src/game/combat/EnemyCombatCatalogV2.js';
+
+test('Campaign Gameplay Foundation Lock RC1 is exact and drift-free', () => {
+  assert.equal(CAMPAIGN_GAMEPLAY_FOUNDATION_LOCK_RC1.version,
+    'campaign-gameplay-foundation-lock-rc1.0.0');
+  assert.equal(CAMPAIGN_GAMEPLAY_FOUNDATION_LOCK_RC1.status, 'locked');
+  assert.equal(CAMPAIGN_GAMEPLAY_FOUNDATION_LOCK_RC1.architecture.finalBossState, 'xstate_v5');
+  assert.equal(CAMPAIGN_GAMEPLAY_FOUNDATION_LOCK_RC1.architecture.rendererAuthority,
+    'presentation_only');
+  assert.deepEqual(auditCampaignGameplayFoundationLockRC1(), []);
+});
+
+test('Dungeon V3.8 catalog exposes one enabled Taurus vertical slice and two briefs', () => {
+  assert.equal(DUNGEON_PARITY_FOUNDATION_VERSION, 'dungeon-parity-foundation-v3.8.0');
+  assert.deepEqual(auditDungeonEncounterCatalogV38(), []);
+  assert.equal(isDungeonParityFoundationEnabledV38({ dungeonId: 'dung_taurus' }), true);
+  assert.equal(isDungeonParityFoundationEnabledV38({ dungeonId: 'dung_nereus' }), false);
+  assert.equal(isDungeonParityFoundationEnabledV38({ dungeonId: 'dung_abaddon' }), false);
+  assert.equal(isDungeonParityFoundationEnabledV38({ dungeonId: 'dung_unknown' }), false);
+  const taurus = resolveDungeonRuntimeProfileV38('dung_taurus');
+  assert.equal(taurus.rooms.length, 5);
+  assert.deepEqual(taurus.rooms.map(room => room.kind),
+    ['entry', 'ambush', 'breakable', 'elite', 'boss']);
+  const salvage = taurus.rooms.find(room => room.id === 'taurus_salvage');
+  assert.equal(salvage.breakablesRequired, true);
+  assert.equal(salvage.breakables.length, 3);
+  const bossRoom = taurus.rooms.at(-1);
+  assert.equal(bossRoom.boss.sharedBossProfileId, 'alpha_mech_sentinel');
+  assert.equal(DUNGEON_RUNTIME_PROFILES_V38.dung_nereus.status, 'catalog_ready');
+  assert.equal(DUNGEON_RUNTIME_PROFILES_V38.dung_abaddon.status, 'catalog_ready');
+});
+
+test('Dungeon room plans are deterministic, bounded and catalog-valid', () => {
+  assert.equal(DUNGEON_ENCOUNTER_DIRECTOR_VERSION, 'dungeon-encounter-director-v3.8.0');
+  assert.deepEqual(auditDungeonEncounterDirectorV38(), []);
+  const first = buildDungeonRoomSpawnPlanV38({ dungeonId: 'dung_taurus', roomIndex: 3, seed: 9842 });
+  const second = buildDungeonRoomSpawnPlanV38({ dungeonId: 'dung_taurus', roomIndex: 3, seed: 9842 });
+  assert.deepEqual(first, second);
+  assert.ok(first.entries.length > 0);
+  assert.ok(first.entries.length <= 40);
+  assert.ok(first.entries.every(entry => ENEMY_ARCHETYPES_V2[entry.roleId]));
+  assert.ok(first.entries.every(entry => entry.spawnAtMs >= 0));
+  assert.ok(first.authoredThreat <= first.room.threatBudget);
+});
+
+test('Dungeon director completes all five Taurus rooms and gates salvage on breakables', () => {
+  const director = createDungeonEncounterDirectorV38({ dungeonId: 'dung_taurus', seed: 77, nowMs: 0 });
+  let nowMs = 0;
+  let activeBreakables = 0;
+  let sawSalvageBlocked = false;
+  let sawBossSpawn = false;
+  let completedEvent = null;
+
+  for (let guard = 0; guard < 1000 && !director.completed; guard += 1) {
+    nowMs += 500;
+    const snapshotBefore = getDungeonEncounterSnapshotV38(director);
+    const currentRoom = director.roomPlan?.room || null;
+    if (currentRoom?.id === 'taurus_salvage' && currentRoom.breakablesRequired) {
+      if (activeBreakables === 0 && director.status === 'combat') activeBreakables = 3;
+      if (director.spawnCursor >= (director.roomPlan?.entries?.length || 0)) {
+        if (activeBreakables > 0) sawSalvageBlocked = true;
+        if (guard % 3 === 0) activeBreakables = 0;
+      }
+    } else {
+      activeBreakables = 0;
+    }
+
+    const step = stepDungeonEncounterDirectorV38(director, {
+      nowMs,
+      activeEnemyCount: 0,
+      activeBreakableCount: activeBreakables,
+      bossAlive: sawBossSpawn,
+      bossDefeated: sawBossSpawn && snapshotBefore?.roomId === 'taurus_boss' && guard % 4 === 0,
+      maxSpawnEventsPerStep: 3,
+    });
+    for (const event of step.events) {
+      if (event.type === 'spawn_breakables') activeBreakables = event.breakables.length;
+      if (event.type === 'spawn_boss') sawBossSpawn = true;
+      if (event.type === 'dungeon_completed') completedEvent = event;
+    }
+  }
+
+  assert.equal(sawSalvageBlocked, true);
+  assert.equal(sawBossSpawn, true);
+  assert.equal(director.completed, true);
+  assert.equal(director.roomsCleared, 5);
+  assert.equal(completedEvent?.totalRooms, 5);
+});
+
+test('Dungeon combat adapter reuses all Campaign roles and distributed slots', () => {
+  assert.equal(DUNGEON_COMBAT_ADAPTER_VERSION, 'dungeon-combat-adapter-v3.8.0');
+  assert.deepEqual(auditDungeonCombatAdapterV38(), []);
+  const room = resolveDungeonRuntimeProfileV38('dung_taurus').rooms[3];
+  const enemies = Object.keys(ENEMY_ARCHETYPES_V2).map((roleId, index) => {
+    const spec = resolveDungeonEnemySpecV38({
+      dungeonId: 'dung_taurus',
+      room,
+      entry: { id: `role:${roleId}`, roleId, laneNorm: (index - 2.5) / 3 },
+    });
+    return { runtimeId: spec.id, spec, seed: index + 1 };
+  });
+  const charger = enemies.find(enemy => enemy.spec.roleId === 'charger').spec;
+  assert.equal(charger.canShoot, false);
+  assert.equal(charger.weapon.projectile, null);
+  for (const enemy of enemies.filter(item => item.spec.roleId !== 'charger')) {
+    assert.equal(enemy.spec.canShoot, true);
+    assert.ok(enemy.spec.weapon.projectile.speed > 0);
+    assert.ok(enemy.spec.fireRangeMax > enemy.spec.fireRangeMin);
+  }
+
+  const registry = createCampaignEnemyCombatSlotRegistryV37();
+  syncCampaignEnemyCombatSlotsV37(
+    registry,
+    enemies.map(createDungeonCombatSlotDescriptorV38),
+    { nowMs: 100 },
+  );
+  const rangedSlots = enemies
+    .filter(enemy => enemy.spec.roleId !== 'charger')
+    .map(enemy => getCampaignEnemyCombatSlotV37(registry, enemy.runtimeId));
+  assert.ok(rangedSlots.every(Boolean));
+  assert.equal(new Set(rangedSlots.map(slot => slot.slotId)).size, rangedSlots.length);
+});
+
+test('Dungeon Boss adapter binds Taurus to shared XState arsenal and scales projectiles', () => {
+  assert.equal(DUNGEON_BOSS_ADAPTER_VERSION, 'dungeon-boss-adapter-v3.8.0');
+  assert.deepEqual(auditDungeonBossAdapterV38(), []);
+  const bossSpec = {
+    id: 'taurus_rust_driller',
+    sharedBossProfileId: 'alpha_mech_sentinel',
+    damageMultiplier: .88,
+    projectileSpeedMultiplier: .96,
+  };
+  const binding = resolveDungeonBossBindingV38(bossSpec);
+  assert.equal(binding.profileId, 'alpha_mech_sentinel');
+  const plan = {
+    id: 'boss-plan-1',
+    pattern: 'alpha_lock_burst',
+    visualId: 'boss_alpha_rail',
+    bossProfileId: 'alpha_mech_sentinel',
+    planetId: 1,
+    bossType: 'mech',
+    projectileDamage: 100,
+    damageType: 'energy',
+    paths: [{
+      origin: { x: 0, y: 0, z: -8 },
+      endpoint: { x: 0, z: 10 },
+      velocity: { x: .25, z: .80 },
+      fireOffsetMs: 0,
+      width: .4,
+    }],
+  };
+  const [projectile] = projectilesFromDungeonBossAttackPlanV38(plan, bossSpec);
+  assert.equal(projectile.rawDamage, 88);
+  assert.equal(projectile.velocity.x, .24);
+  assert.equal(projectile.velocity.z, .768);
+});
+
+test('DungeonScene integrates parity director, required objectives and shared Boss XState', () => {
+  const source = fs.readFileSync(new URL('../src/components/Dungeon/DungeonScene.js', import.meta.url), 'utf8');
+  assert.match(source, /assertCampaignGameplayFoundationLockRC1\(\)/);
+  assert.match(source, /stepDungeonEncounterDirectorV38\(/);
+  assert.match(source, /activeBreakableCount:\s*dungeonBreakablesV38\.length/);
+  assert.match(source, /createDungeonBossControllerV38\(/);
+  assert.match(source, /stepDungeonBossControllerV38\(/);
+  assert.match(source, /projectilesFromDungeonBossAttackPlanV38\(/);
+  assert.match(source, /createDungeonEnemyChoreographyStateV38\(/);
+  assert.match(source, /syncCampaignEnemyCombatSlotsV37\(/);
+  assert.match(source, /resolveDungeonEnemyMuzzleOriginV38/);
+  assert.match(source, /remainingSpawns/);
+  assert.match(source, /clearDungeonHostileProjectilesV38/);
+  assert.match(source, /VITE_SF_DUNGEON_PARITY_V38/);
+  assert.match(source, /if \(!dungeonParityV38\) scheduleBattleTimer\(\(\) => startWave\(1\), 800\)/);
+});

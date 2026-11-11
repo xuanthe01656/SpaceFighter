@@ -21,10 +21,61 @@ import { resolveEnemyGameplayYawV26A4 } from '../../game/assets/EnemyVisualHeadi
 import { resolveBattleBackground, legacyBattleBackgroundRequested, previewBg4Variant } from '../../game/catalog/BackgroundCatalog';
 import { createScrollingBattleBackground } from '../../game/rendering/ScrollingBackgroundRenderer';
 import { attachBattleBackgroundProfiler } from '../../game/rendering/BattleBackgroundProfiler.js';
+import { assertCampaignGameplayFoundationLockRC1 } from '../../game/combat/CampaignGameplayFoundationLockRC1.js';
+import {
+    createCampaignEnemyChoreographyStateV29,
+    stepCampaignEnemyChoreographyV29,
+} from '../../game/combat/CampaignCombatChoreographyV29.js';
+import {
+    createCampaignEnemyCombatSlotRegistryV37,
+    getCampaignEnemyCombatSlotV37,
+    syncCampaignEnemyCombatSlotsV37,
+} from '../../game/combat/CampaignEnemyCombatSlotsV37.js';
+import {
+    createChargerMotionStateV26A3,
+    stepChargerMotionV26A3,
+} from '../../game/combat/CampaignRuntimeReliabilityV26A3.js';
+import {
+    advanceCampaignEnemyProjectileV31,
+    createCampaignEnemyShotPlanV31,
+    resolveCampaignEnemyProjectileVisualV31,
+} from '../../game/combat/CampaignEnemyProjectileV31.js';
+import { createCampaignEnemyVolleyPlanV34 } from '../../game/combat/CampaignEnemyVolleyV34.js';
+import { createCampaignProjectileVisualFactoryV32 } from '../../game/rendering/CampaignProjectileVisualV32.js';
+import {
+    isDungeonParityFoundationEnabledV38,
+    resolveDungeonRuntimeProfileV38,
+} from '../../game/dungeon/DungeonEncounterCatalogV38.js';
+import {
+    createDungeonEncounterDirectorV38,
+    getDungeonEncounterSnapshotV38,
+    stepDungeonEncounterDirectorV38,
+} from '../../game/dungeon/DungeonEncounterDirectorV38.js';
+import {
+    createDungeonCombatSlotDescriptorV38,
+    createDungeonEnemyChoreographyStateV38,
+    resolveDungeonEnemySpawnPointV38,
+    resolveDungeonEnemySpecV38,
+} from '../../game/dungeon/DungeonCombatAdapterV38.js';
+import {
+    createDungeonBossControllerV38,
+    getDungeonBossSnapshotV38,
+    projectilesFromDungeonBossAttackPlanV38,
+    stepDungeonBossControllerV38,
+    stopDungeonBossControllerV38,
+} from '../../game/dungeon/DungeonBossAdapterV38.js';
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const stableSeed = (...parts) => {
+    let hash = 2166136261;
+    for (const char of parts.join('|')) {
+        hash ^= char.charCodeAt(0);
+        hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0 || 1;
+};
 
 const makeMat = (scene, emissive, disableLighting = true) => {
     const m = new BABYLON.StandardMaterial(`mat_${Math.random()}`, scene);
@@ -86,9 +137,24 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     // 1. LOAD TRANG BỊ & TÍNH TOÁN STATS CHUẨN RPG TỪ CAMPAIGN
     // ══════════════════════════════════════════════════════════════════════════
 
-    const dungeonId     = gsRef.current.selectedDungeonId;
-    const dungeonConfig = DUNGEON_CONFIG.find(d => d.id === dungeonId) || DUNGEON_CONFIG[0];
+    const selectedDungeonId = gsRef.current.selectedDungeonId;
+    const dungeonConfig = DUNGEON_CONFIG.find(d => d.id === selectedDungeonId) || DUNGEON_CONFIG[0];
+    const dungeonId = dungeonConfig.id;
     const DIFF = resolveDungeonDifficulty(dungeonConfig);
+    const dungeonParityV38 = isDungeonParityFoundationEnabledV38({
+        dungeonId,
+        envEnabled: import.meta.env?.VITE_SF_DUNGEON_PARITY_V38 !== 'false',
+    });
+    const dungeonRuntimeProfileV38 = resolveDungeonRuntimeProfileV38(dungeonId);
+    if (dungeonParityV38) assertCampaignGameplayFoundationLockRC1();
+    const dungeonSeedV38 = stableSeed(
+        dungeonId,
+        gsRef.current?.campaignData?.profileId || 'guest',
+        gsRef.current?.activeBattleId || 'local',
+    );
+    const dungeonDirectorV38 = dungeonParityV38
+        ? createDungeonEncounterDirectorV38({ dungeonId, seed: dungeonSeedV38, nowMs: 0 })
+        : null;
     const combat = deriveBattleLoadout(gsRef.current.campaignData, { PILOTS, AIRCRAFTS, GEAR_CATALOG },
       {mode:'dungeon', location:dungeonConfig});
     const passives = createBattlePassiveState(combat.stats, Date.now());
@@ -480,6 +546,46 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         elite:       makeMat(scene, new BABYLON.Color3(1,    0.6,  0   )),  
         boss:        makeMat(scene, new BABYLON.Color3(1,    0.35, 0   )),  
     };
+    const dungeonBossDangerMatV38 = makeMat(scene, new BABYLON.Color3(1, .16, .08));
+    dungeonBossDangerMatV38.alpha = .20;
+    dungeonBossDangerMatV38.backFaceCulling = false;
+    const dungeonBreakableMatV38 = makeMat(scene, new BABYLON.Color3(.65, .78, .42), false);
+    const dungeonHazardMatV38 = makeMat(scene, new BABYLON.Color3(.72, .38, .14), false);
+
+    const hostileProjectileVisualsV38 = createCampaignProjectileVisualFactoryV32({ scene, BABYLON });
+    const enemyCombatSlotRegistryV38 = createCampaignEnemyCombatSlotRegistryV37();
+    const dungeonBreakablesV38 = [];
+    const dungeonHazardsV38 = [];
+    let activeDungeonHazardV38 = null;
+    let dungeonHazardSequenceV38 = 0;
+    let currentRoomV38 = null;
+    let bossDefeatedPulseV38 = false;
+    let playerVelocityV38 = Object.freeze({ x: 0, z: 0 });
+    const playerMotionSampleV38 = {
+        x: playerRoot.position.x,
+        z: playerRoot.position.z,
+        initialized: false,
+    };
+    const samplePlayerCombatVelocityV38 = frameFactorValue => {
+        const safeFrame = Math.max(.25, Math.min(4, Number(frameFactorValue) || 1));
+        const dx = playerRoot.position.x - playerMotionSampleV38.x;
+        const dz = playerRoot.position.z - playerMotionSampleV38.z;
+        const teleported = Math.hypot(dx, dz) > 2.4;
+        if (!playerMotionSampleV38.initialized || teleported) {
+            playerVelocityV38 = Object.freeze({ x: 0, z: 0 });
+            playerMotionSampleV38.initialized = true;
+        } else {
+            const instantX = dx / safeFrame;
+            const instantZ = dz / safeFrame;
+            playerVelocityV38 = Object.freeze({
+                x: clamp(playerVelocityV38.x * .62 + instantX * .38, -.22, .22),
+                z: clamp(playerVelocityV38.z * .62 + instantZ * .38, -.18, .18),
+            });
+        }
+        playerMotionSampleV38.x = playerRoot.position.x;
+        playerMotionSampleV38.z = playerRoot.position.z;
+        return playerVelocityV38;
+    };
 
     // ══════════════════════════════════════════════════════════════════════════
     // 8. VFX – SCREEN SHAKE + EXPLOSION PARTICLES
@@ -515,6 +621,9 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     // ══════════════════════════════════════════════════════════════════════════
 
     const MAX_WAVES = dungeonConfig.waves || 5;
+    const ACTIVE_MAX_WAVES = dungeonParityV38
+        ? dungeonRuntimeProfileV38.rooms.length
+        : MAX_WAVES;
 
     let currentWave    = 0;
     let waveEnemyCount = 0;   
@@ -530,8 +639,18 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     let bossVisual     = null;
     let bossHp         = 0;
     let bossMaxHp      = 0;
+    let currentBossSpecV38 = null;
+    let dungeonBossRuntimeV38 = null;
+    let dungeonBossAttackTelegraphsV38 = [];
+    const dungeonBossMuzzleLocalV38 = new BABYLON.Vector3(0, 0, 1.9);
     let waitingForNext = false;
     let lastEnemySpawn = 0;
+
+    scene.onDisposeObservable.add(() => {
+        stopDungeonBossControllerV38(dungeonBossRuntimeV38);
+        dungeonBossRuntimeV38 = null;
+        for (const corridor of dungeonBossAttackTelegraphsV38.splice(0)) safeDis(corridor);
+    });
 
     const startWave = (n) => {
         currentWave     = n;
@@ -548,10 +667,10 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         lastEnemySpawn  = Date.now();
         // KHẮC PHỤC TÊN DÀI: Nếu config có tên thì dùng, nếu không thì cắt bỏ chữ "dung_" cho ngắn
         const dName = dungeonConfig.name || dungeonId.replace('dung_', '').toUpperCase();
-        const waveStr = lang === 'vi' ? `ẢI ${dName} | ĐỢT ${currentWave}/${MAX_WAVES}` : `STAGE ${dName} | WAVE ${currentWave}/${MAX_WAVES}`;
+        const waveStr = lang === 'vi' ? `ẢI ${dName} | ĐỢT ${currentWave}/${ACTIVE_MAX_WAVES}` : `STAGE ${dName} | WAVE ${currentWave}/${ACTIVE_MAX_WAVES}`;
         waveText.text = waveStr;
         
-        const isLast = currentWave === MAX_WAVES;
+        const isLast = currentWave === ACTIVE_MAX_WAVES;
         showAnnouncement(
             isLast ? (lang === 'vi' ? '⚠ LƯỢT CUỐI CÙNG ⚠' : '⚠ FINAL WAVE ⚠') : `${lang === 'vi' ? 'LƯỢT' : 'WAVE'} ${currentWave}`,
             isLast ? '#ff4757' : '#f1c40f'
@@ -561,7 +680,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     const advanceWave = () => {
         if (waitingForNext || gameOver) return;
         waitingForNext = true;
-        if (currentWave >= MAX_WAVES) {
+        if (currentWave >= ACTIVE_MAX_WAVES) {
             triggerVictory();
         } else {
             scheduleBattleTimer(() => startWave(currentWave + 1), 1800);
@@ -572,16 +691,30 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     // 10. BOSS SPAWN
     // ══════════════════════════════════════════════════════════════════════════
 
-    const spawnBoss = () => {
+    const spawnBoss = (bossSpec = null) => {
         if (bossSpawned) return;
         bossSpawned = true;
         bossActive  = true;
-        bossHp      = DIFF.bossBase + currentWave * DIFF.bossPerWave;
-        bossMaxHp   = bossHp;
+        bossHp = bossSpec?.hp
+            ? Math.max(1, Math.round(bossSpec.hp))
+            : (DIFF.bossBase + currentWave * DIFF.bossPerWave);
+        bossMaxHp = bossHp;
+        bossDefeatedPulseV38 = false;
+        currentBossSpecV38 = bossSpec;
+        stopDungeonBossControllerV38(dungeonBossRuntimeV38);
+        dungeonBossRuntimeV38 = dungeonParityV38 && bossSpec?.sharedBossProfileId
+            ? createDungeonBossControllerV38({
+                bossSpec,
+                seed: stableSeed(dungeonSeedV38, bossSpec.id, 'boss'),
+                nowMs: Date.now(),
+            })
+            : null;
+        for (const corridor of dungeonBossAttackTelegraphsV38.splice(0)) safeDis(corridor);
 
         bossMesh = BABYLON.MeshBuilder.CreateSphere('bossCore', { diameter: 2.6, segments: 24 }, scene);
         bossMesh.position.set(0, 0.5, -ZOOM - 6);
         bossMesh.material = MAT.boss;
+        bossMesh._facingYaw = 0;
 
         const bossRing = BABYLON.MeshBuilder.CreateTorus('bossRing', { diameter: 6.0, thickness: 0.35, tessellation: 64 }, scene);
         bossRing.parent     = bossMesh;
@@ -591,9 +724,22 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         const bossCore = BABYLON.MeshBuilder.CreateSphere('bossInner', { diameter: 1.1, segments: 16 }, scene);
         bossCore.parent   = bossMesh;
         bossCore.material = makeMat(scene, new BABYLON.Color3(1, 0.85, 0.2), false);
-        bossVisual = attachBattleEntityVisual(scene, BABYLON, bossMesh, 'dungeon_boss', `${dungeonId}_boss`);
+        bossVisual = attachBattleEntityVisual(
+            scene,
+            BABYLON,
+            bossMesh,
+            'dungeon_boss',
+            bossSpec?.sharedBossProfileId || `${dungeonId}_boss`,
+        );
 
-        const bossName = lang === 'vi' ? `CHÚA TỂ LƯỢT ${currentWave}` : `WAVE ${currentWave} OVERLORD`;
+        const bossName = bossSpec?.displayName?.[lang]
+            || bossSpec?.displayName?.vi
+            || (lang === 'vi' ? `CHÚA TỂ LƯỢT ${currentWave}` : `WAVE ${currentWave} OVERLORD`);
+        bossMesh.metadata = {
+            ...(bossMesh.metadata || {}),
+            dungeonBossId: bossSpec?.id || `${dungeonId}_boss`,
+            sharedBossProfileId: bossSpec?.sharedBossProfileId || null,
+        };
         bossNameText.text = `⚠ ${bossName}`;
         bossHpFill.width = "100%";
         bossPanel.isVisible = true;
@@ -606,78 +752,135 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
     const enemies = [];
 
-    const spawnEnemy = () => {
-        const r    = Math.random();
-        const type = r < 0.15 ? 'elite' : r < 0.35 ? 'heavy' : 'scout';
-
+    const buildDungeonEnemyMesh = (type, runtimeId) => {
         let mesh;
         switch (type) {
             case 'heavy': {
-                mesh = BABYLON.MeshBuilder.CreateBox('eH', { width: 2.8, depth: 2.8, height: 0.7 }, scene);
-                const hCore = BABYLON.MeshBuilder.CreateSphere('eH_core', { diameter: 1.0 }, scene);
-                hCore.parent   = mesh; hCore.position.y = 0.35; hCore.material = makeMat(scene, new BABYLON.Color3(1, 0.55, 0.25), false);
-                const hWing = BABYLON.MeshBuilder.CreateBox('eH_w', { width: 3.6, depth: 0.4, height: 0.28 }, scene);
-                hWing.parent     = mesh; hWing.position.y = 0.05; hWing.rotation.y = Math.PI / 4; hWing.material   = makeMat(scene, new BABYLON.Color3(0.9, 0.4, 0.12), false);
+                mesh = BABYLON.MeshBuilder.CreateBox(`eH_${runtimeId}`, { width: 2.8, depth: 2.8, height: 0.7 }, scene);
+                const hCore = BABYLON.MeshBuilder.CreateSphere(`eH_core_${runtimeId}`, { diameter: 1.0 }, scene);
+                hCore.parent = mesh;
+                hCore.position.y = 0.35;
+                hCore.material = makeMat(scene, new BABYLON.Color3(1, 0.55, 0.25), false);
+                const hWing = BABYLON.MeshBuilder.CreateBox(`eH_w_${runtimeId}`, { width: 3.6, depth: 0.4, height: 0.28 }, scene);
+                hWing.parent = mesh;
+                hWing.position.y = 0.05;
+                hWing.rotation.y = Math.PI / 4;
+                hWing.material = makeMat(scene, new BABYLON.Color3(0.9, 0.4, 0.12), false);
                 break;
             }
             case 'elite': {
-                mesh = BABYLON.MeshBuilder.CreateTorus('eE', { diameter: 2.6, thickness: 0.55, tessellation: 48 }, scene);
+                mesh = BABYLON.MeshBuilder.CreateTorus(`eE_${runtimeId}`, { diameter: 2.6, thickness: 0.55, tessellation: 48 }, scene);
                 mesh.rotation.x = Math.PI / 2;
-                const eCore = BABYLON.MeshBuilder.CreateSphere('eE_core', { diameter: 1.0 }, scene);
-                eCore.parent   = mesh; eCore.material = makeMat(scene, new BABYLON.Color3(1, 0.85, 0.2), false);
+                const eCore = BABYLON.MeshBuilder.CreateSphere(`eE_core_${runtimeId}`, { diameter: 1.0 }, scene);
+                eCore.parent = mesh;
+                eCore.material = makeMat(scene, new BABYLON.Color3(1, 0.85, 0.2), false);
                 break;
             }
-            default: { 
-                mesh = BABYLON.MeshBuilder.CreateSphere('eS', { diameterX: 2.0, diameterZ: 2.0, diameterY: 0.5 }, scene);
-                const sFin = BABYLON.MeshBuilder.CreateCylinder('eS_fin', { diameterTop: 0.05, diameterBottom: 0.05, height: 1.4, tessellation: 8 }, scene);
-                sFin.parent   = mesh; sFin.material = makeMat(scene, new BABYLON.Color3(0.4, 0.9, 1.0), false);
-                sFin.position.set(0, 0, 0.9); sFin.rotation.x = Math.PI / 2;
+            default: {
+                mesh = BABYLON.MeshBuilder.CreateSphere(`eS_${runtimeId}`, { diameterX: 2.0, diameterZ: 2.0, diameterY: 0.5 }, scene);
+                const sFin = BABYLON.MeshBuilder.CreateCylinder(`eS_fin_${runtimeId}`, { diameterTop: 0.05, diameterBottom: 0.05, height: 1.4, tessellation: 8 }, scene);
+                sFin.parent = mesh;
+                sFin.material = makeMat(scene, new BABYLON.Color3(0.4, 0.9, 1.0), false);
+                sFin.position.set(0, 0, 0.9);
+                sFin.rotation.x = Math.PI / 2;
                 break;
             }
         }
+        return mesh;
+    };
 
-        mesh.position.set((Math.random() - 0.5) * boundX() * 1.6, 0.2, -ZOOM - 2);
-        mesh.material   = MAT[type];
-        // The shared sprite/GLB adapter converts source -Z art into a +Z-forward
-        // gameplay root, matching Campaign and the upcoming shared motion core.
+    const spawnEnemy = (spawnEntry = null, room = currentRoomV38) => {
+        const nowMs = Date.now();
+        const runtimeId = spawnEntry?.id || `legacy:${currentWave}:${waveSpawned}:${nowMs}`;
+        let spec = null;
+        let type;
+        let hp;
+        let speed;
+        let shootMs;
+        let laneNorm = null;
+        let seed = stableSeed(dungeonSeedV38, runtimeId);
+
+        if (dungeonParityV38 && spawnEntry) {
+            spec = resolveDungeonEnemySpecV38({ dungeonId, room, entry: spawnEntry });
+            type = spec.elite ? 'elite' : spec.assetKind;
+            hp = spec.hp;
+            speed = spec.speed;
+            shootMs = spec.weapon.cadence?.cooldownMs || Infinity;
+            laneNorm = spec.laneNorm;
+        } else {
+            const r = Math.random();
+            type = r < 0.15 ? 'elite' : r < 0.35 ? 'heavy' : 'scout';
+            const hpMult = type === 'heavy' ? 3.0 : type === 'elite' ? 2.0 : 1.0;
+            hp = Math.floor(enemyBaseHp * hpMult);
+            speed = enemyBaseSpeed * (type === 'heavy' ? 0.55 : type === 'elite' ? 1.35 : 1.0);
+            shootMs = type === 'heavy' ? 2200 : type === 'elite' ? 1400 : Infinity;
+        }
+
+        const mesh = buildDungeonEnemyMesh(type, runtimeId.replace(/[^a-z0-9_-]/gi, '_'));
+        if (spec) {
+            const spawnPoint = resolveDungeonEnemySpawnPointV38({
+                laneNorm: spec.laneNorm,
+                arenaHalfWidth: boundX(),
+                worldHalfHeight: ZOOM,
+                index: spawnEntry.index,
+            });
+            mesh.position.set(spawnPoint.x, spawnPoint.y, spawnPoint.z);
+        } else {
+            mesh.position.set((Math.random() - 0.5) * boundX() * 1.6, 0.2, -ZOOM - 2);
+        }
+        mesh.material = MAT[type] || MAT.scout;
         mesh.rotation.y = 0;
         const visual = attachBattleEntityVisual(scene, BABYLON, mesh, 'dungeon_enemy', `${dungeonId}_${type}`);
 
-        const hpMult  = type === 'heavy' ? 3.0 : type === 'elite' ? 2.0 : 1.0;
-        const hp      = Math.floor(enemyBaseHp * hpMult);
-        const speed   = enemyBaseSpeed * (type === 'heavy'  ? 0.55 : type === 'elite'  ? 1.35 : 1.0);
-        const shootMs = type === 'heavy'  ? 2200 : type === 'elite'  ? 1400 : Infinity;
-
         const miniHpBg = new GUI.Rectangle(`ehp_bg_${mesh.uniqueId}`);
-        miniHpBg.width     = `54px`;
-        miniHpBg.height    = `6px`;
-        miniHpBg.background   = '#111';
-        miniHpBg.color        = '#ffffff40';
+        miniHpBg.width = `54px`;
+        miniHpBg.height = `6px`;
+        miniHpBg.background = '#111';
+        miniHpBg.color = '#ffffff40';
         miniHpBg.cornerRadius = 4;
-        miniHpBg.thickness    = 1;
+        miniHpBg.thickness = 1;
         miniHpBg.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_CENTER;
         ui.addControl(miniHpBg);
         miniHpBg.linkWithMesh(mesh);
         miniHpBg.linkOffsetY = -34;
 
         const miniHp = new GUI.Rectangle(`ehp_${mesh.uniqueId}`);
-        miniHp.width      = '100%';
-        miniHp.height     = '100%';
+        miniHp.width = '100%';
+        miniHp.height = '100%';
         miniHp.background = type === 'heavy' ? '#ff8a66' : type === 'elite' ? '#ffdd55' : '#66ddff';
-        miniHp.thickness  = 0;
+        miniHp.thickness = 0;
         miniHp.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
         miniHpBg.addControl(miniHp);
 
-        enemies.push({
-            mesh, visual, hp, maxHp: hp, type,
-            speed, shootMs,
-            lastShoot: 0,
-            sineOff: Math.random() * Math.PI * 2,
+        const enemy = {
+            runtimeId,
+            seed,
+            mesh, visual, hp,
+            maxHp: hp,
+            type,
+            spec,
+            roleId: spec?.roleId || (type === 'heavy' ? 'shieldbearer' : type === 'elite' ? 'gunner' : 'raider'),
+            speed,
+            shootMs,
+            canShoot: spec ? spec.canShoot : type !== 'scout',
+            lastShoot: spec ? nowMs - Math.max(0, shootMs) : 0,
+            sineOff: spec ? ((seed % 6284) / 1000) : Math.random() * Math.PI * 2,
             miniHp,
             miniHpBg,
             _contactHitId: `dungeon-enemy-contact-${mesh.uniqueId}`,
             _facingYaw: 0,
-        });
+            _combatSlot: null,
+            _lastVolleyPhaseId: null,
+            _volleySequence: 0,
+            _choreographyState: spec
+                ? createDungeonEnemyChoreographyStateV38(spec, { seed, nowMs })
+                : null,
+            _chargerState: spec?.roleId === 'charger'
+                ? createChargerMotionStateV26A3({ nowMs })
+                : null,
+        };
+        enemies.push(enemy);
+        return enemy;
     };
 
     const cleanEnemy = (e, killedByDamage = false) => {
@@ -688,6 +891,121 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         safeDisGui(e.miniHp);
         safeDisGui(e.miniHpBg);
         safeDis(e.mesh); // collider removed synchronously; only noninteractive art remains
+    };
+
+    const clearDungeonRoomObjectsV38 = () => {
+        for (const item of dungeonBreakablesV38.splice(0)) safeDis(item.mesh);
+        for (const item of dungeonHazardsV38.splice(0)) safeDis(item.mesh);
+        activeDungeonHazardV38 = null;
+    };
+
+    const spawnDungeonBreakablesV38 = (definitions = []) => {
+        for (const definition of definitions) {
+            const mesh = BABYLON.MeshBuilder.CreatePolyhedron(`dungeon-breakable-${definition.id}`, {
+                type: 2,
+                size: 1.25,
+            }, scene);
+            mesh.position.set(
+                clamp(Number(definition.laneNorm) || 0, -.9, .9) * (boundX() - .8),
+                .08,
+                -ZOOM * .30 + (Number(definition.depthNorm) || 0) * ZOOM * .45,
+            );
+            mesh.rotation.y = (stableSeed(dungeonSeedV38, definition.id) % 6284) / 1000;
+            mesh.material = dungeonBreakableMatV38;
+            mesh.isPickable = false;
+            dungeonBreakablesV38.push({
+                id: definition.id,
+                mesh,
+                hp: Math.max(1, Number(definition.hp) || 200),
+                maxHp: Math.max(1, Number(definition.hp) || 200),
+                score: Math.max(0, Math.round(Number(definition.score) || 0)),
+            });
+        }
+    };
+
+    const startDungeonHazardV38 = (hazard, nowMs) => {
+        activeDungeonHazardV38 = hazard ? {
+            ...hazard,
+            nextSpawnAtMs: nowMs + Math.max(300, Number(hazard.intervalMs) || 1800),
+            spawnIndex: 0,
+            remainingSpawns: Math.max(1, Math.trunc(Number(hazard.count) || 1)),
+        } : null;
+    };
+
+    const spawnDungeonHazardDebrisV38 = (hazard, nowMs) => {
+        if (!hazard || hazard.remainingSpawns <= 0) return false;
+        const index = hazard.spawnIndex++;
+        hazard.remainingSpawns -= 1;
+        const laneSequence = [-.72, .58, -.18, .82, .24, -.52];
+        const laneNorm = laneSequence[index % laneSequence.length];
+        const mesh = BABYLON.MeshBuilder.CreatePolyhedron(
+            `dungeon-hazard-${++dungeonHazardSequenceV38}`,
+            { type: index % 2 === 0 ? 1 : 2, size: .85 + (index % 3) * .12 },
+            scene,
+        );
+        mesh.position.set(laneNorm * (boundX() - .65), .12, -ZOOM - 1.8);
+        mesh.rotation.y = (index * .73) % (Math.PI * 2);
+        mesh.material = dungeonHazardMatV38;
+        mesh.isPickable = false;
+        dungeonHazardsV38.push({
+            mesh,
+            velocityZ: Math.max(.035, Number(hazard.speed) || .075),
+            damage: Math.max(1, Math.round(Number(hazard.damage) || 60)),
+            hitId: `dungeon-hazard-${currentWave}-${index}-${Math.trunc(nowMs)}`,
+        });
+        return true;
+    };
+
+    const handleDungeonDirectorEventV38 = (event, nowMs) => {
+        if (!event) return;
+        if (event.type === 'room_started') {
+            clearDungeonRoomObjectsV38();
+            clearDungeonHostileProjectilesV38();
+            disposeDungeonBossTelegraphsV38();
+            currentRoomV38 = event.room;
+            currentWave = event.roomIndex + 1;
+            waveSpawned = 0;
+            waveKilled = 0;
+            bossSpawned = false;
+            bossActive = false;
+            bossDefeatedPulseV38 = false;
+            waveText.text = `${lang === 'vi' ? 'PHÒNG' : 'ROOM'} ${currentWave}/${ACTIVE_MAX_WAVES} · ${event.room.title?.[lang] || event.room.title?.vi || event.room.id}`;
+            showAnnouncement(event.room.title?.[lang] || event.room.title?.vi || event.room.id,
+                event.room.kind === 'boss' ? '#ff4757' : dungeonConfig.themeColor || '#66fcf1',
+                event.room.kind === 'boss' ? 1800 : 1200);
+            return;
+        }
+        if (event.type === 'spawn_breakables') {
+            spawnDungeonBreakablesV38(event.breakables);
+            return;
+        }
+        if (event.type === 'hazard_started') {
+            startDungeonHazardV38(event.hazard, nowMs);
+            return;
+        }
+        if (event.type === 'spawn_enemy') {
+            spawnEnemy(event.entry, currentRoomV38);
+            waveSpawned += 1;
+            return;
+        }
+        if (event.type === 'spawn_boss') {
+            clearDungeonHostileProjectilesV38();
+            spawnBoss(event.boss);
+            return;
+        }
+        if (event.type === 'room_cleared') {
+            clearDungeonRoomObjectsV38();
+            clearDungeonHostileProjectilesV38();
+            disposeDungeonBossTelegraphsV38();
+            showAnnouncement(lang === 'vi' ? 'PHÒNG ĐÃ DỌN SẠCH' : 'ROOM CLEARED', '#4ade80', 900);
+            return;
+        }
+        if (event.type === 'dungeon_completed') {
+            clearDungeonRoomObjectsV38();
+            clearDungeonHostileProjectilesV38();
+            disposeDungeonBossTelegraphsV38();
+            triggerVictory();
+        }
     };
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -703,22 +1021,219 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     let   nextDroneFire = 0;
 
     const shots = createProjectileEmitter({ scene, BABYLON, bullets: playerBullets, scheduleBattleTimer });
+    const clearDungeonHostileProjectilesV38 = ({ sourceRole = null } = {}) => {
+        for (let index = enemyBullets.length - 1; index >= 0; index -= 1) {
+            const projectile = enemyBullets[index];
+            if (sourceRole && projectile?._sourceRole !== sourceRole) continue;
+            safeDis(projectile);
+            enemyBullets.splice(index, 1);
+        }
+    };
+    scene.onDisposeObservable.add(() => {
+        clearDungeonHostileProjectilesV38();
+        clearDungeonRoomObjectsV38();
+        hostileProjectileVisualsV38.dispose();
+    });
     const liveTargets = () => [
         ...enemies.filter(e => !e.mesh.isDisposed()),
         ...(bossMesh && !bossMesh.isDisposed() ? [{ mesh: bossMesh }] : []),
     ];
-    const fireEnemyBullet = (pos, velX = 0, velZ = enemyBulletVelZ) => {
+    const fireEnemyBullet = (pos, velX = 0, velZ = enemyBulletVelZ, options = {}) => {
         const hitId = `dungeon-enemy-projectile-${++enemyProjectileSequence}`;
-        const b = BABYLON.MeshBuilder.CreateSphere(hitId, { diameter: 0.5 }, scene);
-        b.position = pos.clone();
-        b.position.y = 0;
-
-        b.material = MAT.bulletEnemy;
-        b._velX    = velX;
-        b._velZ    = velZ;
+        const plan = options.plan || null;
+        const sourceRole = options.sourceRole || plan?.sourceRole || 'legacy';
+        const priority = options.priority || (sourceRole === 'boss' ? 'boss' : 'normal');
+        const visual = plan?.visual || options.visual || resolveCampaignEnemyProjectileVisualV31({
+            sourceRole,
+            priority,
+            visualId: options.visualId || plan?.visualId || null,
+            pattern: options.pattern || plan?.pattern || null,
+        });
+        const b = visual
+            ? hostileProjectileVisualsV38.create({
+                name: hitId,
+                visual,
+                position: pos,
+                vx: velX,
+                vz: velZ,
+            })
+            : BABYLON.MeshBuilder.CreateSphere(hitId, { diameter: 0.5 }, scene);
+        if (!b) return null;
+        if (!visual) {
+            b.position = pos.clone();
+            b.position.y = 0;
+            b.material = MAT.bulletEnemy;
+        }
+        b._velX = velX;
+        b._velZ = velZ;
         b._damageHitId = hitId;
+        b._damage = Math.max(1, Math.round(Number(options.damage ?? options.rawDamage) || 70));
+        b._damageType = options.damageType || 'energy';
+        b._shotPlan = plan;
+        b._createdAtMs = Number(plan?.createdAtMs) || Date.now();
+        b._expiresAtMs = Number(plan?.expiresAtMs) || (b._createdAtMs + (priority === 'boss' ? 5600 : 4400));
+        b._sourceRole = sourceRole;
+        b._priority = priority;
         enemyBullets.push(b);
+        return b;
     };
+
+    const disposeDungeonBossTelegraphsV38 = () => {
+        for (const corridor of dungeonBossAttackTelegraphsV38.splice(0)) safeDis(corridor);
+    };
+
+    const resolveDungeonBossMuzzleOriginV38 = () => {
+        if (!bossMesh || bossMesh.isDisposed?.()) return null;
+        bossMesh.computeWorldMatrix(true);
+        const world = BABYLON.Vector3.TransformCoordinates(
+            dungeonBossMuzzleLocalV38,
+            bossMesh.getWorldMatrix(),
+        );
+        return Object.freeze({ x: world.x, y: 0, z: world.z });
+    };
+
+    const activeDungeonBossPlanIdV38 = () => getDungeonBossSnapshotV38(
+        dungeonBossRuntimeV38,
+    )?.statechart?.attackPlan?.id || null;
+
+    const updateDungeonBossFacingV38 = (velocityX, velocityZ, frameDeltaMs) => {
+        if (!bossMesh || bossMesh.isDisposed?.()) return;
+        bossMesh._facingYaw = resolveEnemyGameplayYawV26A4({
+            currentYaw: bossMesh._facingYaw,
+            velocityX,
+            velocityZ,
+            maxTurnRadians: 5.2 * Math.max(0, Math.min(100, frameDeltaMs)) / 1000,
+        });
+        bossMesh.rotation.y = bossMesh._facingYaw;
+    };
+
+    const createDungeonBossTelegraphsV38 = (plan) => {
+        disposeDungeonBossTelegraphsV38();
+        if (!plan?.paths?.length) return Object.freeze([]);
+        dungeonBossAttackTelegraphsV38 = plan.paths.map((path, index) => {
+            const corridor = BABYLON.MeshBuilder.CreateBox(
+                `dungeon-boss-telegraph-${plan.id}-${index}`,
+                { width: 1, height: .025, depth: 1 },
+                scene,
+            );
+            corridor.position.set(path.midpoint.x, .045, path.midpoint.z);
+            corridor.rotation.y = path.yawRadians;
+            corridor.scaling.set(path.width, 1, path.length);
+            corridor.material = dungeonBossDangerMatV38;
+            corridor.isPickable = false;
+            corridor.visibility = .64;
+            return corridor;
+        });
+        return Object.freeze([...dungeonBossAttackTelegraphsV38]);
+    };
+
+    const fireDungeonBossAttackPlanV38 = (plan) => {
+        if (!plan?.paths?.length || !currentBossSpecV38) return 0;
+        const planId = plan.id;
+        let scheduled = 0;
+        for (const projectile of projectilesFromDungeonBossAttackPlanV38(plan, currentBossSpecV38)) {
+            const fire = () => {
+                if (battleSceneDisposed || gameOver || !bossActive || bossHp <= 0
+                    || !bossMesh || bossMesh.isDisposed?.()) return;
+                if (activeDungeonBossPlanIdV38() !== planId) return;
+                fireEnemyBullet(
+                    new BABYLON.Vector3(projectile.origin.x, 0, projectile.origin.z),
+                    projectile.velocity.x,
+                    projectile.velocity.z,
+                    {
+                        priority: 'boss',
+                        sourceRole: 'boss',
+                        visualId: projectile.visualId,
+                        pattern: projectile.pattern,
+                        rawDamage: projectile.rawDamage,
+                        damageType: projectile.damageType,
+                    },
+                );
+            };
+            if (projectile.fireOffsetMs > 0) scheduleBattleTimer(fire, projectile.fireOffsetMs);
+            else fire();
+            scheduled += 1;
+        }
+        return scheduled;
+    };
+
+    const resolveDungeonEnemyMuzzleOriginV38 = enemy => {
+        if (!enemy?.mesh || enemy.mesh.isDisposed?.()) return null;
+        enemy.mesh.computeWorldMatrix(true);
+        const localForward = enemy.spec?.roleId === 'artillery' ? 1.02 : .76;
+        const world = BABYLON.Vector3.TransformCoordinates(
+            new BABYLON.Vector3(0, 0, localForward),
+            enemy.mesh.getWorldMatrix(),
+        );
+        return world;
+    };
+
+    const fireDungeonEnemyShotV38 = (enemy, nowMs, shotIndex = 0, burstCount = 1) => {
+        if (!dungeonParityV38 || !enemy?.spec?.weapon?.projectile
+            || enemy._dead || enemy.mesh?.isDisposed?.()) return null;
+        const weapon = enemy.spec.weapon;
+        const projectile = weapon.projectile;
+        const origin = resolveDungeonEnemyMuzzleOriginV38(enemy)
+            || enemy.mesh.getAbsolutePosition?.().clone?.()
+            || enemy.mesh.position.clone();
+        origin.y = 0;
+        const spreadOffset = (shotIndex - (burstCount - 1) / 2) * .20;
+        const target = {
+            x: playerRoot.position.x + spreadOffset,
+            z: playerRoot.position.z,
+        };
+        const plan = createCampaignEnemyShotPlanV31({
+            origin,
+            target,
+            targetVelocity: playerVelocityV38,
+            projectileSpeed: projectile.speed,
+            aimMode: projectile.aimMode,
+            leadFactor: projectile.leadFactor,
+            maxLeadMs: projectile.maxLeadMs,
+            guidanceMs: projectile.guidanceMs,
+            turnRateRadians: projectile.turnRateRadians,
+            lifetimeMs: projectile.lifetimeMs,
+            sourceRole: enemy.spec.roleId,
+            priority: enemy.spec.elite ? 'elite' : 'normal',
+            damageType: weapon.bulletType || enemy.spec.archetype.damageType,
+            visualId: projectile.visualId,
+            pattern: weapon.bulletPattern,
+            createdAtMs: nowMs,
+        });
+        enemy.visual?.setState('attack');
+        return fireEnemyBullet(origin, plan.velocity.x, plan.velocity.z, {
+            plan,
+            damage: projectile.damage,
+            damageType: weapon.bulletType || enemy.spec.archetype.damageType,
+            sourceRole: enemy.spec.roleId,
+        });
+    };
+
+    const tryFireDungeonEnemyVolleyV38 = (enemy, choreography, nowMs) => {
+        if (!dungeonParityV38 || !enemy?.spec || !enemy.canShoot || !choreography?.mayFire) return false;
+        if (nowMs <= enemy.lastShoot + enemy.shootMs) return false;
+        const phaseId = choreography.phaseId || 'attack';
+        const cadence = enemy.spec.weapon.cadence || {};
+        const plan = createCampaignEnemyVolleyPlanV34({
+            roleId: enemy.spec.roleId,
+            phaseId,
+            sequence: enemy._volleySequence++,
+            burstCount: cadence.burstCount || 1,
+            burstGapMs: cadence.burstGapMs || 0,
+            projectileDamage: enemy.spec.weapon.projectile?.damage || 1,
+            createdAtMs: nowMs,
+        });
+        enemy.lastShoot = nowMs;
+        enemy._lastVolleyPhaseId = phaseId;
+        for (const shot of plan.shots) {
+            scheduleBattleTimer(() => {
+                if (battleSceneDisposed || gameOver || enemy._dead || enemy.mesh?.isDisposed?.()) return;
+                fireDungeonEnemyShotV38(enemy, Date.now(), shot.index, plan.shots.length);
+            }, shot.fireOffsetMs);
+        }
+        return true;
+    };
+
 
     // ══════════════════════════════════════════════════════════════════════════
     // 13. GAME STATE
@@ -804,11 +1319,14 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             '#ff4757',
             2000,
         );
+        const dungeonSnapshot = dungeonParityV38
+            ? getDungeonEncounterSnapshotV38(dungeonDirectorV38)
+            : null;
         scheduleBattleTimer(() => onGameOver({
             score,
             totalKills,
-            wavesCleared : Math.max(0, currentWave - 1),
-            maxWaves     : MAX_WAVES,
+            wavesCleared : dungeonSnapshot?.roomsCleared ?? Math.max(0, currentWave - 1),
+            maxWaves     : dungeonSnapshot?.totalRooms ?? ACTIVE_MAX_WAVES,
         }), 1800);
     };
 
@@ -822,15 +1340,18 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         );
         // All guest dungeon rewards are paid only after Result -> Claim.
         // Cloud rewards remain server-authoritative.
+        const dungeonSnapshot = dungeonParityV38
+            ? getDungeonEncounterSnapshotV38(dungeonDirectorV38)
+            : null;
         scheduleBattleTimer(() => onVictory({
             score,
             totalKills,
-            wavesCleared : currentWave,
-            maxWaves     : MAX_WAVES,
+            wavesCleared : dungeonSnapshot?.roomsCleared ?? currentWave,
+            maxWaves     : dungeonSnapshot?.totalRooms ?? ACTIVE_MAX_WAVES,
         }), 2800);
     };
 
-    scheduleBattleTimer(() => startWave(1), 800);
+    if (!dungeonParityV38) scheduleBattleTimer(() => startWave(1), 800);
 
     const applyPlayerDamageToEnemy = (enemy, damage) => {
         if (!enemy || enemy.mesh.isDisposed() || enemy.hp <= 0) return false;
@@ -862,6 +1383,129 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         });
     };
 
+    const resolveDungeonEnemySeparationV38 = enemy => {
+        let x = 0;
+        let z = 0;
+        let contributors = 0;
+        const radius = Math.max(1.65, Number(enemy?._combatSlot?.minSpacing) || 1.85);
+        for (const other of enemies) {
+            if (other === enemy || other._dead || other.mesh?.isDisposed?.()) continue;
+            const dx = enemy.mesh.position.x - other.mesh.position.x;
+            const dz = enemy.mesh.position.z - other.mesh.position.z;
+            const distance = Math.hypot(dx, dz);
+            if (distance <= .001 || distance >= radius) continue;
+            const weight = (radius - distance) / radius;
+            x += dx / distance * weight;
+            z += dz / distance * weight;
+            contributors += 1;
+        }
+        if (!contributors) return { x: 0, z: 0 };
+        const length = Math.hypot(x, z) || 1;
+        return {
+            x: x / length * Math.min(1, contributors * .30),
+            z: z / length * Math.min(1, contributors * .22),
+        };
+    };
+
+    const updateDungeonEnemyFacingV38 = (enemy, velocityX, velocityZ, frameDeltaMs) => {
+        enemy._facingYaw = resolveEnemyGameplayYawV26A4({
+            currentYaw: enemy._facingYaw,
+            velocityX,
+            velocityZ,
+            maxTurnRadians: 7 * Math.max(0, Math.min(100, frameDeltaMs)) / 1000,
+        });
+        enemy.mesh.rotation.y = enemy._facingYaw;
+    };
+
+    const stepDungeonEnemyRuntimeV38 = (enemy, nowMs, frameFactor, frameDeltaMs) => {
+        if (!enemy?.spec) return false;
+        const enemyFrame = frameFactor * enemySpeedFactor(enemy, nowMs);
+        const beforeX = enemy.mesh.position.x;
+        const beforeZ = enemy.mesh.position.z;
+
+        if (enemy.spec.roleId === 'charger') {
+            const returnX = clamp(enemy.spec.laneNorm * (boundX() - .75), -boundX() + .5, boundX() - .5);
+            const returnZ = -ZOOM * .48;
+            const charge = stepChargerMotionV26A3(enemy._chargerState, {
+                nowMs,
+                enemyX: enemy.mesh.position.x,
+                enemyZ: enemy.mesh.position.z,
+                targetX: playerRoot.position.x,
+                targetZ: playerRoot.position.z,
+                returnTargetX: returnX,
+                returnTargetZ: returnZ,
+            });
+            enemy._chargerState = charge.state;
+            const speed = enemy.speed * Math.max(0, Number(charge.speedMultiplier) || 0);
+            enemy.mesh.position.x = clamp(
+                enemy.mesh.position.x + charge.direction.x * speed * enemyFrame,
+                -boundX() + .35,
+                boundX() - .35,
+            );
+            enemy.mesh.position.z = clamp(
+                enemy.mesh.position.z + charge.direction.z * speed * enemyFrame,
+                -ZOOM - 3,
+                ZOOM + 2.4,
+            );
+            enemy.visual?.setState(['telegraph', 'charge'].includes(charge.state.phase) ? 'attack' : 'move');
+            updateDungeonEnemyFacingV38(
+                enemy,
+                enemy.mesh.position.x - beforeX,
+                enemy.mesh.position.z - beforeZ,
+                frameDeltaMs,
+            );
+            return true;
+        }
+
+        const separation = resolveDungeonEnemySeparationV38(enemy);
+        const result = stepCampaignEnemyChoreographyV29(enemy._choreographyState, {
+            nowMs,
+            frameScale: enemyFrame,
+            baseSpeed: enemy.speed,
+            enemyX: enemy.mesh.position.x,
+            enemyZ: enemy.mesh.position.z,
+            playerX: playerRoot.position.x,
+            playerZ: playerRoot.position.z,
+            arenaHalfWidth: boundX(),
+            worldHalfHeight: ZOOM,
+            viewportHeight: canvas?.clientHeight || engine.getRenderHeight(),
+            hudOcclusionLineZ: -ZOOM + 5.4,
+            entityScale: enemy.spec.elite ? 1.15 : 1,
+            hpBarOffsetPx: -34,
+            hpBarHeightPx: 6,
+            separationX: separation.x,
+            separationZ: separation.z,
+            combatSlot: enemy._combatSlot,
+            fireCooldownMs: enemy.shootMs,
+        });
+        if (!result.handled) return false;
+        enemy.mesh.position.x = clamp(enemy.mesh.position.x + result.deltaX, -boundX() + .35, boundX() - .35);
+        enemy.mesh.position.z += result.deltaZ;
+        if (!result.canCrossPlayer && Number.isFinite(Number(result.maxCombatZ))
+            && enemy.mesh.position.z > result.maxCombatZ) {
+            enemy.mesh.position.z = result.maxCombatZ;
+            enemy._choreographyState.velocityZ = Math.min(0, enemy._choreographyState.velocityZ || 0);
+        }
+        if (result.facePlayer) {
+            updateDungeonEnemyFacingV38(
+                enemy,
+                playerRoot.position.x - enemy.mesh.position.x,
+                playerRoot.position.z - enemy.mesh.position.z,
+                frameDeltaMs,
+            );
+        } else {
+            updateDungeonEnemyFacingV38(
+                enemy,
+                enemy.mesh.position.x - beforeX,
+                enemy.mesh.position.z - beforeZ,
+                frameDeltaMs,
+            );
+        }
+        enemy.visual?.setState(result.fireWindup || result.mayFire ? 'attack' : 'move');
+        tryFireDungeonEnemyVolleyV38(enemy, result, nowMs);
+        return true;
+    };
+
     // ══════════════════════════════════════════════════════════════════════════
     // 14. MAIN RENDER LOOP
     // ══════════════════════════════════════════════════════════════════════════
@@ -871,6 +1515,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         const now = Date.now();
         const frameFactor = frameScale(engine.getDeltaTime());
         tick += frameFactor;
+        samplePlayerCombatVelocityV38(frameFactor);
         // A. Screen shake
         if (shakeFrames > 0) {
             camera.position.x = CAM_BASE.x + (Math.random() - 0.5) * shakeStr;
@@ -939,38 +1584,185 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
            }
        }
 
-        // G. Spawn địch 
-        if (currentWave > 0 && waveSpawned < waveEnemyCount && now - lastEnemySpawn > spawnInterval) {
-            spawnEnemy();
-            waveSpawned++;
-            lastEnemySpawn = now;
+        if (dungeonParityV38) {
+            if (activeDungeonHazardV38 && now >= activeDungeonHazardV38.nextSpawnAtMs) {
+                const activeHazard = activeDungeonHazardV38;
+                if (spawnDungeonHazardDebrisV38(activeHazard, now)
+                    && activeHazard.remainingSpawns > 0) {
+                    activeHazard.nextSpawnAtMs = now
+                        + Math.max(300, Number(activeHazard.intervalMs) || 1800);
+                } else {
+                    activeDungeonHazardV38 = null;
+                }
+            }
+
+            for (let index = dungeonHazardsV38.length - 1; index >= 0; index -= 1) {
+                const hazard = dungeonHazardsV38[index];
+                if (!hazard.mesh || hazard.mesh.isDisposed()) {
+                    dungeonHazardsV38.splice(index, 1);
+                    continue;
+                }
+                hazard.mesh.position.z += hazard.velocityZ * frameFactor;
+                hazard.mesh.rotation.y += .018 * frameFactor;
+                if (hazard.mesh.position.z > ZOOM + 2.5) {
+                    safeDis(hazard.mesh);
+                    dungeonHazardsV38.splice(index, 1);
+                    continue;
+                }
+                if (hazard.mesh.intersectsMesh(shipVisual.collider, false)) {
+                    damagePlayer({
+                        rawDamage: hazard.damage,
+                        source: 'environment',
+                        damageType: 'kinetic',
+                        hitId: hazard.hitId,
+                    });
+                    safeDis(hazard.mesh);
+                    dungeonHazardsV38.splice(index, 1);
+                }
+            }
+
+            for (let bulletIndex = playerBullets.length - 1; bulletIndex >= 0; bulletIndex -= 1) {
+                const bullet = playerBullets[bulletIndex];
+                if (!bullet || bullet.isDisposed()) continue;
+                let consumed = false;
+                for (let debrisIndex = dungeonBreakablesV38.length - 1; debrisIndex >= 0; debrisIndex -= 1) {
+                    const debris = dungeonBreakablesV38[debrisIndex];
+                    if (!debris.mesh || debris.mesh.isDisposed()) {
+                        dungeonBreakablesV38.splice(debrisIndex, 1);
+                        continue;
+                    }
+                    if (!projectileHitsPoint(bullet, debris.mesh.position, 1.15)) continue;
+                    const hit = shots.registerHit(bullet, { mesh: debris.mesh });
+                    if (!hit.accepted) continue;
+                    debris.hp -= calculateProjectileDamage(bullet.atk, stats.critDamageBoost);
+                    if (debris.hp <= 0) {
+                        explode(debris.mesh.position, 1.3);
+                        updateScore(debris.score);
+                        safeDis(debris.mesh);
+                        dungeonBreakablesV38.splice(debrisIndex, 1);
+                    }
+                    if (hit.consumed) {
+                        safeDis(bullet);
+                        playerBullets.splice(bulletIndex, 1);
+                        consumed = true;
+                    }
+                    break;
+                }
+                if (consumed) continue;
+            }
         }
 
-        // H. Kiểm tra spawn boss 
-        const allNormalDone = waveSpawned >= waveEnemyCount && enemies.length === 0;
-        if (currentWave > 0 && waveBossEnabled && !bossSpawned && allNormalDone) {
-            spawnBoss();
-        }
+        // G-I. Dungeon encounter director V3.8 (Taurus vertical slice) or legacy waves.
+        if (dungeonParityV38) {
+            const directorStep = stepDungeonEncounterDirectorV38(dungeonDirectorV38, {
+                nowMs: now,
+                activeEnemyCount: enemies.length,
+                activeBreakableCount: dungeonBreakablesV38.length,
+                bossAlive: Boolean(bossActive && bossMesh && !bossMesh.isDisposed()),
+                bossDefeated: bossDefeatedPulseV38,
+                maxSpawnEventsPerStep: 3,
+            });
+            bossDefeatedPulseV38 = false;
+            for (const event of directorStep.events) handleDungeonDirectorEventV38(event, now);
+        } else {
+            if (currentWave > 0 && waveSpawned < waveEnemyCount && now - lastEnemySpawn > spawnInterval) {
+                spawnEnemy();
+                waveSpawned++;
+                lastEnemySpawn = now;
+            }
 
-        // I. Kiểm tra wave cleared (không có boss) 
-        if (currentWave > 0 && !waveBossEnabled && allNormalDone && !waitingForNext) {
-            advanceWave();
+            const allNormalDone = waveSpawned >= waveEnemyCount && enemies.length === 0;
+            if (currentWave > 0 && waveBossEnabled && !bossSpawned && allNormalDone) {
+                spawnBoss();
+            }
+
+            if (currentWave > 0 && !waveBossEnabled && allNormalDone && !waitingForNext) {
+                advanceWave();
+            }
         }
 
         // J. Logic boss 
         if (bossActive && bossMesh && !bossMesh.isDisposed()) {
             bossVisual?.tick(frameFactor * (1000 / 60));
-            bossVisual?.setState('move');
-            bossMesh.position.z = BABYLON.Scalar.Lerp(bossMesh.position.z, -ZOOM * 0.45, scaledLerpFactor(0.004,frameFactor));
-            bossMesh.position.x = Math.sin(tick * 0.012) * boundX() * 0.65;
-            bossMesh.rotation.y += 0.025 * frameFactor;
-
-            if (now - (bossMesh._lastShoot || 0) > 2000) {
-                bossVisual?.setState('attack');
-                for (let k = -2; k <= 2; k++) {
-                    fireEnemyBullet(bossMesh.position, k * 0.08, enemyBulletVelZ * 0.85);
+            if (dungeonParityV38 && dungeonBossRuntimeV38) {
+                const beforeBossX = bossMesh.position.x;
+                const beforeBossZ = bossMesh.position.z;
+                const bossStep = stepDungeonBossControllerV38(dungeonBossRuntimeV38, {
+                    nowMs: now,
+                    hpRatio: bossMaxHp > 0 ? bossHp / bossMaxHp : 0,
+                    frameScale: frameFactor,
+                    baseSpeed: .044,
+                    enemyX: bossMesh.position.x,
+                    enemyZ: bossMesh.position.z,
+                    playerX: playerRoot.position.x,
+                    playerZ: playerRoot.position.z,
+                    playerVelocityX: playerVelocityV38.x,
+                    playerVelocityZ: playerVelocityV38.z,
+                    origin: resolveDungeonBossMuzzleOriginV38(),
+                    arenaHalfWidth: boundX(),
+                    worldHalfHeight: ZOOM,
+                    viewportHeight: canvas?.clientHeight || engine.getRenderHeight(),
+                    hudOcclusionLineZ: -ZOOM + 5.4,
+                    entityScale: 1.7,
+                });
+                dungeonBossRuntimeV38 = bossStep.runtime;
+                bossMesh.position.x = clamp(
+                    bossMesh.position.x + (Number(bossStep.deltaX) || 0),
+                    -boundX() + 1.25,
+                    boundX() - 1.25,
+                );
+                bossMesh.position.z = clamp(
+                    bossMesh.position.z + (Number(bossStep.deltaZ) || 0),
+                    -ZOOM + 4.4,
+                    ZOOM - 5.2,
+                );
+                if (bossStep.facePlayer) {
+                    updateDungeonBossFacingV38(
+                        playerRoot.position.x - bossMesh.position.x,
+                        playerRoot.position.z - bossMesh.position.z,
+                        engine.getDeltaTime(),
+                    );
+                } else if (!bossStep.holdOrientation) {
+                    updateDungeonBossFacingV38(
+                        bossMesh.position.x - beforeBossX,
+                        bossMesh.position.z - beforeBossZ,
+                        engine.getDeltaTime(),
+                    );
                 }
-                bossMesh._lastShoot = now;
+                bossVisual?.setState(bossStep.visualState || 'move');
+                for (const event of bossStep.events || []) {
+                    if (event.type === 'telegraph_started') createDungeonBossTelegraphsV38(event.plan);
+                    else if (event.type === 'fire_pattern') fireDungeonBossAttackPlanV38(event.plan);
+                    else if (event.type === 'enrage_started') {
+                        showAnnouncement(
+                            lang === 'vi' ? 'CẢNH BÁO: TRÙM NỔI ĐIÊN!' : 'WARNING: BOSS ENRAGED!',
+                            '#ff2a16',
+                            1800,
+                        );
+                    } else if (event.type === 'telegraph_ended' || event.type === 'telegraph_cancelled') {
+                        disposeDungeonBossTelegraphsV38();
+                    }
+                }
+                for (const corridor of dungeonBossAttackTelegraphsV38) {
+                    if (!corridor?.isDisposed?.()) corridor.visibility = .52 + .18 * Math.sin(now * .021);
+                }
+            } else {
+                bossVisual?.setState('move');
+                bossMesh.position.z = BABYLON.Scalar.Lerp(
+                    bossMesh.position.z,
+                    -ZOOM * 0.45,
+                    scaledLerpFactor(0.004, frameFactor),
+                );
+                bossMesh.position.x = Math.sin(tick * 0.012) * boundX() * 0.65;
+                bossMesh.rotation.y += 0.025 * frameFactor;
+
+                if (now - (bossMesh._lastShoot || 0) > 2000) {
+                    bossVisual?.setState('attack');
+                    for (let k = -2; k <= 2; k++) {
+                        fireEnemyBullet(bossMesh.position, k * 0.08, enemyBulletVelZ * 0.85);
+                    }
+                    bossMesh._lastShoot = now;
+                }
             }
 
             for (let j = playerBullets.length - 1; j >= 0; j--) {
@@ -991,6 +1783,11 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                     triggerShake(0.9, 22);
                     deathVisuals.capture(bossVisual);
                     bossVisual = null;
+                    stopDungeonBossControllerV38(dungeonBossRuntimeV38);
+                    dungeonBossRuntimeV38 = null;
+                    disposeDungeonBossTelegraphsV38();
+                    clearDungeonHostileProjectilesV38();
+                    currentBossSpecV38 = null;
                     safeDis(bossMesh); // boss hitbox removed without waiting for the clip
                     bossMesh   = null;
                     bossActive = false;
@@ -1000,70 +1797,140 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                     if (!isCloud) recordGuestEventKill(gsRef.current.campaignData, EVENT_CONFIG, getRealTime?.() ?? Date.now());
                     showAnnouncement(lang === 'vi' ? '✦ BOSS ĐÃ TIÊU DIỆT ✦' : '✦ BOSS DEFEATED ✦', '#f1c40f');
                     if (typeof onBossDefeated === 'function') onBossDefeated();
-                    advanceWave();
+                    if (dungeonParityV38) bossDefeatedPulseV38 = true;
+                    else advanceWave();
                 }
                 break;
             }
         }
 
-        // K. Đạn địch → người chơi 
+        // K. Đạn địch → người chơi
         for (let i = enemyBullets.length - 1; i >= 0; i--) {
             const eb = enemyBullets[i];
             if (eb.isDisposed()) { enemyBullets.splice(i, 1); continue; }
-            eb.position.x += eb._velX * frameFactor;
-            eb.position.z += eb._velZ * frameFactor;
-            if (eb.position.z > ZOOM + 3) {
+            let expired = false;
+            if (eb._shotPlan) {
+                const advanced = advanceCampaignEnemyProjectileV31({
+                    plan: eb._shotPlan,
+                    position: eb.position,
+                    velocity: { x: eb._velX, z: eb._velZ },
+                    target: { x: playerRoot.position.x, z: playerRoot.position.z },
+                    targetVelocity: playerVelocityV38,
+                    nowMs: now,
+                    frameScale: frameFactor,
+                });
+                eb._velX = advanced.velocity.x;
+                eb._velZ = advanced.velocity.z;
+                eb.position.x += advanced.delta.x;
+                eb.position.z += advanced.delta.z;
+                hostileProjectileVisualsV38.update(
+                    eb,
+                    eb._velX,
+                    eb._velZ,
+                    now,
+                    eb._createdAtMs,
+                    eb._shotPlan.visual?.pulse || 0,
+                );
+                expired = advanced.expired;
+            } else {
+                eb.position.x += eb._velX * frameFactor;
+                eb.position.z += eb._velZ * frameFactor;
+            }
+            if (now >= Number(eb._expiresAtMs || Infinity)) expired = true;
+            if (expired || eb.position.z > ZOOM + 3 || eb.position.z < -ZOOM - 4
+                || Math.abs(eb.position.x) > boundX() + 4) {
                 safeDis(eb);
                 enemyBullets.splice(i, 1);
                 continue;
             }
             if (eb.intersectsMesh(shipVisual.collider, false)) {
-                damagePlayer({rawDamage:70,source:'projectile',damageType:'energy',hitId:eb._damageHitId});
+                damagePlayer({
+                    rawDamage: eb._damage || 70,
+                    source: 'projectile',
+                    damageType: eb._damageType || 'energy',
+                    hitId: eb._damageHitId,
+                });
                 safeDis(eb);
                 enemyBullets.splice(i, 1);
             }
         }
 
-        // L. Cập nhật địch 
+        // L. Cập nhật địch
+        if (dungeonParityV38) {
+            syncCampaignEnemyCombatSlotsV37(
+                enemyCombatSlotRegistryV38,
+                enemies.filter(enemy => enemy.spec).map(createDungeonCombatSlotDescriptorV38),
+                { nowMs: now },
+            );
+            for (const enemy of enemies) {
+                if (!enemy.spec || enemy.spec.roleId === 'charger') continue;
+                enemy._combatSlot = getCampaignEnemyCombatSlotV37(
+                    enemyCombatSlotRegistryV38,
+                    enemy.runtimeId,
+                );
+            }
+        }
+
         for (let i = enemies.length - 1; i >= 0; i--) {
             const e = enemies[i];
             if (e.mesh.isDisposed()) { enemies.splice(i, 1); continue; }
 
             e.visual?.tick(frameFactor * (1000 / 60));
-            e.visual?.setState('move');
-            const enemyFrame = frameFactor * enemySpeedFactor(e, now);
-            const beforeX = e.mesh.position.x;
-            const beforeZ = e.mesh.position.z;
-            e.mesh.position.z += e.speed * enemyFrame;
-            e.mesh.position.x += Math.sin(tick * 0.025 + e.sineOff) * 0.05 * enemyFrame;
-            e._facingYaw = resolveEnemyGameplayYawV26A4({
-                currentYaw: e._facingYaw,
-                velocityX: e.mesh.position.x - beforeX,
-                velocityZ: e.mesh.position.z - beforeZ,
-                maxTurnRadians: 7 * Math.max(0, Math.min(100, engine.getDeltaTime())) / 1000,
-            });
-            e.mesh.rotation.y = e._facingYaw;
-
-            if (e.type !== 'scout' && now - e.lastShoot > e.shootMs) {
-                fireEnemyBullet(e.mesh.position, 0, enemyBulletVelZ);
-                e.visual?.setState('attack');
-                e.lastShoot = now;
+            let parityHandled = false;
+            if (dungeonParityV38 && e.spec) {
+                parityHandled = stepDungeonEnemyRuntimeV38(e, now, frameFactor, engine.getDeltaTime());
             }
 
-            if (e.mesh.position.z > ZOOM + 3) {
-                cleanEnemy(e);
-                enemies.splice(i, 1);
-                damagePlayer({rawDamage:30,source:'environment',damageType:'kinetic'});
-                continue;
+            if (!parityHandled) {
+                e.visual?.setState('move');
+                const enemyFrame = frameFactor * enemySpeedFactor(e, now);
+                const beforeX = e.mesh.position.x;
+                const beforeZ = e.mesh.position.z;
+                e.mesh.position.z += e.speed * enemyFrame;
+                e.mesh.position.x += Math.sin(tick * 0.025 + e.sineOff) * 0.05 * enemyFrame;
+                const facingVelocity = {
+                    velocityX: e.mesh.position.x - beforeX,
+                    velocityZ: e.mesh.position.z - beforeZ,
+                };
+                updateDungeonEnemyFacingV38(
+                    e,
+                    facingVelocity.velocityX,
+                    facingVelocity.velocityZ,
+                    engine.getDeltaTime(),
+                );
+
+                if (e.type !== 'scout' && now - e.lastShoot > e.shootMs) {
+                    fireEnemyBullet(e.mesh.position, 0, enemyBulletVelZ);
+                    e.visual?.setState('attack');
+                    e.lastShoot = now;
+                }
+
+                if (e.mesh.position.z > ZOOM + 3) {
+                    cleanEnemy(e);
+                    enemies.splice(i, 1);
+                    damagePlayer({rawDamage:30,source:'environment',damageType:'kinetic'});
+                    continue;
+                }
             }
 
             if (e.mesh.intersectsMesh(shipVisual.collider, false)) {
-                explode(e.mesh.position);
-                damagePlayer({rawDamage:150,source:'contact',damageType:'kinetic',contactId:e._contactHitId});
-                cleanEnemy(e);
-                enemies.splice(i, 1);
-                waveKilled++;
-                continue;
+                explode(e.mesh.position, e.spec?.roleId === 'charger' ? 1.35 : .75);
+                damagePlayer({
+                    rawDamage: e.spec?.weapon?.contactDamage || 150,
+                    source: 'contact',
+                    damageType: e.spec?.weapon?.bulletType || 'kinetic',
+                    contactId: e._contactHitId,
+                });
+                if (!dungeonParityV38 || e.spec?.roleId === 'charger') {
+                    cleanEnemy(e);
+                    enemies.splice(i, 1);
+                    waveKilled++;
+                    continue;
+                }
+                // Ranged roles never become accidental kamikaze units. Push
+                // them back into their authored firing band and keep fighting.
+                e.mesh.position.z = Math.min(e.mesh.position.z, playerRoot.position.z - 2.2);
+                if (e._choreographyState) e._choreographyState.velocityZ = Math.min(0, e._choreographyState.velocityZ || 0);
             }
 
             let destroyed = false;
@@ -1086,6 +1953,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             }
             if (destroyed) continue;
         }
+
     });
 
     return scene;
