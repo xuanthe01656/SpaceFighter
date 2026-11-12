@@ -46,6 +46,7 @@ import {
     isDungeonParityFoundationEnabledV38,
     resolveDungeonRuntimeProfileV38,
 } from '../../game/dungeon/DungeonEncounterCatalogV38.js';
+import { resolveDungeonVisualAssetRefsV393 } from '../../game/dungeon/DungeonContentCatalogV393.js';
 import {
     createDungeonEncounterDirectorV38,
     getDungeonEncounterSnapshotV38,
@@ -73,7 +74,6 @@ import { isDungeonQaRunV391 } from '../../game/dungeon/DungeonQaAccessV391.js';
 import {
     logicalCircleHitV392,
     logicalSegmentCircleHitV392,
-    requiredDungeonVisualAssetIdsV392,
     resolveDungeonHazardCombatV392,
     resolveDungeonHostileProjectileHitRadiusV392,
 } from '../../game/dungeon/DungeonCombatIntegrityV392.js';
@@ -170,10 +170,9 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     });
     const dungeonRuntimeProfileV38 = resolveDungeonRuntimeProfileV38(dungeonId);
     const dungeonPresentationV39 = resolveDungeonPresentationV39(dungeonId);
-    const dungeonVisualProfilesV392 = requiredDungeonVisualAssetIdsV392({
-        dungeonId,
-        bossVisualAssetId: dungeonPresentationV39.boss?.visualAssetId,
-    }).map(({ kind, id }) => resolveAssetVisual(kind, id)).filter(Boolean);
+    const dungeonVisualProfilesV392 = resolveDungeonVisualAssetRefsV393(dungeonId)
+        .map(({ kind, id }) => resolveAssetVisual(kind, id))
+        .filter(Boolean);
     const dungeonVisualPreloadV392 = {
         settled: dungeonVisualProfilesV392.length === 0,
         deadlineMs: Date.now() + 2600,
@@ -831,7 +830,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         } else if (currentRoomV38.breakablesRequired) {
             const broken = Math.max(0, currentRoomInitialBreakableCountV39 - dungeonBreakablesV38.length);
             const defeated = Math.min(currentRoomInitialEnemyCountV39, Math.max(0, waveKilled));
-            objectiveProgressText.text = `${lang === 'vi' ? 'KHO QUẶNG' : 'CACHES'} ${broken}/${currentRoomInitialBreakableCountV39}`
+            objectiveProgressText.text = `${lang === 'vi' ? 'MỤC TIÊU' : 'NODES'} ${broken}/${currentRoomInitialBreakableCountV39}`
                 + ` · ${lang === 'vi' ? 'ĐỊCH' : 'HOSTILES'} ${defeated}/${currentRoomInitialEnemyCountV39}`;
         } else {
             const defeated = Math.min(currentRoomInitialEnemyCountV39, Math.max(0, waveKilled));
@@ -1122,6 +1121,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 BABYLON,
                 name: `dungeon-breakable-${definition.id}`,
                 position,
+                style: definition.visualStyle || definition.visualId || 'ore_pod',
+                scale: definition.scale || 1,
             });
             const mesh = visual.mesh;
             mesh.rotation.y = (stableSeed(dungeonSeedV38, definition.id) % 6284) / 1000;
@@ -1155,6 +1156,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 maxHp,
                 hpFill,
                 score: Math.max(0, Math.round(Number(definition.score) || 0)),
+                hitRadius: clamp(Number(definition.hitRadius) || 1.15, .7, 2.0),
+                objectiveRole: definition.objectiveRole || 'node',
                 disposeHud: () => {
                     safeDisGui(hpFill);
                     safeDisGui(hpBg);
@@ -2027,7 +2030,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                         dungeonBreakablesV38.splice(debrisIndex, 1);
                         continue;
                     }
-                    if (!projectileHitsPoint(bullet, debris.mesh.position, 1.15)) continue;
+                    if (!projectileHitsPoint(bullet, debris.mesh.position, debris.hitRadius || 1.15)) continue;
                     const hit = shots.registerHit(bullet, { mesh: debris.mesh });
                     if (!hit.accepted) continue;
                     debris.hp -= calculateProjectileDamage(bullet.atk, stats.critDamageBoost);

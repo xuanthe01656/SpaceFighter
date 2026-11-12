@@ -7,6 +7,7 @@ import {
 } from '../combat/EnemyCombatCatalogV2.js';
 import { resolveCampaignEnemyWeaponContractV37 } from '../combat/CombatWeaponCatalogV37.js';
 import { resolveDungeonRuntimeProfileV38 } from './DungeonEncounterCatalogV38.js';
+import { resolveDungeonVisualAssetIdV393 } from './DungeonContentCatalogV393.js';
 
 export const DUNGEON_COMBAT_ADAPTER_VERSION = 'dungeon-combat-adapter-v3.8.0';
 
@@ -44,7 +45,8 @@ export function resolveDungeonEnemySpecV38({
   const archetype = ENEMY_ARCHETYPES_V2[roleId];
   const runtime = enemyRuntimeFromCatalogV3(roleId);
   const visualAssetKind = entry?.elite ? 'elite' : resolveDungeonEnemyAssetKindV38(roleId);
-  const visualAssetId = `${dungeonId}_${visualAssetKind}`;
+  const visualAssetId = entry?.visualAssetId
+    || (entry?.elite ? `${dungeonId}_elite` : resolveDungeonVisualAssetIdV393(dungeonId, roleId));
   const weapon = resolveCampaignEnemyWeaponContractV37(roleId);
   const globalStats = profile.enemyStats;
   const hpMultiplier = finite(entry?.hpMultiplier, finite(room?.hpMultiplier, 1));
@@ -155,9 +157,12 @@ export function auditDungeonCombatAdapterV38() {
     if (spec.roleId !== roleId || !(spec.hp > 0) || !(spec.speed > 0)) {
       issues.push(`DUNGEON_SPEC:${roleId}`);
     }
-    if (spec.visualAssetId !== `dung_taurus_${spec.visualAssetKind}`) {
-      issues.push(`DUNGEON_VISUAL_ASSET:${roleId}`);
-    }
+    const expectedVisual = roleId === 'charger' || roleId === 'support'
+      ? 'dung_taurus_elite'
+      : roleId === 'shieldbearer' || roleId === 'artillery'
+        ? 'dung_taurus_heavy'
+        : 'dung_taurus_scout';
+    if (spec.visualAssetId !== expectedVisual) issues.push(`DUNGEON_VISUAL_ASSET:${roleId}`);
     if (roleId === 'charger') {
       if (spec.canShoot || spec.weapon.projectile !== null) issues.push('DUNGEON_CHARGER_PROJECTILE');
     } else if (!spec.canShoot || !spec.weapon.projectile) {

@@ -23,6 +23,23 @@ export const BATTLE_ANIMATION_CLIPS = Object.freeze({
   enrage: clip([14, 15], 8, { durationMs: 500 }),
   death: clip([15, 14, 13], 12, { durationMs: 250 }),
 });
+
+/**
+ * Delivered Dungeon atlases reserve cells 0-2 as transparent lead-in cells.
+ * The generic spawn clip therefore made a live collider/HP bar visible while
+ * the aircraft art was fully transparent. Dungeon actors start on visible cells
+ * 3-5 and retain the same idle/move/attack state vocabulary.
+ */
+export const DUNGEON_ATLAS_RESERVED_TRANSPARENT_FRAMES_V393 = Object.freeze([0, 1, 2]);
+export const DUNGEON_BATTLE_ANIMATION_CLIPS_V393 = Object.freeze({
+  spawn: clip([3, 4, 5], 10, { durationMs: 300 }),
+  idle: clip([3, 4, 5, 6], 7, { loop: true }),
+  move: clip([7, 8, 9, 10], 9, { loop: true }),
+  attack: clip([11, 12], 12, { durationMs: 180 }),
+  hit: clip([13], 10, { durationMs: 120 }),
+  enrage: clip([14, 15], 8, { durationMs: 500 }),
+  death: clip([15, 14, 13], 12, { durationMs: 250 }),
+});
 export const BATTLE_ANIMATION_STATES = Object.freeze(Object.keys(BATTLE_ANIMATION_CLIPS));
 export const BATTLE_TRANSIENT_STATES = Object.freeze(['spawn', 'attack', 'hit', 'enrage']);
 export const isAnimatedBattleKind = kind => ANIMATED_BATTLE_KINDS.includes(kind);

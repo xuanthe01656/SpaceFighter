@@ -134,7 +134,8 @@ export function resolveDungeonPresentationV39(dungeonId = 'dung_taurus') {
 
 export function resolveDungeonRoomObjectiveV39({ dungeonId = 'dung_taurus', room = null, lang = 'vi' } = {}) {
   const profile = resolveDungeonPresentationV39(dungeonId);
-  const localized = profile.roomObjectives?.[room?.kind]
+  const localized = room?.objective
+    || profile.roomObjectives?.[room?.kind]
     || profile.roomObjectives?.entry
     || { vi: '', en: '' };
   return localized[lang] || localized.vi || localized.en || '';

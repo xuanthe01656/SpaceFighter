@@ -6,9 +6,10 @@
 import { AIRCRAFTS } from '../catalog/aircraft.js';
 import { PILOTS } from '../catalog/pilots.js';
 import { GEAR_CATALOG } from '../catalog/gear.js';
-import { PLANET_ENEMIES, PLANET_BOSSES, DUNGEON_CONFIG } from '../catalog/worlds.js';
+import { PLANET_ENEMIES, PLANET_BOSSES } from '../catalog/worlds.js';
 import { AVAILABLE_ASSET_PATHS } from './AssetAvailability.generated.js';
-import { BATTLE_ANIMATION_CLIPS, BATTLE_ANIMATION_GRID, isAnimatedBattleKind } from './EnemyBossAnimationCatalog.js';
+import { BATTLE_ANIMATION_CLIPS, BATTLE_ANIMATION_GRID, DUNGEON_BATTLE_ANIMATION_CLIPS_V393, isAnimatedBattleKind } from './EnemyBossAnimationCatalog.js';
+import { DUNGEON_CONTENT_CATALOG_V393 } from '../dungeon/DungeonContentCatalogV393.js';
 import { createEnemyBossModelContract } from './EnemyBossModelCatalog.js';
 
 export const VISUAL_CONTRACT_VERSION = '1.2.0';
@@ -52,7 +53,7 @@ const definition = (kind, id, opts = {}) => Object.freeze({
   // Visual-only data: gameplay collision dimensions must never derive from art.
   visual: Object.freeze({ size: opts.size ?? 2.0, orientation: 'nose-negative-z',
     sockets: fixedSockets(opts.sockets || []),
-    ...(isAnimatedBattleKind(kind) ? { atlasGrid: BATTLE_ANIMATION_GRID, animations: BATTLE_ANIMATION_CLIPS,
+    ...(isAnimatedBattleKind(kind) ? { atlasGrid: BATTLE_ANIMATION_GRID, animations: opts.animations || BATTLE_ANIMATION_CLIPS,
       model: createEnemyBossModelContract(kind, id, opts.size ?? 2.0) } : {}),
   }),
 });
@@ -74,11 +75,22 @@ for (const configGroup of Object.values(PLANET_BOSSES)) {
   for (const boss of Object.values(configGroup)) entries.push(definition('boss', boss.id,
     { legacyIcon: boss.imgSrc, role: 'boss', size: 5.2, sockets: [{id:'gun:left',offset:{x:-1.1,y:0,z:0.75}},{id:'gun:right',offset:{x:1.1,y:0,z:0.75}}] }));
 }
-for (const dungeon of DUNGEON_CONFIG) {
-  for (const enemyType of ['scout', 'elite', 'heavy']) {
-    entries.push(definition('dungeon_enemy', `${dungeon.id}_${enemyType}`, { role: enemyType, size: enemyType === 'heavy' ? 3.0 : 2.3, sockets: [{id:'gun:main',offset:{x:0,y:0,z:0.75}}] }));
+for (const dungeon of Object.values(DUNGEON_CONTENT_CATALOG_V393)) {
+  for (const enemyAsset of dungeon.visualSet.enemyAssets) {
+    entries.push(definition('dungeon_enemy', enemyAsset.id, {
+      role: enemyAsset.role,
+      size: enemyAsset.size,
+      animations: DUNGEON_BATTLE_ANIMATION_CLIPS_V393,
+      sockets: [{id:'gun:main',offset:{x:0,y:0,z:0.75}}],
+    }));
   }
-  entries.push(definition('dungeon_boss', `${dungeon.id}_boss`, { role: 'boss', size: 5.8, sockets: [{id:'gun:left',offset:{x:-1.4,y:0,z:1}},{id:'gun:right',offset:{x:1.4,y:0,z:1}}] }));
+  const bossAsset = dungeon.visualSet.bossAsset;
+  entries.push(definition('dungeon_boss', bossAsset.id, {
+    role: bossAsset.role,
+    size: bossAsset.size,
+    animations: DUNGEON_BATTLE_ANIMATION_CLIPS_V393,
+    sockets: [{id:'gun:left',offset:{x:-1.4,y:0,z:1}},{id:'gun:right',offset:{x:1.4,y:0,z:1}}],
+  }));
 }
 for (const projectile of ['laser', 'plasma', 'ion', 'rail', 'pulse', 'neutron', 'photon', 'charge', 'missile']) {
   entries.push(definition('projectile', `projectile_${projectile}`, { role: projectile, size: 0.5 }));

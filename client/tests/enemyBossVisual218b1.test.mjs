@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { ALL_VISUAL_PROFILES, assetDeliveryPaths, resolveAssetVisual } from '../src/game/assets/AssetRegistry.js';
 import {
   ANIMATED_BATTLE_KINDS, BATTLE_ANIMATION_STATES, BATTLE_ANIMATION_CLIPS,
-  BATTLE_ANIMATION_GRID, validateBattleAtlasContract, battleAtlasUV, createBattleVisualAnimator,
+  BATTLE_ANIMATION_GRID, DUNGEON_BATTLE_ANIMATION_CLIPS_V393,
+  validateBattleAtlasContract, battleAtlasUV, createBattleVisualAnimator,
 } from '../src/game/assets/EnemyBossAnimationCatalog.js';
 import { attachBattleEntityVisual, preloadBattleEntityVisualProfiles } from '../src/game/rendering/BattleEntityVisual.js';
 import { ENEMY_SOURCE_TO_ROOT_YAW_V26A4 } from '../src/game/assets/EnemyVisualHeadingV26A4.js';
@@ -59,6 +60,16 @@ test('the contract covers every existing enemy and boss without changing stable 
     assert.equal(p.visual.orientation,'nose-negative-z');
     assert.ok(p.visual.sockets.some(s=>s.id.startsWith('gun:')));
     assert.deepEqual(Object.keys(p.visual.animations),BATTLE_ANIMATION_STATES);
+  }
+});
+
+
+test('Dungeon atlas contract never starts on the three transparent lead-in cells',()=>{
+  assert.equal(validateBattleAtlasContract(BATTLE_ANIMATION_GRID, DUNGEON_BATTLE_ANIMATION_CLIPS_V393),true);
+  assert.deepEqual(DUNGEON_BATTLE_ANIMATION_CLIPS_V393.spawn.frames,[3,4,5]);
+  assert.ok(DUNGEON_BATTLE_ANIMATION_CLIPS_V393.spawn.frames.every(frame=>frame>=3));
+  for(const profile of ALL_VISUAL_PROFILES.filter(item=>item.kind==='dungeon_enemy'||item.kind==='dungeon_boss')){
+    assert.deepEqual(profile.visual.animations.spawn.frames,[3,4,5]);
   }
 });
 

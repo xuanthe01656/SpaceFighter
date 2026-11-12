@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { DUNGEON_CONFIG } from '../src/game/catalog/worlds.js';
 import {
   CAMPAIGN_GAMEPLAY_FOUNDATION_LOCK_RC1,
   auditCampaignGameplayFoundationLockRC1,
@@ -12,6 +13,13 @@ import {
   isDungeonParityFoundationEnabledV38,
   resolveDungeonRuntimeProfileV38,
 } from '../src/game/dungeon/DungeonEncounterCatalogV38.js';
+import {
+  DUNGEON_CONTENT_CATALOG_VERSION,
+  DUNGEON_CONTENT_CATALOG_V393,
+  DUNGEON_OBJECTIVE_PROFILES_V393,
+  auditDungeonContentCatalogV393,
+  resolveDungeonVisualAssetRefsV393,
+} from '../src/game/dungeon/DungeonContentCatalogV393.js';
 import {
   DUNGEON_ENCOUNTER_DIRECTOR_VERSION,
   auditDungeonEncounterDirectorV38,
@@ -67,6 +75,42 @@ test('Campaign Gameplay Foundation Lock RC1 is exact and drift-free', () => {
   assert.equal(CAMPAIGN_GAMEPLAY_FOUNDATION_LOCK_RC1.architecture.rendererAuthority,
     'presentation_only');
   assert.deepEqual(auditCampaignGameplayFoundationLockRC1(), []);
+});
+
+
+test('Dungeon V3.9.3 content catalog is modular, five-room and future-safe', () => {
+  assert.equal(DUNGEON_CONTENT_CATALOG_VERSION, 'dungeon-content-catalog-v3.9.3');
+  assert.deepEqual(auditDungeonContentCatalogV393(), []);
+  assert.deepEqual(Object.keys(DUNGEON_CONTENT_CATALOG_V393), [
+    'dung_taurus', 'dung_nereus', 'dung_abaddon',
+  ]);
+  assert.deepEqual(
+    DUNGEON_CONFIG.map(item => item.id).sort(),
+    Object.keys(DUNGEON_CONTENT_CATALOG_V393).sort(),
+    'product schedule/economy IDs and authored Dungeon content IDs must stay in parity',
+  );
+  for (const profile of Object.values(DUNGEON_CONTENT_CATALOG_V393)) {
+    assert.equal(profile.rooms.length, 5);
+    assert.equal(new Set(profile.rooms.map(room => room.id)).size, 5);
+    assert.ok(profile.rooms.length >= profile.runStructure.minimumRooms);
+    assert.ok(profile.rooms.length <= profile.runStructure.maximumRooms);
+    assert.ok(profile.rooms.some(room => room.id === profile.runStructure.entryRoomId));
+    assert.equal(profile.rooms.find(room => room.id === profile.runStructure.bossRoomId)?.templateId, 'boss');
+    assert.equal(Object.keys(profile.visualSet.enemyByRole).length, 6);
+    assert.equal(resolveDungeonVisualAssetRefsV393(profile.id).length, 4);
+  }
+  assert.ok(DUNGEON_CONTENT_CATALOG_V393.dung_nereus.difficultyRank
+    > DUNGEON_CONTENT_CATALOG_V393.dung_taurus.difficultyRank);
+  assert.ok(DUNGEON_CONTENT_CATALOG_V393.dung_abaddon.difficultyRank
+    > DUNGEON_CONTENT_CATALOG_V393.dung_nereus.difficultyRank);
+
+  const cluster = DUNGEON_OBJECTIVE_PROFILES_V393.taurus_salvage_cluster;
+  assert.equal(cluster.nodes.length, 3);
+  assert.equal(new Set(cluster.nodes.map(node => node.visualStyle)).size, 3,
+    'Taurus objective must not show three identical boxes');
+  assert.equal(new Set(cluster.nodes.map(node => node.depthNorm)).size, 3,
+    'Taurus objective nodes must be staggered in depth, not a flat row');
+  assert.equal(cluster.nodes.filter(node => node.objectiveRole === 'primary').length, 1);
 });
 
 test('Dungeon V3.8 catalog exposes one enabled Taurus vertical slice and two briefs', () => {

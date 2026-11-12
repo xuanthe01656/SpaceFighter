@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ALL_VISUAL_PROFILES } from '../src/game/assets/AssetRegistry.js';
-import { ANIMATED_BATTLE_KINDS, BATTLE_ANIMATION_STATES, validateBattleAtlasContract } from '../src/game/assets/EnemyBossAnimationCatalog.js';
+import { ANIMATED_BATTLE_KINDS, BATTLE_ANIMATION_STATES, DUNGEON_ATLAS_RESERVED_TRANSPARENT_FRAMES_V393, validateBattleAtlasContract } from '../src/game/assets/EnemyBossAnimationCatalog.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public');
 const errors = [];
@@ -29,6 +29,10 @@ for (const p of contracts) {
   const grid = p.visual.atlasGrid;
   if (!p.paths.atlas?.endsWith('_sheet.webp')) errors.push(`${id}: missing canonical animation atlas path`);
   if (!validateBattleAtlasContract(grid, p.visual.animations)) errors.push(`${id}: invalid animation clips or frame indices`);
+  if ((p.kind === 'dungeon_enemy' || p.kind === 'dungeon_boss')
+    && p.visual.animations.spawn.frames.some(frame => DUNGEON_ATLAS_RESERVED_TRANSPARENT_FRAMES_V393.includes(frame))) {
+    errors.push(`${id}: spawn clip references reserved transparent lead-in frames`);
+  }
   if (!p.visual.sockets?.length) errors.push(`${id}: missing weapon socket metadata`);
   for (const state of BATTLE_ANIMATION_STATES) if (!p.visual.animations?.[state]) errors.push(`${id}: missing ${state} state`);
   const source = path.join(root, p.paths.atlas.slice(1));

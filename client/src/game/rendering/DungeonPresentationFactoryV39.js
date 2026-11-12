@@ -136,49 +136,163 @@ export function createDungeonBossFallbackV39({ scene, BABYLON, root, style = 'ru
   };
 }
 
-export function createDungeonBreakableVisualV39({ scene, BABYLON, name = 'ore-cache', position } = {}) {
-  const root = BABYLON.MeshBuilder.CreateBox(`${name}:collider`, { width: 2.15, height: .62, depth: 1.75 }, scene);
+export function createDungeonBreakableVisualV39({
+  scene, BABYLON, name = 'ore-cache', position, style = 'ore_pod', scale = 1,
+} = {}) {
+  const safeScale = clamp(Number(scale) || 1, .65, 1.45);
+  const dimensions = style === 'salvage_core'
+    ? { width: 2.35, height: .82, depth: 2.10 }
+    : style === 'power_cell' || style === 'shield_relay'
+      ? { width: 1.65, height: .78, depth: 1.55 }
+      : style === 'rift_anchor'
+        ? { width: 1.95, height: 1.05, depth: 1.95 }
+        : { width: 2.15, height: .62, depth: 1.75 };
+  const root = BABYLON.MeshBuilder.CreateBox(`${name}:collider`, dimensions, scene);
   root.position.copyFrom(position);
   root.visibility = .02;
   root.isPickable = false;
+  root.scaling.setAll(safeScale);
+  root.metadata = { ...(root.metadata || {}), breakableStyle: style, visualOnlyCollider: true };
 
-  const frameMat = material(scene, BABYLON, 'ore-cache:frame', { diffuse: '#27302d', emissive: '#06100d' });
-  const oreMat = material(scene, BABYLON, 'ore-cache:ore', { diffuse: '#80713d', emissive: '#3b3108' });
-  const glowMat = material(scene, BABYLON, 'ore-cache:glow', { diffuse: '#ffd166', emissive: '#ffd166', disableLighting: true });
+  const frameMat = material(scene, BABYLON, `${style}:frame`, { diffuse: '#27302d', emissive: '#06100d' });
+  const darkMat = material(scene, BABYLON, `${style}:dark`, { diffuse: '#111918', emissive: '#020706' });
+  const oreMat = material(scene, BABYLON, `${style}:ore`, { diffuse: '#80713d', emissive: '#3b3108' });
+  const glowHex = style === 'shield_relay' ? '#55d9ff' : style === 'rift_anchor' ? '#ff476f' : '#ffd166';
+  const glowMat = material(scene, BABYLON, `${style}:glow`, { diffuse: glowHex, emissive: glowHex, disableLighting: true });
+  const damageParts = [];
+  const glowParts = [];
 
-  const frame = setVisualOnly(BABYLON.MeshBuilder.CreateBox(`${name}:frame`, { width: 2.0, height: .50, depth: 1.62 }, scene));
-  frame.parent = root;
-  frame.material = frameMat;
-
-  const bandA = setVisualOnly(BABYLON.MeshBuilder.CreateBox(`${name}:band-a`, { width: .18, height: .62, depth: 1.76 }, scene));
-  bandA.parent = root;
-  bandA.position.x = -.58;
-  bandA.material = glowMat;
-  const bandB = bandA.clone(`${name}:band-b`);
-  bandB.parent = root;
-  bandB.position.x = .58;
-
-  const oreNodes = [];
-  for (let index = 0; index < 4; index += 1) {
-    const shard = setVisualOnly(BABYLON.MeshBuilder.CreatePolyhedron(`${name}:ore:${index}`, {
-      type: 1, size: .38 + (index % 2) * .10,
+  if (style === 'salvage_core') {
+    const body = setVisualOnly(BABYLON.MeshBuilder.CreateCylinder(`${name}:body`, {
+      height: .72, diameter: 1.75, tessellation: 14,
     }, scene));
-    shard.parent = root;
-    shard.position.set(-.62 + index * .42, .43, (index % 2 ? .22 : -.18));
-    shard.rotation.y = index * .63;
-    shard.material = index === 1 ? glowMat : oreMat;
-    oreNodes.push(shard);
+    body.parent = root;
+    body.position.y = .08;
+    body.material = frameMat;
+    damageParts.push(body);
+
+    const ring = setVisualOnly(BABYLON.MeshBuilder.CreateTorus(`${name}:ring`, {
+      diameter: 2.15, thickness: .18, tessellation: 32,
+    }, scene));
+    ring.parent = root;
+    ring.position.y = .18;
+    ring.rotation.x = Math.PI / 2;
+    ring.material = oreMat;
+    damageParts.push(ring);
+
+    const core = setVisualOnly(BABYLON.MeshBuilder.CreateSphere(`${name}:core`, { diameter: .72, segments: 12 }, scene));
+    core.parent = root;
+    core.position.y = .42;
+    core.material = glowMat;
+    glowParts.push(core);
+
+    for (const side of [-1, 1]) {
+      const brace = setVisualOnly(BABYLON.MeshBuilder.CreateBox(`${name}:brace:${side}`, {
+        width: .38, height: .35, depth: 1.85,
+      }, scene));
+      brace.parent = root;
+      brace.position.x = side * .92;
+      brace.material = darkMat;
+      damageParts.push(brace);
+    }
+  } else if (style === 'power_cell' || style === 'shield_relay') {
+    const body = setVisualOnly(BABYLON.MeshBuilder.CreateCylinder(`${name}:cell`, {
+      height: 1.25, diameter: .88, tessellation: 12,
+    }, scene));
+    body.parent = root;
+    body.position.y = .05;
+    body.rotation.z = Math.PI / 2;
+    body.material = frameMat;
+    damageParts.push(body);
+
+    for (const side of [-1, 1]) {
+      const cap = setVisualOnly(BABYLON.MeshBuilder.CreateCylinder(`${name}:cap:${side}`, {
+        height: .18, diameter: 1.08, tessellation: 12,
+      }, scene));
+      cap.parent = root;
+      cap.position.x = side * .68;
+      cap.rotation.z = Math.PI / 2;
+      cap.material = darkMat;
+      damageParts.push(cap);
+    }
+
+    const core = setVisualOnly(BABYLON.MeshBuilder.CreateCylinder(`${name}:energy`, {
+      height: .82, diameter: .46, tessellation: 12,
+    }, scene));
+    core.parent = root;
+    core.rotation.z = Math.PI / 2;
+    core.material = glowMat;
+    glowParts.push(core);
+  } else if (style === 'rift_anchor') {
+    const spine = setVisualOnly(BABYLON.MeshBuilder.CreatePolyhedron(`${name}:spine`, {
+      type: 1, size: .88,
+    }, scene));
+    spine.parent = root;
+    spine.position.y = .22;
+    spine.material = darkMat;
+    damageParts.push(spine);
+
+    const ring = setVisualOnly(BABYLON.MeshBuilder.CreateTorus(`${name}:rift-ring`, {
+      diameter: 1.75, thickness: .16, tessellation: 36,
+    }, scene));
+    ring.parent = root;
+    ring.position.y = .26;
+    ring.rotation.x = Math.PI / 2;
+    ring.material = glowMat;
+    glowParts.push(ring);
+
+    for (let index = 0; index < 3; index += 1) {
+      const shard = setVisualOnly(BABYLON.MeshBuilder.CreateBox(`${name}:anchor:${index}`, {
+        width: .24, height: .36, depth: 1.25,
+      }, scene));
+      shard.parent = root;
+      shard.rotation.y = index * (Math.PI * 2 / 3);
+      shard.position.y = .05;
+      shard.material = frameMat;
+      damageParts.push(shard);
+    }
+  } else {
+    const frame = setVisualOnly(BABYLON.MeshBuilder.CreateBox(`${name}:frame`, { width: 2.0, height: .50, depth: 1.62 }, scene));
+    frame.parent = root;
+    frame.material = frameMat;
+    damageParts.push(frame);
+
+    for (const side of [-1, 1]) {
+      const band = setVisualOnly(BABYLON.MeshBuilder.CreateBox(`${name}:band:${side}`, { width: .18, height: .62, depth: 1.76 }, scene));
+      band.parent = root;
+      band.position.x = side * .58;
+      band.material = glowMat;
+      glowParts.push(band);
+    }
+
+    for (let index = 0; index < 4; index += 1) {
+      const shard = setVisualOnly(BABYLON.MeshBuilder.CreatePolyhedron(`${name}:ore:${index}`, {
+        type: 1, size: .38 + (index % 2) * .10,
+      }, scene));
+      shard.parent = root;
+      shard.position.set(-.62 + index * .42, .43, (index % 2 ? .22 : -.18));
+      shard.rotation.y = index * .63;
+      shard.material = index === 1 ? glowMat : oreMat;
+      (index === 1 ? glowParts : damageParts).push(shard);
+    }
   }
 
   return {
     mesh: root,
+    style,
     setRatio(ratio = 1) {
       const safe = clamp(Number(ratio) || 0, 0, 1);
-      const scale = .72 + safe * .28;
-      oreNodes.forEach((node, index) => {
-        node.scaling.y = scale;
-        node.visibility = safe <= .25 && index % 2 ? .42 : 1;
+      const damage = 1 - safe;
+      damageParts.forEach((part, index) => {
+        part.visibility = safe <= .20 && index % 2 ? .34 : safe <= .45 && index % 3 === 1 ? .68 : 1;
+        part.scaling.y = .78 + safe * .22;
       });
+      glowParts.forEach((part, index) => {
+        const pulse = 1 + damage * (.18 + index * .03);
+        part.scaling.setAll(pulse);
+        part.visibility = .62 + damage * .38;
+      });
+      root.rotation.z = damage * .06;
     },
     dispose() { root.dispose(); },
   };
