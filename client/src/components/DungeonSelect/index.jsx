@@ -1,10 +1,16 @@
 // src/components/DungeonSelect/index.jsx
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { DUNGEON_CONFIG } from '../../constants';
 import styles from './DungeonSelect.module.css';
 import toast from 'react-hot-toast';
 import { dungeonDayUTC, isDungeonOpenUTC } from '../../utils/dungeonSchedule';
+import {
+  createDungeonQaRunV391,
+  getDungeonQaStatusLabelV391,
+  resolveDungeonQaRuntimeAccessV391,
+  resolveDungeonQaProfileV391,
+} from '../../game/dungeon/DungeonQaAccessV391.js';
 
 // --- HỆ THỐNG SVG ICONS CHUẨN SCI-FI ---
 const Icons = {
@@ -41,20 +47,40 @@ const getRewardColor = (type) => {
 export default function DungeonSelect({ gsRef, setScreen, lang, getRealTime }) {
   // Server Phase 1 uses UTC weekdays; local getDay() may disagree in UTC+7.
   const currentDay = dungeonDayUTC(getRealTime());
+  const dungeonQaAccess = resolveDungeonQaRuntimeAccessV391();
+  const [qaRoomSelections, setQaRoomSelections] = useState(() => ({
+    dung_taurus: dungeonQaAccess.requestedDungeonId === 'dung_taurus'
+      ? dungeonQaAccess.requestedRoomId || ''
+      : '',
+  }));
 
   const handleEnter = (dungeon) => {
-    if (!isDungeonOpenUTC(dungeon,getRealTime())) {
-      toast.error(lang==='vi'?'Phó bản hiện chưa mở (lịch UTC).':'Dungeon is closed (UTC schedule).');
-      return;
+    let dungeonQaRun = null;
+    if (dungeonQaAccess.enabled) {
+      dungeonQaRun = createDungeonQaRunV391({
+        access: dungeonQaAccess,
+        dungeonId: dungeon.id,
+        roomId: qaRoomSelections[dungeon.id] || null,
+      });
+      if (!dungeonQaRun) {
+        toast.error(lang === 'vi' ? 'Dungeon này chưa có hồ sơ QA hợp lệ.' : 'No valid QA profile for this dungeon.');
+        return;
+      }
+    } else {
+      if (!isDungeonOpenUTC(dungeon,getRealTime())) {
+        toast.error(lang==='vi'?'Phó bản hiện chưa mở (lịch UTC).':'Dungeon is closed (UTC schedule).');
+        return;
+      }
+      if (gsRef.current.energy < dungeon.energyCost) {
+        toast.error(lang === 'vi' ? 'Không đủ Năng lượng!' : 'Not enough Energy!', { icon: '⚡' });
+        return;
+      }
     }
-    if (gsRef.current.energy < dungeon.energyCost) {
-      toast.error(lang === 'vi' ? 'Không đủ Năng lượng!' : 'Not enough Energy!', { icon: '⚡' });
-      return;
-    }
+    gsRef.current.dungeonQa = dungeonQaRun;
     gsRef.current.selectedDungeonId = dungeon.id;
-    gsRef.current.pendingEnergyCost = dungeon.energyCost; // Đưa cho HQ giữ dùm
+    gsRef.current.pendingEnergyCost = dungeonQaRun ? 0 : dungeon.energyCost;
     gsRef.current.gameMode = 'dungeon';
-    setScreen('hq'); 
+    setScreen('hq');
   };
 
   return (
@@ -74,10 +100,22 @@ export default function DungeonSelect({ gsRef, setScreen, lang, getRealTime }) {
         </div>
       </header>
 
+      {dungeonQaAccess.enabled && (
+        <div className={styles.qaBanner} role="status">
+          <strong>DUNGEON QA V3.9.1</strong>
+          <span>{lang === 'vi'
+            ? 'Mở toàn bộ Dungeon · 0 năng lượng · không thưởng · không ghi tiến trình'
+            : 'All dungeons visible · zero energy · no rewards · no progression writes'}</span>
+        </div>
+      )}
+
       <div className={styles.dungeonGrid}>
         {DUNGEON_CONFIG.map((dungeon, idx) => {
-          const isOpen = dungeon.openDays.includes(currentDay);
-          
+          const scheduleOpen = dungeon.openDays.includes(currentDay);
+          const qaProfile = resolveDungeonQaProfileV391(dungeon.id);
+          const isOpen = dungeonQaAccess.enabled ? Boolean(qaProfile?.visible) : scheduleOpen;
+          const qaStatus = dungeonQaAccess.enabled ? getDungeonQaStatusLabelV391(qaProfile, lang) : null;
+
           return (
             <motion.div 
               key={dungeon.id} 
@@ -94,7 +132,9 @@ export default function DungeonSelect({ gsRef, setScreen, lang, getRealTime }) {
               <div className={styles.cardContent}>
                 <div className={styles.cardHeader}>
                   <div className={`${styles.statusBadge} ${isOpen ? styles.open : styles.closed}`}>
-                    {isOpen ? (lang === 'vi' ? 'ĐANG MỞ (UTC)' : 'OPEN (UTC)') : (lang === 'vi' ? 'ĐÓNG CỬA (UTC)' : 'CLOSED (UTC)')}
+                    {dungeonQaAccess.enabled
+                      ? qaStatus
+                      : (isOpen ? (lang === 'vi' ? 'ĐANG MỞ (UTC)' : 'OPEN (UTC)') : (lang === 'vi' ? 'ĐÓNG CỬA (UTC)' : 'CLOSED (UTC)'))}
                   </div>
                   <div className={styles.difficulty}>
                     {[1, 2, 3].map(star => (
@@ -114,7 +154,11 @@ export default function DungeonSelect({ gsRef, setScreen, lang, getRealTime }) {
                   </div>
 
                   <div className={styles.rewardBox}>
-                    {dungeon.rewards.map((rw, i) => (
+                    {dungeonQaAccess.enabled ? (
+                      <div className={styles.qaNoReward}>
+                        {lang === 'vi' ? 'QA CỤC BỘ · KHÔNG THƯỞNG / KHÔNG GHI DỮ LIỆU' : 'LOCAL QA · NO REWARDS / NO WRITES'}
+                      </div>
+                    ) : dungeon.rewards.map((rw, i) => (
                       <div key={i} className={styles.rewardItem} style={{ color: getRewardColor(rw.type) }}>
                          <span style={{ width: '18px', height: '18px', display: 'flex' }}>
                            {getRewardIcon(rw.type)}
@@ -126,13 +170,45 @@ export default function DungeonSelect({ gsRef, setScreen, lang, getRealTime }) {
                 </div>
 
                 <div className={styles.actionArea}>
-                  <button 
-                    className={`${styles.playBtn} ${isOpen ? styles.open : ''}`} 
+                  {dungeonQaAccess.enabled && qaProfile?.allowDirectRoom && (
+                    <label className={styles.qaRoomPicker}>
+                      <span>{lang === 'vi' ? 'ĐIỂM BẮT ĐẦU QA' : 'QA START POINT'}</span>
+                      <select
+                        value={qaRoomSelections[dungeon.id] || ''}
+                        onChange={(event) => setQaRoomSelections(current => ({
+                          ...current,
+                          [dungeon.id]: event.target.value,
+                        }))}
+                      >
+                        <option value="">{lang === 'vi' ? 'FULL RUN — 5 PHÒNG' : 'FULL RUN — 5 ROOMS'}</option>
+                        {qaProfile.roomBriefs.map(room => (
+                          <option key={room.id} value={room.id}>
+                            {`ROOM ${room.index + 1} — ${room.title?.[lang] || room.title?.vi || room.id}`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  {dungeonQaAccess.enabled && qaProfile?.readiness === 'catalog_preview' && (
+                    <div className={styles.qaPreviewNote}>
+                      {lang === 'vi'
+                        ? 'Preview catalog/legacy: chưa phải vertical slice production.'
+                        : 'Catalog/legacy preview: not a production vertical slice yet.'}
+                    </div>
+                  )}
+                  <button
+                    className={`${styles.playBtn} ${isOpen ? styles.open : ''}`}
                     onClick={() => isOpen && handleEnter(dungeon)}
-                    style={{ '--btn-color': dungeon.themeColor }} /* <-- Bổ sung dòng này */
+                    style={{ '--btn-color': dungeon.themeColor }}
                   >
-                    <span style={{ width: '22px', height: '22px', display: 'flex' }}><Icons.Energy /></span>
-                    {dungeon.energyCost} {lang === 'vi' ? 'XUẤT KÍCH' : 'DEPLOY'}
+                    {dungeonQaAccess.enabled ? (
+                      <>{lang === 'vi' ? 'QA XUẤT KÍCH · 0 NĂNG LƯỢNG' : 'QA DEPLOY · ZERO ENERGY'}</>
+                    ) : (
+                      <>
+                        <span style={{ width: '22px', height: '22px', display: 'flex' }}><Icons.Energy /></span>
+                        {dungeon.energyCost} {lang === 'vi' ? 'XUẤT KÍCH' : 'DEPLOY'}
+                      </>
+                    )}
                   </button>
                 </div>
               </div>

@@ -146,8 +146,15 @@ export function createDungeonEncounterDirectorV38({
   dungeonId = 'dung_taurus',
   seed = 1,
   nowMs = 0,
+  startRoomIndex = 0,
+  endAfterRoomIndex = null,
 } = {}) {
   const profile = resolveDungeonRuntimeProfileV38(dungeonId);
+  const lastRoomIndex = Math.max(0, profile.rooms.length - 1);
+  const safeStartRoomIndex = clamp(Math.trunc(finite(startRoomIndex, 0)), 0, lastRoomIndex);
+  const safeEndAfterRoomIndex = endAfterRoomIndex === null || endAfterRoomIndex === undefined
+    ? null
+    : clamp(Math.trunc(finite(endAfterRoomIndex, safeStartRoomIndex)), safeStartRoomIndex, lastRoomIndex);
   return {
     version: DUNGEON_ENCOUNTER_DIRECTOR_VERSION,
     foundationVersion: DUNGEON_PARITY_FOUNDATION_VERSION,
@@ -155,14 +162,16 @@ export function createDungeonEncounterDirectorV38({
     profile,
     seed: Math.max(1, Math.trunc(finite(seed, 1))),
     status: 'boot',
-    roomIndex: -1,
+    startRoomIndex: safeStartRoomIndex,
+    endAfterRoomIndex: safeEndAfterRoomIndex,
+    roomIndex: safeStartRoomIndex - 1,
     roomPlan: null,
     roomStartedAtMs: Math.max(0, finite(nowMs, 0)),
     roomClearAtMs: null,
     spawnCursor: 0,
     bossSpawned: false,
     bossDefeated: false,
-    roomsCleared: 0,
+    roomsCleared: safeStartRoomIndex,
     completed: false,
   };
 }
@@ -185,7 +194,7 @@ export function stepDungeonEncounterDirectorV38(director, {
   const now = Math.max(0, finite(nowMs, 0));
   const events = [];
 
-  if (director.status === 'boot') beginRoom(director, 0, now, events);
+  if (director.status === 'boot') beginRoom(director, director.startRoomIndex || 0, now, events);
   const plan = director.roomPlan;
   if (!plan) return Object.freeze({ director, events: Object.freeze(events), completed: false });
   const room = plan.room;
@@ -237,7 +246,8 @@ export function stepDungeonEncounterDirectorV38(director, {
     const clearDelay = Math.max(0, finite(director.roomPlan?.room?.clearDelayMs, 1000));
     if (now - director.roomClearAtMs >= clearDelay) {
       const nextRoomIndex = director.roomIndex + 1;
-      if (nextRoomIndex >= director.profile.rooms.length) {
+      if (nextRoomIndex >= director.profile.rooms.length
+        || (director.endAfterRoomIndex !== null && director.roomIndex >= director.endAfterRoomIndex)) {
         director.status = 'complete';
         director.completed = true;
         events.push(freezeDeep({
@@ -269,6 +279,8 @@ export function getDungeonEncounterSnapshotV38(director) {
     version: director.version,
     dungeonId: director.dungeonId,
     status: director.status,
+    startRoomIndex: director.startRoomIndex,
+    endAfterRoomIndex: director.endAfterRoomIndex,
     roomIndex: director.roomIndex,
     roomId: director.roomPlan?.room?.id || null,
     spawnCursor: director.spawnCursor,
@@ -292,5 +304,12 @@ export function auditDungeonEncounterDirectorV38() {
   const director = createDungeonEncounterDirectorV38({ dungeonId: 'dung_taurus', seed: 7, nowMs: 0 });
   const first = stepDungeonEncounterDirectorV38(director, { nowMs: 0, activeEnemyCount: 0 });
   if (!first.events.some(event => event.type === 'room_started')) issues.push('DUNGEON_ROOM_START_EVENT');
+  const bossOnly = createDungeonEncounterDirectorV38({
+    dungeonId: 'dung_taurus', seed: 9, nowMs: 0, startRoomIndex: 4, endAfterRoomIndex: 4,
+  });
+  const bossFirst = stepDungeonEncounterDirectorV38(bossOnly, { nowMs: 0, activeEnemyCount: 0 });
+  if (bossFirst.events.find(event => event.type === 'room_started')?.room?.id !== 'taurus_boss') {
+    issues.push('DUNGEON_QA_DIRECT_ROOM_START');
+  }
   return Object.freeze(issues);
 }

@@ -69,6 +69,7 @@ import {
     resolveDungeonPresentationV39,
     resolveDungeonRoomObjectiveV39,
 } from '../../game/dungeon/DungeonPresentationV39.js';
+import { isDungeonQaRunV391 } from '../../game/dungeon/DungeonQaAccessV391.js';
 import {
     createDungeonBackdropV39,
     createDungeonBossFallbackV39,
@@ -152,6 +153,9 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     const selectedDungeonId = gsRef.current.selectedDungeonId;
     const dungeonConfig = DUNGEON_CONFIG.find(d => d.id === selectedDungeonId) || DUNGEON_CONFIG[0];
     const dungeonId = dungeonConfig.id;
+    const dungeonQaRunV391 = isDungeonQaRunV391(gsRef.current?.dungeonQa, dungeonId)
+        ? gsRef.current.dungeonQa
+        : null;
     const DIFF = resolveDungeonDifficulty(dungeonConfig);
     const dungeonParityV38 = isDungeonParityFoundationEnabledV38({
         dungeonId,
@@ -163,10 +167,19 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     const dungeonSeedV38 = stableSeed(
         dungeonId,
         gsRef.current?.campaignData?.profileId || 'guest',
-        gsRef.current?.activeBattleId || 'local',
+        dungeonQaRunV391?.seedKey || gsRef.current?.activeBattleId || 'local',
     );
+    const qaStartRoomIndexV391 = dungeonParityV38 && Number.isInteger(dungeonQaRunV391?.directRoomIndex)
+        ? dungeonQaRunV391.directRoomIndex
+        : 0;
     const dungeonDirectorV38 = dungeonParityV38
-        ? createDungeonEncounterDirectorV38({ dungeonId, seed: dungeonSeedV38, nowMs: 0 })
+        ? createDungeonEncounterDirectorV38({
+            dungeonId,
+            seed: dungeonSeedV38,
+            nowMs: 0,
+            startRoomIndex: qaStartRoomIndexV391,
+            endAfterRoomIndex: dungeonQaRunV391?.singleRoom ? qaStartRoomIndexV391 : null,
+        })
         : null;
     const combat = deriveBattleLoadout(gsRef.current.campaignData, { PILOTS, AIRCRAFTS, GEAR_CATALOG },
       {mode:'dungeon', location:dungeonConfig});

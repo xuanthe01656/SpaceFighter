@@ -14,6 +14,11 @@ on:
         required: false
         type: boolean
         default: false
+      guest_dungeon_v39_qa:
+        description: 'Build local-only Dungeon V3.9.1 QA APK (all dungeons, no rewards)'
+        required: false
+        type: boolean
+        default: false
       cloud_qa_ui:
         description: 'Build NON-ECONOMIC server-authoritative Cloud Alpha1 QA cockpit (manual only)'
         required: false
@@ -92,6 +97,9 @@ jobs:
       VITE_SF_NATIVE_TOUCH_QA: ${{ github.event_name == 'workflow_dispatch' && inputs.touch_qa == true && '1' || '0' }}
       VITE_SF_GUEST_ABILITIES_QA: ${{ github.event_name == 'workflow_dispatch' && inputs.guest_combat_v2_qa == true && 'true' || 'false' }}
       VITE_SF_GUEST_COMBAT_V2_QA: ${{ github.event_name == 'workflow_dispatch' && inputs.guest_combat_v2_qa == true && 'true' || 'false' }}
+      VITE_SF_DUNGEON_QA: ${{ github.event_name == 'workflow_dispatch' && inputs.guest_dungeon_v39_qa == true && 'true' || 'false' }}
+      VITE_SF_DUNGEON_QA_REWARDS: 'false'
+      VITE_SF_DUNGEON_PARITY_V38: 'true'
       VITE_C8_CLOUD_QA_UI: ${{ github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && 'true' || 'false' }}
       VITE_C9_BABYLON_QA_UI: ${{ github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && inputs.c9_babylon_qa == true && 'true' || 'false' }}
       VITE_C12_CANDIDATE_QA_UI: ${{ github.event_name == 'workflow_dispatch' && inputs.cloud_qa_ui == true && inputs.c9_babylon_qa == true && inputs.c12_candidate_qa == true && 'true' || 'false' }}
@@ -216,7 +224,7 @@ jobs:
       - name: Run current Android candidate fast source gate once
         run: |
           set -euo pipefail
-          if [[ "${{ inputs.c15_rc7_assets }}" == 'true' || "${{ inputs.guest_combat_v2_qa }}" == 'true' ]]; then
+          if [[ "${{ inputs.c15_rc7_assets }}" == 'true' || "${{ inputs.guest_combat_v2_qa }}" == 'true' || "${{ inputs.guest_dungeon_v39_qa }}" == 'true' ]]; then
             npm run gate:c15-rc7:fast
           else
             npm run gate:c15-rc5:fast
@@ -233,6 +241,15 @@ jobs:
             [[ "$VITE_SF_BUILD_CHANNEL" == 'staging-qa' ]] || { echo 'Guest Combat V2 QA may not use a release channel' >&2; exit 1; }
             [[ "$VITE_C8_CLOUD_QA_UI" == 'false' && "$VITE_C15_RC1B_ENABLED" == 'false' ]] || { echo 'Guest Combat V2 QA must be isolated from Cloud/C15 modes' >&2; exit 1; }
             echo 'Building local-only Guest Combat V2 skills/armor QA payload; NO CLOUD, NO REWARDS, NOT FOR RELEASE'
+          fi
+          if [[ "$VITE_SF_DUNGEON_QA" == 'true' ]]; then
+            [[ "$GITHUB_EVENT_NAME" == 'workflow_dispatch' ]] || { echo 'Dungeon QA is manual-only' >&2; exit 1; }
+            [[ "$VITE_GAME_API_ENABLED" == 'false' ]] || { echo 'Dungeon QA must not enable Game API' >&2; exit 1; }
+            [[ "$VITE_SF_BUILD_CHANNEL" == 'staging-qa' ]] || { echo 'Dungeon QA may not use a release channel' >&2; exit 1; }
+            [[ "$VITE_SF_DUNGEON_QA_REWARDS" == 'false' && "$VITE_SF_DUNGEON_PARITY_V38" == 'true' ]] || exit 1
+            [[ "${{ inputs.touch_qa }}" != 'true' && "${{ inputs.guest_combat_v2_qa }}" != 'true' && "${{ inputs.cloud_qa_ui }}" != 'true' ]] || { echo 'Dungeon QA must be built separately from other QA modes' >&2; exit 1; }
+            [[ "${{ inputs.c15_rc1b }}" != 'true' && "${{ inputs.c15_rc1c }}" != 'true' && "${{ inputs.c15_rc3 }}" != 'true' && "${{ inputs.c15_rc4 }}" != 'true' && "${{ inputs.c15_rc5 }}" != 'true' && "${{ inputs.c15_rc7_assets }}" != 'true' ]] || { echo 'Dungeon QA cannot be combined with C15 release candidates' >&2; exit 1; }
+            echo 'Building local-only Dungeon V3.9.1 QA harness; ALL DUNGEONS VISIBLE, NO ENERGY, NO REWARDS, NO TRUSTED WRITES'
           fi
           if [[ "$VITE_SF_NATIVE_TOUCH_QA" == '1' ]]; then
             [[ "$GITHUB_EVENT_NAME" == 'workflow_dispatch' ]] || { echo 'Touch QA is manual-only' >&2; exit 1; }
@@ -350,7 +367,9 @@ jobs:
         run: |
           set -euo pipefail
           name='spacefighter-android-debug-not-for-release'
-          if [[ "${{ inputs.guest_combat_v2_qa }}" == 'true' ]]; then
+          if [[ "${{ inputs.guest_dungeon_v39_qa }}" == 'true' ]]; then
+            name='spacefighter-android-dungeon-v391-qa-debug-no-rewards'
+          elif [[ "${{ inputs.guest_combat_v2_qa }}" == 'true' ]]; then
             name='spacefighter-android-guest-combat-v2-qa-debug-not-for-release'
           elif [[ "${{ inputs.c15_rc7_assets }}" == 'true' ]]; then
             name='spacefighter-android-c15-rc7-asset-delivery-candidate'

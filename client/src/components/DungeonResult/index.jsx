@@ -23,6 +23,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { auth } from '../../firebase';
 import { recordGuestBattle } from '../../utils/guestProgress';
+import { isDungeonQaRunV391 } from '../../game/dungeon/DungeonQaAccessV391.js';
 
 // ── Icon helpers ──────────────────────────────────────────────────────────────
 const RewardIcon = ({ type, size = 28 }) => {
@@ -82,6 +83,7 @@ export default function DungeonResult({ gsRef, setScreen, lang, saveUserProfile,
   }
 
   const { isVictory, dungeon, score, totalKills, wavesCleared, maxWaves, earnedRewards } = result;
+  const qaRun = isDungeonQaRunV391(result?.qa, dungeon?.id) ? result.qa : null;
   const themeColor = dungeon?.themeColor || (isVictory ? '#4ade80' : '#ef4444');
 
   // Animate rewards in after 0.8s
@@ -97,6 +99,12 @@ export default function DungeonResult({ gsRef, setScreen, lang, saveUserProfile,
     setSaving(true);
 
     try {
+      if (qaRun) {
+        gsRef.current.dungeonResult = null;
+        toast.success(lang === 'vi' ? 'QA hoàn tất — không ghi dữ liệu.' : 'QA complete — no data written.');
+        setScreen('dungeon_select');
+        return;
+      }
       if (auth.currentUser) {
         const reply=await gameAction('battle.finish',{ticketId:gsRef.current.activeBattleId,victory:isVictory});
         gsRef.current.dungeonResult=null;
@@ -167,6 +175,11 @@ export default function DungeonResult({ gsRef, setScreen, lang, saveUserProfile,
 
   // ── "Back without claim" (defeat or skip) ────────────────────────────────
   const handleSkip = async () => {
+    if (qaRun) {
+      gsRef.current.dungeonResult = null;
+      setScreen('dungeon_select');
+      return;
+    }
     if (auth.currentUser && gsRef.current.activeBattleId) {
       try { await gameAction('battle.finish',{ticketId:gsRef.current.activeBattleId,victory:false}); }
       catch(error) {toast.error(error.message);return;}
@@ -220,6 +233,12 @@ export default function DungeonResult({ gsRef, setScreen, lang, saveUserProfile,
         <p style={{ color: themeColor, fontSize: 13, letterSpacing: '0.35em', margin: '0 0 4px', opacity: 0.8 }}>
           {dungeon?.title?.[lang] || dungeon?.title?.vi || 'DUNGEON'}
         </p>
+        {qaRun && (
+          <p style={{ color: '#facc15', fontSize: 11, letterSpacing: '.16em', margin: '4px 0 8px', fontWeight: 800 }}>
+            DUNGEON QA · NO REWARDS · NO PROFILE WRITES
+            {qaRun.directRoomId ? ` · ${qaRun.directRoomId}` : ''}
+          </p>
+        )}
 
         {/* Victory / Defeat */}
         <h1 style={{
@@ -284,14 +303,26 @@ export default function DungeonResult({ gsRef, setScreen, lang, saveUserProfile,
         }}>
           <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
           <span style={{ color: '#94a3b8', fontSize: 11, letterSpacing: '0.22em' }}>
-            {isVictory
-              ? (lang === 'vi' ? 'PHẦN THƯỞNG NHẬN ĐƯỢC' : 'REWARDS EARNED')
-              : (lang === 'vi' ? 'KHÔNG CÓ PHẦN THƯỞNG' : 'NO REWARDS')}
+            {qaRun
+              ? 'QA RUN · NO REWARDS'
+              : (isVictory
+                ? (lang === 'vi' ? 'PHẦN THƯỞNG NHẬN ĐƯỢC' : 'REWARDS EARNED')
+                : (lang === 'vi' ? 'KHÔNG CÓ PHẦN THƯỞNG' : 'NO REWARDS'))}
           </span>
           <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.08)' }} />
         </div>
 
-        {isVictory && (earnedRewards.length > 0 || auth.currentUser) ? (
+        {qaRun ? (
+          <div style={{
+            padding: '18px 20px', background: 'rgba(250,204,21,.06)',
+            border: '1px solid rgba(250,204,21,.28)', borderRadius: 10,
+            color: '#facc15', fontSize: 13, textAlign: 'center', lineHeight: 1.6,
+          }}>
+            {lang === 'vi'
+              ? 'Đây là lượt QA cục bộ. Không tiêu hao năng lượng, không nhận thưởng và không ghi tiến trình.'
+              : 'This is a local QA run. No energy, rewards, progression, or trusted writes are applied.'}
+          </div>
+        ) : isVictory && (earnedRewards.length > 0 || auth.currentUser) ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <AnimatePresence>
               {showRewards && earnedRewards.map((rw, i) => (
@@ -368,7 +399,19 @@ export default function DungeonResult({ gsRef, setScreen, lang, saveUserProfile,
         transition={{ delay: 0.55 }}
         style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: 480 }}
       >
-        {isVictory && (earnedRewards.length > 0 || auth.currentUser) ? (
+        {qaRun ? (
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            onClick={handleSkip}
+            style={{
+              padding: '18px 28px', border: '1px solid rgba(250,204,21,.65)', borderRadius: 12,
+              background: 'rgba(250,204,21,.12)', color: '#facc15', fontSize: 17,
+              fontWeight: 900, letterSpacing: '.12em', cursor: 'pointer', fontFamily: font,
+            }}
+          >
+            {lang === 'vi' ? '◀ VỀ DUNGEON QA' : '◀ BACK TO DUNGEON QA'}
+          </motion.button>
+        ) : isVictory && (earnedRewards.length > 0 || auth.currentUser) ? (
           // Victory: cloud accounts receive server-rolled rewards when claiming.
           <motion.button
             whileTap={{ scale: 0.97 }}
@@ -433,7 +476,7 @@ export default function DungeonResult({ gsRef, setScreen, lang, saveUserProfile,
         )}
 
         {/* Secondary: back button */}
-        <motion.button
+        {!qaRun && <motion.button
           whileTap={{ scale: 0.97 }}
           onClick={handleSkip}
           style={{
@@ -451,7 +494,7 @@ export default function DungeonResult({ gsRef, setScreen, lang, saveUserProfile,
           {isVictory
             ? (lang === 'vi' ? '✕ BỎ QUA PHẦN THƯỞNG' : '✕ FORFEIT REWARDS')
             : (lang === 'vi' ? '◀ VỀ DANH SÁCH PHÓ BẢN' : '◀ BACK TO DUNGEONS')}
-        </motion.button>
+        </motion.button>}
       </motion.div>
     </motion.div>
   );

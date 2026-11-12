@@ -6,6 +6,7 @@ import { DUNGEON_CONFIG, EVENT_CONFIG } from '../../constants';
 import { activeCoinMultiplier } from '../../utils/guestProgress';
 import { auth } from '../../firebase';
 import toast from 'react-hot-toast';
+import { isDungeonQaRunV391 } from '../../game/dungeon/DungeonQaAccessV391.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -79,12 +80,16 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
     // Lấy config dungeon hiện tại để tính thưởng sau
     const dungeonId     = gsRef.current.selectedDungeonId;
     const dungeonConfig = DUNGEON_CONFIG.find(d => d.id === dungeonId) || DUNGEON_CONFIG[0];
+    const dungeonQaRun = isDungeonQaRunV391(gsRef.current?.dungeonQa, dungeonConfig.id)
+      ? gsRef.current.dungeonQa
+      : null;
 
     const data = {
       gsRef,
       lang,
       getRealTime,
-      isCloud: Boolean(auth.currentUser),
+      // QA runs suppress guest progress mutation as well as Cloud settlement.
+      isCloud: Boolean(auth.currentUser) || Boolean(dungeonQaRun),
 
       // ── THUA: không có thưởng, vào màn hình kết quả để hiển thị thống kê
       onGameOver: (result) => {
@@ -96,6 +101,7 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
           wavesCleared : result.wavesCleared || 0,
           maxWaves     : result.maxWaves     || 5,
           earnedRewards: [],   // Thua → không nhận thưởng
+          qa            : dungeonQaRun,
         };
         setScreen('dungeon_result');
       },
@@ -103,8 +109,8 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
       // ── THẮNG: tính thưởng, lưu vào gsRef.current.dungeonResult
       onVictory: (result) => {
         // Cloud accounts receive only server-rolled rewards at claim time.
-        const earnedRewards = auth.currentUser ? [] : calcRewards(dungeonConfig, result);
-        if (!auth.currentUser) {
+        const earnedRewards = (auth.currentUser || dungeonQaRun) ? [] : calcRewards(dungeonConfig, result);
+        if (!auth.currentUser && !dungeonQaRun) {
           // Former scene-side bonus is now held until the player taps Claim.
           const bonus = Math.floor(Math.max(0,Number(result.score)||0)*0.1*activeCoinMultiplier(EVENT_CONFIG));
           if (bonus>0) {
@@ -122,6 +128,7 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
           wavesCleared : result.wavesCleared || 0,
           maxWaves     : result.maxWaves     || 5,
           earnedRewards,
+          qa            : dungeonQaRun,
         };
         setScreen('dungeon_result');
       },
@@ -159,6 +166,30 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
         style={{ display: 'block', width: '100%', height: '100%', touchAction: 'none', outline: 'none' }}
       />
 
+      {isDungeonQaRunV391(gsRef.current?.dungeonQa, gsRef.current?.selectedDungeonId) && (
+        <div style={{
+          position: 'absolute',
+          top: 'calc(env(safe-area-inset-top) + 40px)',
+          right: '20px',
+          zIndex: 101,
+          padding: '7px 10px',
+          border: '1px solid rgba(250,204,21,.75)',
+          borderRadius: 6,
+          background: 'rgba(20,14,2,.82)',
+          color: '#facc15',
+          fontFamily: 'monospace',
+          fontSize: 11,
+          fontWeight: 800,
+          letterSpacing: '.08em',
+          textAlign: 'right',
+          pointerEvents: 'none',
+        }}>
+          DUNGEON QA · NO REWARDS
+          <br />
+          {gsRef.current.dungeonQa.directRoomId || gsRef.current.dungeonQa.runtimeMode}
+        </div>
+      )}
+
       {/* Nút Rút Lui (chỉ UI React trong Dungeon) */}
       <button
         disabled={retreating}
@@ -167,7 +198,11 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
           retreatLockRef.current = true;
           setRetreating(true);
           try {
-            if (auth.currentUser && gsRef.current.activeBattleId) {
+            const dungeonQaRun = isDungeonQaRunV391(
+              gsRef.current?.dungeonQa,
+              gsRef.current?.selectedDungeonId,
+            );
+            if (!dungeonQaRun && auth.currentUser && gsRef.current.activeBattleId) {
               // Never leave gameplay while the authoritative ticket is still open.
               await gameAction('battle.abandon',{ticketId:gsRef.current.activeBattleId});
             }

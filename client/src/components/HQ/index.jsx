@@ -9,6 +9,7 @@ import { preloadBattleScreen } from '../../game/routing/BattleScreenLoaders';
 import ShipImage from '../ShipImage/ShipImage';
 import AssetImage from '../AssetImage/AssetImage';
 import { resolveShipVisual } from '../../game/rendering/ShipVisualCatalog';
+import { isDungeonQaRunV391 } from '../../game/dungeon/DungeonQaAccessV391.js';
 
 // Hàm tiện ích: Định dạng số liệu ngắn gọn (1K, 1.5M, 2B) đồng bộ toàn App
 const formatCompactNumber = (number) => {
@@ -35,7 +36,11 @@ export default function HQ({ gsRef, setScreen, lang, saveUserProfile, gameAction
     }
     const mode = gsRef.current.gameMode === 'dungeon' ? 'dungeon' : 'campaign';
     const cost = Number(gsRef.current.pendingEnergyCost);
-    if (mode==='dungeon' && (!Number.isFinite(cost) || cost<=0 || gsRef.current.energy < cost)) {
+    const dungeonQaRun = mode === 'dungeon' && isDungeonQaRunV391(
+      gsRef.current?.dungeonQa,
+      gsRef.current?.selectedDungeonId,
+    ) ? gsRef.current.dungeonQa : null;
+    if (mode==='dungeon' && !dungeonQaRun && (!Number.isFinite(cost) || cost<=0 || gsRef.current.energy < cost)) {
       toast.error(lang === 'vi' ? 'Không đủ năng lượng!' : 'Not enough Energy!'); return;
     }
     launchLockRef.current=true;setIsLaunching(true);
@@ -56,7 +61,7 @@ export default function HQ({ gsRef, setScreen, lang, saveUserProfile, gameAction
         setScreen('campaign');
         return;
       }
-      if (auth.currentUser) {
+      if (auth.currentUser && !dungeonQaRun) {
         // Recover a ticket left after app crash/reload. Energy from an
         // interrupted dungeon run is not refunded (documented game policy).
         if (gsRef.current.activeBattleId) {
@@ -67,7 +72,7 @@ export default function HQ({ gsRef, setScreen, lang, saveUserProfile, gameAction
           : {mode,planetId:Number(progress.currentPlanet)||1,stage:Number(progress.selectedStage)||1};
         const reply=await gameAction('battle.start',payload);
         gsRef.current.activeBattleId=reply.extra.ticket.id;
-      } else if (mode==='dungeon') {
+      } else if (mode==='dungeon' && !dungeonQaRun) {
         const before=gsRef.current.energy;
         gsRef.current.energy=before-cost;
         const saved=await saveUserProfile();
@@ -333,6 +338,17 @@ export default function HQ({ gsRef, setScreen, lang, saveUserProfile, gameAction
               {import.meta.env.VITE_C12_CANDIDATE_QA_UI === 'true'
                 ? 'C12 CANDIDATE · NON-ECONOMIC' : 'CLOUD ALPHA 1 · QA ONLY · NO REWARDS'}
             </button>
+          </div>
+        )}
+        {isDungeonQaRunV391(gsRef.current?.dungeonQa, targetDungeon) && (
+          <div style={{
+            margin: '10px auto', maxWidth: 520, padding: '10px 14px', textAlign: 'center',
+            border: '1px solid rgba(250,204,21,.55)', borderRadius: 8,
+            background: 'rgba(42,29,3,.62)', color: '#facc15', fontWeight: 800,
+            letterSpacing: '.08em', fontSize: 13,
+          }}>
+            DUNGEON QA · NO ENERGY · NO REWARDS · NO PROFILE WRITES
+            {gsRef.current.dungeonQa.directRoomId ? ` · ${gsRef.current.dungeonQa.directRoomId}` : ''}
           </div>
         )}
         <div style={{ display: 'flex', justifyContent: 'center' }}>
