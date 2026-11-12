@@ -33,11 +33,22 @@ import {
   resolveDungeonBossBindingV38,
 } from '../src/game/dungeon/DungeonBossAdapterV38.js';
 import {
+  DUNGEON_PRODUCTION_PRESENTATION_VERSION,
+  auditDungeonPresentationV39,
+  resolveDungeonBossPatternPresentationV39,
+  resolveDungeonPresentationV39,
+} from '../src/game/dungeon/DungeonPresentationV39.js';
+import {
+  CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32,
+  resolveCampaignProjectileVisualV32,
+} from '../src/game/rendering/CampaignProjectileVisualV32.js';
+import {
   createCampaignEnemyCombatSlotRegistryV37,
   getCampaignEnemyCombatSlotV37,
   syncCampaignEnemyCombatSlotsV37,
 } from '../src/game/combat/CampaignEnemyCombatSlotsV37.js';
 import { ENEMY_ARCHETYPES_V2 } from '../src/game/combat/EnemyCombatCatalogV2.js';
+import { resolveAssetVisual } from '../src/game/assets/AssetRegistry.js';
 
 test('Campaign Gameplay Foundation Lock RC1 is exact and drift-free', () => {
   assert.equal(CAMPAIGN_GAMEPLAY_FOUNDATION_LOCK_RC1.version,
@@ -161,7 +172,7 @@ test('Dungeon combat adapter reuses all Campaign roles and distributed slots', (
 });
 
 test('Dungeon Boss adapter binds Taurus to shared XState arsenal and scales projectiles', () => {
-  assert.equal(DUNGEON_BOSS_ADAPTER_VERSION, 'dungeon-boss-adapter-v3.8.0');
+  assert.equal(DUNGEON_BOSS_ADAPTER_VERSION, 'dungeon-boss-adapter-v3.9.0');
   assert.deepEqual(auditDungeonBossAdapterV38(), []);
   const bossSpec = {
     id: 'taurus_rust_driller',
@@ -171,6 +182,8 @@ test('Dungeon Boss adapter binds Taurus to shared XState arsenal and scales proj
   };
   const binding = resolveDungeonBossBindingV38(bossSpec);
   assert.equal(binding.profileId, 'alpha_mech_sentinel');
+  assert.equal(binding.dungeonId, 'dung_taurus');
+  assert.equal(binding.visualAssetId, 'dung_taurus_boss');
   const plan = {
     id: 'boss-plan-1',
     pattern: 'alpha_lock_burst',
@@ -192,6 +205,39 @@ test('Dungeon Boss adapter binds Taurus to shared XState arsenal and scales proj
   assert.equal(projectile.rawDamage, 88);
   assert.equal(projectile.velocity.x, .24);
   assert.equal(projectile.velocity.z, .768);
+  assert.equal(projectile.sourcePattern, 'alpha_lock_burst');
+  assert.equal(projectile.pattern, 'taurus_drill_lance');
+  assert.equal(projectile.visualId, 'dungeon_taurus_drill_lance');
+});
+
+test('Dungeon V3.9 presentation resolves production Taurus identity without changing combat authority', () => {
+  assert.equal(DUNGEON_PRODUCTION_PRESENTATION_VERSION,
+    'dungeon-production-presentation-v3.9.0');
+  assert.deepEqual(auditDungeonPresentationV39(), []);
+  const profile = resolveDungeonPresentationV39('dung_taurus');
+  assert.equal(profile.boss.visualAssetId, 'dung_taurus_boss');
+  const bossAsset = resolveAssetVisual('dungeon_boss', profile.boss.visualAssetId);
+  assert.equal(bossAsset?.assetId, 'dungeon_boss:dung_taurus_boss');
+  assert.match(bossAsset?.atlasSrc || '', /dung_taurus_boss_sheet\.webp$/);
+  assert.notEqual(profile.palette.clearColor.toLowerCase(), '#4ade80');
+  assert.ok(profile.hazard.warningMs >= 500);
+  assert.ok(profile.hazard.warningDepth >= 20);
+  const pattern = resolveDungeonBossPatternPresentationV39({
+    dungeonId: 'dung_taurus',
+    patternId: 'alpha_overdrive',
+    visualId: 'boss_alpha_overdrive',
+  });
+  assert.equal(pattern.patternId, 'taurus_foundry_overdrive');
+  assert.equal(pattern.visualId, 'dungeon_taurus_overdrive');
+  for (const visualId of [
+    'dungeon_taurus_drill_lance',
+    'dungeon_taurus_ore_cutter',
+    'dungeon_taurus_shrapnel',
+    'dungeon_taurus_overdrive',
+  ]) {
+    assert.ok(CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32[visualId]);
+    assert.equal(resolveCampaignProjectileVisualV32({ visualId }).id, visualId);
+  }
 });
 
 test('DungeonScene integrates parity director, required objectives and shared Boss XState', () => {
@@ -207,6 +253,14 @@ test('DungeonScene integrates parity director, required objectives and shared Bo
   assert.match(source, /resolveDungeonEnemyMuzzleOriginV38/);
   assert.match(source, /remainingSpawns/);
   assert.match(source, /clearDungeonHostileProjectilesV38/);
+  assert.match(source, /createDungeonHazardTelegraphV39/);
+  assert.match(source, /createDungeonBreakableVisualV39/);
+  assert.match(source, /createDungeonBossFallbackV39/);
+  assert.match(source, /bossVisualAssetId/);
+  assert.match(source, /dungeonObjectivePanel/);
+  assert.match(source, /HOÀN THÀNH\\nPHÓ BẢN!/);
+  assert.doesNotMatch(source, /scene\.clearColor\s*=\s*hexToColor4\(dungeonConfig\.themeColor/);
+  assert.doesNotMatch(source, /CAMPAIGN\\nCLEARED/);
   assert.match(source, /VITE_SF_DUNGEON_PARITY_V38/);
   assert.match(source, /if \(!dungeonParityV38\) scheduleBattleTimer\(\(\) => startWave\(1\), 800\)/);
 });

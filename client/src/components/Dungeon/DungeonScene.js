@@ -64,6 +64,18 @@ import {
     stepDungeonBossControllerV38,
     stopDungeonBossControllerV38,
 } from '../../game/dungeon/DungeonBossAdapterV38.js';
+import {
+    resolveDungeonBossPatternPresentationV39,
+    resolveDungeonPresentationV39,
+    resolveDungeonRoomObjectiveV39,
+} from '../../game/dungeon/DungeonPresentationV39.js';
+import {
+    createDungeonBackdropV39,
+    createDungeonBossFallbackV39,
+    createDungeonBreakableVisualV39,
+    createDungeonHazardTelegraphV39,
+    createDungeonHazardVisualV39,
+} from '../../game/rendering/DungeonPresentationFactoryV39.js';
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -146,6 +158,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         envEnabled: import.meta.env?.VITE_SF_DUNGEON_PARITY_V38 !== 'false',
     });
     const dungeonRuntimeProfileV38 = resolveDungeonRuntimeProfileV38(dungeonId);
+    const dungeonPresentationV39 = resolveDungeonPresentationV39(dungeonId);
     if (dungeonParityV38) assertCampaignGameplayFoundationLockRC1();
     const dungeonSeedV38 = stableSeed(
         dungeonId,
@@ -187,9 +200,9 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     engine.onResizeObservable.add(syncCamera);
 
     const light = new BABYLON.HemisphericLight('amb', new BABYLON.Vector3(0, 1, 0), scene);
-    light.intensity   = 1.0;
-    light.diffuse     = new BABYLON.Color3(0.7, 0.8, 1.0);
-    light.groundColor = new BABYLON.Color3(0.1, 0.1, 0.2);
+    light.intensity   = .92;
+    light.diffuse     = BABYLON.Color3.FromHexString(dungeonPresentationV39.palette.ambientDiffuse);
+    light.groundColor = BABYLON.Color3.FromHexString(dungeonPresentationV39.palette.ambientGround);
 
     const hexToColor4 = (hex) => {
         const c = hex.replace('#', '');
@@ -197,7 +210,10 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             parseInt(c.slice(0, 2), 16) / 255, parseInt(c.slice(2, 4), 16) / 255, parseInt(c.slice(4, 6), 16) / 255, 1,
         );
     };
-    scene.clearColor = hexToColor4(dungeonConfig.themeColor || '#010a1a');
+    // Theme accent colors must never become the whole arena background. The
+    // video review exposed a flat bright-green Taurus battlefield when no
+    // authored background was bound. V3.9 uses a dark production fallback.
+    scene.clearColor = hexToColor4(dungeonPresentationV39.palette.clearColor || '#03110e');
 
     const glow = new BABYLON.GlowLayer('glow', scene);
     glow.intensity = quality.glow ? 0.2 : 0;
@@ -214,9 +230,12 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         const SPAN_Z = ZOOM * 2.5;
 
         const layers = [
-            { count: Math.max(8,Math.round(200 * quality.starFraction)), size: 0.07, speed: 0.025, brightness: new BABYLON.Color3(0.4, 0.5, 0.7) },
-            { count:  Math.max(8,Math.round(80 * quality.starFraction)), size: 0.14, speed: 0.060, brightness: new BABYLON.Color3(0.7, 0.8, 1.0) },
-            { count:  Math.max(8,Math.round(25 * quality.starFraction)), size: 0.24, speed: 0.110, brightness: new BABYLON.Color3(1.0, 1.0, 1.0) },
+            { count: Math.max(8,Math.round(200 * quality.starFraction)), size: 0.07, speed: 0.025,
+              brightness: BABYLON.Color3.FromHexString(dungeonPresentationV39.palette.starFar) },
+            { count:  Math.max(8,Math.round(80 * quality.starFraction)), size: 0.14, speed: 0.060,
+              brightness: BABYLON.Color3.FromHexString(dungeonPresentationV39.palette.starMid) },
+            { count:  Math.max(8,Math.round(25 * quality.starFraction)), size: 0.24, speed: 0.110,
+              brightness: BABYLON.Color3.FromHexString(dungeonPresentationV39.palette.starNear) },
         ];
 
         const allLayers = layers.map(({ count, size, speed, brightness }) => {
@@ -243,7 +262,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     };
     const selectedBackground = legacyBattleBackgroundRequested(globalThis.location?.search) ? null : resolveBattleBackground({ mode: 'dungeon', dungeonId,
         variantId: previewBg4Variant({mode: 'dungeon', dungeonId, queryString: globalThis.location?.search}) });
-    // Keep the load frame dark for readable shots; avoid a bright-cyan flash before the texture is ready.
+    // Keep the load frame dark for readable shots; avoid a bright accent-color
+    // flash before an authored background is ready.
     if (selectedBackground) scene.clearColor = hexToColor4(selectedBackground.fallbackColor);
     if (selectedBackground) {
         createScrollingBattleBackground({
@@ -252,6 +272,16 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             onFallback: createLegacyStarfield,
         });
     } else createLegacyStarfield();
+    const dungeonBackdropV39 = !selectedBackground && dungeonParityV38
+        ? createDungeonBackdropV39({
+            scene,
+            BABYLON,
+            arenaHalfWidth: ZOOM * getAspect(),
+            worldHalfHeight: ZOOM,
+            count: dungeonPresentationV39.backdrop?.decorativeDebrisCount || 0,
+            scrollSpeed: dungeonPresentationV39.backdrop?.scrollSpeed || .014,
+        })
+        : null;
     // Developer-only measurement: ?bgPerf=1; no mission or wallet writes.
     attachBattleBackgroundProfiler({
         scene, engine, mode: 'dungeon',
@@ -387,19 +417,20 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
     // Chữ chạy cảnh báo (Announcement)
     const annPanel = new GUI.Rectangle('annPanel');
-    annPanel.width = "100%"; 
+    annPanel.width = "86%";
     annPanel.height = `70px`;
-    annPanel.background = "rgba(5,11,20,0.92)"; 
-    annPanel.color = "rgba(102, 252, 241, 0.5)";
+    annPanel.background = dungeonPresentationV39.palette.panel || "rgba(5,11,20,0.92)";
+    annPanel.color = dungeonPresentationV39.palette.accent || "#66fcf1";
     annPanel.thickness = 2; 
+    annPanel.cornerRadius = 10;
     annPanel.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_CENTER;
-    annPanel.top = "-15%"; 
+    annPanel.top = "-12%";
     annPanel.alpha = 0;
     ui.addControl(annPanel);
 
     const annText = new GUI.TextBlock('annText');
-    annText.color = "#66fcf1"; 
-    annText.fontSize = 32; 
+    annText.color = dungeonPresentationV39.palette.accent || "#66fcf1";
+    annText.fontSize = 27;
     annText.fontWeight = "bold";
     annText.fontFamily = '"VT323", monospace';
     annPanel.addControl(annText);
@@ -417,6 +448,52 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             else { annPanel.alpha = 0; clearInterval(annAnim); }
         }, 50);
     };
+
+    // Compact objective card. It stays outside the player combat lane and
+    // replaces the ambiguous full-screen room banners seen in the V3.8 video.
+    const objectivePanel = new GUI.Rectangle('dungeonObjectivePanel');
+    objectivePanel.width = '270px';
+    objectivePanel.height = '58px';
+    objectivePanel.background = dungeonPresentationV39.palette.panel || 'rgba(3,12,14,0.92)';
+    objectivePanel.color = `${dungeonPresentationV39.palette.accent || '#4ade80'}aa`;
+    objectivePanel.thickness = 1;
+    objectivePanel.cornerRadius = 8;
+    objectivePanel.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP;
+    objectivePanel.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_RIGHT;
+    objectivePanel.top = '68px';
+    objectivePanel.left = '-10px';
+    objectivePanel.isVisible = false;
+    ui.addControl(objectivePanel);
+
+    const objectiveStack = new GUI.StackPanel('dungeonObjectiveStack');
+    objectiveStack.paddingTop = '5px';
+    objectiveStack.paddingLeft = '8px';
+    objectiveStack.paddingRight = '8px';
+    objectivePanel.addControl(objectiveStack);
+
+    const objectiveTitleText = new GUI.TextBlock('dungeonObjectiveTitle');
+    objectiveTitleText.height = '20px';
+    objectiveTitleText.color = dungeonPresentationV39.palette.accentSoft || '#9ff5bb';
+    objectiveTitleText.fontFamily = '"VT323", monospace';
+    objectiveTitleText.fontSize = 16;
+    objectiveTitleText.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+    objectiveStack.addControl(objectiveTitleText);
+
+    const objectiveBodyText = new GUI.TextBlock('dungeonObjectiveBody');
+    objectiveBodyText.height = '17px';
+    objectiveBodyText.color = '#e7fff6';
+    objectiveBodyText.fontFamily = '"VT323", monospace';
+    objectiveBodyText.fontSize = 13;
+    objectiveBodyText.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+    objectiveStack.addControl(objectiveBodyText);
+
+    const objectiveProgressText = new GUI.TextBlock('dungeonObjectiveProgress');
+    objectiveProgressText.height = '16px';
+    objectiveProgressText.color = dungeonPresentationV39.palette.objective || '#ffd166';
+    objectiveProgressText.fontFamily = '"VT323", monospace';
+    objectiveProgressText.fontSize = 13;
+    objectiveProgressText.textHorizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+    objectiveStack.addControl(objectiveProgressText);
 
     // ══════════════════════════════════════════════════════════════════════════
     // 5. TÀU NGƯỜI CHƠI
@@ -546,19 +623,32 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         elite:       makeMat(scene, new BABYLON.Color3(1,    0.6,  0   )),  
         boss:        makeMat(scene, new BABYLON.Color3(1,    0.35, 0   )),  
     };
-    const dungeonBossDangerMatV38 = makeMat(scene, new BABYLON.Color3(1, .16, .08));
-    dungeonBossDangerMatV38.alpha = .20;
-    dungeonBossDangerMatV38.backFaceCulling = false;
-    const dungeonBreakableMatV38 = makeMat(scene, new BABYLON.Color3(.65, .78, .42), false);
-    const dungeonHazardMatV38 = makeMat(scene, new BABYLON.Color3(.72, .38, .14), false);
+    const dungeonBossTelegraphMaterialsV39 = new Map();
+    const resolveDungeonBossTelegraphMaterialV39 = patternId => {
+        const presentation = resolveDungeonBossPatternPresentationV39({
+            dungeonId,
+            patternId,
+        });
+        const key = presentation.telegraphColor || dungeonPresentationV39.palette.danger || '#ff3f2e';
+        if (!dungeonBossTelegraphMaterialsV39.has(key)) {
+            const material = makeMat(scene, BABYLON.Color3.FromHexString(key));
+            material.alpha = .20;
+            material.backFaceCulling = false;
+            dungeonBossTelegraphMaterialsV39.set(key, material);
+        }
+        return Object.freeze({ material: dungeonBossTelegraphMaterialsV39.get(key), presentation });
+    };
 
     const hostileProjectileVisualsV38 = createCampaignProjectileVisualFactoryV32({ scene, BABYLON });
     const enemyCombatSlotRegistryV38 = createCampaignEnemyCombatSlotRegistryV37();
     const dungeonBreakablesV38 = [];
     const dungeonHazardsV38 = [];
+    const dungeonHazardWarningsV39 = [];
     let activeDungeonHazardV38 = null;
     let dungeonHazardSequenceV38 = 0;
     let currentRoomV38 = null;
+    let currentRoomInitialEnemyCountV39 = 0;
+    let currentRoomInitialBreakableCountV39 = 0;
     let bossDefeatedPulseV38 = false;
     let playerVelocityV38 = Object.freeze({ x: 0, z: 0 });
     const playerMotionSampleV38 = {
@@ -637,6 +727,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     let bossActive     = false;
     let bossMesh       = null;
     let bossVisual     = null;
+    let bossFallbackVisualV39 = null;
     let bossHp         = 0;
     let bossMaxHp      = 0;
     let currentBossSpecV38 = null;
@@ -649,8 +740,47 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     scene.onDisposeObservable.add(() => {
         stopDungeonBossControllerV38(dungeonBossRuntimeV38);
         dungeonBossRuntimeV38 = null;
+        bossFallbackVisualV39?.dispose?.();
+        bossFallbackVisualV39 = null;
+        dungeonBackdropV39?.dispose?.();
         for (const corridor of dungeonBossAttackTelegraphsV38.splice(0)) safeDis(corridor);
     });
+
+    const syncObjectivePanelSizeV39 = () => {
+        const cssWidth = canvas?.clientWidth || engine.getRenderWidth();
+        objectivePanel.width = cssWidth < 390 ? '230px' : '270px';
+        objectivePanel.left = cssWidth < 390 ? '-6px' : '-10px';
+        objectiveBodyText.fontSize = cssWidth < 390 ? 12 : 13;
+    };
+    syncObjectivePanelSizeV39();
+    engine.onResizeObservable.add(syncObjectivePanelSizeV39);
+
+    const updateDungeonObjectiveHudV39 = () => {
+        if (!dungeonParityV38 || !currentRoomV38) {
+            objectivePanel.isVisible = false;
+            return;
+        }
+        const roomTitle = currentRoomV38.title?.[lang]
+            || currentRoomV38.title?.vi
+            || currentRoomV38.id;
+        objectiveTitleText.text = `${lang === 'vi' ? 'MỤC TIÊU' : 'OBJECTIVE'} · ${roomTitle}`;
+        objectiveBodyText.text = currentRoomV38.objective?.[lang]
+            || currentRoomV38.objective?.vi
+            || resolveDungeonRoomObjectiveV39({ dungeonId, room: currentRoomV38, lang });
+        if (currentRoomV38.kind === 'boss') {
+            const ratio = bossMaxHp > 0 ? clamp(bossHp / bossMaxHp, 0, 1) : 1;
+            objectiveProgressText.text = `${lang === 'vi' ? 'TRÙM' : 'BOSS'} · ${Math.round(ratio * 100)}%`;
+        } else if (currentRoomV38.breakablesRequired) {
+            const broken = Math.max(0, currentRoomInitialBreakableCountV39 - dungeonBreakablesV38.length);
+            const defeated = Math.min(currentRoomInitialEnemyCountV39, Math.max(0, waveKilled));
+            objectiveProgressText.text = `${lang === 'vi' ? 'KHO QUẶNG' : 'CACHES'} ${broken}/${currentRoomInitialBreakableCountV39}`
+                + ` · ${lang === 'vi' ? 'ĐỊCH' : 'HOSTILES'} ${defeated}/${currentRoomInitialEnemyCountV39}`;
+        } else {
+            const defeated = Math.min(currentRoomInitialEnemyCountV39, Math.max(0, waveKilled));
+            objectiveProgressText.text = `${lang === 'vi' ? 'ĐỊCH' : 'HOSTILES'} ${defeated}/${currentRoomInitialEnemyCountV39}`;
+        }
+        objectivePanel.isVisible = true;
+    };
 
     const startWave = (n) => {
         currentWave     = n;
@@ -710,26 +840,34 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             })
             : null;
         for (const corridor of dungeonBossAttackTelegraphsV38.splice(0)) safeDis(corridor);
+        bossFallbackVisualV39?.dispose?.();
+        bossFallbackVisualV39 = null;
 
-        bossMesh = BABYLON.MeshBuilder.CreateSphere('bossCore', { diameter: 2.6, segments: 24 }, scene);
+        // Invisible logical collider/root. The production atlas/GLB or the
+        // multi-part Rust Driller fallback owns presentation. V3.8 passed the
+        // Campaign profile ID to the dungeon asset registry, so no dungeon art
+        // could resolve and the video showed only a sphere/torus placeholder.
+        bossMesh = BABYLON.MeshBuilder.CreateSphere('bossCore', { diameter: 4.4, segments: 16 }, scene);
         bossMesh.position.set(0, 0.5, -ZOOM - 6);
+        bossMesh.visibility = .02;
         bossMesh.material = MAT.boss;
         bossMesh._facingYaw = 0;
-
-        const bossRing = BABYLON.MeshBuilder.CreateTorus('bossRing', { diameter: 6.0, thickness: 0.35, tessellation: 64 }, scene);
-        bossRing.parent     = bossMesh;
-        bossRing.rotation.x = Math.PI / 2;
-        bossRing.material   = makeMat(scene, new BABYLON.Color3(1, 0.5, 0), false);
-
-        const bossCore = BABYLON.MeshBuilder.CreateSphere('bossInner', { diameter: 1.1, segments: 16 }, scene);
-        bossCore.parent   = bossMesh;
-        bossCore.material = makeMat(scene, new BABYLON.Color3(1, 0.85, 0.2), false);
+        bossFallbackVisualV39 = createDungeonBossFallbackV39({
+            scene,
+            BABYLON,
+            root: bossMesh,
+            style: dungeonPresentationV39.boss?.fallbackStyle || 'rust_driller',
+        });
+        const bossVisualAssetId = dungeonBossRuntimeV38?.binding?.visualAssetId
+            || bossSpec?.visualAssetId
+            || dungeonPresentationV39.boss?.visualAssetId
+            || `${dungeonId}_boss`;
         bossVisual = attachBattleEntityVisual(
             scene,
             BABYLON,
             bossMesh,
             'dungeon_boss',
-            bossSpec?.sharedBossProfileId || `${dungeonId}_boss`,
+            bossVisualAssetId,
         );
 
         const bossName = bossSpec?.displayName?.[lang]
@@ -739,6 +877,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             ...(bossMesh.metadata || {}),
             dungeonBossId: bossSpec?.id || `${dungeonId}_boss`,
             sharedBossProfileId: bossSpec?.sharedBossProfileId || null,
+            visualAssetId: bossVisualAssetId,
         };
         bossNameText.text = `⚠ ${bossName}`;
         bossHpFill.width = "100%";
@@ -894,62 +1033,143 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     };
 
     const clearDungeonRoomObjectsV38 = () => {
-        for (const item of dungeonBreakablesV38.splice(0)) safeDis(item.mesh);
-        for (const item of dungeonHazardsV38.splice(0)) safeDis(item.mesh);
+        for (const item of dungeonBreakablesV38.splice(0)) {
+            item.disposeHud?.();
+            item.visual?.dispose?.();
+            safeDis(item.mesh);
+        }
+        for (const item of dungeonHazardsV38.splice(0)) {
+            item.visual?.dispose?.();
+            safeDis(item.mesh);
+        }
+        for (const warning of dungeonHazardWarningsV39.splice(0)) warning?.dispose?.();
         activeDungeonHazardV38 = null;
     };
 
     const spawnDungeonBreakablesV38 = (definitions = []) => {
         for (const definition of definitions) {
-            const mesh = BABYLON.MeshBuilder.CreatePolyhedron(`dungeon-breakable-${definition.id}`, {
-                type: 2,
-                size: 1.25,
-            }, scene);
-            mesh.position.set(
+            const position = new BABYLON.Vector3(
                 clamp(Number(definition.laneNorm) || 0, -.9, .9) * (boundX() - .8),
                 .08,
                 -ZOOM * .30 + (Number(definition.depthNorm) || 0) * ZOOM * .45,
             );
+            const visual = createDungeonBreakableVisualV39({
+                scene,
+                BABYLON,
+                name: `dungeon-breakable-${definition.id}`,
+                position,
+            });
+            const mesh = visual.mesh;
             mesh.rotation.y = (stableSeed(dungeonSeedV38, definition.id) % 6284) / 1000;
-            mesh.material = dungeonBreakableMatV38;
             mesh.isPickable = false;
+
+            const hpBg = new GUI.Rectangle(`dungeon-breakable-hp-bg-${definition.id}`);
+            hpBg.width = '62px';
+            hpBg.height = '7px';
+            hpBg.background = 'rgba(3,10,9,.88)';
+            hpBg.color = `${dungeonPresentationV39.palette.objective || '#ffd166'}99`;
+            hpBg.thickness = 1;
+            hpBg.cornerRadius = 4;
+            ui.addControl(hpBg);
+            hpBg.linkWithMesh(mesh);
+            hpBg.linkOffsetY = -38;
+
+            const hpFill = new GUI.Rectangle(`dungeon-breakable-hp-fill-${definition.id}`);
+            hpFill.width = '100%';
+            hpFill.height = '100%';
+            hpFill.background = dungeonPresentationV39.breakable?.hpBarColor || '#ffd166';
+            hpFill.thickness = 0;
+            hpFill.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+            hpBg.addControl(hpFill);
+
+            const maxHp = Math.max(1, Number(definition.hp) || 200);
             dungeonBreakablesV38.push({
                 id: definition.id,
                 mesh,
-                hp: Math.max(1, Number(definition.hp) || 200),
-                maxHp: Math.max(1, Number(definition.hp) || 200),
+                visual,
+                hp: maxHp,
+                maxHp,
+                hpFill,
                 score: Math.max(0, Math.round(Number(definition.score) || 0)),
+                disposeHud: () => {
+                    safeDisGui(hpFill);
+                    safeDisGui(hpBg);
+                },
             });
         }
+        updateDungeonObjectiveHudV39();
     };
 
     const startDungeonHazardV38 = (hazard, nowMs) => {
         activeDungeonHazardV38 = hazard ? {
             ...hazard,
-            nextSpawnAtMs: nowMs + Math.max(300, Number(hazard.intervalMs) || 1800),
+            nextTelegraphAtMs: nowMs + 360,
+            pending: null,
             spawnIndex: 0,
             remainingSpawns: Math.max(1, Math.trunc(Number(hazard.count) || 1)),
         } : null;
     };
 
-    const spawnDungeonHazardDebrisV38 = (hazard, nowMs) => {
-        if (!hazard || hazard.remainingSpawns <= 0) return false;
-        const index = hazard.spawnIndex++;
-        hazard.remainingSpawns -= 1;
+    const prepareDungeonHazardWarningV39 = (hazard, nowMs) => {
+        if (!hazard || hazard.remainingSpawns <= 0 || hazard.pending) return null;
+        const index = hazard.spawnIndex;
         const laneSequence = [-.72, .58, -.18, .82, .24, -.52];
         const laneNorm = laneSequence[index % laneSequence.length];
-        const mesh = BABYLON.MeshBuilder.CreatePolyhedron(
-            `dungeon-hazard-${++dungeonHazardSequenceV38}`,
-            { type: index % 2 === 0 ? 1 : 2, size: .85 + (index % 3) * .12 },
+        const warningMs = Math.max(500, Number(hazard.warningMs)
+            || Number(dungeonPresentationV39.hazard?.warningMs)
+            || 720);
+        const warning = createDungeonHazardTelegraphV39({
             scene,
+            BABYLON,
+            name: `dungeon-hazard-warning-${currentWave}-${index}`,
+            x: laneNorm * (boundX() - .65),
+            z: 0,
+            width: Number(hazard.warningWidth)
+                || Number(dungeonPresentationV39.hazard?.warningWidth)
+                || 1.55,
+            depth: Math.max(
+                Number(dungeonPresentationV39.hazard?.warningDepth) || 0,
+                ZOOM * 1.62,
+            ),
+            colorHex: dungeonPresentationV39.palette.warning || '#ff8a32',
+        });
+        dungeonHazardWarningsV39.push(warning);
+        hazard.pending = {
+            index,
+            laneNorm,
+            warning,
+            spawnAtMs: nowMs + warningMs,
+        };
+        return hazard.pending;
+    };
+
+    const spawnDungeonHazardDebrisV38 = (hazard, nowMs, pending = hazard?.pending) => {
+        if (!hazard || hazard.remainingSpawns <= 0 || !pending) return false;
+        const index = pending.index;
+        hazard.spawnIndex += 1;
+        hazard.remainingSpawns -= 1;
+        const position = new BABYLON.Vector3(
+            pending.laneNorm * (boundX() - .65),
+            .12,
+            -ZOOM - 1.8,
         );
-        mesh.position.set(laneNorm * (boundX() - .65), .12, -ZOOM - 1.8);
+        const visual = createDungeonHazardVisualV39({
+            scene,
+            BABYLON,
+            name: `dungeon-hazard-${++dungeonHazardSequenceV38}`,
+            position,
+            variant: index,
+        });
+        const mesh = visual.mesh;
         mesh.rotation.y = (index * .73) % (Math.PI * 2);
-        mesh.material = dungeonHazardMatV38;
         mesh.isPickable = false;
         dungeonHazardsV38.push({
             mesh,
+            visual,
             velocityZ: Math.max(.035, Number(hazard.speed) || .075),
+            rotationX: .010 + (index % 3) * .003,
+            rotationY: .015 + (index % 2) * .004,
+            rotationZ: .008 + (index % 4) * .002,
             damage: Math.max(1, Math.round(Number(hazard.damage) || 60)),
             hitId: `dungeon-hazard-${currentWave}-${index}-${Math.trunc(nowMs)}`,
         });
@@ -964,6 +1184,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             disposeDungeonBossTelegraphsV38();
             currentRoomV38 = event.room;
             currentWave = event.roomIndex + 1;
+            currentRoomInitialEnemyCountV39 = event.roomPlan?.entries?.length || 0;
+            currentRoomInitialBreakableCountV39 = event.room.breakables?.length || 0;
             waveSpawned = 0;
             waveKilled = 0;
             bossSpawned = false;
@@ -972,7 +1194,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             waveText.text = `${lang === 'vi' ? 'PHÒNG' : 'ROOM'} ${currentWave}/${ACTIVE_MAX_WAVES} · ${event.room.title?.[lang] || event.room.title?.vi || event.room.id}`;
             showAnnouncement(event.room.title?.[lang] || event.room.title?.vi || event.room.id,
                 event.room.kind === 'boss' ? '#ff4757' : dungeonConfig.themeColor || '#66fcf1',
-                event.room.kind === 'boss' ? 1800 : 1200);
+                event.room.kind === 'boss' ? 1300 : 850);
+            updateDungeonObjectiveHudV39();
             return;
         }
         if (event.type === 'spawn_breakables') {
@@ -986,24 +1209,28 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         if (event.type === 'spawn_enemy') {
             spawnEnemy(event.entry, currentRoomV38);
             waveSpawned += 1;
+            updateDungeonObjectiveHudV39();
             return;
         }
         if (event.type === 'spawn_boss') {
             clearDungeonHostileProjectilesV38();
             spawnBoss(event.boss);
+            updateDungeonObjectiveHudV39();
             return;
         }
         if (event.type === 'room_cleared') {
             clearDungeonRoomObjectsV38();
             clearDungeonHostileProjectilesV38();
             disposeDungeonBossTelegraphsV38();
-            showAnnouncement(lang === 'vi' ? 'PHÒNG ĐÃ DỌN SẠCH' : 'ROOM CLEARED', '#4ade80', 900);
+            objectiveProgressText.text = lang === 'vi' ? 'HOÀN TẤT' : 'COMPLETE';
+            showAnnouncement(lang === 'vi' ? 'PHÒNG ĐÃ DỌN SẠCH' : 'ROOM CLEARED', '#4ade80', 650);
             return;
         }
         if (event.type === 'dungeon_completed') {
             clearDungeonRoomObjectsV38();
             clearDungeonHostileProjectilesV38();
             disposeDungeonBossTelegraphsV38();
+            objectivePanel.isVisible = false;
             triggerVictory();
         }
     };
@@ -1110,6 +1337,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     const createDungeonBossTelegraphsV38 = (plan) => {
         disposeDungeonBossTelegraphsV38();
         if (!plan?.paths?.length) return Object.freeze([]);
+        const telegraph = resolveDungeonBossTelegraphMaterialV39(plan.pattern);
         dungeonBossAttackTelegraphsV38 = plan.paths.map((path, index) => {
             const corridor = BABYLON.MeshBuilder.CreateBox(
                 `dungeon-boss-telegraph-${plan.id}-${index}`,
@@ -1119,9 +1347,15 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             corridor.position.set(path.midpoint.x, .045, path.midpoint.z);
             corridor.rotation.y = path.yawRadians;
             corridor.scaling.set(path.width, 1, path.length);
-            corridor.material = dungeonBossDangerMatV38;
+            corridor.material = telegraph.material;
             corridor.isPickable = false;
             corridor.visibility = .64;
+            corridor.metadata = {
+                ...(corridor.metadata || {}),
+                dungeonBossPlanId: plan.id,
+                sourcePatternId: plan.pattern,
+                presentationPatternId: telegraph.presentation.patternId,
+            };
             return corridor;
         });
         return Object.freeze([...dungeonBossAttackTelegraphsV38]);
@@ -1334,7 +1568,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         if (gameOver) return;
         gameOver = true;
         showAnnouncement(
-            lang === 'vi' ? 'HOÀN THÀNH\nCHIẾN DỊCH!' : 'CAMPAIGN\nCLEARED!',
+            lang === 'vi' ? 'HOÀN THÀNH\nPHÓ BẢN!' : 'DUNGEON\nCLEARED!',
             '#2ecc71',
             2000,
         );
@@ -1370,6 +1604,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         const index = enemies.indexOf(enemy);
         if (index >= 0) enemies.splice(index, 1);
         waveKilled++;
+        updateDungeonObjectiveHudV39();
         return true;
     };
     const applyDungeonSplash = (bullet, impact, damage, primary) => {
@@ -1515,6 +1750,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         const now = Date.now();
         const frameFactor = frameScale(engine.getDeltaTime());
         tick += frameFactor;
+        dungeonBackdropV39?.tick?.(frameFactor);
         samplePlayerCombatVelocityV38(frameFactor);
         // A. Screen shake
         if (shakeFrames > 0) {
@@ -1585,14 +1821,29 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
        }
 
         if (dungeonParityV38) {
-            if (activeDungeonHazardV38 && now >= activeDungeonHazardV38.nextSpawnAtMs) {
+            if (activeDungeonHazardV38) {
                 const activeHazard = activeDungeonHazardV38;
-                if (spawnDungeonHazardDebrisV38(activeHazard, now)
-                    && activeHazard.remainingSpawns > 0) {
-                    activeHazard.nextSpawnAtMs = now
-                        + Math.max(300, Number(activeHazard.intervalMs) || 1800);
-                } else {
-                    activeDungeonHazardV38 = null;
+                if (activeHazard.pending) {
+                    activeHazard.pending.warning?.update?.(now);
+                    if (now >= activeHazard.pending.spawnAtMs) {
+                        const pending = activeHazard.pending;
+                        pending.warning?.dispose?.();
+                        const warningIndex = dungeonHazardWarningsV39.indexOf(pending.warning);
+                        if (warningIndex >= 0) dungeonHazardWarningsV39.splice(warningIndex, 1);
+                        spawnDungeonHazardDebrisV38(activeHazard, now, pending);
+                        activeHazard.pending = null;
+                        if (activeHazard.remainingSpawns > 0) {
+                            const interval = Math.max(900, Number(activeHazard.intervalMs) || 1800);
+                            const warningMs = Math.max(500, Number(activeHazard.warningMs)
+                                || Number(dungeonPresentationV39.hazard?.warningMs)
+                                || 720);
+                            activeHazard.nextTelegraphAtMs = now + Math.max(260, interval - warningMs);
+                        } else {
+                            activeDungeonHazardV38 = null;
+                        }
+                    }
+                } else if (activeHazard.remainingSpawns > 0 && now >= activeHazard.nextTelegraphAtMs) {
+                    prepareDungeonHazardWarningV39(activeHazard, now);
                 }
             }
 
@@ -1603,8 +1854,11 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                     continue;
                 }
                 hazard.mesh.position.z += hazard.velocityZ * frameFactor;
-                hazard.mesh.rotation.y += .018 * frameFactor;
+                hazard.mesh.rotation.x += hazard.rotationX * frameFactor;
+                hazard.mesh.rotation.y += hazard.rotationY * frameFactor;
+                hazard.mesh.rotation.z += hazard.rotationZ * frameFactor;
                 if (hazard.mesh.position.z > ZOOM + 2.5) {
+                    hazard.visual?.dispose?.();
                     safeDis(hazard.mesh);
                     dungeonHazardsV38.splice(index, 1);
                     continue;
@@ -1616,6 +1870,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                         damageType: 'kinetic',
                         hitId: hazard.hitId,
                     });
+                    hazard.visual?.dispose?.();
                     safeDis(hazard.mesh);
                     dungeonHazardsV38.splice(index, 1);
                 }
@@ -1635,11 +1890,22 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                     const hit = shots.registerHit(bullet, { mesh: debris.mesh });
                     if (!hit.accepted) continue;
                     debris.hp -= calculateProjectileDamage(bullet.atk, stats.critDamageBoost);
+                    const debrisRatio = clamp(debris.hp / debris.maxHp, 0, 1);
+                    debris.visual?.setRatio?.(debrisRatio);
+                    if (debris.hpFill) {
+                        debris.hpFill.width = `${Math.round(debrisRatio * 100)}%`;
+                        debris.hpFill.background = debrisRatio <= .30
+                            ? (dungeonPresentationV39.breakable?.criticalColor || '#ff7b32')
+                            : (dungeonPresentationV39.breakable?.hpBarColor || '#ffd166');
+                    }
                     if (debris.hp <= 0) {
                         explode(debris.mesh.position, 1.3);
                         updateScore(debris.score);
+                        debris.disposeHud?.();
+                        debris.visual?.dispose?.();
                         safeDis(debris.mesh);
                         dungeonBreakablesV38.splice(debrisIndex, 1);
+                        updateDungeonObjectiveHudV39();
                     }
                     if (hit.consumed) {
                         safeDis(bullet);
@@ -1730,13 +1996,14 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                     );
                 }
                 bossVisual?.setState(bossStep.visualState || 'move');
+                bossFallbackVisualV39?.tick?.(engine.getDeltaTime(), bossStep.visualState || 'move');
                 for (const event of bossStep.events || []) {
                     if (event.type === 'telegraph_started') createDungeonBossTelegraphsV38(event.plan);
                     else if (event.type === 'fire_pattern') fireDungeonBossAttackPlanV38(event.plan);
                     else if (event.type === 'enrage_started') {
                         showAnnouncement(
                             lang === 'vi' ? 'CẢNH BÁO: TRÙM NỔI ĐIÊN!' : 'WARNING: BOSS ENRAGED!',
-                            '#ff2a16',
+                            dungeonPresentationV39.palette.danger || '#ff2a16',
                             1800,
                         );
                     } else if (event.type === 'telegraph_ended' || event.type === 'telegraph_cancelled') {
@@ -1748,6 +2015,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 }
             } else {
                 bossVisual?.setState('move');
+                bossFallbackVisualV39?.tick?.(engine.getDeltaTime(), 'move');
                 bossMesh.position.z = BABYLON.Scalar.Lerp(
                     bossMesh.position.z,
                     -ZOOM * 0.45,
@@ -1774,7 +2042,9 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
                 bossHp -= calculateProjectileDamage(b.atk, stats.critDamageBoost);
                 bossVisual?.setState('hit');
+                bossFallbackVisualV39?.tick?.(0, 'hit');
                 bossHpFill.width = `${clamp(bossHp / bossMaxHp, 0, 1) * 100}%`;
+                updateDungeonObjectiveHudV39();
 
                 if (hit.consumed || b._splashRadius) { safeDis(b); playerBullets.splice(j, 1); }
 
@@ -1783,6 +2053,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                     triggerShake(0.9, 22);
                     deathVisuals.capture(bossVisual);
                     bossVisual = null;
+                    bossFallbackVisualV39?.dispose?.();
+                    bossFallbackVisualV39 = null;
                     stopDungeonBossControllerV38(dungeonBossRuntimeV38);
                     dungeonBossRuntimeV38 = null;
                     disposeDungeonBossTelegraphsV38();

@@ -98,6 +98,22 @@ export const CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32 = freezeDeep({
     id: 'mini_boss_heavy', style: 'slug', color: '#ff334e', core: '#fff4f6', edge: '#260008',
     width: .50, length: 1.42, pulse: .045, glow: .98,
   },
+  dungeon_taurus_drill_lance: {
+    id: 'dungeon_taurus_drill_lance', style: 'lance', color: '#ff8a32', core: '#fff7dc', edge: '#2d0d02',
+    width: .43, length: 1.84, pulse: .028, glow: 1,
+  },
+  dungeon_taurus_ore_cutter: {
+    id: 'dungeon_taurus_ore_cutter', style: 'dart', color: '#ffc857', core: '#ffffff', edge: '#2b1b02',
+    width: .38, length: 1.55, pulse: .038, glow: .98,
+  },
+  dungeon_taurus_shrapnel: {
+    id: 'dungeon_taurus_shrapnel', style: 'slug', color: '#ff6b35', core: '#fff2d7', edge: '#2c0902',
+    width: .54, length: 1.34, pulse: .055, glow: 1,
+  },
+  dungeon_taurus_overdrive: {
+    id: 'dungeon_taurus_overdrive', style: 'ember', color: '#ff382e', core: '#fff7df', edge: '#340403',
+    width: .50, length: 1.08, pulse: .095, glow: 1,
+  },
 });
 
 export function resolveCampaignProjectileVisualV32({ visualId, sourceRole, priority, pattern } = {}) {

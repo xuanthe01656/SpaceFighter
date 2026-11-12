@@ -8,8 +8,12 @@ import {
   stopCampaignBossStatechartControllerV37,
 } from '../combat/CampaignBossStatechartV37.js';
 import { resolveCampaignBossProfileV33 } from '../combat/CampaignBossArsenalV33.js';
+import {
+  resolveDungeonBossPatternPresentationV39,
+  resolveDungeonPresentationV39,
+} from './DungeonPresentationV39.js';
 
-export const DUNGEON_BOSS_ADAPTER_VERSION = 'dungeon-boss-adapter-v3.8.0';
+export const DUNGEON_BOSS_ADAPTER_VERSION = 'dungeon-boss-adapter-v3.9.0';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -26,9 +30,18 @@ export function resolveDungeonBossBindingV38(bossSpec = {}) {
   const profile = resolveCampaignBossProfileV33({
     profileId: bossSpec.sharedBossProfileId || 'alpha_mech_sentinel',
   });
+  const bossId = String(bossSpec.id || '');
+  const inferredDungeonId = bossId.startsWith('taurus_') ? 'dung_taurus'
+    : bossId.startsWith('nereus_') ? 'dung_nereus'
+      : bossId.startsWith('abaddon_') ? 'dung_abaddon'
+        : 'dung_taurus';
+  const dungeonId = bossSpec.dungeonId || inferredDungeonId;
+  const presentation = resolveDungeonPresentationV39(dungeonId);
   return freezeDeep({
     version: DUNGEON_BOSS_ADAPTER_VERSION,
     dungeonBossId: bossSpec.id || `dungeon_${profile.id}`,
+    dungeonId,
+    visualAssetId: bossSpec.visualAssetId || presentation.boss?.visualAssetId || `${dungeonId}_boss`,
     profileId: profile.id,
     planetId: profile.planetId,
     bossType: profile.bossType,
@@ -82,26 +95,40 @@ export function stopDungeonBossControllerV38(runtime) {
 
 export function projectilesFromDungeonBossAttackPlanV38(plan, bossSpec = {}) {
   const binding = resolveDungeonBossBindingV38(bossSpec);
-  return Object.freeze(projectilesFromCampaignBossAttackPlanV29(plan).map(projectile => freezeDeep({
-    ...projectile,
-    rawDamage: Math.max(1, Math.round(projectile.rawDamage * binding.damageMultiplier)),
-    velocity: {
-      x: projectile.velocity.x * binding.projectileSpeedMultiplier,
-      z: projectile.velocity.z * binding.projectileSpeedMultiplier,
-    },
-    dungeonBossId: binding.dungeonBossId,
-  })));
+  return Object.freeze(projectilesFromCampaignBossAttackPlanV29(plan).map(projectile => {
+    const presentation = resolveDungeonBossPatternPresentationV39({
+      dungeonId: binding.dungeonId,
+      patternId: projectile.pattern,
+      visualId: projectile.visualId,
+    });
+    return freezeDeep({
+      ...projectile,
+      pattern: presentation.patternId,
+      sourcePattern: presentation.originalPatternId,
+      visualId: presentation.visualId,
+      rawDamage: Math.max(1, Math.round(projectile.rawDamage * binding.damageMultiplier)),
+      velocity: {
+        x: projectile.velocity.x * binding.projectileSpeedMultiplier,
+        z: projectile.velocity.z * binding.projectileSpeedMultiplier,
+      },
+      dungeonBossId: binding.dungeonBossId,
+      dungeonId: binding.dungeonId,
+    });
+  }));
 }
 
 export function auditDungeonBossAdapterV38() {
   const issues = [];
   const binding = resolveDungeonBossBindingV38({
     id: 'taurus_rust_driller',
+    dungeonId: 'dung_taurus',
+    visualAssetId: 'dung_taurus_boss',
     sharedBossProfileId: 'alpha_mech_sentinel',
     damageMultiplier: .88,
     projectileSpeedMultiplier: .96,
   });
   if (binding.profileId !== 'alpha_mech_sentinel') issues.push('DUNGEON_BOSS_PROFILE_BINDING');
+  if (binding.visualAssetId !== 'dung_taurus_boss') issues.push('DUNGEON_BOSS_VISUAL_BINDING');
   if (!(binding.damageMultiplier > 0) || !(binding.projectileSpeedMultiplier > 0)) {
     issues.push('DUNGEON_BOSS_MULTIPLIER');
   }
