@@ -8,7 +8,7 @@ import {
   ANIMATED_BATTLE_KINDS, BATTLE_ANIMATION_STATES, BATTLE_ANIMATION_CLIPS,
   BATTLE_ANIMATION_GRID, validateBattleAtlasContract, battleAtlasUV, createBattleVisualAnimator,
 } from '../src/game/assets/EnemyBossAnimationCatalog.js';
-import { attachBattleEntityVisual } from '../src/game/rendering/BattleEntityVisual.js';
+import { attachBattleEntityVisual, preloadBattleEntityVisualProfiles } from '../src/game/rendering/BattleEntityVisual.js';
 import { ENEMY_SOURCE_TO_ROOT_YAW_V26A4 } from '../src/game/assets/EnemyVisualHeadingV26A4.js';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -133,6 +133,21 @@ test('atlas sprite replaces visuals only and changes UVs per actor, never shared
   assert.equal(m.rootMesh.visibility,1);
   assert.equal(m.rootMesh.children[0].visibility,0.9);
   assert.equal(m.meshes[0].gone,true);
+});
+
+test('battle visual preloader warms the shared scene cache before first spawn', async()=>{
+  const m=mockBabylon();const profile=art();
+  const pending=preloadBattleEntityVisualProfiles(m.scene,m.BABYLON,[profile,profile]);
+  assert.equal(m.textures.size,1,'duplicate profiles must share one atlas request');
+  m.textures.get(profile.atlasSrc).onReady();
+  const results=await pending;
+  assert.deepEqual(results.map(item=>({assetId:item.assetId,loaded:item.loaded,src:item.src})),[
+    {assetId:profile.assetId,loaded:true,src:profile.atlasSrc},
+  ]);
+  const ctrl=attachBattleEntityVisual(m.scene,m.BABYLON,m.rootMesh,'enemy','p1_small',{profile});
+  assert.equal(ctrl.mode,'atlas','first spawned actor should use the already-loaded atlas immediately');
+  assert.equal(m.textures.size,1,'attach must reuse the preloaded texture record');
+  ctrl.dispose();
 });
 
 test('sprites in the same scene share one atlas texture but have independent UV buffers',()=>{

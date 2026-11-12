@@ -215,7 +215,19 @@ export function createDungeonHazardVisualV39({ scene, BABYLON, name = 'drifting-
   beacon.position.set(.40, .35, -.18);
   beacon.material = warningMat;
 
-  return { mesh: root, dispose: () => root.dispose() };
+  return {
+    mesh: root,
+    setRatio(ratio = 1) {
+      const safe = clamp(Number(ratio) || 0, 0, 1);
+      const impact = 1 - safe;
+      chunk.scaling.setAll(.88 + safe * .12);
+      strut.visibility = safe <= .30 ? .36 : safe <= .60 ? .68 : 1;
+      beacon.scaling.setAll(1 + impact * .52);
+      beacon.visibility = .55 + impact * .45;
+      root.rotation.z += impact * .018;
+    },
+    dispose: () => root.dispose(),
+  };
 }
 
 export function createDungeonHazardTelegraphV39({

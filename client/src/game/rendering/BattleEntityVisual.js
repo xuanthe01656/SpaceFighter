@@ -45,6 +45,40 @@ function materialFor(scene, BABYLON, src) {
   return record;
 }
 
+
+const waitForMaterialRecord = record => new Promise(resolve => {
+  if (!record) { resolve(false); return; }
+  if (record.loaded) { resolve(true); return; }
+  if (record.failed) { resolve(false); return; }
+  const listener = ok => resolve(Boolean(ok));
+  record.listeners.add(listener);
+});
+
+/**
+ * Preload atlas/static battle art through the same scene cache used by
+ * attachBattleEntityVisual.  Spawners may wait for this promise (with their own
+ * timeout) so the first actor of each kind does not briefly expose procedural
+ * geometry while its local atlas is still decoding.
+ */
+export async function preloadBattleEntityVisualProfiles(scene, BABYLON, profiles = []) {
+  const unique = new Map();
+  for (const profile of profiles || []) {
+    if (!profile?.assetId) continue;
+    unique.set(profile.assetId, profile);
+  }
+  const results = await Promise.all([...unique.values()].map(async profile => {
+    const sources = [...new Set([profile.atlasSrc, profile.topSrc].filter(Boolean))];
+    for (const src of sources) {
+      const record = materialFor(scene, BABYLON, src);
+      if (await waitForMaterialRecord(record)) {
+        return Object.freeze({ assetId: profile.assetId, loaded: true, src });
+      }
+    }
+    return Object.freeze({ assetId: profile.assetId, loaded: false, src: null });
+  }));
+  return Object.freeze(results);
+}
+
 /**
  * Attach a pure visual child without replacing the collision root.
  * No model or texture requests are sent for missing art.

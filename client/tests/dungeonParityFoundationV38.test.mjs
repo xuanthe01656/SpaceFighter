@@ -49,6 +49,15 @@ import {
 } from '../src/game/combat/CampaignEnemyCombatSlotsV37.js';
 import { ENEMY_ARCHETYPES_V2 } from '../src/game/combat/EnemyCombatCatalogV2.js';
 import { resolveAssetVisual } from '../src/game/assets/AssetRegistry.js';
+import {
+  DUNGEON_COMBAT_INTEGRITY_VERSION,
+  auditDungeonCombatIntegrityV392,
+  logicalCircleHitV392,
+  logicalSegmentCircleHitV392,
+  requiredDungeonVisualAssetIdsV392,
+  resolveDungeonHazardCombatV392,
+  resolveDungeonHostileProjectileHitRadiusV392,
+} from '../src/game/dungeon/DungeonCombatIntegrityV392.js';
 
 test('Campaign Gameplay Foundation Lock RC1 is exact and drift-free', () => {
   assert.equal(CAMPAIGN_GAMEPLAY_FOUNDATION_LOCK_RC1.version,
@@ -157,6 +166,11 @@ test('Dungeon combat adapter reuses all Campaign roles and distributed slots', (
     assert.ok(enemy.spec.weapon.projectile.speed > 0);
     assert.ok(enemy.spec.fireRangeMax > enemy.spec.fireRangeMin);
   }
+  for (const enemy of enemies) {
+    const visual = resolveAssetVisual('dungeon_enemy', enemy.spec.visualAssetId);
+    assert.equal(visual?.assetId, `dungeon_enemy:${enemy.spec.visualAssetId}`);
+    assert.match(visual?.atlasSrc || '', /_sheet\.webp$/);
+  }
 
   const registry = createCampaignEnemyCombatSlotRegistryV37();
   syncCampaignEnemyCombatSlotsV37(
@@ -240,6 +254,41 @@ test('Dungeon V3.9 presentation resolves production Taurus identity without chan
   }
 });
 
+test('Dungeon V3.9.2 integrity makes hazards destructible and hostile damage renderer-independent', () => {
+  assert.equal(DUNGEON_COMBAT_INTEGRITY_VERSION, 'dungeon-combat-integrity-v3.9.2');
+  assert.deepEqual(auditDungeonCombatIntegrityV392(), []);
+  const hazardConfig = resolveDungeonRuntimeProfileV38('dung_taurus').rooms[1].hazard;
+  const hazard = resolveDungeonHazardCombatV392(hazardConfig);
+  assert.equal(hazard.destructible, true);
+  assert.equal(hazard.hp, 180);
+  assert.equal(hazard.score, 45);
+  assert.equal(logicalCircleHitV392({ x: 0, z: 0 }, { x: 1.19, z: 0 }, 1.2), true);
+  assert.equal(logicalCircleHitV392({ x: 0, z: 0 }, { x: 1.21, z: 0 }, 1.2), false);
+  assert.equal(logicalCircleHitV392(null, { x: 0, z: 0 }, 1.2), false);
+  assert.equal(logicalSegmentCircleHitV392(
+    { x: -2, z: 0 }, { x: 2, z: 0 }, { x: 0, z: 0 }, .4,
+  ), true);
+  assert.equal(logicalSegmentCircleHitV392(
+    { x: -2, z: 2 }, { x: 2, z: 2 }, { x: 0, z: 0 }, .4,
+  ), false);
+  const normalRadius = resolveDungeonHostileProjectileHitRadiusV392({
+    priority: 'normal', visual: { width: .30 },
+  });
+  const bossRadius = resolveDungeonHostileProjectileHitRadiusV392({
+    priority: 'boss', visual: { width: .50 },
+  });
+  assert.ok(normalRadius >= 1);
+  assert.ok(bossRadius >= 1.2);
+  assert.ok(bossRadius > normalRadius);
+  const required = requiredDungeonVisualAssetIdsV392({
+    dungeonId: 'dung_taurus', bossVisualAssetId: 'dung_taurus_boss',
+  });
+  assert.deepEqual(required.map(entry => entry.id), [
+    'dung_taurus_scout', 'dung_taurus_heavy', 'dung_taurus_elite', 'dung_taurus_boss',
+  ]);
+  assert.ok(required.every(entry => resolveAssetVisual(entry.kind, entry.id)?.atlasSrc));
+});
+
 test('DungeonScene integrates parity director, required objectives and shared Boss XState', () => {
   const source = fs.readFileSync(new URL('../src/components/Dungeon/DungeonScene.js', import.meta.url), 'utf8');
   assert.match(source, /assertCampaignGameplayFoundationLockRC1\(\)/);
@@ -257,10 +306,17 @@ test('DungeonScene integrates parity director, required objectives and shared Bo
   assert.match(source, /createDungeonBreakableVisualV39/);
   assert.match(source, /createDungeonBossFallbackV39/);
   assert.match(source, /bossVisualAssetId/);
+  assert.match(source, /preloadBattleEntityVisualProfiles/);
+  assert.match(source, /dungeonVisualSpawnGateReadyV392/);
+  assert.match(source, /resolveDungeonHazardCombatV392/);
+  assert.match(source, /hazard\.visual\?\.setRatio/);
+  assert.match(source, /logicalSegmentCircleHitV392\(/);
+  assert.doesNotMatch(source, /eb\.intersectsMesh\(shipVisual\.collider/);
   assert.match(source, /dungeonObjectivePanel/);
   assert.match(source, /HOÀN THÀNH\\nPHÓ BẢN!/);
   assert.doesNotMatch(source, /scene\.clearColor\s*=\s*hexToColor4\(dungeonConfig\.themeColor/);
   assert.doesNotMatch(source, /CAMPAIGN\\nCLEARED/);
   assert.match(source, /VITE_SF_DUNGEON_PARITY_V38/);
-  assert.match(source, /if \(!dungeonParityV38\) scheduleBattleTimer\(\(\) => startWave\(1\), 800\)/);
+  assert.match(source, /startLegacyDungeonWhenVisualsReadyV392/);
+  assert.match(source, /scheduleBattleTimer\(startLegacyDungeonWhenVisualsReadyV392, 80\)/);
 });

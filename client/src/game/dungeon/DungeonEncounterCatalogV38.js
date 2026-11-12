@@ -93,6 +93,11 @@ export const DUNGEON_RUNTIME_PROFILES_V38 = freezeDeep({
           warningWidth: 1.55,
           damage: 70,
           speed: .085,
+          destructible: true,
+          hp: 180,
+          score: 45,
+          hitRadius: 1.25,
+          contactRadius: 1.10,
         },
       }),
       room('taurus_salvage', 'breakable', {

@@ -43,6 +43,8 @@ export function resolveDungeonEnemySpecV38({
   const roleId = ENEMY_ARCHETYPES_V2[entry?.roleId] ? entry.roleId : 'raider';
   const archetype = ENEMY_ARCHETYPES_V2[roleId];
   const runtime = enemyRuntimeFromCatalogV3(roleId);
+  const visualAssetKind = entry?.elite ? 'elite' : resolveDungeonEnemyAssetKindV38(roleId);
+  const visualAssetId = `${dungeonId}_${visualAssetKind}`;
   const weapon = resolveCampaignEnemyWeaponContractV37(roleId);
   const globalStats = profile.enemyStats;
   const hpMultiplier = finite(entry?.hpMultiplier, finite(room?.hpMultiplier, 1));
@@ -74,7 +76,9 @@ export function resolveDungeonEnemySpecV38({
     dungeonId,
     roomId: room?.id || null,
     roleId,
-    assetKind: resolveDungeonEnemyAssetKindV38(roleId),
+    assetKind: visualAssetKind,
+    visualAssetKind,
+    visualAssetId,
     archetype,
     runtime,
     weapon: {
@@ -150,6 +154,9 @@ export function auditDungeonCombatAdapterV38() {
     });
     if (spec.roleId !== roleId || !(spec.hp > 0) || !(spec.speed > 0)) {
       issues.push(`DUNGEON_SPEC:${roleId}`);
+    }
+    if (spec.visualAssetId !== `dung_taurus_${spec.visualAssetKind}`) {
+      issues.push(`DUNGEON_VISUAL_ASSET:${roleId}`);
     }
     if (roleId === 'charger') {
       if (spec.canShoot || spec.weapon.projectile !== null) issues.push('DUNGEON_CHARGER_PROJECTILE');

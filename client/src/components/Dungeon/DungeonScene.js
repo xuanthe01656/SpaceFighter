@@ -9,7 +9,7 @@ import { battleSpeedMultiplier, BATTLE_WORLD_HALF_HEIGHT } from '../../game/conf
 import { resolveDungeonDifficulty } from '../../game/config/DungeonDifficulty';
 import { createBattlePassiveState, receiveBattleHit, shouldEchoShot } from '../../game/combat/BattlePassives';
 import { createPlayerShipVisual } from '../../game/rendering/ShipVisualFactory';
-import { attachBattleEntityVisual } from '../../game/rendering/BattleEntityVisual';
+import { attachBattleEntityVisual, preloadBattleEntityVisualProfiles } from '../../game/rendering/BattleEntityVisual';
 import { createBattleDeathVisualQueue } from '../../game/rendering/BattleDeathVisualQueue';
 import { resolveAssetVisual } from '../../game/assets/AssetRegistry.js';
 import { createShipEngineFx } from '../../game/rendering/ShipEngineFx';
@@ -70,6 +70,13 @@ import {
     resolveDungeonRoomObjectiveV39,
 } from '../../game/dungeon/DungeonPresentationV39.js';
 import { isDungeonQaRunV391 } from '../../game/dungeon/DungeonQaAccessV391.js';
+import {
+    logicalCircleHitV392,
+    logicalSegmentCircleHitV392,
+    requiredDungeonVisualAssetIdsV392,
+    resolveDungeonHazardCombatV392,
+    resolveDungeonHostileProjectileHitRadiusV392,
+} from '../../game/dungeon/DungeonCombatIntegrityV392.js';
 import {
     createDungeonBackdropV39,
     createDungeonBossFallbackV39,
@@ -163,6 +170,35 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     });
     const dungeonRuntimeProfileV38 = resolveDungeonRuntimeProfileV38(dungeonId);
     const dungeonPresentationV39 = resolveDungeonPresentationV39(dungeonId);
+    const dungeonVisualProfilesV392 = requiredDungeonVisualAssetIdsV392({
+        dungeonId,
+        bossVisualAssetId: dungeonPresentationV39.boss?.visualAssetId,
+    }).map(({ kind, id }) => resolveAssetVisual(kind, id)).filter(Boolean);
+    const dungeonVisualPreloadV392 = {
+        settled: dungeonVisualProfilesV392.length === 0,
+        deadlineMs: Date.now() + 2600,
+        results: [],
+        warned: false,
+    };
+    if (dungeonVisualProfilesV392.length) {
+        preloadBattleEntityVisualProfiles(scene, BABYLON, dungeonVisualProfilesV392)
+            .then(results => {
+                if (battleSceneDisposed) return;
+                dungeonVisualPreloadV392.results = results;
+                dungeonVisualPreloadV392.settled = true;
+                const failed = results.filter(result => !result.loaded);
+                if (failed.length) {
+                    console.warn('[DUNGEON_VISUAL_V392_FALLBACK]', failed.map(result => result.assetId));
+                    dungeonVisualPreloadV392.warned = true;
+                }
+            })
+            .catch(error => {
+                if (battleSceneDisposed) return;
+                dungeonVisualPreloadV392.settled = true;
+                dungeonVisualPreloadV392.warned = true;
+                console.warn('[DUNGEON_VISUAL_V392_PRELOAD]', error?.message || String(error));
+            });
+    }
     if (dungeonParityV38) assertCampaignGameplayFoundationLockRC1();
     const dungeonSeedV38 = stableSeed(
         dungeonId,
@@ -663,6 +699,15 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     let currentRoomInitialEnemyCountV39 = 0;
     let currentRoomInitialBreakableCountV39 = 0;
     let bossDefeatedPulseV38 = false;
+    const dungeonVisualSpawnGateReadyV392 = nowMs => {
+        if (dungeonVisualPreloadV392.settled) return true;
+        if (nowMs < dungeonVisualPreloadV392.deadlineMs) return false;
+        if (!dungeonVisualPreloadV392.warned) {
+            dungeonVisualPreloadV392.warned = true;
+            console.warn('[DUNGEON_VISUAL_V392_TIMEOUT]', dungeonVisualProfilesV392.map(profile => profile.assetId));
+        }
+        return true;
+    };
     let playerVelocityV38 = Object.freeze({ x: 0, z: 0 });
     const playerMotionSampleV38 = {
         x: playerRoot.position.x,
@@ -954,7 +999,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
         if (dungeonParityV38 && spawnEntry) {
             spec = resolveDungeonEnemySpecV38({ dungeonId, room, entry: spawnEntry });
-            type = spec.elite ? 'elite' : spec.assetKind;
+            type = spec.visualAssetKind || spec.assetKind;
             hp = spec.hp;
             speed = spec.speed;
             shootMs = spec.weapon.cadence?.cooldownMs || Infinity;
@@ -982,7 +1027,13 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         }
         mesh.material = MAT[type] || MAT.scout;
         mesh.rotation.y = 0;
-        const visual = attachBattleEntityVisual(scene, BABYLON, mesh, 'dungeon_enemy', `${dungeonId}_${type}`);
+        const enemyVisualAssetId = spec?.visualAssetId || `${dungeonId}_${type}`;
+        const visual = attachBattleEntityVisual(scene, BABYLON, mesh, 'dungeon_enemy', enemyVisualAssetId);
+        mesh.metadata = {
+            ...(mesh.metadata || {}),
+            dungeonEnemyRoleId: spec?.roleId || null,
+            visualAssetId: enemyVisualAssetId,
+        };
 
         const miniHpBg = new GUI.Rectangle(`ehp_bg_${mesh.uniqueId}`);
         miniHpBg.width = `54px`;
@@ -1174,8 +1225,15 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             variant: index,
         });
         const mesh = visual.mesh;
+        const combat = resolveDungeonHazardCombatV392(hazard);
         mesh.rotation.y = (index * .73) % (Math.PI * 2);
         mesh.isPickable = false;
+        mesh.metadata = {
+            ...(mesh.metadata || {}),
+            dungeonHazardId: hazard.id || 'drifting_debris',
+            destructible: combat.destructible,
+            logicalHitRadius: combat.hitRadius,
+        };
         dungeonHazardsV38.push({
             mesh,
             visual,
@@ -1185,6 +1243,12 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             rotationZ: .008 + (index % 4) * .002,
             damage: Math.max(1, Math.round(Number(hazard.damage) || 60)),
             hitId: `dungeon-hazard-${currentWave}-${index}-${Math.trunc(nowMs)}`,
+            destructible: combat.destructible,
+            hp: combat.hp,
+            maxHp: combat.maxHp,
+            score: combat.score,
+            hitRadius: combat.hitRadius,
+            contactRadius: combat.contactRadius,
         });
         return true;
     };
@@ -1274,10 +1338,16 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         clearDungeonRoomObjectsV38();
         hostileProjectileVisualsV38.dispose();
     });
-    const liveTargets = () => [
-        ...enemies.filter(e => !e.mesh.isDisposed()),
-        ...(bossMesh && !bossMesh.isDisposed() ? [{ mesh: bossMesh }] : []),
-    ];
+    const liveTargets = () => {
+        const combatTargets = [
+            ...enemies.filter(e => !e.mesh.isDisposed()),
+            ...(bossMesh && !bossMesh.isDisposed() ? [{ mesh: bossMesh }] : []),
+        ];
+        if (combatTargets.length) return combatTargets;
+        return dungeonHazardsV38
+            .filter(hazard => hazard.destructible && hazard.mesh && !hazard.mesh.isDisposed())
+            .map(hazard => ({ mesh: hazard.mesh, hazard }));
+    };
     const fireEnemyBullet = (pos, velX = 0, velZ = enemyBulletVelZ, options = {}) => {
         const hitId = `dungeon-enemy-projectile-${++enemyProjectileSequence}`;
         const plan = options.plan || null;
@@ -1288,6 +1358,11 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             priority,
             visualId: options.visualId || plan?.visualId || null,
             pattern: options.pattern || plan?.pattern || null,
+        });
+        const hitRadius = resolveDungeonHostileProjectileHitRadiusV392({
+            priority,
+            visual,
+            requestedRadius: options.hitRadius || plan?.hitRadius,
         });
         const b = visual
             ? hostileProjectileVisualsV38.create({
@@ -1314,6 +1389,12 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         b._expiresAtMs = Number(plan?.expiresAtMs) || (b._createdAtMs + (priority === 'boss' ? 5600 : 4400));
         b._sourceRole = sourceRole;
         b._priority = priority;
+        b._hitRadius = hitRadius;
+        b.metadata = {
+            ...(b.metadata || {}),
+            logicalHitRadius: hitRadius,
+            damageAuthority: 'dungeon-logical-projectile-v392',
+        };
         enemyBullets.push(b);
         return b;
     };
@@ -1598,7 +1679,16 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         }), 2800);
     };
 
-    if (!dungeonParityV38) scheduleBattleTimer(() => startWave(1), 800);
+    if (!dungeonParityV38) {
+        const startLegacyDungeonWhenVisualsReadyV392 = () => {
+            if (dungeonVisualSpawnGateReadyV392(Date.now())) {
+                startWave(1);
+                return;
+            }
+            scheduleBattleTimer(startLegacyDungeonWhenVisualsReadyV392, 80);
+        };
+        scheduleBattleTimer(startLegacyDungeonWhenVisualsReadyV392, 800);
+    }
 
     const applyPlayerDamageToEnemy = (enemy, damage) => {
         if (!enemy || enemy.mesh.isDisposed() || enemy.hp <= 0) return false;
@@ -1866,23 +1956,32 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                     dungeonHazardsV38.splice(index, 1);
                     continue;
                 }
+                const previousHazardPositionV392 = {
+                    x: hazard.mesh.position.x,
+                    z: hazard.mesh.position.z,
+                };
                 hazard.mesh.position.z += hazard.velocityZ * frameFactor;
                 hazard.mesh.rotation.x += hazard.rotationX * frameFactor;
                 hazard.mesh.rotation.y += hazard.rotationY * frameFactor;
                 hazard.mesh.rotation.z += hazard.rotationZ * frameFactor;
-                if (hazard.mesh.position.z > ZOOM + 2.5) {
-                    hazard.visual?.dispose?.();
-                    safeDis(hazard.mesh);
-                    dungeonHazardsV38.splice(index, 1);
-                    continue;
-                }
-                if (hazard.mesh.intersectsMesh(shipVisual.collider, false)) {
+                if (logicalSegmentCircleHitV392(
+                    previousHazardPositionV392,
+                    hazard.mesh.position,
+                    playerRoot.position,
+                    hazard.contactRadius || 1.1,
+                )) {
                     damagePlayer({
                         rawDamage: hazard.damage,
                         source: 'environment',
                         damageType: 'kinetic',
                         hitId: hazard.hitId,
                     });
+                    hazard.visual?.dispose?.();
+                    safeDis(hazard.mesh);
+                    dungeonHazardsV38.splice(index, 1);
+                    continue;
+                }
+                if (hazard.mesh.position.z > ZOOM + 2.5) {
                     hazard.visual?.dispose?.();
                     safeDis(hazard.mesh);
                     dungeonHazardsV38.splice(index, 1);
@@ -1893,6 +1992,35 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 const bullet = playerBullets[bulletIndex];
                 if (!bullet || bullet.isDisposed()) continue;
                 let consumed = false;
+                for (let hazardIndex = dungeonHazardsV38.length - 1; hazardIndex >= 0; hazardIndex -= 1) {
+                    const hazard = dungeonHazardsV38[hazardIndex];
+                    if (!hazard.destructible) continue;
+                    if (!hazard.mesh || hazard.mesh.isDisposed()) {
+                        dungeonHazardsV38.splice(hazardIndex, 1);
+                        continue;
+                    }
+                    if (!projectileHitsPoint(bullet, hazard.mesh.position, hazard.hitRadius || 1.25)) continue;
+                    const hit = shots.registerHit(bullet, { mesh: hazard.mesh });
+                    if (!hit.accepted) continue;
+                    hazard.hp -= calculateProjectileDamage(bullet.atk, stats.critDamageBoost);
+                    const hazardRatio = clamp(hazard.hp / Math.max(1, hazard.maxHp), 0, 1);
+                    hazard.visual?.setRatio?.(hazardRatio);
+                    if (hazard.hp <= 0) {
+                        explode(hazard.mesh.position, 1.15);
+                        triggerShake(.10, 3);
+                        updateScore(hazard.score || 0);
+                        hazard.visual?.dispose?.();
+                        safeDis(hazard.mesh);
+                        dungeonHazardsV38.splice(hazardIndex, 1);
+                    }
+                    if (hit.consumed || bullet._splashRadius) {
+                        safeDis(bullet);
+                        playerBullets.splice(bulletIndex, 1);
+                        consumed = true;
+                    }
+                    break;
+                }
+                if (consumed) continue;
                 for (let debrisIndex = dungeonBreakablesV38.length - 1; debrisIndex >= 0; debrisIndex -= 1) {
                     const debris = dungeonBreakablesV38[debrisIndex];
                     if (!debris.mesh || debris.mesh.isDisposed()) {
@@ -1933,16 +2061,18 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
         // G-I. Dungeon encounter director V3.8 (Taurus vertical slice) or legacy waves.
         if (dungeonParityV38) {
-            const directorStep = stepDungeonEncounterDirectorV38(dungeonDirectorV38, {
-                nowMs: now,
-                activeEnemyCount: enemies.length,
-                activeBreakableCount: dungeonBreakablesV38.length,
-                bossAlive: Boolean(bossActive && bossMesh && !bossMesh.isDisposed()),
-                bossDefeated: bossDefeatedPulseV38,
-                maxSpawnEventsPerStep: 3,
-            });
-            bossDefeatedPulseV38 = false;
-            for (const event of directorStep.events) handleDungeonDirectorEventV38(event, now);
+            if (dungeonVisualSpawnGateReadyV392(now)) {
+                const directorStep = stepDungeonEncounterDirectorV38(dungeonDirectorV38, {
+                    nowMs: now,
+                    activeEnemyCount: enemies.length,
+                    activeBreakableCount: dungeonBreakablesV38.length,
+                    bossAlive: Boolean(bossActive && bossMesh && !bossMesh.isDisposed()),
+                    bossDefeated: bossDefeatedPulseV38,
+                    maxSpawnEventsPerStep: 3,
+                });
+                bossDefeatedPulseV38 = false;
+                for (const event of directorStep.events) handleDungeonDirectorEventV38(event, now);
+            }
         } else {
             if (currentWave > 0 && waveSpawned < waveEnemyCount && now - lastEnemySpawn > spawnInterval) {
                 spawnEnemy();
@@ -2093,6 +2223,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         for (let i = enemyBullets.length - 1; i >= 0; i--) {
             const eb = enemyBullets[i];
             if (eb.isDisposed()) { enemyBullets.splice(i, 1); continue; }
+            const previousProjectilePositionV392 = { x: eb.position.x, z: eb.position.z };
             let expired = false;
             if (eb._shotPlan) {
                 const advanced = advanceCampaignEnemyProjectileV31({
@@ -2121,20 +2252,25 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 eb.position.x += eb._velX * frameFactor;
                 eb.position.z += eb._velZ * frameFactor;
             }
-            if (now >= Number(eb._expiresAtMs || Infinity)) expired = true;
-            if (expired || eb.position.z > ZOOM + 3 || eb.position.z < -ZOOM - 4
-                || Math.abs(eb.position.x) > boundX() + 4) {
-                safeDis(eb);
-                enemyBullets.splice(i, 1);
-                continue;
-            }
-            if (eb.intersectsMesh(shipVisual.collider, false)) {
+            if (logicalSegmentCircleHitV392(
+                previousProjectilePositionV392,
+                eb.position,
+                playerRoot.position,
+                eb._hitRadius || 1,
+            )) {
                 damagePlayer({
                     rawDamage: eb._damage || 70,
                     source: 'projectile',
                     damageType: eb._damageType || 'energy',
                     hitId: eb._damageHitId,
                 });
+                safeDis(eb);
+                enemyBullets.splice(i, 1);
+                continue;
+            }
+            if (now >= Number(eb._expiresAtMs || Infinity)) expired = true;
+            if (expired || eb.position.z > ZOOM + 3 || eb.position.z < -ZOOM - 4
+                || Math.abs(eb.position.x) > boundX() + 4) {
                 safeDis(eb);
                 enemyBullets.splice(i, 1);
             }
