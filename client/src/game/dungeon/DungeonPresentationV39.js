@@ -5,7 +5,7 @@
  * live here. DungeonScene and the shared projectile renderer consume this
  * catalog without changing deterministic combat state.
  */
-export const DUNGEON_PRODUCTION_PRESENTATION_VERSION = 'dungeon-production-presentation-v3.9.7';
+export const DUNGEON_PRODUCTION_PRESENTATION_VERSION = 'dungeon-production-presentation-v3.9.8';
 
 const freezeDeep = value => {
   if (Array.isArray(value)) return Object.freeze(value.map(freezeDeep));

@@ -2,7 +2,7 @@
  * Babylon presentation helpers for Dungeon production pass V3.9.
  * Gameplay collision, HP and deterministic state remain owned by DungeonScene.
  */
-export const DUNGEON_PRESENTATION_FACTORY_VERSION = 'dungeon-presentation-factory-v3.9.7';
+export const DUNGEON_PRESENTATION_FACTORY_VERSION = 'dungeon-presentation-factory-v3.9.8';
 
 const sceneCaches = new WeakMap();
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));

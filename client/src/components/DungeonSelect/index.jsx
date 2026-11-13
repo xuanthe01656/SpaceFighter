@@ -120,10 +120,10 @@ export default function DungeonSelect({ gsRef, setScreen, lang, getRealTime }) {
 
       {dungeonQaAccess.enabled && (
         <div className={styles.qaBanner} role="status">
-          <strong>DUNGEON QA V3.9.7</strong>
+          <strong>DUNGEON QA V3.9.8</strong>
           <span>{lang === 'vi'
-            ? '3 Dungeon đủ 5 phòng · chọn trang bị QA · 0 năng lượng · không thưởng · không ghi tiến trình'
-            : 'Three complete five-room QA dungeons · selectable QA loadouts · zero energy · no rewards · no progression writes'}</span>
+            ? '1 Dungeon production · 2 ứng viên production · thiết lập QA thu gọn · 0 năng lượng · không ghi tiến trình'
+            : 'One production dungeon · two production candidates · compact QA setup · zero energy · no progression writes'}</span>
         </div>
       )}
 
@@ -134,12 +134,16 @@ export default function DungeonSelect({ gsRef, setScreen, lang, getRealTime }) {
           const isOpen = dungeonQaAccess.enabled ? Boolean(qaProfile?.visible) : scheduleOpen;
           const qaStatus = dungeonQaAccess.enabled ? getDungeonQaStatusLabelV391(qaProfile, lang) : null;
           const selectedQaLoadout = resolveDungeonQaLoadoutPresetV397(qaLoadoutSelections[dungeon.id]);
+          const selectedQaRoom = qaProfile?.roomBriefs?.find(room => room.id === qaRoomSelections[dungeon.id]) || null;
+          const selectedQaRoomLabel = selectedQaRoom
+            ? `${lang === 'vi' ? 'PHÒNG' : 'ROOM'} ${selectedQaRoom.index + 1}`
+            : `${lang === 'vi' ? 'FULL' : 'FULL'} ${qaProfile?.roomBriefs?.length || 5}`;
 
           return (
             <motion.div 
               key={dungeon.id} 
               initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.15 }}
-              className={`${styles.card} ${isOpen ? styles.open : styles.closed}`}
+              className={`${styles.card} ${isOpen ? styles.open : styles.closed} ${dungeonQaAccess.enabled ? styles.qaCard : ''}`}
               style={{ color: dungeon.themeColor }}
             >
               {/* Ảnh nền AAA */}
@@ -150,7 +154,7 @@ export default function DungeonSelect({ gsRef, setScreen, lang, getRealTime }) {
 
               <div className={styles.cardContent}>
                 <div className={styles.cardHeader}>
-                  <div className={`${styles.statusBadge} ${isOpen ? styles.open : styles.closed}`}>
+                  <div className={`${styles.statusBadge} ${isOpen ? styles.open : styles.closed} ${qaProfile?.readiness === 'production_candidate_qa' ? styles.candidate : ''}`}>
                     {dungeonQaAccess.enabled
                       ? qaStatus
                       : (isOpen ? (lang === 'vi' ? 'ĐANG MỞ (UTC)' : 'OPEN (UTC)') : (lang === 'vi' ? 'ĐÓNG CỬA (UTC)' : 'CLOSED (UTC)'))}
@@ -190,56 +194,60 @@ export default function DungeonSelect({ gsRef, setScreen, lang, getRealTime }) {
 
                 <div className={styles.actionArea}>
                   {dungeonQaAccess.enabled && qaProfile && (
-                    <>
-                      <div className={styles.qaControlGrid}>
-                        {qaProfile.allowDirectRoom && (
-                          <label className={styles.qaRoomPicker}>
-                            <span>{lang === 'vi' ? 'ĐIỂM BẮT ĐẦU QA' : 'QA START POINT'}</span>
+                    <details className={styles.qaSetupPanel}>
+                      <summary className={styles.qaSetupSummary}>
+                        <span>{lang === 'vi' ? 'THIẾT LẬP QA' : 'QA SETUP'}</span>
+                        <strong>{selectedQaRoomLabel} · {selectedQaLoadout.label?.[lang] || selectedQaLoadout.label?.vi}</strong>
+                      </summary>
+                      <div className={styles.qaSetupBody}>
+                        <div className={styles.qaControlGrid}>
+                          {qaProfile.allowDirectRoom && (
+                            <label className={styles.qaRoomPicker}>
+                              <span>{lang === 'vi' ? 'ĐIỂM BẮT ĐẦU' : 'START POINT'}</span>
+                              <select
+                                value={qaRoomSelections[dungeon.id] || ''}
+                                onChange={(event) => setQaRoomSelections(current => ({
+                                  ...current,
+                                  [dungeon.id]: event.target.value,
+                                }))}
+                              >
+                                <option value="">{lang === 'vi'
+                                  ? `FULL RUN — ${qaProfile.roomBriefs.length} PHÒNG`
+                                  : `FULL RUN — ${qaProfile.roomBriefs.length} ROOMS`}</option>
+                                {qaProfile.roomBriefs.map(room => (
+                                  <option key={room.id} value={room.id}>
+                                    {`ROOM ${room.index + 1} — ${room.title?.[lang] || room.title?.vi || room.id}`}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          )}
+                          <label className={styles.qaLoadoutPicker}>
+                            <span>{lang === 'vi' ? 'TRANG BỊ QA' : 'QA LOADOUT'}</span>
                             <select
-                              value={qaRoomSelections[dungeon.id] || ''}
-                              onChange={(event) => setQaRoomSelections(current => ({
+                              value={qaLoadoutSelections[dungeon.id] || qaProfile.defaultLoadoutPresetId}
+                              onChange={(event) => setQaLoadoutSelections(current => ({
                                 ...current,
                                 [dungeon.id]: event.target.value,
                               }))}
                             >
-                              <option value="">{lang === 'vi'
-                                ? `FULL RUN — ${qaProfile.roomBriefs.length} PHÒNG`
-                                : `FULL RUN — ${qaProfile.roomBriefs.length} ROOMS`}</option>
-                              {qaProfile.roomBriefs.map(room => (
-                                <option key={room.id} value={room.id}>
-                                  {`ROOM ${room.index + 1} — ${room.title?.[lang] || room.title?.vi || room.id}`}
+                              {qaLoadoutPresets.map(preset => (
+                                <option key={preset.id} value={preset.id}>
+                                  {preset.label?.[lang] || preset.label?.vi || preset.id}
                                 </option>
                               ))}
                             </select>
                           </label>
-                        )}
-                        <label className={styles.qaLoadoutPicker}>
-                          <span>{lang === 'vi' ? 'CẤU HÌNH TRANG BỊ QA' : 'QA LOADOUT PRESET'}</span>
-                          <select
-                            value={qaLoadoutSelections[dungeon.id] || qaProfile.defaultLoadoutPresetId}
-                            onChange={(event) => setQaLoadoutSelections(current => ({
-                              ...current,
-                              [dungeon.id]: event.target.value,
-                            }))}
-                          >
-                            {qaLoadoutPresets.map(preset => (
-                              <option key={preset.id} value={preset.id}>
-                                {preset.label?.[lang] || preset.label?.vi || preset.id}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
+                        </div>
+                        <div className={styles.qaLoadoutSummary}>
+                          <strong>{selectedQaLoadout.label?.[lang] || selectedQaLoadout.label?.vi}</strong>
+                          <span>{selectedQaLoadout.summary?.[lang] || selectedQaLoadout.summary?.vi}</span>
+                        </div>
+                        <p className={styles.qaIsolationNote}>{lang === 'vi'
+                          ? 'Chỉ áp dụng trong trận QA · không sửa kho đồ, lịch mở hoặc tiến trình.'
+                          : 'Applies only to this QA run · inventory, schedule and progression remain unchanged.'}</p>
                       </div>
-                      <div className={styles.qaLoadoutSummary}>
-                        <strong>{selectedQaLoadout.label?.[lang] || selectedQaLoadout.label?.vi}</strong>
-                        <span>{selectedQaLoadout.summary?.[lang] || selectedQaLoadout.summary?.vi}</span>
-                      </div>
-                      <div className={styles.qaProductionNote}>
-                        {lang === 'vi'
-                          ? 'FULL QA 5 PHÒNG · production vẫn khóa lịch/mở khóa · loadout chỉ tồn tại trong trận.'
-                          : 'FULL FIVE-ROOM QA · production schedule/unlock stays locked · loadout exists only in this run.'}
-                      </div>
-                    </>
+                    </details>
                   )}
                   <button
                     className={`${styles.playBtn} ${isOpen ? styles.open : ''}`}

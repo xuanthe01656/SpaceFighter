@@ -1,4 +1,4 @@
-/* Dungeon HUD V3.9.7 — shared-baseline fixed-screen production presentation.
+/* Dungeon HUD V3.9.8 — shared-baseline fixed-screen production presentation.
  * React owns screen UI; Babylon keeps world-space HP, hit text and combat effects. */
 .hud {
   --sf-dh-frame-height: clamp(142px, 35.4vw, 154px);
@@ -89,11 +89,11 @@
   z-index: 5;
   top: var(--sf-dh-identity-top);
   height: clamp(28px, 7.2vw, 32px);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 1px;
+  display: grid;
+  grid-template-rows: clamp(12px, 3vw, 15px) clamp(9px, 2.2vw, 11px);
+  align-content: start;
+  justify-items: center;
+  row-gap: 1px;
   min-width: 0;
   text-align: center;
   letter-spacing: .07em;
@@ -106,7 +106,11 @@
   width: 100%;
   color: var(--sf-dh-accent-soft);
   font-size: clamp(10px, 2.6vw, 13px);
-  line-height: 1.05;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transform: translateY(-.02em);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -117,7 +121,11 @@
   color: var(--sf-dh-muted);
   font-family: var(--sf-ui-data-font);
   font-size: clamp(7px, 1.85vw, 9px);
-  line-height: 1.05;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transform: translateY(-.03em);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -132,9 +140,10 @@
   width: 23.2%;
   height: clamp(49px, 12.3vw, 56px);
   display: grid;
+  grid-template-rows: clamp(9px, 2.2vw, 11px) clamp(23px, 6.4vw, 31px) clamp(8px, 2vw, 10px);
   justify-items: center;
   align-content: center;
-  gap: 1px;
+  row-gap: 0;
   min-width: 0;
   text-align: center;
   font-family: var(--sf-ui-data-font);
@@ -145,13 +154,21 @@
 .podLabel {
   color: var(--sf-dh-muted);
   font-size: clamp(8px, 2.1vw, 10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   line-height: 1;
+  transform: translateY(-.04em);
   letter-spacing: .12em;
 }
 .podValue {
   color: var(--sf-dh-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: clamp(21px, 6.2vw, 30px);
-  line-height: .94;
+  line-height: 1;
+  transform: translateY(-.015em);
   font-variant-numeric: tabular-nums;
   text-shadow: 0 0 8px color-mix(in srgb, var(--sf-dh-accent) 40%, transparent);
 }
@@ -159,8 +176,12 @@
 .rightPod small {
   width: 92%;
   color: var(--sf-dh-accent-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: clamp(7px, 1.8vw, 9px);
-  line-height: 1.05;
+  line-height: 1;
+  transform: translateY(-.03em);
   letter-spacing: .08em;
   white-space: nowrap;
   overflow: hidden;
@@ -185,7 +206,12 @@
   width: 100%;
   color: var(--sf-dh-text);
   font-size: clamp(11px, 2.85vw, 14px);
+  min-height: clamp(13px, 3.2vw, 16px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   line-height: 1;
+  transform: translateY(-.02em);
   letter-spacing: .09em;
   white-space: nowrap;
   overflow: hidden;
@@ -222,8 +248,13 @@
   margin-top: 2px;
   color: var(--sf-dh-accent-soft);
   font-family: var(--sf-ui-data-font);
+  min-height: clamp(9px, 2.3vw, 11px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: clamp(8px, 2.1vw, 10px);
   line-height: 1;
+  transform: translateY(-.02em);
   font-variant-numeric: tabular-nums;
 }
 .armorValue span { color: var(--sf-dh-muted); }
@@ -241,7 +272,7 @@
   align-items: center;
   justify-content: center;
   gap: clamp(3px, 1vw, 7px);
-  margin: 6px 0 0;
+  margin: 5px 0 0;
   padding: 0;
   width: 100%;
   min-height: 18px;
@@ -341,13 +372,22 @@
   font: 800 clamp(11px, 3vw, 13px)/1 var(--sf-ui-data-font);
   font-variant-numeric: tabular-nums;
 }
-.objectiveCopy { grid-column: 2; grid-row: 1; min-width: 0; padding-right: 1px; }
+.objectiveCopy {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  min-height: 36px;
+  display: grid;
+  align-content: center;
+  padding-right: 1px;
+}
 .objectiveHeading {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
   min-width: 0;
+  min-height: 14px;
 }
 .objectiveHeading span {
   min-width: 0;
@@ -357,22 +397,26 @@
   color: var(--sf-dh-accent-soft);
   font-size: clamp(9px, 2.45vw, 13px);
   font-weight: 800;
-  line-height: 1.05;
+  line-height: 1;
+  transform: translateY(-.02em);
   letter-spacing: .055em;
 }
 .objectiveHeading strong {
   color: var(--sf-dh-objective);
+  display: flex;
+  align-items: baseline;
   font: 800 clamp(7.5px, 1.95vw, 10px)/1 var(--sf-ui-data-font);
+  transform: translateY(-.02em);
   letter-spacing: .035em;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 .objectiveCopy p {
-  margin: 3px 0 0;
+  margin: 2px 0 0;
   color: var(--sf-dh-text);
   font-family: var(--sf-ui-data-font);
   font-size: clamp(7.8px, 2.05vw, 10px);
-  line-height: 1.15;
+  line-height: 1.18;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;

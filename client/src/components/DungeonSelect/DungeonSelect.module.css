@@ -313,6 +313,13 @@
     color: #64748b;
     border: 1px solid rgba(100, 116, 139, 0.3);
   }
+  .statusBadge.candidate {
+    background: rgba(34, 211, 238, 0.10);
+    color: #67e8f9;
+    border-color: rgba(34, 211, 238, 0.48);
+    box-shadow: 0 0 12px rgba(34, 211, 238, 0.20);
+    animation: none;
+  }
   @keyframes pulseBadge {
     0%, 100% { opacity: 0.85; box-shadow: 0 0 8px rgba(74,222,128,0.2); }
     50%       { opacity: 1;    box-shadow: 0 0 18px rgba(74,222,128,0.5); }
@@ -408,7 +415,21 @@
   }
   
  /* Action Button */
-.actionArea { margin-top: 16px; flex-shrink: 0; }
+.actionArea {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  flex-shrink: 0;
+}
+
+.qaCard {
+  height: auto;
+  max-height: none;
+  min-height: 560px;
+  cursor: default;
+}
+.qaCard .cardContent { height: auto; min-height: 560px; }
+
 
 .playBtn {
   width: 100%;
@@ -416,7 +437,8 @@
   justify-content: center;
   align-items: center;
   gap: 10px;
-  padding: 14px 16px;
+  min-height: 50px;
+  padding: 13px 16px;
   border: none;
   border-radius: 10px;
   font-family: inherit;
@@ -504,6 +526,12 @@
       height: auto; flex: none;
       scroll-snap-align: start;
     }
+    .card.qaCard {
+      min-height: 0;
+      max-height: none;
+      overflow: hidden;
+    }
+    .qaCard .cardContent { min-height: 0; height: auto; }
     .card.open:hover  { transform: none; }
     .card.open:active { transform: scale(0.99); }
   
@@ -556,70 +584,133 @@
     .statusBadge.open { animation: none; }
     .card, .bgImage, .playBtn { transition: none; }
   }
-/* Dungeon QA V3.9.7 — isolated full-content/loadout test harness */
+/* Dungeon QA V3.9.8 — compact controls keep the deploy CTA permanently visible. */
+.card.qaCard { max-height: none; }
 .qaBanner {
   display: flex;
   align-items: center;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 8px 14px;
+  gap: 6px 12px;
   width: min(1100px, 100%);
-  margin: 0 auto 14px;
-  padding: 10px 14px;
+  margin: 0 auto 12px;
+  padding: 9px 13px;
   border: 1px solid rgba(250, 204, 21, 0.5);
   border-radius: 10px;
   background: linear-gradient(90deg, rgba(61, 42, 3, 0.82), rgba(25, 18, 4, 0.82));
   color: #facc15;
   font-family: 'Share Tech Mono', monospace;
-  font-size: 12px;
-  letter-spacing: 0.07em;
+  font-size: 11px;
+  letter-spacing: 0.065em;
   text-align: center;
   box-shadow: 0 0 22px rgba(250, 204, 21, 0.12);
 }
-
 .qaBanner span { color: #fde68a; opacity: 0.88; }
 
 .qaNoReward {
   width: 100%;
   color: #facc15;
   font-family: 'Share Tech Mono', monospace;
-  font-size: 11px;
-  letter-spacing: 0.07em;
-  line-height: 1.35;
+  font-size: 10px;
+  letter-spacing: 0.065em;
+  line-height: 1.3;
+}
+
+.qaSetupPanel {
+  width: 100%;
+  border: 1px solid rgba(34, 211, 238, 0.34);
+  border-radius: 9px;
+  background: rgba(3, 12, 25, 0.82);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.qaSetupSummary {
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  color: #a5f3fc;
+  font-family: 'Share Tech Mono', monospace;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  box-sizing: border-box;
+}
+.qaSetupSummary::-webkit-details-marker { display: none; }
+.qaSetupSummary::after {
+  content: '⌄';
+  grid-column: 3;
+  color: #facc15;
+  font-size: 16px;
+  line-height: 1;
+  transform-origin: center;
+  transition: transform .16s ease;
+}
+.qaSetupPanel[open] .qaSetupSummary::after { transform: rotate(180deg); }
+.qaSetupSummary span {
+  color: #facc15;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .11em;
+  white-space: nowrap;
+}
+.qaSetupSummary strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #dbeafe;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .035em;
+  text-align: right;
+}
+.qaSetupSummary:focus-visible {
+  outline: 2px solid rgba(250, 204, 21, .88);
+  outline-offset: -2px;
+}
+
+.qaSetupBody {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid rgba(34, 211, 238, .18);
+  background: linear-gradient(180deg, rgba(5, 21, 38, .88), rgba(2, 10, 21, .94));
 }
 
 .qaControlGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  margin-bottom: 8px;
 }
 
 .qaRoomPicker,
 .qaLoadoutPicker {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
   color: #facc15;
   font-family: 'Share Tech Mono', monospace;
-  font-size: 10px;
-  letter-spacing: 0.12em;
+  font-size: 9px;
+  letter-spacing: 0.10em;
 }
 
 .qaRoomPicker select,
 .qaLoadoutPicker select {
   width: 100%;
-  min-height: 38px;
+  min-height: 40px;
   padding: 8px 10px;
   border: 1px solid rgba(250, 204, 21, 0.42);
   border-radius: 7px;
-  background: rgba(3, 10, 24, 0.94);
+  background: rgba(3, 10, 24, 0.96);
   color: #f8fafc;
   font: inherit;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.035em;
 }
-
 .qaRoomPicker select:focus-visible,
 .qaLoadoutPicker select:focus-visible {
   outline: 2px solid rgba(250, 204, 21, 0.82);
@@ -628,41 +719,49 @@
 
 .qaLoadoutSummary {
   display: grid;
-  gap: 3px;
-  margin-bottom: 7px;
+  gap: 2px;
   padding: 8px 10px;
-  border: 1px solid rgba(34, 211, 238, 0.26);
+  border: 1px solid rgba(34, 211, 238, 0.24);
   border-radius: 7px;
-  background: linear-gradient(90deg, rgba(8, 47, 73, 0.42), rgba(3, 19, 34, 0.7));
+  background: linear-gradient(90deg, rgba(8, 47, 73, 0.38), rgba(3, 19, 34, 0.64));
   font-family: 'Share Tech Mono', monospace;
 }
-
 .qaLoadoutSummary strong {
   color: #a5f3fc;
-  font-size: 11px;
-  letter-spacing: 0.08em;
+  font-size: 10px;
+  letter-spacing: 0.07em;
 }
-
 .qaLoadoutSummary span {
   color: #dbeafe;
-  font-size: 10px;
-  line-height: 1.35;
+  font-size: 9px;
+  line-height: 1.32;
 }
-
-.qaProductionNote {
-  margin-bottom: 10px;
-  padding: 8px 10px;
-  border-left: 3px solid #22d3ee;
-  background: rgba(8, 145, 178, 0.09);
+.qaIsolationNote {
+  margin: 0;
+  padding-left: 8px;
+  border-left: 2px solid #22d3ee;
   color: #bae6fd;
   font-family: 'Share Tech Mono', monospace;
-  font-size: 11px;
-  line-height: 1.35;
+  font-size: 9px;
+  line-height: 1.32;
 }
 
 @media (max-width: 768px) and (orientation: portrait) {
-  .qaBanner { font-size: 11px; margin-bottom: 10px; }
+  .qaBanner { font-size: 10px; margin-bottom: 10px; padding: 8px 10px; }
+  .qaCard .cardContent { padding-bottom: 16px; }
+  .qaSetupSummary { min-height: 46px; padding: 9px 11px; }
+  .qaSetupSummary strong { font-size: 9px; }
   .qaControlGrid { grid-template-columns: 1fr; gap: 7px; }
   .qaRoomPicker select,
-  .qaLoadoutPicker select { min-height: 42px; }
+  .qaLoadoutPicker select { min-height: 44px; }
+  .qaCard .playBtn {
+    min-height: 52px;
+    margin-top: 0;
+    position: relative;
+    z-index: 3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qaSetupSummary::after { transition: none; }
 }

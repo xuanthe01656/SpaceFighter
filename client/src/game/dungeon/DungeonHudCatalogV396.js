@@ -5,12 +5,12 @@ import {
 import { resolveDungeonPresentationV39 } from './DungeonPresentationV39.js';
 
 /**
- * Dungeon HUD catalog V3.9.7 (V3.9.6 compatibility module).
+ * Dungeon HUD catalog V3.9.8 (V3.9.6 compatibility module).
  *
  * Presentation-only metadata for the React HUD. Combat authority, reward values,
  * HP tuning and encounter timing remain in their existing catalogs/runtime.
  */
-export const DUNGEON_HUD_CATALOG_VERSION = 'dungeon-hud-catalog-v3.9.7';
+export const DUNGEON_HUD_CATALOG_VERSION = 'dungeon-hud-catalog-v3.9.8';
 export const DUNGEON_HUD_MAX_VISIBLE_ROOM_MARKERS_V396 = 8;
 
 const freezeDeep = value => {
@@ -70,13 +70,13 @@ const PROFILE_META = freezeDeep({
     shortCode: 'NEREUS',
     displayName: { vi: 'LÕI PHÒNG VỆ NEREUS', en: 'NEREUS DEFENSE CORE' },
     missionLabel: { vi: 'XÂM NHẬP HỆ THỐNG', en: 'SYSTEM INCURSION' },
-    qaLabel: 'NEREUS PRODUCTION QA',
+    qaLabel: 'NEREUS CANDIDATE QA',
   },
   dung_abaddon: {
     shortCode: 'ABADDON',
     displayName: { vi: 'KHE NỨT ABADDON', en: 'ABADDON RIFT' },
     missionLabel: { vi: 'SINH TỒN KHE NỨT', en: 'RIFT SURVIVAL' },
-    qaLabel: 'ABADDON PRODUCTION QA',
+    qaLabel: 'ABADDON CANDIDATE QA',
   },
 });
 
@@ -112,8 +112,8 @@ const buildHudProfile = dungeonId => {
       publishIntervalMs: 100,
       compactWidthPx: 390,
       objectiveMaxLines: 2,
-      reservedTopPx: 224,
-      alignmentContract: 'shared-baseline-v397',
+      reservedTopPx: 232,
+      alignmentContract: 'shared-baseline-v398',
       worldSafetyMargin: .45,
     },
   });

@@ -15,7 +15,7 @@ on:
         type: boolean
         default: false
       guest_dungeon_v39_qa:
-        description: 'Build local-only Dungeon V3.9.7 production QA APK (3 full dungeons, selectable loadouts, no rewards)'
+        description: 'Build local-only Dungeon V3.9.8 production hardening QA APK (3 full dungeons, selectable loadouts, no rewards)'
         required: false
         type: boolean
         default: false
@@ -249,7 +249,7 @@ jobs:
             [[ "$VITE_SF_DUNGEON_QA_REWARDS" == 'false' && "$VITE_SF_DUNGEON_PARITY_V38" == 'true' ]] || exit 1
             [[ "${{ inputs.touch_qa }}" != 'true' && "${{ inputs.guest_combat_v2_qa }}" != 'true' && "${{ inputs.cloud_qa_ui }}" != 'true' ]] || { echo 'Dungeon QA must be built separately from other QA modes' >&2; exit 1; }
             [[ "${{ inputs.c15_rc1b }}" != 'true' && "${{ inputs.c15_rc1c }}" != 'true' && "${{ inputs.c15_rc3 }}" != 'true' && "${{ inputs.c15_rc4 }}" != 'true' && "${{ inputs.c15_rc5 }}" != 'true' && "${{ inputs.c15_rc7_assets }}" != 'true' ]] || { echo 'Dungeon QA cannot be combined with C15 release candidates' >&2; exit 1; }
-            echo 'Building local-only Dungeon V3.9.7 production QA harness; 3 FULL DUNGEONS, SELECTABLE LOADOUTS, NO ENERGY, NO REWARDS, NO TRUSTED WRITES'
+            echo 'Building local-only Dungeon V3.9.8 production hardening QA harness; 3 FULL DUNGEONS, SELECTABLE LOADOUTS, NO ENERGY, NO REWARDS, NO TRUSTED WRITES'
           fi
           if [[ "$VITE_SF_NATIVE_TOUCH_QA" == '1' ]]; then
             [[ "$GITHUB_EVENT_NAME" == 'workflow_dispatch' ]] || { echo 'Touch QA is manual-only' >&2; exit 1; }
@@ -368,7 +368,7 @@ jobs:
           set -euo pipefail
           name='spacefighter-android-debug-not-for-release'
           if [[ "${{ inputs.guest_dungeon_v39_qa }}" == 'true' ]]; then
-            name='spacefighter-android-dungeon-v397-production-qa-debug-no-rewards'
+            name='spacefighter-android-dungeon-v398-production-hardening-qa-debug-no-rewards'
           elif [[ "${{ inputs.guest_combat_v2_qa }}" == 'true' ]]; then
             name='spacefighter-android-guest-combat-v2-qa-debug-not-for-release'
           elif [[ "${{ inputs.c15_rc7_assets }}" == 'true' ]]; then

@@ -5,8 +5,8 @@ import {
   auditDungeonQaLoadoutsV397,
 } from './DungeonQaLoadoutV397.js';
 
-/** Stable function names retained for V3.9.1 callers; contract advanced in V3.9.7. */
-export const DUNGEON_QA_ACCESS_VERSION = 'dungeon-qa-access-v3.9.7';
+/** Stable function names retained for V3.9.1 callers; contract advanced in V3.9.8. */
+export const DUNGEON_QA_ACCESS_VERSION = 'dungeon-qa-access-v3.9.8';
 
 const freezeDeep = value => {
   if (Array.isArray(value)) return Object.freeze(value.map(freezeDeep));
@@ -30,7 +30,7 @@ export const DUNGEON_QA_PROFILES_V391 = freezeDeep({
   dung_taurus: {
     id: 'dung_taurus',
     visible: true,
-    runtimeMode: 'parity_v397',
+    runtimeMode: 'parity_v398',
     readiness: 'production_qa',
     difficultyTier: 1,
     allowDirectRoom: true,
@@ -40,8 +40,8 @@ export const DUNGEON_QA_PROFILES_V391 = freezeDeep({
   dung_nereus: {
     id: 'dung_nereus',
     visible: true,
-    runtimeMode: 'parity_v397',
-    readiness: 'production_qa',
+    runtimeMode: 'parity_v398',
+    readiness: 'production_candidate_qa',
     difficultyTier: 2,
     allowDirectRoom: true,
     defaultLoadoutPresetId: 'control_mk3',
@@ -50,8 +50,8 @@ export const DUNGEON_QA_PROFILES_V391 = freezeDeep({
   dung_abaddon: {
     id: 'dung_abaddon',
     visible: true,
-    runtimeMode: 'parity_v397',
-    readiness: 'production_qa',
+    runtimeMode: 'parity_v398',
+    readiness: 'production_candidate_qa',
     difficultyTier: 3,
     allowDirectRoom: true,
     defaultLoadoutPresetId: 'fortress_mk4',
@@ -140,7 +140,7 @@ export function createDungeonQaRunV391({
     directRoomIndex: room?.index ?? null,
     singleRoom: Boolean(room),
     loadoutPresetId: presetId,
-    seedKey: `qa-v397:${profile.id}:${room?.id || 'full'}:${presetId}`,
+    seedKey: `qa-v398:${profile.id}:${room?.id || 'full'}:${presetId}`,
     rewardMode: 'none',
     consumeEnergy: false,
     trustedWrites: false,
@@ -155,7 +155,7 @@ export function isDungeonQaRunV391(run, dungeonId = null, {
   if (run.rewardMode !== 'none' || run.consumeEnergy !== false || run.trustedWrites !== false) return false;
   if (!DUNGEON_QA_LOADOUT_PRESETS_V397[run.loadoutPresetId]) return false;
   if (typeof run.seedKey !== 'string'
-    || !run.seedKey.startsWith(`qa-v397:${run.dungeonId}:`)
+    || !run.seedKey.startsWith(`qa-v398:${run.dungeonId}:`)
     || !run.seedKey.endsWith(`:${run.loadoutPresetId}`)) return false;
   const profile = resolveDungeonQaProfileV391(run.dungeonId);
   if (!profile?.visible || run.runtimeMode !== profile.runtimeMode || run.readiness !== profile.readiness) return false;
@@ -166,7 +166,10 @@ export function isDungeonQaRunV391(run, dungeonId = null, {
 export function getDungeonQaStatusLabelV391(profile, lang = 'vi') {
   if (!profile) return '';
   const tier = Math.max(1, Number(profile.difficultyTier) || 1);
-  return lang === 'vi' ? `PRODUCTION QA · BẬC ${tier}` : `PRODUCTION QA · TIER ${tier}`;
+  if (profile.readiness === 'production_qa') {
+    return lang === 'vi' ? `PRODUCTION QA · BẬC ${tier}` : `PRODUCTION QA · TIER ${tier}`;
+  }
+  return lang === 'vi' ? `QA ỨNG VIÊN · BẬC ${tier}` : `CANDIDATE QA · TIER ${tier}`;
 }
 
 export function auditDungeonQaAccessV391() {
@@ -177,7 +180,10 @@ export function auditDungeonQaAccessV391() {
     if (!profile.visible || !DUNGEON_RUNTIME_PROFILES_V38[profile.id]) {
       issues.push(`DUNGEON_QA_PROFILE_INVALID:${profile.id}`);
     }
-    if (profile.readiness !== 'production_qa' || profile.runtimeMode !== 'parity_v397') {
+    const expectedReadiness = profile.id === 'dung_taurus'
+      ? 'production_qa'
+      : 'production_candidate_qa';
+    if (profile.readiness !== expectedReadiness || profile.runtimeMode !== 'parity_v398') {
       issues.push(`DUNGEON_QA_PROFILE_MODE:${profile.id}`);
     }
     if (!profile.allowDirectRoom || profile.roomBriefs.length !== 5) {

@@ -1,13 +1,13 @@
 import { ENEMY_ARCHETYPES_V2 } from '../combat/EnemyCombatCatalogV2.js';
 
 /**
- * Dungeon content catalog V3.9.7 (V3.9.3 compatibility module).
+ * Dungeon content catalog V3.9.8 (V3.9.3 compatibility module).
  *
  * This is the authoritative, data-only content schema for all present and future
  * dungeons. Runtime V3.8 consumes a compatibility projection so existing scene,
  * combat, QA and server-authority contracts do not need to be cloned per dungeon.
  */
-export const DUNGEON_CONTENT_CATALOG_VERSION = 'dungeon-content-catalog-v3.9.7';
+export const DUNGEON_CONTENT_CATALOG_VERSION = 'dungeon-content-catalog-v3.9.8';
 export const DUNGEON_CONTENT_SCHEMA_VERSION = 1;
 
 const freezeDeep = value => {
@@ -65,17 +65,17 @@ export const DUNGEON_ENCOUNTER_PACKS_V393 = freezeDeep({
     roles: [{ id: 'raider', weight: 6 }, { id: 'gunner', weight: 4 }],
   },
   taurus_pirate_ambush: {
-    threatBudget: 11,
+    threatBudget: 10,
     roles: [{ id: 'raider', weight: 5 }, { id: 'gunner', weight: 4 }, { id: 'charger', weight: 2 }],
     speedMultiplier: 1.04,
   },
   taurus_salvage_guard: {
-    threatBudget: 13,
+    threatBudget: 12,
     roles: [{ id: 'gunner', weight: 4 }, { id: 'shieldbearer', weight: 3 }, { id: 'raider', weight: 2 }],
     hpMultiplier: 1.08,
   },
   taurus_elite_escort: {
-    threatBudget: 17,
+    threatBudget: 15,
     roles: [
       { id: 'shieldbearer', weight: 4 },
       { id: 'support', weight: 3 },
@@ -88,65 +88,65 @@ export const DUNGEON_ENCOUNTER_PACKS_V393 = freezeDeep({
     fireCooldownMultiplier: .94,
   },
   taurus_boss_guard: {
-    threatBudget: 6,
+    threatBudget: 5,
     roles: [{ id: 'gunner', weight: 4 }, { id: 'support', weight: 2 }],
   },
 
   nereus_entry_screen: {
-    threatBudget: 11,
+    threatBudget: 10,
     roles: [{ id: 'gunner', weight: 5 }, { id: 'shieldbearer', weight: 3 }, { id: 'raider', weight: 2 }],
   },
   nereus_current_guard: {
-    threatBudget: 15,
+    threatBudget: 13,
     roles: [{ id: 'support', weight: 4 }, { id: 'gunner', weight: 4 }, { id: 'charger', weight: 1 }],
     projectileSpeedMultiplier: 1.05,
   },
   nereus_shield_lattice: {
-    threatBudget: 17,
+    threatBudget: 15,
     roles: [{ id: 'shieldbearer', weight: 5 }, { id: 'support', weight: 4 }, { id: 'gunner', weight: 2 }],
     hpMultiplier: 1.10,
   },
   nereus_oracle_guard: {
-    threatBudget: 21,
+    threatBudget: 18,
     roles: [{ id: 'shieldbearer', weight: 4 }, { id: 'support', weight: 4 }, { id: 'artillery', weight: 3 }],
-    hpMultiplier: 1.18,
-    damageMultiplier: 1.10,
-    fireCooldownMultiplier: .92,
+    hpMultiplier: 1.14,
+    damageMultiplier: 1.06,
+    fireCooldownMultiplier: .96,
   },
   nereus_boss_guard: {
-    threatBudget: 8,
+    threatBudget: 7,
     roles: [{ id: 'support', weight: 4 }, { id: 'shieldbearer', weight: 3 }],
   },
 
   abaddon_entry_screen: {
-    threatBudget: 16,
+    threatBudget: 13,
     roles: [{ id: 'raider', weight: 5 }, { id: 'charger', weight: 3 }, { id: 'gunner', weight: 2 }],
   },
   abaddon_gravity_assault: {
-    threatBudget: 20,
+    threatBudget: 17,
     roles: [{ id: 'raider', weight: 4 }, { id: 'charger', weight: 4 }, { id: 'artillery', weight: 2 }],
-    speedMultiplier: 1.06,
+    speedMultiplier: 1.04,
   },
   abaddon_rift_anchor_guard: {
-    threatBudget: 23,
+    threatBudget: 20,
     roles: [{ id: 'charger', weight: 4 }, { id: 'artillery', weight: 4 }, { id: 'support', weight: 2 }],
-    damageMultiplier: 1.08,
+    damageMultiplier: 1.05,
   },
   abaddon_brood_elite: {
-    threatBudget: 28,
+    threatBudget: 24,
     roles: [
       { id: 'raider', weight: 4 },
       { id: 'charger', weight: 4 },
       { id: 'artillery', weight: 3 },
       { id: 'shieldbearer', weight: 2 },
     ],
-    hpMultiplier: 1.20,
-    damageMultiplier: 1.16,
-    projectileSpeedMultiplier: 1.10,
-    fireCooldownMultiplier: .88,
+    hpMultiplier: 1.12,
+    damageMultiplier: 1.06,
+    projectileSpeedMultiplier: 1.05,
+    fireCooldownMultiplier: .96,
   },
   abaddon_boss_guard: {
-    threatBudget: 10,
+    threatBudget: 8,
     roles: [{ id: 'charger', weight: 4 }, { id: 'artillery', weight: 3 }],
   },
 });
@@ -156,15 +156,15 @@ export const DUNGEON_HAZARD_PROFILES_V393 = freezeDeep({
     id: 'taurus_scrap_lanes',
     type: 'drifting_debris',
     count: 4,
-    intervalMs: 1900,
+    intervalMs: 1950,
     warningMode: 'edge_pulse',
     entryCueMs: 280,
     entryCueWidth: 1.05,
     warningMs: 280,
     warningWidth: 1.05,
     naturalDrift: true,
-    damage: 70,
-    speed: .085,
+    damage: 65,
+    speed: .082,
     destructible: true,
     hp: 180,
     score: 45,
@@ -174,26 +174,29 @@ export const DUNGEON_HAZARD_PROFILES_V393 = freezeDeep({
   nereus_ion_currents: {
     id: 'nereus_ion_currents',
     type: 'ion_current_lanes',
-    count: 5,
-    intervalMs: 1650,
-    warningMs: 820,
+    count: 4,
+    intervalMs: 1750,
+    warningMs: 900,
     warningWidth: 1.35,
-    damage: 82,
-    speed: .095,
+    damage: 72,
+    speed: .088,
     destructible: false,
     contactRadius: 1.18,
   },
   abaddon_gravity_shear: {
     id: 'abaddon_gravity_shear',
     type: 'rift_shear_lanes',
-    count: 6,
-    intervalMs: 1450,
-    warningMs: 760,
-    warningWidth: 1.7,
-    damage: 105,
-    speed: .112,
-    destructible: false,
-    contactRadius: 1.25,
+    count: 5,
+    intervalMs: 1650,
+    warningMs: 840,
+    warningWidth: 1.55,
+    damage: 88,
+    speed: .102,
+    destructible: true,
+    hp: 300,
+    score: 70,
+    hitRadius: 1.55,
+    contactRadius: 1.18,
   },
 });
 
@@ -378,28 +381,28 @@ export const DUNGEON_CONTENT_CATALOG_V393 = freezeDeep({
     },
     rooms: [
       {
-        id: 'taurus_entry', templateId: 'clear', encounterPackId: 'taurus_entry_screen',
+        id: 'taurus_entry', templateId: 'clear', encounterPackId: 'taurus_entry_screen', activeEnemyCap: 6, spawnGapMs: 760,
         title: { vi: 'CỬA VÀNH ĐAI', en: 'BELT APPROACH' },
         objective: { vi: 'Dọn sạch lối vào và giữ đội hình.', en: 'Clear the approach and hold formation.' },
       },
       {
-        id: 'taurus_ambush', templateId: 'hazard_clear', encounterPackId: 'taurus_pirate_ambush',
+        id: 'taurus_ambush', templateId: 'hazard_clear', encounterPackId: 'taurus_pirate_ambush', activeEnemyCap: 7, spawnGapMs: 650,
         hazardId: 'taurus_scrap_lanes',
         title: { vi: 'Ổ PHỤC HẢI TẶC', en: 'PIRATE AMBUSH' },
         objective: { vi: 'Né phế liệu trôi và tiêu diệt hải tặc.', en: 'Evade drifting scrap and destroy the pirates.' },
       },
       {
-        id: 'taurus_salvage', templateId: 'destroy_nodes', encounterPackId: 'taurus_salvage_guard',
+        id: 'taurus_salvage', templateId: 'destroy_nodes', encounterPackId: 'taurus_salvage_guard', activeEnemyCap: 7, spawnGapMs: 620,
         objectiveProfileId: 'taurus_salvage_cluster',
         title: { vi: 'CỤM THU HỒI KHOÁNG', en: 'SALVAGE RECOVERY CLUSTER' },
       },
       {
-        id: 'taurus_elite', templateId: 'elite_formation', encounterPackId: 'taurus_elite_escort',
+        id: 'taurus_elite', templateId: 'elite_formation', encounterPackId: 'taurus_elite_escort', activeEnemyCap: 8, spawnGapMs: 580,
         title: { vi: 'ĐỘI HÌNH HỘ TỐNG', en: 'SALVAGE ESCORT' },
         objective: { vi: 'Phá đội hình hộ tống tinh nhuệ.', en: 'Break the elite escort formation.' },
       },
       {
-        id: 'taurus_boss', templateId: 'boss', encounterPackId: 'taurus_boss_guard',
+        id: 'taurus_boss', templateId: 'boss', encounterPackId: 'taurus_boss_guard', activeEnemyCap: 5, spawnGapMs: 720,
         title: { vi: 'MŨI KHOAN GỈ SÉT', en: 'THE RUSTY DRILLER' },
         objective: { vi: 'Đánh bại Mũi Khoan Gỉ Sét.', en: 'Defeat the Rusty Driller.' },
         boss: {
@@ -423,46 +426,46 @@ export const DUNGEON_CONTENT_CATALOG_V393 = freezeDeep({
     productionProfile: {
       operation: { vi: 'XÂM NHẬP LÕI NEREUS', en: 'NEREUS CORE INCURSION' },
       combatIdentity: { vi: 'Khống chế · dòng ion · đội hình khiên', en: 'Control · ion currents · shield formations' },
-      recommendedPower: 5200,
+      recommendedPower: 4800,
       defaultQaLoadoutPresetId: 'control_mk3',
       validationFocus: ['ion_lane_readability', 'shield_relay_sequence', 'support_artillery_pressure', 'oracle_boss'],
     },
     runStructure: { minimumRooms: 5, maximumRooms: 10, recommendedRooms: 5, entryRoomId: 'nereus_entry', bossRoomId: 'nereus_oracle' },
     enemyStats: {
-      baseHp: 145, baseSpeed: .046, hpMultiplier: 1.18, damageMultiplier: 1.12,
-      speedMultiplier: 1.04, projectileSpeedMultiplier: 1.12, fireCooldownMultiplier: .88,
+      baseHp: 145, baseSpeed: .046, hpMultiplier: 1.12, damageMultiplier: 1.08,
+      speedMultiplier: 1.02, projectileSpeedMultiplier: 1.08, fireCooldownMultiplier: .94,
     },
     rooms: [
       {
-        id: 'nereus_entry', templateId: 'clear', encounterPackId: 'nereus_entry_screen',
+        id: 'nereus_entry', templateId: 'clear', encounterPackId: 'nereus_entry_screen', activeEnemyCap: 7, spawnGapMs: 720,
         title: { vi: 'CỔNG THỦY TRIỀU', en: 'TIDAL GATE' },
         objective: { vi: 'Xuyên qua lớp phòng vệ ngoài của Nereus.', en: 'Breach the outer Nereus defenses.' },
       },
       {
-        id: 'nereus_current_lanes', templateId: 'hazard_clear', encounterPackId: 'nereus_current_guard',
+        id: 'nereus_current_lanes', templateId: 'hazard_clear', encounterPackId: 'nereus_current_guard', activeEnemyCap: 8, spawnGapMs: 640,
         hazardId: 'nereus_ion_currents',
         title: { vi: 'HÀNH LANG DÒNG ION', en: 'ION CURRENT CORRIDOR' },
         objective: { vi: 'Đọc nhịp dòng ion, đổi làn và phá đội tuần tra.', en: 'Read the ion cadence, change lanes and clear the patrol.' },
       },
       {
-        id: 'nereus_shield_grid', templateId: 'destroy_nodes', encounterPackId: 'nereus_shield_lattice',
+        id: 'nereus_shield_grid', templateId: 'destroy_nodes', encounterPackId: 'nereus_shield_lattice', activeEnemyCap: 8, spawnGapMs: 610,
         objectiveProfileId: 'nereus_shield_lattice',
         title: { vi: 'LƯỚI KHIÊN', en: 'SHIELD LATTICE' },
       },
       {
-        id: 'nereus_oracle_guard', templateId: 'elite_formation', encounterPackId: 'nereus_oracle_guard',
+        id: 'nereus_oracle_guard', templateId: 'elite_formation', encounterPackId: 'nereus_oracle_guard', activeEnemyCap: 9, spawnGapMs: 560,
         title: { vi: 'VỆ BINH ORACLE', en: 'ORACLE GUARD' },
         objective: { vi: 'Phá đội hình hỗ trợ và pháo tuyến sau.', en: 'Break the support and artillery formation.' },
       },
       {
-        id: 'nereus_oracle', templateId: 'boss', encounterPackId: 'nereus_boss_guard',
+        id: 'nereus_oracle', templateId: 'boss', encounterPackId: 'nereus_boss_guard', activeEnemyCap: 6, spawnGapMs: 680,
         title: { vi: 'LÕI ORACLE', en: 'ORACLE CORE' },
         objective: { vi: 'Vô hiệu hóa Lõi Oracle.', en: 'Disable the Oracle Core.' },
         boss: {
           id: 'nereus_oracle_core', dungeonId: 'dung_nereus', visualAssetId: 'dung_nereus_boss',
           displayName: { vi: 'MẮT THẦN ORACLE', en: 'THE ORACLE CORE' },
-          sharedBossProfileId: 'cryo_mech_warden', hp: 14200,
-          damageMultiplier: 1.08, projectileSpeedMultiplier: 1.10,
+          sharedBossProfileId: 'cryo_mech_warden', hp: 13600,
+          damageMultiplier: 1.04, projectileSpeedMultiplier: 1.06,
         },
       },
     ],
@@ -479,46 +482,46 @@ export const DUNGEON_CONTENT_CATALOG_V393 = freezeDeep({
     productionProfile: {
       operation: { vi: 'PHONG TỎA KHE NỨT', en: 'RIFT CONTAINMENT' },
       combatIdentity: { vi: 'Sinh tồn · xé trọng lực · bầy lai tạp', en: 'Survival · gravity shear · biomech swarm' },
-      recommendedPower: 8800,
+      recommendedPower: 7600,
       defaultQaLoadoutPresetId: 'fortress_mk4',
       validationFocus: ['gravity_lane_pressure', 'rift_anchor_sequence', 'elite_swarm_density', 'leviathan_boss'],
     },
     runStructure: { minimumRooms: 5, maximumRooms: 12, recommendedRooms: 5, entryRoomId: 'abaddon_entry', bossRoomId: 'abaddon_leviathan' },
     enemyStats: {
-      baseHp: 190, baseSpeed: .052, hpMultiplier: 1.42, damageMultiplier: 1.38,
-      speedMultiplier: 1.12, projectileSpeedMultiplier: 1.24, fireCooldownMultiplier: .74,
+      baseHp: 175, baseSpeed: .050, hpMultiplier: 1.28, damageMultiplier: 1.24,
+      speedMultiplier: 1.08, projectileSpeedMultiplier: 1.16, fireCooldownMultiplier: .86,
     },
     rooms: [
       {
-        id: 'abaddon_entry', templateId: 'clear', encounterPackId: 'abaddon_entry_screen',
+        id: 'abaddon_entry', templateId: 'clear', encounterPackId: 'abaddon_entry_screen', activeEnemyCap: 8, spawnGapMs: 680,
         title: { vi: 'NGƯỠNG KHE NỨT', en: 'RIFT THRESHOLD' },
         objective: { vi: 'Thiết lập hành lang an toàn trong khe nứt.', en: 'Establish a safe corridor inside the rift.' },
       },
       {
-        id: 'abaddon_gravity_shear', templateId: 'hazard_clear', encounterPackId: 'abaddon_gravity_assault',
+        id: 'abaddon_gravity_shear', templateId: 'hazard_clear', encounterPackId: 'abaddon_gravity_assault', activeEnemyCap: 8, spawnGapMs: 620,
         hazardId: 'abaddon_gravity_shear',
         title: { vi: 'HÀNH LANG XÉ TRỌNG LỰC', en: 'GRAVITY SHEAR CORRIDOR' },
-        objective: { vi: 'Giữ hành lang, tránh dải xé và tiêu diệt bầy áp sát.', en: 'Hold the corridor, evade shear lanes and destroy the closing swarm.' },
+        objective: { vi: 'Bắn vỡ mảnh khe nứt rắn, né dải xé và tiêu diệt bầy áp sát.', en: 'Shoot down solid rift shards, evade shear lanes and destroy the closing swarm.' },
       },
       {
-        id: 'abaddon_rift', templateId: 'destroy_nodes', encounterPackId: 'abaddon_rift_anchor_guard',
+        id: 'abaddon_rift', templateId: 'destroy_nodes', encounterPackId: 'abaddon_rift_anchor_guard', activeEnemyCap: 9, spawnGapMs: 590,
         objectiveProfileId: 'abaddon_rift_anchors',
         title: { vi: 'NEO KHE NỨT', en: 'RIFT ANCHORS' },
       },
       {
-        id: 'abaddon_brood', templateId: 'elite_formation', encounterPackId: 'abaddon_brood_elite',
+        id: 'abaddon_brood', templateId: 'elite_formation', encounterPackId: 'abaddon_brood_elite', activeEnemyCap: 9, spawnGapMs: 540,
         title: { vi: 'BẦY LAI TẠP', en: 'BIOMECH BROOD' },
         objective: { vi: 'Phá bầy tinh nhuệ trước khi chúng áp đảo khu vực.', en: 'Destroy the elite brood before it overwhelms the sector.' },
       },
       {
-        id: 'abaddon_leviathan', templateId: 'boss', encounterPackId: 'abaddon_boss_guard',
+        id: 'abaddon_leviathan', templateId: 'boss', encounterPackId: 'abaddon_boss_guard', activeEnemyCap: 6, spawnGapMs: 660,
         title: { vi: 'LEVIATHAN LAI TẠP', en: 'BIOMECH LEVIATHAN' },
         objective: { vi: 'Đánh bại Leviathan và đóng khe nứt.', en: 'Defeat the Leviathan and seal the rift.' },
         boss: {
           id: 'abaddon_leviathan', dungeonId: 'dung_abaddon', visualAssetId: 'dung_abaddon_boss',
           displayName: { vi: 'LEVIATHAN LAI TẠP', en: 'BIOMECH LEVIATHAN' },
-          sharedBossProfileId: 'inferno_alien_demon', hp: 23500,
-          damageMultiplier: 1.22, projectileSpeedMultiplier: 1.18,
+          sharedBossProfileId: 'inferno_alien_demon', hp: 21000,
+          damageMultiplier: 1.14, projectileSpeedMultiplier: 1.12,
         },
       },
     ],

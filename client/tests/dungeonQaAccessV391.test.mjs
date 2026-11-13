@@ -9,6 +9,7 @@ import {
   DUNGEON_QA_PROFILES_V391,
   auditDungeonQaAccessV391,
   createDungeonQaRunV391,
+  getDungeonQaStatusLabelV391,
   isDungeonQaRunV391,
   resolveDungeonQaAccessV391,
 } from '../src/game/dungeon/DungeonQaAccessV391.js';
@@ -28,15 +29,19 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
 const read = relative => fs.readFileSync(path.join(repo, relative), 'utf8').replace(/\r\n/g, '\n');
 
-test('Dungeon QA V3.9.7 exposes three full five-room profiles without changing production availability', () => {
-  assert.equal(DUNGEON_QA_ACCESS_VERSION, 'dungeon-qa-access-v3.9.7');
+test('Dungeon QA V3.9.8 exposes three full five-room profiles without changing production availability', () => {
+  assert.equal(DUNGEON_QA_ACCESS_VERSION, 'dungeon-qa-access-v3.9.8');
   assert.deepEqual(auditDungeonQaAccessV391(), []);
   assert.deepEqual(Object.keys(DUNGEON_QA_PROFILES_V391).sort(), [
     'dung_abaddon', 'dung_nereus', 'dung_taurus',
   ]);
+  assert.equal(DUNGEON_QA_PROFILES_V391.dung_taurus.readiness, 'production_qa');
+  assert.equal(DUNGEON_QA_PROFILES_V391.dung_nereus.readiness, 'production_candidate_qa');
+  assert.equal(DUNGEON_QA_PROFILES_V391.dung_abaddon.readiness, 'production_candidate_qa');
+  assert.equal(getDungeonQaStatusLabelV391(DUNGEON_QA_PROFILES_V391.dung_taurus, 'vi'), 'PRODUCTION QA · BẬC 1');
+  assert.equal(getDungeonQaStatusLabelV391(DUNGEON_QA_PROFILES_V391.dung_nereus, 'vi'), 'QA ỨNG VIÊN · BẬC 2');
   for (const profile of Object.values(DUNGEON_QA_PROFILES_V391)) {
-    assert.equal(profile.readiness, 'production_qa');
-    assert.equal(profile.runtimeMode, 'parity_v397');
+    assert.equal(profile.runtimeMode, 'parity_v398');
     assert.equal(profile.roomBriefs.length, 5);
     assert.equal(profile.allowDirectRoom, true);
   }
@@ -75,7 +80,7 @@ test('QA run contract is always zero-energy, zero-reward and no trusted writes',
   assert.equal(taurusBoss.consumeEnergy, false);
   assert.equal(taurusBoss.trustedWrites, false);
   assert.equal(taurusBoss.loadoutPresetId, 'assault_mk3');
-  assert.equal(taurusBoss.seedKey, 'qa-v397:dung_taurus:taurus_boss:assault_mk3');
+  assert.equal(taurusBoss.seedKey, 'qa-v398:dung_taurus:taurus_boss:assault_mk3');
   assert.equal(isDungeonQaRunV391(taurusBoss, 'dung_taurus', { runtimeEnabled: false }), false);
   assert.equal(isDungeonQaRunV391({ ...taurusBoss, runtimeMode: 'forged' }, 'dung_taurus', { runtimeEnabled: true }), false);
 
@@ -85,7 +90,8 @@ test('QA run contract is always zero-energy, zero-reward and no trusted writes',
     roomId: 'nereus_oracle',
     loadoutPresetId: 'control_mk3',
   });
-  assert.equal(nereus.runtimeMode, 'parity_v397');
+  assert.equal(nereus.runtimeMode, 'parity_v398');
+  assert.equal(nereus.readiness, 'production_candidate_qa');
   assert.equal(nereus.directRoomId, 'nereus_oracle');
   assert.equal(nereus.directRoomIndex, 4);
   assert.equal(nereus.singleRoom, true);
@@ -171,6 +177,9 @@ test('UI, launch, result and workflow wiring preserve QA isolation', () => {
   assert.match(select, /createDungeonQaRunV391/);
   assert.match(select, /qaRoomSelections/);
   assert.match(select, /qaLoadoutSelections/);
+  assert.match(select, /qaSetupPanel/);
+  assert.match(select, /<details/);
+  assert.match(select, /QA XUẤT KÍCH/);
   assert.match(select, /listDungeonQaLoadoutPresetsV397/);
   assert.match(hq, /!dungeonQaRun/);
   assert.match(hq, /NO ENERGY · NO REWARDS · NO PROFILE WRITES/);
@@ -188,7 +197,7 @@ test('UI, launch, result and workflow wiring preserve QA isolation', () => {
   assert.match(workflow, /guest_dungeon_v39_qa:/);
   assert.match(workflow, /VITE_SF_DUNGEON_QA:/);
   assert.match(workflow, /VITE_SF_DUNGEON_QA_REWARDS: 'false'/);
-  assert.match(workflow, /spacefighter-android-dungeon-v397-production-qa-debug-no-rewards/);
+  assert.match(workflow, /spacefighter-android-dungeon-v398-production-hardening-qa-debug-no-rewards/);
   assert.match(workflow, /Dungeon QA cannot be combined with C15 release candidates/);
 
   // Production schedule remains authored in the catalog; QA never rewrites it.

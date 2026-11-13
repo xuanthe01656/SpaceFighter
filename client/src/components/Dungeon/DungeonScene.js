@@ -100,6 +100,11 @@ import {
     resolveDungeonObjectiveProgressV396,
 } from '../../game/dungeon/DungeonHudCatalogV396.js';
 import {
+    resolveDungeonCombatSlotV398,
+    resolveDungeonEnemyFireDecisionV398,
+    resolveDungeonEnemySeparationV398,
+} from '../../game/dungeon/DungeonProductionTuningV398.js';
+import {
     logicalCircleHitV392,
     logicalSegmentCircleHitV392,
     resolveDungeonHazardCombatV392,
@@ -1249,6 +1254,9 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             _contactHitId: `dungeon-enemy-contact-${mesh.uniqueId}`,
             _facingYaw: 0,
             _combatSlot: null,
+            _dungeonCombatSlot: null,
+            _fireBlockedSinceMs: null,
+            _forcedFireCountV398: 0,
             _lastVolleyPhaseId: null,
             _volleySequence: 0,
             _choreographyState: spec
@@ -1279,6 +1287,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             safeDis(item.mesh);
         }
         for (const item of dungeonHazardsV38.splice(0)) {
+            item.disposeHud?.();
             item.visual?.dispose?.();
             safeDis(item.mesh);
         }
@@ -1437,6 +1446,28 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         const combat = resolveDungeonHazardCombatV392(hazard);
         mesh.rotation.y = (index * .73) % (Math.PI * 2);
         mesh.isPickable = false;
+        let hpBg = null;
+        let hpFill = null;
+        if (combat.destructible) {
+            hpBg = new GUI.Rectangle(`dungeon-hazard-hp-bg-${mesh.uniqueId}`);
+            hpBg.width = '52px';
+            hpBg.height = '6px';
+            hpBg.background = 'rgba(13,3,11,.90)';
+            hpBg.color = `${dungeonPresentationV39.palette.warning || '#ff5f6d'}aa`;
+            hpBg.thickness = 1;
+            hpBg.cornerRadius = 3;
+            ui.addControl(hpBg);
+            hpBg.linkWithMesh(mesh);
+            hpBg.linkOffsetY = -34;
+
+            hpFill = new GUI.Rectangle(`dungeon-hazard-hp-fill-${mesh.uniqueId}`);
+            hpFill.width = '100%';
+            hpFill.height = '100%';
+            hpFill.background = dungeonPresentationV39.palette.warning || '#ff5f6d';
+            hpFill.thickness = 0;
+            hpFill.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+            hpBg.addControl(hpFill);
+        }
         mesh.metadata = {
             ...(mesh.metadata || {}),
             dungeonHazardId: hazard.id || 'drifting_debris',
@@ -1459,6 +1490,12 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             score: combat.score,
             hitRadius: combat.hitRadius,
             contactRadius: combat.contactRadius,
+            hpBg,
+            hpFill,
+            disposeHud: () => {
+                safeDisGui(hpFill);
+                safeDisGui(hpBg);
+            },
         });
         return true;
     };
@@ -1558,10 +1595,10 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             ...enemies.filter(e => !e.mesh.isDisposed()),
             ...(bossMesh && !bossMesh.isDisposed() ? [{ mesh: bossMesh }] : []),
         ];
-        if (combatTargets.length) return combatTargets;
-        return dungeonHazardsV38
+        const hazardTargets = dungeonHazardsV38
             .filter(hazard => hazard.destructible && hazard.mesh && !hazard.mesh.isDisposed())
-            .map(hazard => ({ mesh: hazard.mesh, hazard }));
+            .map(hazard => ({ mesh: hazard.mesh, hazard, targetPriority: 'survival_hazard' }));
+        return [...combatTargets, ...hazardTargets];
     };
     const fireEnemyBullet = (pos, velX = 0, velZ = enemyBulletVelZ, options = {}) => {
         const hitId = `dungeon-enemy-projectile-${++enemyProjectileSequence}`;
@@ -2028,29 +2065,17 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         });
     };
 
-    const resolveDungeonEnemySeparationV38 = enemy => {
-        let x = 0;
-        let z = 0;
-        let contributors = 0;
-        const radius = Math.max(1.65, Number(enemy?._combatSlot?.minSpacing) || 1.85);
-        for (const other of enemies) {
-            if (other === enemy || other._dead || other.mesh?.isDisposed?.()) continue;
-            const dx = enemy.mesh.position.x - other.mesh.position.x;
-            const dz = enemy.mesh.position.z - other.mesh.position.z;
-            const distance = Math.hypot(dx, dz);
-            if (distance <= .001 || distance >= radius) continue;
-            const weight = (radius - distance) / radius;
-            x += dx / distance * weight;
-            z += dz / distance * weight;
-            contributors += 1;
-        }
-        if (!contributors) return { x: 0, z: 0 };
-        const length = Math.hypot(x, z) || 1;
-        return {
-            x: x / length * Math.min(1, contributors * .30),
-            z: z / length * Math.min(1, contributors * .22),
-        };
-    };
+    const resolveDungeonEnemySeparationV38 = (enemy, frameFactorValue = 1) => resolveDungeonEnemySeparationV398({
+        enemyX: enemy?.mesh?.position?.x,
+        enemyZ: enemy?.mesh?.position?.z,
+        neighbors: enemies,
+        enemyId: enemy?.runtimeId || null,
+        minSpacing: enemy?._dungeonCombatSlot?.minSpacing
+            || enemy?._combatSlot?.minSpacing
+            || (enemy?.spec?.roleId === 'charger' ? 2.05 : 1.95),
+        seed: enemy?.seed || 1,
+        frameScale: frameFactorValue,
+    });
 
     const updateDungeonEnemyFacingV38 = (enemy, velocityX, velocityZ, frameDeltaMs) => {
         enemy._facingYaw = resolveEnemyGameplayYawV26A4({
@@ -2067,6 +2092,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         const enemyFrame = frameFactor * enemySpeedFactor(enemy, nowMs);
         const beforeX = enemy.mesh.position.x;
         const beforeZ = enemy.mesh.position.z;
+        const separation = resolveDungeonEnemySeparationV38(enemy, enemyFrame);
 
         if (enemy.spec.roleId === 'charger') {
             const returnX = clamp(enemy.spec.laneNorm * (boundX() - .75), -boundX() + .5, boundX() - .5);
@@ -2083,12 +2109,12 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             enemy._chargerState = charge.state;
             const speed = enemy.speed * Math.max(0, Number(charge.speedMultiplier) || 0);
             enemy.mesh.position.x = clamp(
-                enemy.mesh.position.x + charge.direction.x * speed * enemyFrame,
+                enemy.mesh.position.x + charge.direction.x * speed * enemyFrame + separation.correctionX,
                 -boundX() + .35,
                 boundX() - .35,
             );
             enemy.mesh.position.z = clamp(
-                enemy.mesh.position.z + charge.direction.z * speed * enemyFrame,
+                enemy.mesh.position.z + charge.direction.z * speed * enemyFrame + separation.correctionZ,
                 -ZOOM - 3,
                 ZOOM + 2.4,
             );
@@ -2102,7 +2128,6 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             return true;
         }
 
-        const separation = resolveDungeonEnemySeparationV38(enemy);
         const result = stepCampaignEnemyChoreographyV29(enemy._choreographyState, {
             nowMs,
             frameScale: enemyFrame,
@@ -2122,14 +2147,18 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             entityScale: enemy.spec.elite ? 1.15 : 1,
             hpBarOffsetPx: -34,
             hpBarHeightPx: 6,
-            separationX: separation.x,
-            separationZ: separation.z,
-            combatSlot: enemy._combatSlot,
+            separationX: separation.steeringX,
+            separationZ: separation.steeringZ,
+            combatSlot: enemy._dungeonCombatSlot || enemy._combatSlot,
             fireCooldownMs: enemy.shootMs,
         });
         if (!result.handled) return false;
-        enemy.mesh.position.x = clamp(enemy.mesh.position.x + result.deltaX, -boundX() + .35, boundX() - .35);
-        enemy.mesh.position.z += result.deltaZ;
+        enemy.mesh.position.x = clamp(
+            enemy.mesh.position.x + result.deltaX + separation.correctionX,
+            -boundX() + .35,
+            boundX() - .35,
+        );
+        enemy.mesh.position.z += result.deltaZ + separation.correctionZ;
         if (!result.canCrossPlayer && Number.isFinite(Number(result.maxCombatZ))
             && enemy.mesh.position.z > result.maxCombatZ) {
             enemy.mesh.position.z = result.maxCombatZ;
@@ -2150,8 +2179,22 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 frameDeltaMs,
             );
         }
-        enemy.visual?.setState(result.fireWindup || result.mayFire ? 'attack' : 'move');
-        tryFireDungeonEnemyVolleyV38(enemy, result, nowMs);
+        const fireDecisionV398 = resolveDungeonEnemyFireDecisionV398({
+            choreography: result,
+            roleId: enemy.spec.roleId,
+            seed: enemy.seed,
+            nowMs,
+            blockedSinceMs: enemy._fireBlockedSinceMs,
+        });
+        enemy._fireBlockedSinceMs = fireDecisionV398.blockedSinceMs;
+        const firingStateV398 = fireDecisionV398.mayFire && !result.mayFire
+            ? { ...result, mayFire: true, dungeonFireFailSafeV398: true }
+            : result;
+        enemy.visual?.setState(result.fireWindup || fireDecisionV398.mayFire ? 'attack' : 'move');
+        if (tryFireDungeonEnemyVolleyV38(enemy, firingStateV398, nowMs)) {
+            if (fireDecisionV398.forced) enemy._forcedFireCountV398 += 1;
+            enemy._fireBlockedSinceMs = null;
+        }
         return true;
     };
 
@@ -2227,6 +2270,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
            const b = playerBullets[i];
            if (b.isDisposed()) { playerBullets.splice(i, 1); continue; }
            
+           b._dungeonPreviousPositionV398 = { x: b.position.x, z: b.position.z };
            shots.advance(b, frameFactor);
 
            // Hủy đạn nếu bay ra khỏi màn hình
@@ -2299,6 +2343,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             for (let index = dungeonHazardsV38.length - 1; index >= 0; index -= 1) {
                 const hazard = dungeonHazardsV38[index];
                 if (!hazard.mesh || hazard.mesh.isDisposed()) {
+                    hazard.disposeHud?.();
                     dungeonHazardsV38.splice(index, 1);
                     continue;
                 }
@@ -2324,12 +2369,14 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                         damageType: 'kinetic',
                         hitId: hazard.hitId,
                     });
+                    hazard.disposeHud?.();
                     hazard.visual?.dispose?.();
                     safeDis(hazard.mesh);
                     dungeonHazardsV38.splice(index, 1);
                     continue;
                 }
                 if (hazard.mesh.position.z > ZOOM + 2.5) {
+                    hazard.disposeHud?.();
                     hazard.visual?.dispose?.();
                     safeDis(hazard.mesh);
                     dungeonHazardsV38.splice(index, 1);
@@ -2344,19 +2391,34 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                     const hazard = dungeonHazardsV38[hazardIndex];
                     if (!hazard.destructible) continue;
                     if (!hazard.mesh || hazard.mesh.isDisposed()) {
+                        hazard.disposeHud?.();
                         dungeonHazardsV38.splice(hazardIndex, 1);
                         continue;
                     }
-                    if (!projectileHitsPoint(bullet, hazard.mesh.position, hazard.hitRadius || 1.25)) continue;
+                    const previousBulletPositionV398 = bullet._dungeonPreviousPositionV398 || bullet.position;
+                    const hitRadiusV398 = hazard.hitRadius || 1.25;
+                    if (!logicalSegmentCircleHitV392(
+                        previousBulletPositionV398,
+                        bullet.position,
+                        hazard.mesh.position,
+                        hitRadiusV398,
+                    ) && !projectileHitsPoint(bullet, hazard.mesh.position, hitRadiusV398)) continue;
                     const hit = shots.registerHit(bullet, { mesh: hazard.mesh });
                     if (!hit.accepted) continue;
                     hazard.hp -= calculateProjectileDamage(bullet.atk, stats.critDamageBoost);
                     const hazardRatio = clamp(hazard.hp / Math.max(1, hazard.maxHp), 0, 1);
                     hazard.visual?.setRatio?.(hazardRatio);
+                    if (hazard.hpFill) {
+                        hazard.hpFill.width = `${Math.round(hazardRatio * 100)}%`;
+                        hazard.hpFill.background = hazardRatio <= .30
+                            ? (dungeonPresentationV39.palette.danger || '#ff315f')
+                            : (dungeonPresentationV39.palette.warning || '#ff5f6d');
+                    }
                     if (hazard.hp <= 0) {
                         explode(hazard.mesh.position, 1.15);
                         triggerShake(.10, 3);
                         updateScore(hazard.score || 0);
+                        hazard.disposeHud?.();
                         hazard.visual?.dispose?.();
                         safeDis(hazard.mesh);
                         dungeonHazardsV38.splice(hazardIndex, 1);
@@ -2650,6 +2712,12 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                     enemyCombatSlotRegistryV38,
                     enemy.runtimeId,
                 );
+                enemy._dungeonCombatSlot = resolveDungeonCombatSlotV398({
+                    slot: enemy._combatSlot,
+                    seed: enemy.seed,
+                    roleId: enemy.spec.roleId,
+                    difficultyRank: dungeonRuntimeProfileV38?.difficultyRank || 1,
+                });
             }
         }
 

@@ -1,5 +1,5 @@
 /**
- * SpaceFighter Dungeon HUD V3.9.7 (V3.9.6 compatibility component).
+ * SpaceFighter Dungeon HUD V3.9.8 (V3.9.6 compatibility component).
  *
  * React owns all fixed-screen Dungeon presentation. Babylon retains world-space
  * health bars, hit text and combat visuals. This component never mutates combat,
