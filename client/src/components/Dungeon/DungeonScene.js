@@ -89,6 +89,13 @@ import {
 } from '../../game/dungeon/DungeonPresentationV39.js';
 import { isDungeonQaRunV391 } from '../../game/dungeon/DungeonQaAccessV391.js';
 import {
+    buildDungeonRoomMarkersV396,
+    resolveDungeonHudOcclusionLineV396,
+    resolveDungeonHudProfileV396,
+    resolveDungeonHudRoomV396,
+    resolveDungeonObjectiveProgressV396,
+} from '../../game/dungeon/DungeonHudCatalogV396.js';
+import {
     logicalCircleHitV392,
     logicalSegmentCircleHitV392,
     resolveDungeonHazardCombatV392,
@@ -145,7 +152,12 @@ const safeDisGui = (ctrl) => { if (ctrl) { try { ctrl.dispose(); } catch (_) {} 
 
 export const createDungeonScene = (scene, canvas, engine, data) => {
 
-    const { gsRef, lang, onGameOver, onVictory, onBossDefeated, isCloud, getRealTime } = data;
+    const {
+      gsRef, lang, onGameOver, onVictory, onBossDefeated, isCloud, getRealTime,
+      onHudUpdate, onAnnouncement,
+    } = data;
+    const externalHudV396 = typeof onHudUpdate === 'function';
+    const externalAnnouncementV396 = typeof onAnnouncement === 'function';
   const quality = data.qualityProfile || {starFraction:1, particleFraction:1, glow:true, maxModelBytes:8*1024*1024};
 
   // Dispose all pending scene-owned timeouts to prevent late spawns/rewards
@@ -187,6 +199,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     });
     const dungeonRuntimeProfileV38 = resolveDungeonRuntimeProfileV38(dungeonId);
     const dungeonPresentationV39 = resolveDungeonPresentationV39(dungeonId);
+    const dungeonHudProfileV396 = resolveDungeonHudProfileV396(dungeonId);
     const dungeonVisualProfilesV392 = resolveDungeonVisualAssetRefsV393(dungeonId)
         .map(({ kind, id }) => resolveAssetVisual(kind, id))
         .filter(Boolean);
@@ -366,6 +379,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     topBar.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP;
     topBar.stretch = GUI.Image.STRETCH_NONE; 
     ui.addControl(topBar);
+    topBar.isVisible = !externalHudV396;
 
     // Điểm số
     const scoreText = new GUI.TextBlock('scoreText');
@@ -377,6 +391,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     scoreText.left = `15px`; 
     scoreText.top = `10px`;
     ui.addControl(scoreText);
+    scoreText.isVisible = !externalHudV396;
 
     // Sóng
     const waveText = new GUI.TextBlock('waveText');
@@ -388,6 +403,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     waveText.left = `-15px`; 
     waveText.top = `10px`;
     ui.addControl(waveText);
+    waveText.isVisible = !externalHudV396;
 
     // Chữ Hệ Thống Giáp
     const hpLabel = new GUI.TextBlock('hpLabel');
@@ -396,6 +412,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     hpLabel.fontFamily = '"VT323", monospace';
     hpLabel.textVerticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP;
     ui.addControl(hpLabel);
+    hpLabel.isVisible = !externalHudV396;
 
     const drawHudSvg = () => {
         const { w, cssW, cx, h1, h2, dx1, dx2, stroke } = measureBattleHud(engine, canvas, ui);
@@ -427,6 +444,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     hpBarContainer.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP;
     hpBarContainer.top = `40px`;
     ui.addControl(hpBarContainer);
+    hpBarContainer.isVisible = !externalHudV396;
 
     const hpSegments = [];
     for (let i = 0; i < 10; i++) {
@@ -492,6 +510,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     annPanel.top = "-12%";
     annPanel.alpha = 0;
     ui.addControl(annPanel);
+    annPanel.isVisible = !externalAnnouncementV396;
 
     const annText = new GUI.TextBlock('annText');
     annText.color = dungeonPresentationV39.palette.accent || "#66fcf1";
@@ -501,7 +520,17 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     annPanel.addControl(annText);
 
     let annAnim = null;
+    let announcementSequenceV396 = 0;
     const showAnnouncement = (text, colorHex = "#66fcf1", duration = 2000) => {
+        if (externalAnnouncementV396) {
+            onAnnouncement({
+                id: `dungeon-announcement-${++announcementSequenceV396}`,
+                text,
+                colorHex,
+                duration,
+            });
+            return;
+        }
         annText.text = text; annText.color = colorHex; annPanel.color = colorHex;
         if (annAnim) clearInterval(annAnim);
         let step = 0;
@@ -513,6 +542,10 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             else { annPanel.alpha = 0; clearInterval(annAnim); }
         }, 50);
     };
+    scene.onDisposeObservable.add(() => {
+        if (annAnim) clearInterval(annAnim);
+        annAnim = null;
+    });
 
     // Compact objective card. It stays outside the player combat lane and
     // replaces the ambiguous full-screen room banners seen in the V3.8 video.
@@ -529,6 +562,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     objectivePanel.left = '-10px';
     objectivePanel.isVisible = false;
     ui.addControl(objectivePanel);
+    objectivePanel.isVisible = false;
 
     const objectiveStack = new GUI.StackPanel('dungeonObjectiveStack');
     objectiveStack.paddingTop = '5px';
@@ -714,6 +748,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     let currentRoomV38 = null;
     let currentRoomInitialEnemyCountV39 = 0;
     let currentRoomInitialBreakableCountV39 = 0;
+    let currentRoomCompleteV396 = false;
     let dungeonObjectiveSequenceV394 = null;
     const dungeonVisualFallbackWarningsV394 = new Set();
     let bossDefeatedPulseV38 = false;
@@ -858,11 +893,12 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             const defeated = Math.min(currentRoomInitialEnemyCountV39, Math.max(0, waveKilled));
             objectiveProgressText.text = `${lang === 'vi' ? 'ĐỊCH' : 'HOSTILES'} ${defeated}/${currentRoomInitialEnemyCountV39}`;
         }
-        objectivePanel.isVisible = true;
+        objectivePanel.isVisible = !externalHudV396;
     };
 
     const startWave = (n) => {
         currentWave     = n;
+        currentRoomCompleteV396 = false;
         waveEnemyCount  = DIFF.countBase + n * DIFF.countInc;
         spawnInterval   = Math.max(DIFF.spawnMin, DIFF.spawnBase - n * 60);
         enemyBaseHp     = DIFF.hpBase + n * DIFF.hpInc;
@@ -889,6 +925,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     const advanceWave = () => {
         if (waitingForNext || gameOver) return;
         waitingForNext = true;
+        currentRoomCompleteV396 = true;
+        publishDungeonHudV396(true);
         if (currentWave >= ACTIVE_MAX_WAVES) {
             triggerVictory();
         } else {
@@ -970,7 +1008,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         };
         bossNameText.text = `⚠ ${bossName}`;
         bossHpFill.width = "100%";
-        bossPanel.isVisible = true;
+        bossPanel.isVisible = !externalHudV396;
         showAnnouncement('⚠ BOSS ⚠', '#ff4757');
     };
 
@@ -1424,6 +1462,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             currentWave = event.roomIndex + 1;
             currentRoomInitialEnemyCountV39 = event.roomPlan?.entries?.length || 0;
             currentRoomInitialBreakableCountV39 = event.room.breakables?.length || 0;
+            currentRoomCompleteV396 = false;
             waveSpawned = 0;
             waveKilled = 0;
             bossSpawned = false;
@@ -1434,6 +1473,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 event.room.kind === 'boss' ? '#ff4757' : dungeonConfig.themeColor || '#66fcf1',
                 event.room.kind === 'boss' ? 1300 : 850);
             updateDungeonObjectiveHudV39();
+            publishDungeonHudV396(true);
             return;
         }
         if (event.type === 'spawn_breakables') {
@@ -1454,14 +1494,17 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             clearDungeonHostileProjectilesV38();
             spawnBoss(event.boss);
             updateDungeonObjectiveHudV39();
+            publishDungeonHudV396(true);
             return;
         }
         if (event.type === 'room_cleared') {
+            currentRoomCompleteV396 = true;
             clearDungeonRoomObjectsV38();
             clearDungeonHostileProjectilesV38();
             disposeDungeonBossTelegraphsV38();
             objectiveProgressText.text = lang === 'vi' ? 'HOÀN TẤT' : 'COMPLETE';
             showAnnouncement(lang === 'vi' ? 'PHÒNG ĐÃ DỌN SẠCH' : 'ROOM CLEARED', '#4ade80', 650);
+            publishDungeonHudV396(true);
             return;
         }
         if (event.type === 'dungeon_completed') {
@@ -1733,7 +1776,91 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     let enemyBulletVelZ = DIFF.bulletVel;
     let gameOver     = false;
     let tick         = 0;
+    let lastDungeonHudPublishAtV396 = -Infinity;
 
+    const publishDungeonHudV396 = (force = false) => {
+        if (!externalHudV396 || battleSceneDisposed) return;
+        const nowMs = Date.now();
+        const publishIntervalMs = dungeonHudProfileV396.layout?.publishIntervalMs || 100;
+        if (!force && nowMs - lastDungeonHudPublishAtV396 < publishIntervalMs) return;
+        lastDungeonHudPublishAtV396 = nowMs;
+
+        const roomIndex = Math.max(0, currentWave - 1);
+        const roomHud = resolveDungeonHudRoomV396({
+            dungeonId,
+            room: currentRoomV38,
+            roomIndex,
+            lang,
+        });
+        const sequence = getProgressiveObjectiveSnapshotV394(dungeonObjectiveSequenceV394);
+        const nodesTotal = sequence.totalCount > 0
+            ? sequence.totalCount
+            : currentRoomInitialBreakableCountV39;
+        const nodesDestroyed = sequence.totalCount > 0
+            ? sequence.destroyedCount
+            : Math.max(0, currentRoomInitialBreakableCountV39 - dungeonBreakablesV38.length);
+        const enemyTotalForHudV396 = currentRoomInitialEnemyCountV39 || waveEnemyCount;
+        const progress = resolveDungeonObjectiveProgressV396({
+            roomKind: roomHud.kind,
+            roomComplete: currentRoomCompleteV396,
+            enemiesDefeated: Math.min(enemyTotalForHudV396, Math.max(0, waveKilled)),
+            enemiesTotal: enemyTotalForHudV396,
+            nodesDestroyed,
+            nodesTotal,
+            bossHp: bossActive ? bossHp : null,
+            bossMaxHp: bossActive ? bossMaxHp : null,
+            lang,
+        });
+        const roomMarkers = buildDungeonRoomMarkersV396({
+            dungeonId,
+            rooms: dungeonRuntimeProfileV38?.rooms,
+            currentRoomIndex: roomIndex,
+            maxMarkers: dungeonHudProfileV396.layout?.maxRoomMarkers,
+            lang,
+        });
+        const roomMarkerSignature = roomMarkers
+            .map(marker => `${marker.index}:${marker.status}:${marker.gapBefore ? 1 : 0}`)
+            .join('|');
+        const objectiveBody = roomHud.objective
+            || resolveDungeonRoomObjectiveV39({ dungeonId, room: currentRoomV38, lang });
+        const bossName = currentBossSpecV38?.displayName?.[lang]
+            || currentBossSpecV38?.displayName?.vi
+            || currentBossSpecV38?.displayName?.en
+            || '';
+        const directQaLabel = dungeonQaRunV391?.directRoomId || dungeonQaRunV391?.runtimeMode || '';
+
+        onHudUpdate({
+            dungeonId,
+            score,
+            kills: totalKills,
+            hp: stats.hp,
+            maxHp: stats.maxHp,
+            roomIndex,
+            roomNumber: roomIndex + 1,
+            roomTotal: ACTIVE_MAX_WAVES,
+            roomId: roomHud.id,
+            roomTitle: roomHud.title,
+            roomKind: roomHud.kind,
+            roomKindLabel: roomHud.kindLabel,
+            roomTone: roomHud.tone,
+            roomMarkers,
+            roomMarkerSignature,
+            objectiveTitle: `${lang === 'vi' ? 'MỤC TIÊU' : 'OBJECTIVE'} · ${roomHud.title}`,
+            objectiveBody,
+            objectiveMode: progress.mode,
+            objectiveLabel: progress.label,
+            objectiveValue: progress.value,
+            objectiveSecondary: progress.secondary,
+            objectiveRatio: progress.ratio,
+            bossName,
+            bossHp: bossActive ? bossHp : null,
+            bossMaxHp: bossActive ? bossMaxHp : null,
+            roomComplete: currentRoomCompleteV396,
+            qaLabel: dungeonQaRunV391
+                ? `${dungeonHudProfileV396.qaLabel}${directQaLabel ? ` · ${directQaLabel}` : ''}`
+                : null,
+        });
+    };
 
     const updateScore = (delta) => {
         score += delta;
@@ -1799,6 +1926,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     const triggerGameOver = () => {
         if (gameOver) return;
         gameOver = true;
+        publishDungeonHudV396(true);
         explode(playerRoot.position, 4);
         triggerShake(0.6, 20);
         shipVisual.setVisibility(0);
@@ -1822,6 +1950,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     const triggerVictory = () => {
         if (gameOver) return;
         gameOver = true;
+        currentRoomCompleteV396 = true;
+        publishDungeonHudV396(true);
         showAnnouncement(
             lang === 'vi' ? 'HOÀN THÀNH\nPHÓ BẢN!' : 'DUNGEON\nCLEARED!',
             '#2ecc71',
@@ -1968,7 +2098,11 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             arenaHalfWidth: boundX(),
             worldHalfHeight: ZOOM,
             viewportHeight: canvas?.clientHeight || engine.getRenderHeight(),
-            hudOcclusionLineZ: -ZOOM + 5.4,
+            hudOcclusionLineZ: resolveDungeonHudOcclusionLineV396({
+                dungeonId,
+                worldHalfHeight: ZOOM,
+                viewportHeight: canvas?.clientHeight || engine.getRenderHeight(),
+            }),
             entityScale: enemy.spec.elite ? 1.15 : 1,
             hpBarOffsetPx: -34,
             hpBarHeightPx: 6,
@@ -2012,6 +2146,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     scene.onBeforeRenderObservable.add(() => {
         if (gameOver || (typeof scene.isDisposed === 'function' ? scene.isDisposed() : scene.isDisposed)) return;
         const now = Date.now();
+        publishDungeonHudV396();
         const frameFactor = frameScale(engine.getDeltaTime());
         tick += frameFactor;
         dungeonBackdropV39?.tick?.(frameFactor);
@@ -2317,7 +2452,11 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                     arenaHalfWidth: boundX(),
                     worldHalfHeight: ZOOM,
                     viewportHeight: canvas?.clientHeight || engine.getRenderHeight(),
-                    hudOcclusionLineZ: -ZOOM + 5.4,
+                    hudOcclusionLineZ: resolveDungeonHudOcclusionLineV396({
+                        dungeonId,
+                        worldHalfHeight: ZOOM,
+                        viewportHeight: canvas?.clientHeight || engine.getRenderHeight(),
+                    }),
                     entityScale: 1.7,
                 });
                 dungeonBossRuntimeV38 = bossStep.runtime;

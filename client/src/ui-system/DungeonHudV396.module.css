@@ -1,0 +1,242 @@
+/* Dungeon HUD V3.9.6 — fixed-screen production presentation.
+ * All pointer events are disabled except the retreat control. World-space HP,
+ * damage text and combat effects remain in Babylon. */
+.hud {
+  position: fixed;
+  top: var(--sf-native-battle-hud-top, var(--sf-ui-safe-top, env(safe-area-inset-top, 0px)));
+  left: max(5px, env(safe-area-inset-left, 0px));
+  right: max(5px, env(safe-area-inset-right, 0px));
+  z-index: 72;
+  height: clamp(184px, 48vw, 208px);
+  max-width: 760px;
+  margin: 0 auto;
+  color: var(--sf-dh-text, var(--sf-ui-text));
+  font-family: var(--sf-ui-title-font);
+  pointer-events: none;
+  isolation: isolate;
+  filter: drop-shadow(0 5px 12px rgba(0, 3, 10, .78));
+}
+.hud::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: clamp(132px, 34vw, 150px);
+  background: linear-gradient(180deg, rgba(3, 18, 30, .96), rgba(3, 17, 29, .91) 62%, rgba(2, 14, 24, .94));
+  clip-path: polygon(0 17%, 5% 0, 30% 0, 36.5% 27%, 63.5% 27%, 70% 0, 95% 0, 100% 17%, 100% 73%, 94% 100%, 6% 100%, 0 73%);
+  border-bottom: 1px solid color-mix(in srgb, var(--sf-dh-accent) 52%, transparent);
+  pointer-events: none;
+}
+.frameArt {
+  position: absolute;
+  inset: 0 0 auto 0;
+  width: 100%;
+  height: clamp(132px, 34vw, 150px);
+  z-index: 1;
+  overflow: visible;
+  pointer-events: none;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--sf-dh-accent) 34%, transparent));
+}
+.shell { position: absolute; inset: 0 0 auto 0; height: 150px; z-index: 4; pointer-events: none; }
+.cutoutClearance { position: absolute; left: 36%; right: 36%; top: 0; height: 31%; pointer-events: none; }
+.retreatAction {
+  position: absolute;
+  left: 1.8%;
+  top: clamp(15px, 3.8vw, 20px);
+  width: clamp(40px, 10.5vw, 48px);
+  height: clamp(38px, 10vw, 46px);
+  display: grid;
+  place-items: center;
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, var(--sf-dh-accent) 72%, white 6%);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--sf-dh-accent) 22%, rgba(3, 24, 39, .94)), rgba(1, 13, 25, .95));
+  color: #eaffff;
+  clip-path: polygon(17% 0, 80% 0, 100% 34%, 100% 72%, 80% 100%, 9% 100%, 0 82%, 0 20%);
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.retreatAction:disabled { opacity: .48; cursor: default; }
+.retreatAction svg { width: clamp(25px, 6.8vw, 32px); height: clamp(25px, 6.8vw, 32px); }
+.retreatAction:focus-visible { outline: 2px solid var(--sf-dh-objective); outline-offset: 3px; }
+
+.identityLeft,
+.identityRight {
+  position: absolute;
+  z-index: 5;
+  top: clamp(7px, 2vw, 11px);
+  width: 25%;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+.identityLeft { left: 11%; text-align: left; }
+.identityRight { right: 4.5%; text-align: right; }
+.identityLeft strong,
+.identityRight strong { font-size: clamp(10px, 2.65vw, 13px); color: var(--sf-dh-accent-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.identityLeft span,
+.identityRight span { font-family: var(--sf-ui-data-font); font-size: clamp(7px, 1.9vw, 9px); color: var(--sf-dh-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.leftPod,
+.rightPod {
+  position: absolute;
+  z-index: 5;
+  top: clamp(57px, 14.3vw, 67px);
+  width: 21.5%;
+  height: clamp(50px, 12vw, 59px);
+  display: grid;
+  align-content: center;
+  gap: 0;
+  font-family: var(--sf-ui-data-font);
+  text-transform: uppercase;
+}
+.leftPod { left: 4.5%; text-align: left; }
+.rightPod { right: 4.5%; text-align: right; }
+.podLabel { color: var(--sf-dh-muted); font-size: clamp(8px, 2.2vw, 11px); letter-spacing: .12em; }
+.podValue { color: var(--sf-dh-text); font-size: clamp(21px, 6.4vw, 31px); line-height: .95; text-shadow: 0 0 8px color-mix(in srgb, var(--sf-dh-accent) 40%, transparent); }
+.leftPod small,
+.rightPod small { color: var(--sf-dh-accent-soft); font-size: clamp(7px, 1.9vw, 9px); letter-spacing: .08em; }
+.fraction { color: var(--sf-dh-objective); font-size: .65em; padding: 0 1px; }
+
+.armorCenter {
+  position: absolute;
+  z-index: 5;
+  left: 25.5%;
+  right: 25.5%;
+  top: clamp(51px, 12.9vw, 61px);
+  height: clamp(82px, 20vw, 94px);
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  min-width: 0;
+}
+.armorHeading { color: var(--sf-dh-text); font-size: clamp(11px, 2.9vw, 14px); letter-spacing: .09em; line-height: 1; white-space: nowrap; }
+.armorSegments { width: min(100%, 182px); height: clamp(12px, 3.2vw, 15px); margin-top: 5px; display: grid; grid-template-columns: repeat(10, 1fr); gap: 2px; padding: 2px; border: 1px solid color-mix(in srgb, var(--sf-dh-accent) 58%, transparent); background: rgba(0, 4, 11, .76); clip-path: polygon(4% 0, 96% 0, 100% 50%, 96% 100%, 4% 100%, 0 50%); }
+.armorSegment { position: relative; min-width: 0; background: rgba(44, 93, 105, .32); overflow: hidden; transform: skewX(-8deg); }
+.armorSegment::after { content: ''; position: absolute; inset: 0; width: var(--sf-fill, 0%); background: linear-gradient(180deg, #e8ffff, var(--sf-dh-accent)); box-shadow: 0 0 7px color-mix(in srgb, var(--sf-dh-accent) 70%, transparent); }
+.armorValue { margin-top: 2px; color: var(--sf-dh-accent-soft); font-family: var(--sf-ui-data-font); font-size: clamp(8px, 2.15vw, 10px); line-height: 1; }
+.armorValue span { color: var(--sf-dh-muted); }
+.lowArmor .armorHeading,
+.lowArmor .armorValue { color: var(--sf-dh-danger); }
+.lowArmor .armorSegment::after { background: linear-gradient(180deg, #ffe6eb, var(--sf-dh-danger)); animation: armorPulse .85s ease-in-out infinite alternate; }
+@keyframes armorPulse { from { opacity: .65; } to { opacity: 1; } }
+
+.roomRail { list-style: none; display: flex; align-items: center; justify-content: center; gap: clamp(3px, 1vw, 7px); margin: 6px 0 0; padding: 0; width: 100%; min-height: 18px; }
+.roomMarker { position: relative; width: clamp(15px, 4vw, 20px); height: clamp(15px, 4vw, 20px); display: grid; place-items: center; border: 1px solid rgba(120, 205, 219, .36); background: rgba(2, 18, 28, .82); clip-path: polygon(25% 0, 75% 0, 100% 25%, 100% 75%, 75% 100%, 25% 100%, 0 75%, 0 25%); }
+.markerCore { font-family: var(--sf-ui-data-font); font-size: clamp(7px, 1.8vw, 9px); color: var(--sf-dh-muted); }
+.room_complete { border-color: var(--sf-dh-accent); background: color-mix(in srgb, var(--sf-dh-accent) 28%, rgba(2, 18, 28, .92)); }
+.room_complete .markerCore { color: #f0ffff; }
+.room_active { transform: scale(1.17); border-color: var(--sf-dh-objective); background: color-mix(in srgb, var(--sf-dh-objective) 30%, rgba(2, 18, 28, .94)); box-shadow: 0 0 9px color-mix(in srgb, var(--sf-dh-objective) 62%, transparent); }
+.room_active .markerCore { color: #fff8dc; font-weight: 800; }
+.room_upcoming { opacity: .56; }
+.roomGap { color: var(--sf-dh-muted); font-family: var(--sf-ui-data-font); font-size: 8px; letter-spacing: -1px; }
+
+.qaBadge {
+  position: absolute;
+  z-index: 6;
+  top: clamp(113px, 28.4vw, 130px);
+  right: 4.5%;
+  max-width: 34%;
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--sf-dh-objective) 70%, transparent);
+  background: rgba(22, 14, 2, .84);
+  color: var(--sf-dh-objective);
+  font: 700 clamp(7px, 1.8vw, 9px)/1.2 var(--sf-ui-data-font);
+  letter-spacing: .05em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.objectiveCard {
+  position: absolute;
+  z-index: 8;
+  top: clamp(142px, 35vw, 154px);
+  left: max(1%, env(safe-area-inset-left, 0px));
+  right: max(1%, env(safe-area-inset-right, 0px));
+  min-height: clamp(43px, 11.5vw, 54px);
+  padding: 7px 10px 9px 53px;
+  background: linear-gradient(100deg, var(--sf-dh-panel), rgba(2, 11, 20, .92));
+  border: 1px solid color-mix(in srgb, var(--sf-dh-accent) 52%, transparent);
+  clip-path: polygon(0 17%, 2% 0, 98% 0, 100% 17%, 100% 83%, 98% 100%, 2% 100%, 0 83%);
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, .36), 0 4px 10px rgba(0, 0, 0, .42);
+  pointer-events: none;
+}
+.objective_warning { border-color: color-mix(in srgb, var(--sf-dh-warning) 72%, transparent); }
+.objective_objective,
+.objective_elite { border-color: color-mix(in srgb, var(--sf-dh-objective) 68%, transparent); }
+.objective_boss { border-color: color-mix(in srgb, var(--sf-dh-danger) 76%, transparent); }
+.objectiveIcon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--sf-dh-accent); color: var(--sf-dh-accent-soft); background: rgba(4, 31, 43, .82); clip-path: polygon(25% 0, 75% 0, 100% 25%, 100% 75%, 75% 100%, 25% 100%, 0 75%, 0 25%); font: 800 13px/1 var(--sf-ui-data-font); }
+.objectiveCopy { min-width: 0; padding-right: 2px; }
+.objectiveHeading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; }
+.objectiveHeading span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--sf-dh-accent-soft); font-size: clamp(10px, 2.6vw, 13px); font-weight: 800; letter-spacing: .06em; }
+.objectiveHeading strong { flex: 0 0 auto; color: var(--sf-dh-objective); font: 800 clamp(8px, 2vw, 10px)/1 var(--sf-ui-data-font); letter-spacing: .04em; }
+.objectiveCopy p { margin: 2px 0 0; color: var(--sf-dh-text); font-family: var(--sf-ui-data-font); font-size: clamp(8px, 2.1vw, 10px); line-height: 1.15; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.objectiveCopy small { display: block; margin-top: 1px; color: var(--sf-dh-muted); font: 700 clamp(7px, 1.8vw, 9px)/1 var(--sf-ui-data-font); }
+.objectiveRail { position: absolute; left: 53px; right: 10px; bottom: 4px; height: 3px; background: rgba(71, 105, 116, .27); overflow: hidden; }
+.objectiveRail > span { display: block; height: 100%; min-width: 0; background: linear-gradient(90deg, var(--sf-dh-accent), var(--sf-dh-objective)); box-shadow: 0 0 7px color-mix(in srgb, var(--sf-dh-accent) 70%, transparent); transition: width .18s linear; }
+.bossRail > span { background: linear-gradient(90deg, #ff9f43, var(--sf-dh-danger)); box-shadow: 0 0 8px color-mix(in srgb, var(--sf-dh-danger) 72%, transparent); }
+.bossName { position: absolute; inset: auto 10px 7px 53px; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; pointer-events: none; }
+.bossName span { color: var(--sf-dh-danger); font-size: clamp(7px, 1.75vw, 9px); letter-spacing: .08em; }
+.bossName strong { max-width: 62%; color: #fff1f3; font-size: clamp(9px, 2.4vw, 12px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.objective_boss .objectiveCopy p { padding-bottom: 10px; }
+
+.notice {
+  position: fixed;
+  z-index: 90;
+  left: 50%;
+  top: 30%;
+  transform: translate(-50%, -50%);
+  width: min(88vw, 560px);
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 18px;
+  border: 1px solid color-mix(in srgb, var(--sf-dh-accent) 65%, transparent);
+  background: linear-gradient(90deg, transparent, rgba(2, 17, 29, .95) 12%, rgba(2, 17, 29, .95) 88%, transparent);
+  color: var(--sf-dh-accent-soft);
+  font-family: var(--sf-ui-title-font);
+  font-size: clamp(18px, 5vw, 28px);
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-align: center;
+  white-space: pre-line;
+  pointer-events: none;
+  animation: noticeIn .22s ease-out both;
+}
+.noticeLine { flex: 1; height: 1px; background: currentColor; opacity: .58; }
+.notice_danger { color: var(--sf-dh-danger); }
+.notice_success { color: #80efbc; }
+@keyframes noticeIn { from { opacity: 0; transform: translate(-50%, -58%) scale(.96); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+
+@media (max-width: 390px) {
+  .hud { left: max(3px, env(safe-area-inset-left, 0px)); right: max(3px, env(safe-area-inset-right, 0px)); height: 196px; }
+  .identityLeft { left: 13.5%; width: 22%; }
+  .identityRight { right: 3.5%; width: 25%; }
+  .leftPod { left: 4%; width: 22%; }
+  .rightPod { right: 4%; width: 22%; }
+  .armorCenter { left: 26%; right: 26%; }
+  .objectiveCard { padding-left: 47px; }
+  .objectiveIcon { left: 8px; width: 31px; height: 31px; }
+  .objectiveRail,
+  .bossName { left: 47px; }
+  .objectiveHeading strong { max-width: 42%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+
+@media (min-width: 680px) {
+  .hud { height: 210px; }
+  .objectiveCard { left: 5%; right: 5%; }
+  .identityLeft { left: 10%; }
+  .identityRight { right: 5%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lowArmor .armorSegment::after,
+  .notice { animation: none; }
+  .objectiveRail > span { transition: none; }
+}

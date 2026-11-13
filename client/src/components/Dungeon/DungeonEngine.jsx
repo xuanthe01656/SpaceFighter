@@ -7,6 +7,7 @@ import { activeCoinMultiplier } from '../../utils/guestProgress';
 import { auth } from '../../firebase';
 import toast from 'react-hot-toast';
 import { isDungeonQaRunV391 } from '../../game/dungeon/DungeonQaAccessV391.js';
+import DungeonHudV396, { EMPTY_DUNGEON_HUD_STATE_V396 } from '../../ui-system/DungeonHudV396.jsx';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -48,6 +49,17 @@ const calcRewards = (dungeonConfig, { score, totalKills }) => {
   return earned;
 };
 
+
+const HUD_COMPARE_KEYS_V396 = Object.freeze([
+  'dungeonId', 'score', 'kills', 'hp', 'maxHp', 'roomIndex', 'roomNumber', 'roomTotal',
+  'roomId', 'roomTitle', 'roomKind', 'roomKindLabel', 'roomTone', 'objectiveTitle',
+  'objectiveBody', 'objectiveMode', 'objectiveLabel', 'objectiveValue',
+  'objectiveSecondary', 'objectiveRatio', 'bossName', 'bossHp', 'bossMaxHp',
+  'roomComplete', 'qaLabel', 'roomMarkerSignature',
+]);
+const sameDungeonHudStateV396 = (previous, next) => HUD_COMPARE_KEYS_V396
+  .every(key => previous?.[key] === next?.[key]);
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile, gameAction, getRealTime }) {
@@ -56,6 +68,9 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
   const sceneRef  = useRef(null);
   const retreatLockRef = useRef(false);
   const [retreating, setRetreating] = React.useState(false);
+  const [dungeonHud, setDungeonHud] = React.useState(EMPTY_DUNGEON_HUD_STATE_V396);
+  const [dungeonNotice, setDungeonNotice] = React.useState(null);
+  const noticeSequenceRef = useRef(0);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -90,6 +105,14 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
       getRealTime,
       // QA runs suppress guest progress mutation as well as Cloud settlement.
       isCloud: Boolean(auth.currentUser) || Boolean(dungeonQaRun),
+      onAnnouncement: notice => setDungeonNotice({
+        ...notice,
+        id: notice?.id || `dungeon-notice-${++noticeSequenceRef.current}`,
+      }),
+      onHudUpdate: next => setDungeonHud(previous => {
+        const normalized = { ...EMPTY_DUNGEON_HUD_STATE_V396, ...next };
+        return sameDungeonHudStateV396(previous, normalized) ? previous : normalized;
+      }),
 
       // ── THUA: không có thưởng, vào màn hình kết quả để hiển thị thống kê
       onGameOver: (result) => {
@@ -134,7 +157,7 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
       },
 
       onBossDefeated: () => {
-        // Babylon HUD đã xử lý nội bộ — không cần React làm gì thêm
+        // Scene publishes the final Boss HUD snapshot; no authority is owned here.
       },
     };
 
@@ -153,7 +176,28 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
       scene.dispose();
       engine.dispose();
     };
-  }, [gsRef, lang, setScreen, saveUserProfile]);
+  }, [gsRef, lang, setScreen, saveUserProfile, gameAction, getRealTime]);
+
+  const retreat = async () => {
+    if (retreatLockRef.current) return;
+    retreatLockRef.current = true;
+    setRetreating(true);
+    try {
+      const dungeonQaRun = isDungeonQaRunV391(
+        gsRef.current?.dungeonQa,
+        gsRef.current?.selectedDungeonId,
+      );
+      if (!dungeonQaRun && auth.currentUser && gsRef.current.activeBattleId) {
+        await gameAction('battle.abandon', { ticketId: gsRef.current.activeBattleId });
+      }
+      setScreen('dungeon_select');
+    } catch (error) {
+      toast.error(error?.message || (lang === 'vi' ? 'Không thể rút lui, thử lại.' : 'Retreat failed; retry.'));
+    } finally {
+      retreatLockRef.current = false;
+      setRetreating(false);
+    }
+  };
 
   return (
     <div style={{
@@ -166,71 +210,15 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
         style={{ display: 'block', width: '100%', height: '100%', touchAction: 'none', outline: 'none' }}
       />
 
-      {isDungeonQaRunV391(gsRef.current?.dungeonQa, gsRef.current?.selectedDungeonId) && (
-        <div style={{
-          position: 'absolute',
-          top: 'calc(env(safe-area-inset-top) + 40px)',
-          right: '20px',
-          zIndex: 101,
-          padding: '7px 10px',
-          border: '1px solid rgba(250,204,21,.75)',
-          borderRadius: 6,
-          background: 'rgba(20,14,2,.82)',
-          color: '#facc15',
-          fontFamily: 'monospace',
-          fontSize: 11,
-          fontWeight: 800,
-          letterSpacing: '.08em',
-          textAlign: 'right',
-          pointerEvents: 'none',
-        }}>
-          DUNGEON QA · NO REWARDS
-          <br />
-          {gsRef.current.dungeonQa.directRoomId || gsRef.current.dungeonQa.runtimeMode}
-        </div>
-      )}
 
-      {/* Nút Rút Lui (chỉ UI React trong Dungeon) */}
-      <button
-        disabled={retreating}
-        onClick={async () => {
-          if (retreatLockRef.current) return;
-          retreatLockRef.current = true;
-          setRetreating(true);
-          try {
-            const dungeonQaRun = isDungeonQaRunV391(
-              gsRef.current?.dungeonQa,
-              gsRef.current?.selectedDungeonId,
-            );
-            if (!dungeonQaRun && auth.currentUser && gsRef.current.activeBattleId) {
-              // Never leave gameplay while the authoritative ticket is still open.
-              await gameAction('battle.abandon',{ticketId:gsRef.current.activeBattleId});
-            }
-            setScreen('dungeon_select');
-          } catch (error) {
-            toast.error(error?.message || (lang === 'vi' ? 'Không thể rút lui, thử lại.' : 'Retreat failed; retry.'));
-          } finally {
-            retreatLockRef.current = false;
-            setRetreating(false);
-          }
-        }}
-        style={{
-          position: 'absolute',
-          top: 'calc(env(safe-area-inset-top) + 40px)',
-          left: '20px',
-          padding: '8px 15px',
-          background: 'rgba(0,0,0,0.5)',
-          color: '#64ffda',
-          border: '1px solid #64ffda',
-          borderRadius: '5px',
-          zIndex: 100,
-          fontFamily: 'inherit',
-          cursor: 'pointer',
-          textTransform: 'uppercase',
-        }}
-      >
-        ◀ {retreating ? (lang === 'vi' ? 'ĐANG ĐÓNG TRẬN…' : 'CLOSING…') : (lang === 'vi' ? 'RÚT LUI' : 'RETREAT')}
-      </button>
+      <DungeonHudV396
+        lang={lang}
+        state={dungeonHud}
+        announcement={dungeonNotice}
+        onRetreat={retreat}
+        retreating={retreating}
+      />
+
     </div>
   );
 }

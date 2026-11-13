@@ -88,6 +88,17 @@ import {
   auditDungeonWorldTraversalV395,
   createDungeonObjectiveWorldMotionV395,
 } from '../src/game/dungeon/DungeonWorldTraversalV395.js';
+import {
+  DUNGEON_HUD_CATALOG_VERSION,
+  DUNGEON_HUD_MAX_VISIBLE_ROOM_MARKERS_V396,
+  DUNGEON_HUD_PROFILES_V396,
+  auditDungeonHudCatalogV396,
+  buildDungeonRoomMarkersV396,
+  resolveDungeonHudOcclusionLineV396,
+  resolveDungeonHudProfileV396,
+  resolveDungeonHudRoomV396,
+  resolveDungeonObjectiveProgressV396,
+} from '../src/game/dungeon/DungeonHudCatalogV396.js';
 
 test('Campaign Gameplay Foundation Lock RC1 is exact and drift-free', () => {
   assert.equal(CAMPAIGN_GAMEPLAY_FOUNDATION_LOCK_RC1.version,
@@ -495,4 +506,114 @@ test('DungeonScene integrates parity director, required objectives and shared Bo
   assert.match(source, /VITE_SF_DUNGEON_PARITY_V38/);
   assert.match(source, /startLegacyDungeonWhenVisualsReadyV392/);
   assert.match(source, /scheduleBattleTimer\(startLegacyDungeonWhenVisualsReadyV392, 80\)/);
+});
+
+
+test('Dungeon HUD V3.9.6 is catalog-driven, presentation-only and future-safe', () => {
+  assert.equal(DUNGEON_HUD_CATALOG_VERSION, 'dungeon-hud-catalog-v3.9.6');
+  assert.deepEqual(auditDungeonHudCatalogV396(), []);
+  assert.deepEqual(
+    Object.keys(DUNGEON_HUD_PROFILES_V396).sort(),
+    Object.keys(DUNGEON_CONTENT_CATALOG_V393).sort(),
+  );
+  const taurus = resolveDungeonHudProfileV396('dung_taurus');
+  assert.equal(taurus.shortCode, 'TAURUS');
+  assert.equal(taurus.layout.publishIntervalMs, 100);
+  assert.equal(taurus.layout.maxRoomMarkers, DUNGEON_HUD_MAX_VISIBLE_ROOM_MARKERS_V396);
+  assert.equal(taurus.layout.reservedTopPx, 208);
+  const phoneLine = resolveDungeonHudOcclusionLineV396({
+    dungeonId: 'dung_taurus', worldHalfHeight: 15, viewportHeight: 852,
+  });
+  const tabletLine = resolveDungeonHudOcclusionLineV396({
+    dungeonId: 'dung_taurus', worldHalfHeight: 15, viewportHeight: 1280,
+  });
+  assert.ok(phoneLine > tabletLine, 'phone HUD occupies more world depth than tablet HUD');
+  assert.ok(taurus.colors.accent.startsWith('#'));
+  assert.equal(Object.prototype.hasOwnProperty.call(taurus, 'damage'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(taurus, 'reward'), false);
+});
+
+test('Dungeon HUD room rail scales beyond the current five-room vertical slice', () => {
+  const rooms = Array.from({ length: 12 }, (_, index) => ({
+    id: `future_room_${index + 1}`,
+    kind: index === 11 ? 'boss' : (index % 4 === 2 ? 'breakable' : 'entry'),
+    title: { vi: `Phòng ${index + 1}`, en: `Room ${index + 1}` },
+    objective: { vi: 'Mục tiêu', en: 'Objective' },
+  }));
+  const markers = buildDungeonRoomMarkersV396({
+    dungeonId: 'dung_taurus',
+    rooms,
+    currentRoomIndex: 7,
+    maxMarkers: 8,
+    lang: 'vi',
+  });
+  assert.ok(markers.length <= 8);
+  assert.ok(markers.some(marker => marker.index === 0));
+  assert.ok(markers.some(marker => marker.index === 7 && marker.status === 'active'));
+  assert.ok(markers.some(marker => marker.index === 11 && marker.kind === 'boss'));
+  assert.ok(markers.some(marker => marker.gapBefore));
+});
+
+test('Dungeon HUD objective adapter keeps hostile, node and Boss progress semantically distinct', () => {
+  const hostile = resolveDungeonObjectiveProgressV396({
+    roomKind: 'entry', enemiesDefeated: 3, enemiesTotal: 8, lang: 'vi',
+  });
+  assert.equal(hostile.mode, 'hostiles');
+  assert.equal(hostile.value, '3/8');
+  assert.equal(hostile.ratio, 3 / 8);
+
+  const nodes = resolveDungeonObjectiveProgressV396({
+    roomKind: 'breakable', nodesDestroyed: 2, nodesTotal: 3,
+    enemiesDefeated: 4, enemiesTotal: 6, lang: 'vi',
+  });
+  assert.equal(nodes.mode, 'nodes');
+  assert.equal(nodes.value, '2/3');
+  assert.match(nodes.secondary, /4\/6/);
+
+  const boss = resolveDungeonObjectiveProgressV396({
+    roomKind: 'boss', bossHp: 2500, bossMaxHp: 10000, lang: 'vi',
+  });
+  assert.equal(boss.mode, 'boss');
+  assert.equal(boss.value, '25%');
+  assert.equal(boss.ratio, .25);
+
+  const complete = resolveDungeonObjectiveProgressV396({ roomComplete: true, lang: 'en' });
+  assert.equal(complete.mode, 'complete');
+  assert.equal(complete.ratio, 1);
+});
+
+test('Dungeon HUD V3.9.6 owns fixed presentation while Babylon retains world-space UI', () => {
+  const engineSource = fs.readFileSync(new URL('../src/components/Dungeon/DungeonEngine.jsx', import.meta.url), 'utf8');
+  const sceneSource = fs.readFileSync(new URL('../src/components/Dungeon/DungeonScene.js', import.meta.url), 'utf8');
+  const hudSource = fs.readFileSync(new URL('../src/ui-system/DungeonHudV396.jsx', import.meta.url), 'utf8');
+  const cssSource = fs.readFileSync(new URL('../src/ui-system/DungeonHudV396.module.css', import.meta.url), 'utf8');
+
+  assert.match(engineSource, /<DungeonHudV396/);
+  assert.match(engineSource, /onHudUpdate:/);
+  assert.match(engineSource, /onAnnouncement:/);
+  assert.doesNotMatch(engineSource, /DUNGEON QA · NO REWARDS\s*<br/);
+  assert.match(sceneSource, /externalHudV396/);
+  assert.match(sceneSource, /publishDungeonHudV396/);
+  assert.match(sceneSource, /publishIntervalMs/);
+  assert.match(sceneSource, /topBar\.isVisible = !externalHudV396/);
+  assert.match(sceneSource, /objectivePanel\.isVisible = !externalHudV396/);
+  assert.match(hudSource, /RoomRail/);
+  assert.match(hudSource, /objectiveMode === 'boss'/);
+  assert.match(cssSource, /--sf-native-battle-hud-top/);
+  assert.match(cssSource, /env\(safe-area-inset-left/);
+  assert.match(cssSource, /pointer-events:\s*none/);
+  assert.match(cssSource, /\.retreatAction[\s\S]*pointer-events:\s*auto/);
+});
+
+test('Dungeon HUD room metadata is localized and derived from authored content', () => {
+  const room = resolveDungeonHudRoomV396({
+    dungeonId: 'dung_taurus',
+    room: DUNGEON_CONTENT_CATALOG_V393.dung_taurus.rooms[2],
+    roomIndex: 2,
+    lang: 'vi',
+  });
+  assert.equal(room.id, 'taurus_salvage');
+  assert.equal(room.kind, 'breakable');
+  assert.equal(room.kindLabel, 'MỤC TIÊU');
+  assert.match(room.title, /THU HỒI/);
 });
