@@ -1,10 +1,10 @@
 /**
- * Dungeon room flow V3.9.4.
+ * Dungeon room flow V3.9.5.
  *
  * Pure deterministic helpers for progressive objective reveals and natural
  * drifting hazards.  No Babylon, DOM, reward or server-authority access.
  */
-export const DUNGEON_ROOM_FLOW_VERSION = 'dungeon-room-flow-v3.9.4';
+export const DUNGEON_ROOM_FLOW_VERSION = 'dungeon-room-flow-v3.9.5';
 
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -26,11 +26,18 @@ const hashParts = (...parts) => {
 };
 
 const normalizeRevealPolicy = policy => freezeDeep({
-  mode: policy?.mode || 'sequential_travel',
+  mode: policy?.mode || 'sequential_world_drift',
   initialDelayMs: Math.max(0, finite(policy?.initialDelayMs, 650)),
-  betweenNodesMs: Math.max(250, finite(policy?.betweenNodesMs, 1450)),
-  entryDepthOffset: clamp(finite(policy?.entryDepthOffset, 2.2), .8, 5),
-  approachSpeed: clamp(finite(policy?.approachSpeed, .075), .025, .18),
+  betweenNodesMs: Math.max(250, finite(policy?.betweenNodesMs, 1100)),
+  entryDepthOffset: clamp(finite(policy?.entryDepthOffset, 2.4), .8, 5),
+  exitDepthOffset: clamp(finite(policy?.exitDepthOffset, 2.2), .8, 5),
+  approachSpeed: clamp(finite(policy?.approachSpeed, .064), .025, .18),
+  cruiseSpeed: clamp(finite(policy?.cruiseSpeed, .034), .014, .12),
+  driftAmplitude: clamp(finite(policy?.driftAmplitude, .26), 0, .85),
+  driftFrequency: clamp(finite(policy?.driftFrequency, .30), .08, .85),
+  reentryDelayMs: clamp(finite(policy?.reentryDelayMs, 900), 250, 4000),
+  passLaneShiftNorm: clamp(finite(policy?.passLaneShiftNorm, .12), 0, .28),
+  // Kept for compatibility with V3.9.4 callers; world-drift mode never anchors.
   anchorTolerance: clamp(finite(policy?.anchorTolerance, .12), .04, .5),
   requirePreviousDestroyed: policy?.requirePreviousDestroyed !== false,
 });

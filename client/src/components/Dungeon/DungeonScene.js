@@ -61,6 +61,10 @@ import {
     resolveDungeonEnemyVisualBindingV394,
 } from '../../game/dungeon/DungeonVisualBindingV394.js';
 import {
+    advanceDungeonObjectiveWorldMotionV395,
+    createDungeonObjectiveWorldMotionV395,
+} from '../../game/dungeon/DungeonWorldTraversalV395.js';
+import {
     createDungeonEncounterDirectorV38,
     getDungeonEncounterSnapshotV38,
     stepDungeonEncounterDirectorV38,
@@ -993,10 +997,23 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 break;
             }
             case 'elite': {
-                mesh = BABYLON.MeshBuilder.CreateTorus(`eE_${runtimeId}`, { diameter: 2.6, thickness: 0.55, tessellation: 48 }, scene);
-                mesh.rotation.x = Math.PI / 2;
+                // Keep the gameplay/presentation root pitch- and roll-neutral.
+                // V3.9.4 used the rotated torus itself as the root; the atlas
+                // plane inherited that 90-degree pitch and could become edge-on,
+                // leaving only the linked HP bar visible.
+                mesh = BABYLON.MeshBuilder.CreateSphere(`eE_${runtimeId}`, {
+                    diameterX: 2.55, diameterZ: 2.55, diameterY: .62, segments: 10,
+                }, scene);
+                mesh.visibility = .02;
+                const eRing = BABYLON.MeshBuilder.CreateTorus(`eE_ring_${runtimeId}`, {
+                    diameter: 2.6, thickness: 0.55, tessellation: 48,
+                }, scene);
+                eRing.parent = mesh;
+                eRing.rotation.x = Math.PI / 2;
+                eRing.material = makeMat(scene, new BABYLON.Color3(1, 0.6, 0), false);
                 const eCore = BABYLON.MeshBuilder.CreateSphere(`eE_core_${runtimeId}`, { diameter: 1.0 }, scene);
                 eCore.parent = mesh;
+                eCore.position.y = .18;
                 eCore.material = makeMat(scene, new BABYLON.Color3(1, 0.85, 0.2), false);
                 break;
             }
@@ -1058,10 +1075,16 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             cannon.position.set(0, .28, .72);
             cannon.material = temporaryMat;
         }
+        // BattleEntityVisual assumes a neutral root and applies yaw only.
+        // Procedural parts may rotate locally, but the collider/root must not
+        // carry pitch or roll into an authored atlas plane.
+        mesh.rotation.x = 0;
+        mesh.rotation.z = 0;
         mesh.metadata = {
             ...(mesh.metadata || {}),
             temporaryVisualStyle: temporaryStyle,
             temporaryRoleId: roleId,
+            dungeonVisualRootNeutralV395: true,
         };
         return mesh;
     };
@@ -1218,23 +1241,16 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
     const spawnDungeonBreakableNodeV394 = (definition, nowMs) => {
         if (!definition) return null;
-        const targetPosition = new BABYLON.Vector3(
-            clamp(Number(definition.laneNorm) || 0, -.9, .9) * (boundX() - .8),
-            .08,
-            -ZOOM * .30 + (Number(definition.depthNorm) || 0) * ZOOM * .45,
-        );
         const policy = dungeonObjectiveSequenceV394?.policy || currentRoomV38?.objectiveRevealPolicy || {};
-        const entryOffset = clamp(Number(policy.entryDepthOffset) || 2.2, .8, 5);
-        const entryLane = clamp(
-            Number.isFinite(Number(definition.entryLaneNorm)) ? Number(definition.entryLaneNorm) : Number(definition.laneNorm) || 0,
-            -.9,
-            .9,
-        );
-        const position = new BABYLON.Vector3(
-            entryLane * (boundX() - .8),
-            .08,
-            -ZOOM - entryOffset,
-        );
+        const motion = createDungeonObjectiveWorldMotionV395({
+            seed: stableSeed(dungeonSeedV38, currentRoomV38?.id || 'room', definition.id),
+            definition,
+            policy,
+            arenaHalfWidth: boundX(),
+            worldHalfHeight: ZOOM,
+            nowMs,
+        });
+        const position = new BABYLON.Vector3(motion.x, .08, motion.z);
         const visual = createDungeonBreakableVisualV39({
             scene,
             BABYLON,
@@ -1274,14 +1290,14 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             hp: maxHp,
             maxHp,
             hpFill,
+            hpBg,
             score: Math.max(0, Math.round(Number(definition.score) || 0)),
             hitRadius: clamp(Number(definition.hitRadius) || 1.15, .7, 2.0),
             objectiveRole: definition.objectiveRole || 'node',
             sequenceIndex: Number(definition.sequenceIndex) || 0,
-            targetPosition,
-            approachSpeed: clamp(Number(policy.approachSpeed) || .075, .025, .18),
-            anchorTolerance: clamp(Number(policy.anchorTolerance) || .12, .04, .5),
-            anchored: false,
+            motion,
+            isWorldVisible: true,
+            passCount: 0,
             spawnedAtMs: nowMs,
             disposeHud: () => {
                 safeDisGui(hpFill);
@@ -2083,19 +2099,23 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             }
 
             for (const item of dungeonBreakablesV38) {
-                if (item.anchored || !item.mesh || item.mesh.isDisposed()) continue;
-                const dx = item.targetPosition.x - item.mesh.position.x;
-                const dz = item.targetPosition.z - item.mesh.position.z;
-                const distance = Math.hypot(dx, dz);
-                const step = item.approachSpeed * frameFactor;
-                if (distance <= Math.max(item.anchorTolerance, step)) {
-                    item.mesh.position.copyFrom(item.targetPosition);
-                    item.anchored = true;
+                if (!item.mesh || item.mesh.isDisposed()) continue;
+                const motionStep = advanceDungeonObjectiveWorldMotionV395(item.motion, {
+                    nowMs: now,
+                    frameFactor,
+                });
+                item.isWorldVisible = motionStep.visible;
+                if (motionStep.visible) {
+                    item.mesh.setEnabled?.(true);
+                    item.mesh.position.x = motionStep.x;
+                    item.mesh.position.z = motionStep.z;
+                    item.mesh.rotation.y += .0042 * frameFactor;
+                    item.visual?.tick?.(engine.getDeltaTime(), motionStep.phase);
                 } else {
-                    item.mesh.position.x += dx / distance * step;
-                    item.mesh.position.z += dz / distance * step;
-                    item.mesh.rotation.y += .0035 * frameFactor;
+                    item.mesh.setEnabled?.(false);
                 }
+                if (item.hpBg) item.hpBg.isVisible = motionStep.visible;
+                if (motionStep.wrapped) item.passCount += 1;
             }
 
             if (activeDungeonHazardV38) {
@@ -2204,6 +2224,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                         dungeonBreakablesV38.splice(debrisIndex, 1);
                         continue;
                     }
+                    if (debris.isWorldVisible === false) continue;
                     if (!projectileHitsPoint(bullet, debris.mesh.position, debris.hitRadius || 1.15)) continue;
                     const hit = shots.registerHit(bullet, { mesh: debris.mesh });
                     if (!hit.accepted) continue;

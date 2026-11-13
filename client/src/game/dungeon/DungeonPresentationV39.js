@@ -5,7 +5,7 @@
  * live here. DungeonScene and the shared projectile renderer consume this
  * catalog without changing deterministic combat state.
  */
-export const DUNGEON_PRODUCTION_PRESENTATION_VERSION = 'dungeon-production-presentation-v3.9.4';
+export const DUNGEON_PRODUCTION_PRESENTATION_VERSION = 'dungeon-production-presentation-v3.9.5';
 
 const freezeDeep = value => {
   if (Array.isArray(value)) return Object.freeze(value.map(freezeDeep));
@@ -91,8 +91,8 @@ export const DUNGEON_PRESENTATION_PROFILES_V39 = freezeDeep({
         en: 'Evade drifting scrap and destroy the pirates.',
       },
       breakable: {
-        vi: 'Phá toàn bộ kho quặng và tiêu diệt địch.',
-        en: 'Destroy every ore cache and all hostiles.',
+        vi: 'Đánh chặn từng mô-đun thu hồi đang trôi và tiêu diệt lực lượng bảo vệ.',
+        en: 'Intercept each drifting salvage module and clear its guards.',
       },
       elite: {
         vi: 'Phá đội hình hộ tống tinh nhuệ.',

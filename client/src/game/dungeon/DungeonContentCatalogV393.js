@@ -1,13 +1,13 @@
 import { ENEMY_ARCHETYPES_V2 } from '../combat/EnemyCombatCatalogV2.js';
 
 /**
- * Dungeon content catalog V3.9.4 (V3.9.3 compatibility module).
+ * Dungeon content catalog V3.9.5 (V3.9.3 compatibility module).
  *
  * This is the authoritative, data-only content schema for all present and future
  * dungeons. Runtime V3.8 consumes a compatibility projection so existing scene,
  * combat, QA and server-authority contracts do not need to be cloned per dungeon.
  */
-export const DUNGEON_CONTENT_CATALOG_VERSION = 'dungeon-content-catalog-v3.9.4';
+export const DUNGEON_CONTENT_CATALOG_VERSION = 'dungeon-content-catalog-v3.9.5';
 export const DUNGEON_CONTENT_SCHEMA_VERSION = 1;
 
 const freezeDeep = value => {
@@ -208,12 +208,18 @@ export const DUNGEON_OBJECTIVE_PROFILES_V393 = freezeDeep({
     },
     layoutId: 'progressive_salvage_route',
     revealPolicy: {
-      mode: 'sequential_travel',
-      initialDelayMs: 700,
-      betweenNodesMs: 1450,
+      mode: 'sequential_world_drift',
+      initialDelayMs: 650,
+      betweenNodesMs: 1050,
       requirePreviousDestroyed: true,
-      entryDepthOffset: 2.2,
-      approachSpeed: .078,
+      entryDepthOffset: 2.5,
+      exitDepthOffset: 2.2,
+      approachSpeed: .066,
+      cruiseSpeed: .034,
+      driftAmplitude: .28,
+      driftFrequency: .30,
+      reentryDelayMs: 900,
+      passLaneShiftNorm: .12,
       anchorTolerance: .12,
     },
     nodes: [
@@ -268,8 +274,10 @@ export const DUNGEON_OBJECTIVE_PROFILES_V393 = freezeDeep({
     },
     layoutId: 'offset_arc',
     revealPolicy: {
-      mode: 'sequential_travel', initialDelayMs: 650, betweenNodesMs: 1250,
-      requirePreviousDestroyed: true, entryDepthOffset: 2.1, approachSpeed: .074, anchorTolerance: .12,
+      mode: 'sequential_world_drift', initialDelayMs: 620, betweenNodesMs: 980,
+      requirePreviousDestroyed: true, entryDepthOffset: 2.3, exitDepthOffset: 2.2,
+      approachSpeed: .060, cruiseSpeed: .030, driftAmplitude: .22, driftFrequency: .26,
+      reentryDelayMs: 840, passLaneShiftNorm: .10, anchorTolerance: .12,
     },
     nodes: [
       { id: 'nereus_relay_left', visualId: 'nereus_shield_relay', visualStyle: 'shield_relay', laneNorm: -.60, depthNorm: -.12, hp: 420, score: 120, hitRadius: 1.10 },
@@ -287,8 +295,10 @@ export const DUNGEON_OBJECTIVE_PROFILES_V393 = freezeDeep({
     },
     layoutId: 'broken_triangle',
     revealPolicy: {
-      mode: 'sequential_travel', initialDelayMs: 550, betweenNodesMs: 1100,
-      requirePreviousDestroyed: true, entryDepthOffset: 2.4, approachSpeed: .086, anchorTolerance: .13,
+      mode: 'sequential_world_drift', initialDelayMs: 520, betweenNodesMs: 900,
+      requirePreviousDestroyed: true, entryDepthOffset: 2.7, exitDepthOffset: 2.4,
+      approachSpeed: .074, cruiseSpeed: .040, driftAmplitude: .34, driftFrequency: .36,
+      reentryDelayMs: 720, passLaneShiftNorm: .15, anchorTolerance: .13,
     },
     nodes: [
       { id: 'abaddon_anchor_left', visualId: 'abaddon_rift_anchor', visualStyle: 'rift_anchor', laneNorm: -.58, depthNorm: -.30, hp: 680, score: 190, hitRadius: 1.18 },
@@ -601,7 +611,8 @@ export function auditDungeonContentCatalogV393() {
   if (new Set(taurusNodes.map(node => node.visualStyle)).size < 3) issues.push('TAURUS_SALVAGE_VISUAL_VARIETY');
   if (new Set(taurusNodes.map(node => node.depthNorm)).size < 3) issues.push('TAURUS_SALVAGE_DEPTH_VARIETY');
   if (!taurusNodes.some(node => node.objectiveRole === 'primary')) issues.push('TAURUS_SALVAGE_PRIMARY');
-  if (taurusObjective.revealPolicy?.mode !== 'sequential_travel') issues.push('TAURUS_SALVAGE_PROGRESSIVE_REVEAL');
+  if (taurusObjective.revealPolicy?.mode !== 'sequential_world_drift') issues.push('TAURUS_SALVAGE_WORLD_DRIFT');
+  if (!(taurusObjective.revealPolicy?.cruiseSpeed > 0)) issues.push('TAURUS_SALVAGE_CRUISE_SPEED');
   if (new Set(taurusNodes.map(node => node.sequenceIndex)).size !== taurusNodes.length) issues.push('TAURUS_SALVAGE_SEQUENCE');
   const taurusHazard = DUNGEON_HAZARD_PROFILES_V393.taurus_scrap_lanes;
   if (taurusHazard.warningMode !== 'edge_pulse' || taurusHazard.warningMs > 400) issues.push('TAURUS_HAZARD_NATURAL_ENTRY');

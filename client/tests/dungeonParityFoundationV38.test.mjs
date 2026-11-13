@@ -82,6 +82,12 @@ import {
   resolveDungeonBossVisualBindingV394,
   resolveDungeonEnemyVisualBindingV394,
 } from '../src/game/dungeon/DungeonVisualBindingV394.js';
+import {
+  DUNGEON_WORLD_TRAVERSAL_VERSION,
+  advanceDungeonObjectiveWorldMotionV395,
+  auditDungeonWorldTraversalV395,
+  createDungeonObjectiveWorldMotionV395,
+} from '../src/game/dungeon/DungeonWorldTraversalV395.js';
 
 test('Campaign Gameplay Foundation Lock RC1 is exact and drift-free', () => {
   assert.equal(CAMPAIGN_GAMEPLAY_FOUNDATION_LOCK_RC1.version,
@@ -94,8 +100,8 @@ test('Campaign Gameplay Foundation Lock RC1 is exact and drift-free', () => {
 });
 
 
-test('Dungeon V3.9.4 content catalog is modular, five-room and future-safe', () => {
-  assert.equal(DUNGEON_CONTENT_CATALOG_VERSION, 'dungeon-content-catalog-v3.9.4');
+test('Dungeon V3.9.5 content catalog is modular, five-room and future-safe', () => {
+  assert.equal(DUNGEON_CONTENT_CATALOG_VERSION, 'dungeon-content-catalog-v3.9.5');
   assert.deepEqual(auditDungeonContentCatalogV393(), []);
   assert.deepEqual(Object.keys(DUNGEON_CONTENT_CATALOG_V393), [
     'dung_taurus', 'dung_nereus', 'dung_abaddon',
@@ -127,7 +133,8 @@ test('Dungeon V3.9.4 content catalog is modular, five-room and future-safe', () 
   assert.equal(new Set(cluster.nodes.map(node => node.depthNorm)).size, 3,
     'Taurus objective nodes must be staggered in depth, not a flat row');
   assert.equal(cluster.nodes.filter(node => node.objectiveRole === 'primary').length, 1);
-  assert.equal(cluster.revealPolicy.mode, 'sequential_travel');
+  assert.equal(cluster.revealPolicy.mode, 'sequential_world_drift');
+  assert.ok(cluster.revealPolicy.cruiseSpeed > 0);
   assert.deepEqual(cluster.nodes.map(node => node.sequenceIndex), [0, 1, 2]);
 });
 
@@ -288,7 +295,7 @@ test('Dungeon Boss adapter binds Taurus to shared XState arsenal and scales proj
 
 test('Dungeon V3.9 presentation resolves production Taurus identity without changing combat authority', () => {
   assert.equal(DUNGEON_PRODUCTION_PRESENTATION_VERSION,
-    'dungeon-production-presentation-v3.9.4');
+    'dungeon-production-presentation-v3.9.5');
   assert.deepEqual(auditDungeonPresentationV39(), []);
   const profile = resolveDungeonPresentationV39('dung_taurus');
   assert.equal(profile.boss.visualAssetId, 'dung_taurus_boss');
@@ -318,8 +325,8 @@ test('Dungeon V3.9 presentation resolves production Taurus identity without chan
 });
 
 
-test('Dungeon V3.9.4 reveals salvage nodes sequentially and removes full-lane rock direction guides', () => {
-  assert.equal(DUNGEON_ROOM_FLOW_VERSION, 'dungeon-room-flow-v3.9.4');
+test('Dungeon V3.9.5 reveals salvage nodes sequentially and keeps objectives in world-space motion', () => {
+  assert.equal(DUNGEON_ROOM_FLOW_VERSION, 'dungeon-room-flow-v3.9.5');
   assert.deepEqual(auditDungeonRoomFlowV394(), []);
   const cluster = DUNGEON_OBJECTIVE_PROFILES_V393.taurus_salvage_cluster;
   const state = createProgressiveObjectiveSequenceV394({
@@ -327,9 +334,9 @@ test('Dungeon V3.9.4 reveals salvage nodes sequentially and removes full-lane ro
     policy: cluster.revealPolicy,
     nowMs: 1000,
   });
-  let step = stepProgressiveObjectiveSequenceV394(state, { nowMs: 1699, activeIds: [] });
+  let step = stepProgressiveObjectiveSequenceV394(state, { nowMs: 1649, activeIds: [] });
   assert.equal(step.events.length, 0);
-  step = stepProgressiveObjectiveSequenceV394(state, { nowMs: 1700, activeIds: [] });
+  step = stepProgressiveObjectiveSequenceV394(state, { nowMs: 1650, activeIds: [] });
   assert.equal(step.events[0].definition.id, 'taurus_salvage_core');
   assert.equal(getProgressiveObjectiveSnapshotV394(state).remainingCount, 3);
   step = stepProgressiveObjectiveSequenceV394(state, { nowMs: 1800, activeIds: ['taurus_salvage_core'] });
@@ -337,9 +344,9 @@ test('Dungeon V3.9.4 reveals salvage nodes sequentially and removes full-lane ro
   step = stepProgressiveObjectiveSequenceV394(state, { nowMs: 1900, activeIds: [] });
   assert.equal(step.destroyedCount, 1);
   assert.equal(step.events[0].type, 'objective_node_cleared');
-  step = stepProgressiveObjectiveSequenceV394(state, { nowMs: 3349, activeIds: [] });
+  step = stepProgressiveObjectiveSequenceV394(state, { nowMs: 2949, activeIds: [] });
   assert.equal(step.events.length, 0);
-  step = stepProgressiveObjectiveSequenceV394(state, { nowMs: 3350, activeIds: [] });
+  step = stepProgressiveObjectiveSequenceV394(state, { nowMs: 2950, activeIds: [] });
   assert.equal(step.events[0].definition.id, 'taurus_ore_pod_left');
 
   const cue = resolveDungeonHazardCueV394(resolveDungeonRuntimeProfileV38('dung_taurus').rooms[1].hazard);
@@ -350,6 +357,34 @@ test('Dungeon V3.9.4 reveals salvage nodes sequentially and removes full-lane ro
   const second = advanceNaturalHazardMotionV394(motion, 1);
   assert.ok(first.zDelta > 0 && second.travel > first.travel);
   assert.notEqual(first.x, second.x, 'rock must drift naturally instead of following a perfectly straight guide');
+
+  assert.equal(DUNGEON_WORLD_TRAVERSAL_VERSION, 'dungeon-world-traversal-v3.9.5');
+  assert.deepEqual(auditDungeonWorldTraversalV395(), []);
+  const objectiveMotion = createDungeonObjectiveWorldMotionV395({
+    seed: 77,
+    definition: cluster.nodes[0],
+    policy: cluster.revealPolicy,
+    arenaHalfWidth: 7,
+    worldHalfHeight: 15,
+    nowMs: 0,
+  });
+  let previousZ = objectiveMotion.z;
+  let sawCruise = false;
+  let sawWrap = false;
+  for (let frame = 0; frame < 2000; frame += 1) {
+    const objectiveStep = advanceDungeonObjectiveWorldMotionV395(objectiveMotion, {
+      nowMs: frame * 16.667,
+      frameFactor: 1,
+    });
+    if (objectiveStep.visible) {
+      assert.ok(objectiveStep.z > previousZ, 'visible objective must keep drifting with the scrolling world');
+      previousZ = objectiveStep.z;
+      if (objectiveStep.phase === 'cruise') sawCruise = true;
+    }
+    if (objectiveStep.wrapped) { sawWrap = true; break; }
+  }
+  assert.equal(sawCruise, true);
+  assert.equal(sawWrap, true, 'a missed objective must re-enter instead of anchoring or dead-locking the room');
 });
 
 test('Dungeon V3.9.4 binds authored atlases for every current role and has a temporary fallback contract', () => {
@@ -376,6 +411,18 @@ test('Dungeon V3.9.4 binds authored atlases for every current role and has a tem
     dungeonId: 'dung_taurus', profileResolver: () => null,
   });
   assert.equal(temporaryBoss.mode, 'temporary_procedural');
+});
+
+
+test('Dungeon V3.9.5 keeps authored atlas roots pitch/roll neutral and objectives non-anchored', () => {
+  const source = fs.readFileSync(new URL('../src/components/Dungeon/DungeonScene.js', import.meta.url), 'utf8');
+  assert.match(source, /dungeonVisualRootNeutralV395:\s*true/);
+  assert.match(source, /CreateSphere\(`eE_\$\{runtimeId\}`/,
+    'elite collider must be a neutral root rather than the rotated torus itself');
+  assert.doesNotMatch(source, /mesh = BABYLON\.MeshBuilder\.CreateTorus\(`eE_[\s\S]{0,180}mesh\.rotation\.x = Math\.PI \/ 2/);
+  assert.match(source, /advanceDungeonObjectiveWorldMotionV395/);
+  assert.doesNotMatch(source, /item\.anchored\s*\|\|/);
+  assert.match(source, /debris\.isWorldVisible === false/);
 });
 
 test('Dungeon V3.9.2 integrity makes hazards destructible and hostile damage renderer-independent', () => {
