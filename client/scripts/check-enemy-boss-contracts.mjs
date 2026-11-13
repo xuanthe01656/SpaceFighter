@@ -3,11 +3,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ALL_VISUAL_PROFILES } from '../src/game/assets/AssetRegistry.js';
 import { ANIMATED_BATTLE_KINDS, BATTLE_ANIMATION_STATES, DUNGEON_ATLAS_RESERVED_TRANSPARENT_FRAMES_V393, validateBattleAtlasContract } from '../src/game/assets/EnemyBossAnimationCatalog.js';
+import { auditDungeonVisualBindingsV394 } from '../src/game/dungeon/DungeonVisualBindingV394.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public');
 const errors = [];
 const contracts = ALL_VISUAL_PROFILES.filter(p => ANIMATED_BATTLE_KINDS.includes(p.kind));
 const maxFileBytes = 6 * 1024 * 1024;
+errors.push(...auditDungeonVisualBindingsV394());
 function webpDimensions(buffer) {
   if (buffer.toString('ascii', 0, 4) !== 'RIFF' || buffer.toString('ascii', 8, 12) !== 'WEBP') throw Error('Not RIFF WebP');
   const fourCC = buffer.toString('ascii', 12, 16);

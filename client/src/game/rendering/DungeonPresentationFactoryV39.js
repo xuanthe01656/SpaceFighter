@@ -346,11 +346,48 @@ export function createDungeonHazardVisualV39({ scene, BABYLON, name = 'drifting-
 
 export function createDungeonHazardTelegraphV39({
   scene, BABYLON, name = 'hazard-warning', x = 0, z = -8, width = 1.5,
-  depth = 8, colorHex = '#ff8a32',
+  depth = 8, colorHex = '#ff8a32', mode = 'corridor',
 } = {}) {
-  const mat = material(scene, BABYLON, `hazard-warning:${colorHex}`, {
-    diffuse: colorHex, emissive: colorHex, alpha: .22, disableLighting: true,
+  if (mode === 'none') {
+    return { mesh: null, marker: null, update() {}, dispose() {} };
+  }
+  const mat = material(scene, BABYLON, `hazard-warning:${mode}:${colorHex}`, {
+    diffuse: colorHex, emissive: colorHex, alpha: mode === 'edge_pulse' ? .30 : .22, disableLighting: true,
   });
+
+  if (mode === 'edge_pulse') {
+    // A compact entry shimmer warns that something is crossing the top edge,
+    // but deliberately does not draw the rock's future path through the arena.
+    const marker = BABYLON.MeshBuilder.CreateTorus(`${name}:entry`, {
+      diameter: Math.max(.78, width * .82), thickness: .09, tessellation: 28,
+    }, scene);
+    marker.position.set(x, .055, z);
+    marker.rotation.x = Math.PI / 2;
+    marker.material = mat;
+    marker.isPickable = false;
+
+    const glint = BABYLON.MeshBuilder.CreateBox(`${name}:glint`, {
+      width: Math.max(.42, width * .58), height: .018, depth: .12,
+    }, scene);
+    glint.position.set(x, .045, z + .08);
+    glint.material = mat;
+    glint.isPickable = false;
+
+    return {
+      mesh: null,
+      marker,
+      glint,
+      update(nowMs = 0) {
+        const wave = (1 + Math.sin(Number(nowMs) * .042)) * .5;
+        marker.visibility = .28 + wave * .55;
+        marker.scaling.setAll(.88 + wave * .24);
+        glint.visibility = .18 + wave * .46;
+        glint.scaling.x = .82 + wave * .36;
+      },
+      dispose() { marker.dispose(); glint.dispose(); },
+    };
+  }
+
   const corridor = BABYLON.MeshBuilder.CreateBox(name, { width: 1, height: .025, depth: 1 }, scene);
   corridor.position.set(x, .035, z);
   corridor.scaling.set(width, 1, depth);

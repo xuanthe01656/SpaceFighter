@@ -5,7 +5,7 @@
  * live here. DungeonScene and the shared projectile renderer consume this
  * catalog without changing deterministic combat state.
  */
-export const DUNGEON_PRODUCTION_PRESENTATION_VERSION = 'dungeon-production-presentation-v3.9.0';
+export const DUNGEON_PRODUCTION_PRESENTATION_VERSION = 'dungeon-production-presentation-v3.9.4';
 
 const freezeDeep = value => {
   if (Array.isArray(value)) return Object.freeze(value.map(freezeDeep));
@@ -70,10 +70,11 @@ export const DUNGEON_PRESENTATION_PROFILES_V39 = freezeDeep({
     },
     hazard: {
       style: 'drifting_scrap',
-      warningMs: 720,
-      warningWidth: 1.55,
-      warningDepth: 24,
-      warningPulseHz: 3.1,
+      warningMode: 'edge_pulse',
+      warningMs: 280,
+      warningWidth: 1.05,
+      warningDepth: 0,
+      warningPulseHz: 4.2,
     },
     breakable: {
       style: 'ore_cache',
@@ -160,8 +161,10 @@ export function auditDungeonPresentationV39() {
   const issues = [];
   const taurus = DUNGEON_PRESENTATION_PROFILES_V39.dung_taurus;
   if (taurus.boss.visualAssetId !== 'dung_taurus_boss') issues.push('TAURUS_BOSS_VISUAL_ID');
-  if (!(taurus.hazard.warningMs >= 500 && taurus.hazard.warningMs <= 1200)) {
-    issues.push('TAURUS_HAZARD_WARNING_WINDOW');
+  if (taurus.hazard.warningMode !== 'edge_pulse'
+    || !(taurus.hazard.warningMs >= 180 && taurus.hazard.warningMs <= 400)
+    || taurus.hazard.warningDepth !== 0) {
+    issues.push('TAURUS_HAZARD_NATURAL_ENTRY_CUE');
   }
   const patternIds = Object.keys(taurus.boss.patternPresentation || {});
   if (patternIds.length !== 4) issues.push('TAURUS_PATTERN_PRESENTATION_COUNT');

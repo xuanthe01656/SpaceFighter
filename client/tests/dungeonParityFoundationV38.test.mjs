@@ -66,6 +66,22 @@ import {
   resolveDungeonHazardCombatV392,
   resolveDungeonHostileProjectileHitRadiusV392,
 } from '../src/game/dungeon/DungeonCombatIntegrityV392.js';
+import {
+  DUNGEON_ROOM_FLOW_VERSION,
+  advanceNaturalHazardMotionV394,
+  auditDungeonRoomFlowV394,
+  createNaturalHazardMotionV394,
+  createProgressiveObjectiveSequenceV394,
+  getProgressiveObjectiveSnapshotV394,
+  resolveDungeonHazardCueV394,
+  stepProgressiveObjectiveSequenceV394,
+} from '../src/game/dungeon/DungeonRoomFlowV394.js';
+import {
+  DUNGEON_VISUAL_BINDING_VERSION,
+  auditDungeonVisualBindingsV394,
+  resolveDungeonBossVisualBindingV394,
+  resolveDungeonEnemyVisualBindingV394,
+} from '../src/game/dungeon/DungeonVisualBindingV394.js';
 
 test('Campaign Gameplay Foundation Lock RC1 is exact and drift-free', () => {
   assert.equal(CAMPAIGN_GAMEPLAY_FOUNDATION_LOCK_RC1.version,
@@ -78,8 +94,8 @@ test('Campaign Gameplay Foundation Lock RC1 is exact and drift-free', () => {
 });
 
 
-test('Dungeon V3.9.3 content catalog is modular, five-room and future-safe', () => {
-  assert.equal(DUNGEON_CONTENT_CATALOG_VERSION, 'dungeon-content-catalog-v3.9.3');
+test('Dungeon V3.9.4 content catalog is modular, five-room and future-safe', () => {
+  assert.equal(DUNGEON_CONTENT_CATALOG_VERSION, 'dungeon-content-catalog-v3.9.4');
   assert.deepEqual(auditDungeonContentCatalogV393(), []);
   assert.deepEqual(Object.keys(DUNGEON_CONTENT_CATALOG_V393), [
     'dung_taurus', 'dung_nereus', 'dung_abaddon',
@@ -111,6 +127,8 @@ test('Dungeon V3.9.3 content catalog is modular, five-room and future-safe', () 
   assert.equal(new Set(cluster.nodes.map(node => node.depthNorm)).size, 3,
     'Taurus objective nodes must be staggered in depth, not a flat row');
   assert.equal(cluster.nodes.filter(node => node.objectiveRole === 'primary').length, 1);
+  assert.equal(cluster.revealPolicy.mode, 'sequential_travel');
+  assert.deepEqual(cluster.nodes.map(node => node.sequenceIndex), [0, 1, 2]);
 });
 
 test('Dungeon V3.8 catalog exposes one enabled Taurus vertical slice and two briefs', () => {
@@ -270,7 +288,7 @@ test('Dungeon Boss adapter binds Taurus to shared XState arsenal and scales proj
 
 test('Dungeon V3.9 presentation resolves production Taurus identity without changing combat authority', () => {
   assert.equal(DUNGEON_PRODUCTION_PRESENTATION_VERSION,
-    'dungeon-production-presentation-v3.9.0');
+    'dungeon-production-presentation-v3.9.4');
   assert.deepEqual(auditDungeonPresentationV39(), []);
   const profile = resolveDungeonPresentationV39('dung_taurus');
   assert.equal(profile.boss.visualAssetId, 'dung_taurus_boss');
@@ -278,8 +296,9 @@ test('Dungeon V3.9 presentation resolves production Taurus identity without chan
   assert.equal(bossAsset?.assetId, 'dungeon_boss:dung_taurus_boss');
   assert.match(bossAsset?.atlasSrc || '', /dung_taurus_boss_sheet\.webp$/);
   assert.notEqual(profile.palette.clearColor.toLowerCase(), '#4ade80');
-  assert.ok(profile.hazard.warningMs >= 500);
-  assert.ok(profile.hazard.warningDepth >= 20);
+  assert.equal(profile.hazard.warningMode, 'edge_pulse');
+  assert.ok(profile.hazard.warningMs >= 180 && profile.hazard.warningMs <= 400);
+  assert.equal(profile.hazard.warningDepth, 0);
   const pattern = resolveDungeonBossPatternPresentationV39({
     dungeonId: 'dung_taurus',
     patternId: 'alpha_overdrive',
@@ -296,6 +315,67 @@ test('Dungeon V3.9 presentation resolves production Taurus identity without chan
     assert.ok(CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32[visualId]);
     assert.equal(resolveCampaignProjectileVisualV32({ visualId }).id, visualId);
   }
+});
+
+
+test('Dungeon V3.9.4 reveals salvage nodes sequentially and removes full-lane rock direction guides', () => {
+  assert.equal(DUNGEON_ROOM_FLOW_VERSION, 'dungeon-room-flow-v3.9.4');
+  assert.deepEqual(auditDungeonRoomFlowV394(), []);
+  const cluster = DUNGEON_OBJECTIVE_PROFILES_V393.taurus_salvage_cluster;
+  const state = createProgressiveObjectiveSequenceV394({
+    definitions: cluster.nodes,
+    policy: cluster.revealPolicy,
+    nowMs: 1000,
+  });
+  let step = stepProgressiveObjectiveSequenceV394(state, { nowMs: 1699, activeIds: [] });
+  assert.equal(step.events.length, 0);
+  step = stepProgressiveObjectiveSequenceV394(state, { nowMs: 1700, activeIds: [] });
+  assert.equal(step.events[0].definition.id, 'taurus_salvage_core');
+  assert.equal(getProgressiveObjectiveSnapshotV394(state).remainingCount, 3);
+  step = stepProgressiveObjectiveSequenceV394(state, { nowMs: 1800, activeIds: ['taurus_salvage_core'] });
+  assert.equal(step.events.length, 0, 'the next node cannot appear while the current target is alive');
+  step = stepProgressiveObjectiveSequenceV394(state, { nowMs: 1900, activeIds: [] });
+  assert.equal(step.destroyedCount, 1);
+  assert.equal(step.events[0].type, 'objective_node_cleared');
+  step = stepProgressiveObjectiveSequenceV394(state, { nowMs: 3349, activeIds: [] });
+  assert.equal(step.events.length, 0);
+  step = stepProgressiveObjectiveSequenceV394(state, { nowMs: 3350, activeIds: [] });
+  assert.equal(step.events[0].definition.id, 'taurus_ore_pod_left');
+
+  const cue = resolveDungeonHazardCueV394(resolveDungeonRuntimeProfileV38('dung_taurus').rooms[1].hazard);
+  assert.equal(cue.mode, 'edge_pulse');
+  assert.ok(cue.durationMs <= 400);
+  const motion = createNaturalHazardMotionV394({ seed: 77, index: 2, laneNorm: .3, speed: .085 });
+  const first = advanceNaturalHazardMotionV394(motion, 1);
+  const second = advanceNaturalHazardMotionV394(motion, 1);
+  assert.ok(first.zDelta > 0 && second.travel > first.travel);
+  assert.notEqual(first.x, second.x, 'rock must drift naturally instead of following a perfectly straight guide');
+});
+
+test('Dungeon V3.9.4 binds authored atlases for every current role and has a temporary fallback contract', () => {
+  assert.equal(DUNGEON_VISUAL_BINDING_VERSION, 'dungeon-visual-binding-v3.9.4');
+  assert.deepEqual(auditDungeonVisualBindingsV394(), []);
+  const gunner = resolveDungeonEnemyVisualBindingV394({ dungeonId: 'dung_taurus', roleId: 'gunner' });
+  assert.equal(gunner.mode, 'authored_atlas');
+  assert.equal(gunner.assetId, 'dung_taurus_scout');
+  assert.ok(gunner.profile?.atlasSrc);
+  const repairedAlias = resolveDungeonEnemyVisualBindingV394({
+    dungeonId: 'dung_taurus', roleId: 'support', requestedAssetId: 'missing-runtime-alias',
+  });
+  assert.equal(repairedAlias.mode, 'authored_atlas');
+  assert.equal(repairedAlias.assetId, 'dung_taurus_elite');
+  const temporary = resolveDungeonEnemyVisualBindingV394({
+    dungeonId: 'dung_taurus', roleId: 'artillery', profileResolver: () => null,
+  });
+  assert.equal(temporary.mode, 'temporary_procedural');
+  assert.equal(temporary.temporaryStyle, 'long_cannon');
+  const boss = resolveDungeonBossVisualBindingV394({ dungeonId: 'dung_taurus' });
+  assert.equal(boss.mode, 'authored_atlas');
+  assert.equal(boss.assetId, 'dung_taurus_boss');
+  const temporaryBoss = resolveDungeonBossVisualBindingV394({
+    dungeonId: 'dung_taurus', profileResolver: () => null,
+  });
+  assert.equal(temporaryBoss.mode, 'temporary_procedural');
 });
 
 test('Dungeon V3.9.2 integrity makes hazards destructible and hostile damage renderer-independent', () => {
@@ -337,7 +417,7 @@ test('DungeonScene integrates parity director, required objectives and shared Bo
   const source = fs.readFileSync(new URL('../src/components/Dungeon/DungeonScene.js', import.meta.url), 'utf8');
   assert.match(source, /assertCampaignGameplayFoundationLockRC1\(\)/);
   assert.match(source, /stepDungeonEncounterDirectorV38\(/);
-  assert.match(source, /activeBreakableCount:\s*dungeonBreakablesV38\.length/);
+  assert.match(source, /getProgressiveObjectiveSnapshotV394\(dungeonObjectiveSequenceV394\)\.remainingCount/);
   assert.match(source, /createDungeonBossControllerV38\(/);
   assert.match(source, /stepDungeonBossControllerV38\(/);
   assert.match(source, /projectilesFromDungeonBossAttackPlanV38\(/);
@@ -347,6 +427,11 @@ test('DungeonScene integrates parity director, required objectives and shared Bo
   assert.match(source, /remainingSpawns/);
   assert.match(source, /clearDungeonHostileProjectilesV38/);
   assert.match(source, /createDungeonHazardTelegraphV39/);
+  assert.match(source, /resolveDungeonHazardCueV394/);
+  assert.match(source, /advanceNaturalHazardMotionV394/);
+  assert.match(source, /stepProgressiveObjectiveSequenceV394/);
+  assert.match(source, /spawnDungeonBreakableNodeV394/);
+  assert.match(source, /resolveDungeonEnemyVisualBindingV394/);
   assert.match(source, /createDungeonBreakableVisualV39/);
   assert.match(source, /createDungeonBossFallbackV39/);
   assert.match(source, /bossVisualAssetId/);

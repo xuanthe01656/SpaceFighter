@@ -48,6 +48,19 @@ import {
 } from '../../game/dungeon/DungeonEncounterCatalogV38.js';
 import { resolveDungeonVisualAssetRefsV393 } from '../../game/dungeon/DungeonContentCatalogV393.js';
 import {
+    advanceNaturalHazardMotionV394,
+    createNaturalHazardMotionV394,
+    createProgressiveObjectiveSequenceV394,
+    getProgressiveObjectiveSnapshotV394,
+    resolveDungeonHazardCueV394,
+    resolveDungeonHazardLaneNormV394,
+    stepProgressiveObjectiveSequenceV394,
+} from '../../game/dungeon/DungeonRoomFlowV394.js';
+import {
+    resolveDungeonBossVisualBindingV394,
+    resolveDungeonEnemyVisualBindingV394,
+} from '../../game/dungeon/DungeonVisualBindingV394.js';
+import {
     createDungeonEncounterDirectorV38,
     getDungeonEncounterSnapshotV38,
     stepDungeonEncounterDirectorV38,
@@ -697,6 +710,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     let currentRoomV38 = null;
     let currentRoomInitialEnemyCountV39 = 0;
     let currentRoomInitialBreakableCountV39 = 0;
+    let dungeonObjectiveSequenceV394 = null;
+    const dungeonVisualFallbackWarningsV394 = new Set();
     let bossDefeatedPulseV38 = false;
     const dungeonVisualSpawnGateReadyV392 = nowMs => {
         if (dungeonVisualPreloadV392.settled) return true;
@@ -828,7 +843,10 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             const ratio = bossMaxHp > 0 ? clamp(bossHp / bossMaxHp, 0, 1) : 1;
             objectiveProgressText.text = `${lang === 'vi' ? 'TRÙM' : 'BOSS'} · ${Math.round(ratio * 100)}%`;
         } else if (currentRoomV38.breakablesRequired) {
-            const broken = Math.max(0, currentRoomInitialBreakableCountV39 - dungeonBreakablesV38.length);
+            const sequence = getProgressiveObjectiveSnapshotV394(dungeonObjectiveSequenceV394);
+            const broken = sequence.totalCount > 0
+                ? sequence.destroyedCount
+                : Math.max(0, currentRoomInitialBreakableCountV39 - dungeonBreakablesV38.length);
             const defeated = Math.min(currentRoomInitialEnemyCountV39, Math.max(0, waveKilled));
             objectiveProgressText.text = `${lang === 'vi' ? 'MỤC TIÊU' : 'NODES'} ${broken}/${currentRoomInitialBreakableCountV39}`
                 + ` · ${lang === 'vi' ? 'ĐỊCH' : 'HOSTILES'} ${defeated}/${currentRoomInitialEnemyCountV39}`;
@@ -915,16 +933,25 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             root: bossMesh,
             style: dungeonPresentationV39.boss?.fallbackStyle || 'rust_driller',
         });
-        const bossVisualAssetId = dungeonBossRuntimeV38?.binding?.visualAssetId
+        const requestedBossVisualAssetId = dungeonBossRuntimeV38?.binding?.visualAssetId
             || bossSpec?.visualAssetId
             || dungeonPresentationV39.boss?.visualAssetId
             || `${dungeonId}_boss`;
-        bossVisual = attachBattleEntityVisual(
-            scene,
-            BABYLON,
+        const bossVisualBindingV394 = resolveDungeonBossVisualBindingV394({
+            dungeonId,
+            requestedAssetId: requestedBossVisualAssetId,
+        });
+        const bossVisualAssetId = bossVisualBindingV394.assetId;
+        if (bossVisualBindingV394.mode === 'temporary_procedural'
+            && !dungeonVisualFallbackWarningsV394.has(`boss:${bossVisualAssetId}`)) {
+            dungeonVisualFallbackWarningsV394.add(`boss:${bossVisualAssetId}`);
+            console.warn('[DUNGEON_VISUAL_V394_TEMPORARY]', 'boss', bossVisualAssetId);
+        }
+        bossVisual = attachBattleEntityVisual(scene, BABYLON,
             bossMesh,
             'dungeon_boss',
             bossVisualAssetId,
+            { profile: bossVisualBindingV394.profile },
         );
 
         const bossName = bossSpec?.displayName?.[lang]
@@ -935,6 +962,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             dungeonBossId: bossSpec?.id || `${dungeonId}_boss`,
             sharedBossProfileId: bossSpec?.sharedBossProfileId || null,
             visualAssetId: bossVisualAssetId,
+            visualBindingMode: bossVisualBindingV394.mode,
         };
         bossNameText.text = `⚠ ${bossName}`;
         bossHpFill.width = "100%";
@@ -948,7 +976,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
     const enemies = [];
 
-    const buildDungeonEnemyMesh = (type, runtimeId) => {
+    const buildDungeonEnemyMesh = (type, runtimeId, roleId = 'raider', temporaryStyle = 'scout_wedge') => {
         let mesh;
         switch (type) {
             case 'heavy': {
@@ -982,6 +1010,59 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 break;
             }
         }
+
+        // Role-specific temporary presentation. It is visible only when an
+        // authored atlas/static image is unavailable and is hidden atomically
+        // by BattleEntityVisual as soon as the real art is ready.
+        const temporaryMat = MAT[type] || MAT.scout;
+        if (roleId === 'gunner') {
+            for (const side of [-1, 1]) {
+                const barrel = BABYLON.MeshBuilder.CreateCylinder(`temp-gun-${runtimeId}-${side}`, {
+                    diameter: .16, height: 1.15, tessellation: 8,
+                }, scene);
+                barrel.parent = mesh;
+                barrel.position.set(side * .55, .18, .65);
+                barrel.rotation.x = Math.PI / 2;
+                barrel.material = temporaryMat;
+            }
+        } else if (roleId === 'charger') {
+            const ram = BABYLON.MeshBuilder.CreateCylinder(`temp-ram-${runtimeId}`, {
+                diameterTop: 0, diameterBottom: .48, height: 1.45, tessellation: 10,
+            }, scene);
+            ram.parent = mesh;
+            ram.position.set(0, .12, 1.0);
+            ram.rotation.x = Math.PI / 2;
+            ram.material = temporaryMat;
+        } else if (roleId === 'shieldbearer') {
+            const shield = BABYLON.MeshBuilder.CreateTorus(`temp-shield-${runtimeId}`, {
+                diameter: 3.1, thickness: .14, tessellation: 32,
+            }, scene);
+            shield.parent = mesh;
+            shield.position.y = .22;
+            shield.rotation.x = Math.PI / 2;
+            shield.material = temporaryMat;
+        } else if (roleId === 'support') {
+            for (const side of [-1, 1]) {
+                const pod = BABYLON.MeshBuilder.CreateSphere(`temp-support-${runtimeId}-${side}`, {
+                    diameter: .44, segments: 8,
+                }, scene);
+                pod.parent = mesh;
+                pod.position.set(side * 1.15, .18, -.15);
+                pod.material = temporaryMat;
+            }
+        } else if (roleId === 'artillery') {
+            const cannon = BABYLON.MeshBuilder.CreateBox(`temp-cannon-${runtimeId}`, {
+                width: .34, height: .30, depth: 2.15,
+            }, scene);
+            cannon.parent = mesh;
+            cannon.position.set(0, .28, .72);
+            cannon.material = temporaryMat;
+        }
+        mesh.metadata = {
+            ...(mesh.metadata || {}),
+            temporaryVisualStyle: temporaryStyle,
+            temporaryRoleId: roleId,
+        };
         return mesh;
     };
 
@@ -1012,7 +1093,21 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             shootMs = type === 'heavy' ? 2200 : type === 'elite' ? 1400 : Infinity;
         }
 
-        const mesh = buildDungeonEnemyMesh(type, runtimeId.replace(/[^a-z0-9_-]/gi, '_'));
+        const resolvedRoleId = spec?.roleId
+            || (type === 'heavy' ? 'shieldbearer' : type === 'elite' ? 'gunner' : 'raider');
+        const requestedEnemyVisualAssetId = spec?.visualAssetId || `${dungeonId}_${type}`;
+        const enemyVisualBindingV394 = resolveDungeonEnemyVisualBindingV394({
+            dungeonId,
+            roleId: resolvedRoleId,
+            elite: Boolean(spec?.elite),
+            requestedAssetId: requestedEnemyVisualAssetId,
+        });
+        const mesh = buildDungeonEnemyMesh(
+            type,
+            runtimeId.replace(/[^a-z0-9_-]/gi, '_'),
+            resolvedRoleId,
+            enemyVisualBindingV394.temporaryStyle,
+        );
         if (spec) {
             const spawnPoint = resolveDungeonEnemySpawnPointV38({
                 laneNorm: spec.laneNorm,
@@ -1026,12 +1121,23 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         }
         mesh.material = MAT[type] || MAT.scout;
         mesh.rotation.y = 0;
-        const enemyVisualAssetId = spec?.visualAssetId || `${dungeonId}_${type}`;
-        const visual = attachBattleEntityVisual(scene, BABYLON, mesh, 'dungeon_enemy', enemyVisualAssetId);
+        const enemyVisualAssetId = enemyVisualBindingV394.assetId;
+        if (enemyVisualBindingV394.mode === 'temporary_procedural'
+            && !dungeonVisualFallbackWarningsV394.has(`enemy:${enemyVisualAssetId}`)) {
+            dungeonVisualFallbackWarningsV394.add(`enemy:${enemyVisualAssetId}`);
+            console.warn('[DUNGEON_VISUAL_V394_TEMPORARY]', resolvedRoleId, enemyVisualAssetId);
+        }
+        const visual = attachBattleEntityVisual(scene, BABYLON,
+            mesh,
+            'dungeon_enemy',
+            enemyVisualAssetId,
+            { profile: enemyVisualBindingV394.profile },
+        );
         mesh.metadata = {
             ...(mesh.metadata || {}),
-            dungeonEnemyRoleId: spec?.roleId || null,
+            dungeonEnemyRoleId: resolvedRoleId,
             visualAssetId: enemyVisualAssetId,
+            visualBindingMode: enemyVisualBindingV394.mode,
         };
 
         const miniHpBg = new GUI.Rectangle(`ehp_bg_${mesh.uniqueId}`);
@@ -1061,7 +1167,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             maxHp: hp,
             type,
             spec,
-            roleId: spec?.roleId || (type === 'heavy' ? 'shieldbearer' : type === 'elite' ? 'gunner' : 'raider'),
+            roleId: resolvedRoleId,
             speed,
             shootMs,
             canShoot: spec ? spec.canShoot : type !== 'scout',
@@ -1107,70 +1213,99 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         }
         for (const warning of dungeonHazardWarningsV39.splice(0)) warning?.dispose?.();
         activeDungeonHazardV38 = null;
+        dungeonObjectiveSequenceV394 = null;
     };
 
-    const spawnDungeonBreakablesV38 = (definitions = []) => {
-        for (const definition of definitions) {
-            const position = new BABYLON.Vector3(
-                clamp(Number(definition.laneNorm) || 0, -.9, .9) * (boundX() - .8),
-                .08,
-                -ZOOM * .30 + (Number(definition.depthNorm) || 0) * ZOOM * .45,
-            );
-            const visual = createDungeonBreakableVisualV39({
-                scene,
-                BABYLON,
-                name: `dungeon-breakable-${definition.id}`,
-                position,
-                style: definition.visualStyle || definition.visualId || 'ore_pod',
-                scale: definition.scale || 1,
-            });
-            const mesh = visual.mesh;
-            mesh.rotation.y = (stableSeed(dungeonSeedV38, definition.id) % 6284) / 1000;
-            mesh.isPickable = false;
+    const spawnDungeonBreakableNodeV394 = (definition, nowMs) => {
+        if (!definition) return null;
+        const targetPosition = new BABYLON.Vector3(
+            clamp(Number(definition.laneNorm) || 0, -.9, .9) * (boundX() - .8),
+            .08,
+            -ZOOM * .30 + (Number(definition.depthNorm) || 0) * ZOOM * .45,
+        );
+        const policy = dungeonObjectiveSequenceV394?.policy || currentRoomV38?.objectiveRevealPolicy || {};
+        const entryOffset = clamp(Number(policy.entryDepthOffset) || 2.2, .8, 5);
+        const entryLane = clamp(
+            Number.isFinite(Number(definition.entryLaneNorm)) ? Number(definition.entryLaneNorm) : Number(definition.laneNorm) || 0,
+            -.9,
+            .9,
+        );
+        const position = new BABYLON.Vector3(
+            entryLane * (boundX() - .8),
+            .08,
+            -ZOOM - entryOffset,
+        );
+        const visual = createDungeonBreakableVisualV39({
+            scene,
+            BABYLON,
+            name: `dungeon-breakable-${definition.id}`,
+            position,
+            style: definition.visualStyle || definition.visualId || 'ore_pod',
+            scale: definition.scale || 1,
+        });
+        const mesh = visual.mesh;
+        mesh.rotation.y = (stableSeed(dungeonSeedV38, definition.id) % 6284) / 1000;
+        mesh.isPickable = false;
 
-            const hpBg = new GUI.Rectangle(`dungeon-breakable-hp-bg-${definition.id}`);
-            hpBg.width = '62px';
-            hpBg.height = '7px';
-            hpBg.background = 'rgba(3,10,9,.88)';
-            hpBg.color = `${dungeonPresentationV39.palette.objective || '#ffd166'}99`;
-            hpBg.thickness = 1;
-            hpBg.cornerRadius = 4;
-            ui.addControl(hpBg);
-            hpBg.linkWithMesh(mesh);
-            hpBg.linkOffsetY = -38;
+        const hpBg = new GUI.Rectangle(`dungeon-breakable-hp-bg-${definition.id}`);
+        hpBg.width = '62px';
+        hpBg.height = '7px';
+        hpBg.background = 'rgba(3,10,9,.88)';
+        hpBg.color = `${dungeonPresentationV39.palette.objective || '#ffd166'}99`;
+        hpBg.thickness = 1;
+        hpBg.cornerRadius = 4;
+        ui.addControl(hpBg);
+        hpBg.linkWithMesh(mesh);
+        hpBg.linkOffsetY = -38;
 
-            const hpFill = new GUI.Rectangle(`dungeon-breakable-hp-fill-${definition.id}`);
-            hpFill.width = '100%';
-            hpFill.height = '100%';
-            hpFill.background = dungeonPresentationV39.breakable?.hpBarColor || '#ffd166';
-            hpFill.thickness = 0;
-            hpFill.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
-            hpBg.addControl(hpFill);
+        const hpFill = new GUI.Rectangle(`dungeon-breakable-hp-fill-${definition.id}`);
+        hpFill.width = '100%';
+        hpFill.height = '100%';
+        hpFill.background = dungeonPresentationV39.breakable?.hpBarColor || '#ffd166';
+        hpFill.thickness = 0;
+        hpFill.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+        hpBg.addControl(hpFill);
 
-            const maxHp = Math.max(1, Number(definition.hp) || 200);
-            dungeonBreakablesV38.push({
-                id: definition.id,
-                mesh,
-                visual,
-                hp: maxHp,
-                maxHp,
-                hpFill,
-                score: Math.max(0, Math.round(Number(definition.score) || 0)),
-                hitRadius: clamp(Number(definition.hitRadius) || 1.15, .7, 2.0),
-                objectiveRole: definition.objectiveRole || 'node',
-                disposeHud: () => {
-                    safeDisGui(hpFill);
-                    safeDisGui(hpBg);
-                },
-            });
-        }
+        const maxHp = Math.max(1, Number(definition.hp) || 200);
+        const item = {
+            id: definition.id,
+            mesh,
+            visual,
+            hp: maxHp,
+            maxHp,
+            hpFill,
+            score: Math.max(0, Math.round(Number(definition.score) || 0)),
+            hitRadius: clamp(Number(definition.hitRadius) || 1.15, .7, 2.0),
+            objectiveRole: definition.objectiveRole || 'node',
+            sequenceIndex: Number(definition.sequenceIndex) || 0,
+            targetPosition,
+            approachSpeed: clamp(Number(policy.approachSpeed) || .075, .025, .18),
+            anchorTolerance: clamp(Number(policy.anchorTolerance) || .12, .04, .5),
+            anchored: false,
+            spawnedAtMs: nowMs,
+            disposeHud: () => {
+                safeDisGui(hpFill);
+                safeDisGui(hpBg);
+            },
+        };
+        dungeonBreakablesV38.push(item);
+        updateDungeonObjectiveHudV39();
+        return item;
+    };
+
+    const startDungeonBreakableSequenceV394 = (definitions = [], nowMs = 0) => {
+        dungeonObjectiveSequenceV394 = createProgressiveObjectiveSequenceV394({
+            definitions,
+            policy: currentRoomV38?.objectiveRevealPolicy || {},
+            nowMs,
+        });
         updateDungeonObjectiveHudV39();
     };
 
     const startDungeonHazardV38 = (hazard, nowMs) => {
         activeDungeonHazardV38 = hazard ? {
             ...hazard,
-            nextTelegraphAtMs: nowMs + 360,
+            nextTelegraphAtMs: nowMs + 420,
             pending: null,
             spawnIndex: 0,
             remainingSpawns: Math.max(1, Math.trunc(Number(hazard.count) || 1)),
@@ -1180,32 +1315,31 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     const prepareDungeonHazardWarningV39 = (hazard, nowMs) => {
         if (!hazard || hazard.remainingSpawns <= 0 || hazard.pending) return null;
         const index = hazard.spawnIndex;
-        const laneSequence = [-.72, .58, -.18, .82, .24, -.52];
-        const laneNorm = laneSequence[index % laneSequence.length];
-        const warningMs = Math.max(500, Number(hazard.warningMs)
-            || Number(dungeonPresentationV39.hazard?.warningMs)
-            || 720);
+        const laneNorm = resolveDungeonHazardLaneNormV394({
+            seed: stableSeed(dungeonSeedV38, currentRoomV38?.id || 'room', hazard.id || 'hazard'),
+            index,
+        });
+        const cue = resolveDungeonHazardCueV394({
+            ...dungeonPresentationV39.hazard,
+            ...hazard,
+        });
         const warning = createDungeonHazardTelegraphV39({
             scene,
             BABYLON,
             name: `dungeon-hazard-warning-${currentWave}-${index}`,
             x: laneNorm * (boundX() - .65),
-            z: 0,
-            width: Number(hazard.warningWidth)
-                || Number(dungeonPresentationV39.hazard?.warningWidth)
-                || 1.55,
-            depth: Math.max(
-                Number(dungeonPresentationV39.hazard?.warningDepth) || 0,
-                ZOOM * 1.62,
-            ),
+            z: -ZOOM + .62,
+            width: cue.width,
+            depth: 0,
             colorHex: dungeonPresentationV39.palette.warning || '#ff8a32',
+            mode: cue.mode,
         });
-        dungeonHazardWarningsV39.push(warning);
+        if (cue.mode !== 'none') dungeonHazardWarningsV39.push(warning);
         hazard.pending = {
             index,
             laneNorm,
             warning,
-            spawnAtMs: nowMs + warningMs,
+            spawnAtMs: nowMs + cue.durationMs,
         };
         return hazard.pending;
     };
@@ -1215,8 +1349,15 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         const index = pending.index;
         hazard.spawnIndex += 1;
         hazard.remainingSpawns -= 1;
+        const motion = createNaturalHazardMotionV394({
+            seed: stableSeed(dungeonSeedV38, currentRoomV38?.id || 'room', hazard.id || 'hazard'),
+            index,
+            laneNorm: pending.laneNorm,
+            speed: Math.max(.035, Number(hazard.speed) || .075),
+            arenaHalfWidth: boundX(),
+        });
         const position = new BABYLON.Vector3(
-            pending.laneNorm * (boundX() - .65),
+            motion.baseX,
             .12,
             -ZOOM - 1.8,
         );
@@ -1236,11 +1377,12 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             dungeonHazardId: hazard.id || 'drifting_debris',
             destructible: combat.destructible,
             logicalHitRadius: combat.hitRadius,
+            movementPresentation: 'natural_drift_v394',
         };
         dungeonHazardsV38.push({
             mesh,
             visual,
-            velocityZ: Math.max(.035, Number(hazard.speed) || .075),
+            motion,
             rotationX: .010 + (index % 3) * .003,
             rotationY: .015 + (index % 2) * .004,
             rotationZ: .008 + (index % 4) * .002,
@@ -1279,7 +1421,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             return;
         }
         if (event.type === 'spawn_breakables') {
-            spawnDungeonBreakablesV38(event.breakables);
+            startDungeonBreakableSequenceV394(event.breakables, nowMs);
             return;
         }
         if (event.type === 'hazard_started') {
@@ -1927,6 +2069,35 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
        }
 
         if (dungeonParityV38) {
+            if (dungeonObjectiveSequenceV394) {
+                const sequenceStep = stepProgressiveObjectiveSequenceV394(dungeonObjectiveSequenceV394, {
+                    nowMs: now,
+                    activeIds: dungeonBreakablesV38.map(item => item.id),
+                });
+                for (const event of sequenceStep.events) {
+                    if (event.type === 'spawn_objective_node') {
+                        spawnDungeonBreakableNodeV394(event.definition, now);
+                    }
+                }
+                if (sequenceStep.events.length) updateDungeonObjectiveHudV39();
+            }
+
+            for (const item of dungeonBreakablesV38) {
+                if (item.anchored || !item.mesh || item.mesh.isDisposed()) continue;
+                const dx = item.targetPosition.x - item.mesh.position.x;
+                const dz = item.targetPosition.z - item.mesh.position.z;
+                const distance = Math.hypot(dx, dz);
+                const step = item.approachSpeed * frameFactor;
+                if (distance <= Math.max(item.anchorTolerance, step)) {
+                    item.mesh.position.copyFrom(item.targetPosition);
+                    item.anchored = true;
+                } else {
+                    item.mesh.position.x += dx / distance * step;
+                    item.mesh.position.z += dz / distance * step;
+                    item.mesh.rotation.y += .0035 * frameFactor;
+                }
+            }
+
             if (activeDungeonHazardV38) {
                 const activeHazard = activeDungeonHazardV38;
                 if (activeHazard.pending) {
@@ -1940,10 +2111,11 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                         activeHazard.pending = null;
                         if (activeHazard.remainingSpawns > 0) {
                             const interval = Math.max(900, Number(activeHazard.intervalMs) || 1800);
-                            const warningMs = Math.max(500, Number(activeHazard.warningMs)
-                                || Number(dungeonPresentationV39.hazard?.warningMs)
-                                || 720);
-                            activeHazard.nextTelegraphAtMs = now + Math.max(260, interval - warningMs);
+                            const cueMs = resolveDungeonHazardCueV394({
+                                ...dungeonPresentationV39.hazard,
+                                ...activeHazard,
+                            }).durationMs;
+                            activeHazard.nextTelegraphAtMs = now + Math.max(420, interval - cueMs);
                         } else {
                             activeDungeonHazardV38 = null;
                         }
@@ -1963,7 +2135,9 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                     x: hazard.mesh.position.x,
                     z: hazard.mesh.position.z,
                 };
-                hazard.mesh.position.z += hazard.velocityZ * frameFactor;
+                const hazardMotionStepV394 = advanceNaturalHazardMotionV394(hazard.motion, frameFactor);
+                hazard.mesh.position.x = hazardMotionStepV394.x;
+                hazard.mesh.position.z += hazardMotionStepV394.zDelta;
                 hazard.mesh.rotation.x += hazard.rotationX * frameFactor;
                 hazard.mesh.rotation.y += hazard.rotationY * frameFactor;
                 hazard.mesh.rotation.z += hazard.rotationZ * frameFactor;
@@ -2049,6 +2223,12 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                         debris.visual?.dispose?.();
                         safeDis(debris.mesh);
                         dungeonBreakablesV38.splice(debrisIndex, 1);
+                        if (dungeonObjectiveSequenceV394) {
+                            stepProgressiveObjectiveSequenceV394(dungeonObjectiveSequenceV394, {
+                                nowMs: now,
+                                activeIds: dungeonBreakablesV38.map(item => item.id),
+                            });
+                        }
                         updateDungeonObjectiveHudV39();
                     }
                     if (hit.consumed) {
@@ -2068,7 +2248,9 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 const directorStep = stepDungeonEncounterDirectorV38(dungeonDirectorV38, {
                     nowMs: now,
                     activeEnemyCount: enemies.length,
-                    activeBreakableCount: dungeonBreakablesV38.length,
+                    activeBreakableCount: currentRoomV38?.breakablesRequired
+                        ? getProgressiveObjectiveSnapshotV394(dungeonObjectiveSequenceV394).remainingCount
+                        : dungeonBreakablesV38.length,
                     bossAlive: Boolean(bossActive && bossMesh && !bossMesh.isDisposed()),
                     bossDefeated: bossDefeatedPulseV38,
                     maxSpawnEventsPerStep: 3,

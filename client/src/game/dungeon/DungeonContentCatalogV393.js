@@ -1,13 +1,13 @@
 import { ENEMY_ARCHETYPES_V2 } from '../combat/EnemyCombatCatalogV2.js';
 
 /**
- * Dungeon content catalog V3.9.3.
+ * Dungeon content catalog V3.9.4 (V3.9.3 compatibility module).
  *
  * This is the authoritative, data-only content schema for all present and future
  * dungeons. Runtime V3.8 consumes a compatibility projection so existing scene,
  * combat, QA and server-authority contracts do not need to be cloned per dungeon.
  */
-export const DUNGEON_CONTENT_CATALOG_VERSION = 'dungeon-content-catalog-v3.9.3';
+export const DUNGEON_CONTENT_CATALOG_VERSION = 'dungeon-content-catalog-v3.9.4';
 export const DUNGEON_CONTENT_SCHEMA_VERSION = 1;
 
 const freezeDeep = value => {
@@ -157,8 +157,12 @@ export const DUNGEON_HAZARD_PROFILES_V393 = freezeDeep({
     type: 'drifting_debris',
     count: 4,
     intervalMs: 1900,
-    warningMs: 720,
-    warningWidth: 1.55,
+    warningMode: 'edge_pulse',
+    entryCueMs: 280,
+    entryCueWidth: 1.05,
+    warningMs: 280,
+    warningWidth: 1.05,
+    naturalDrift: true,
     damage: 70,
     speed: .085,
     destructible: true,
@@ -202,10 +206,20 @@ export const DUNGEON_OBJECTIVE_PROFILES_V393 = freezeDeep({
       vi: 'Phá lõi xử lý và hai khoang hàng, đồng thời tiêu diệt lực lượng bảo vệ.',
       en: 'Destroy the processor core and both cargo pods, then clear the guards.',
     },
-    layoutId: 'staggered_triangle',
+    layoutId: 'progressive_salvage_route',
+    revealPolicy: {
+      mode: 'sequential_travel',
+      initialDelayMs: 700,
+      betweenNodesMs: 1450,
+      requirePreviousDestroyed: true,
+      entryDepthOffset: 2.2,
+      approachSpeed: .078,
+      anchorTolerance: .12,
+    },
     nodes: [
       {
         id: 'taurus_salvage_core',
+        sequenceIndex: 0,
         objectiveRole: 'primary',
         visualId: 'taurus_salvage_core',
         visualStyle: 'salvage_core',
@@ -218,6 +232,7 @@ export const DUNGEON_OBJECTIVE_PROFILES_V393 = freezeDeep({
       },
       {
         id: 'taurus_ore_pod_left',
+        sequenceIndex: 1,
         objectiveRole: 'satellite',
         visualId: 'taurus_ore_pod',
         visualStyle: 'ore_pod',
@@ -230,6 +245,7 @@ export const DUNGEON_OBJECTIVE_PROFILES_V393 = freezeDeep({
       },
       {
         id: 'taurus_power_cell_right',
+        sequenceIndex: 2,
         objectiveRole: 'satellite',
         visualId: 'taurus_power_cell',
         visualStyle: 'power_cell',
@@ -251,6 +267,10 @@ export const DUNGEON_OBJECTIVE_PROFILES_V393 = freezeDeep({
       en: 'Destroy three shield relays to expose the Oracle Core.',
     },
     layoutId: 'offset_arc',
+    revealPolicy: {
+      mode: 'sequential_travel', initialDelayMs: 650, betweenNodesMs: 1250,
+      requirePreviousDestroyed: true, entryDepthOffset: 2.1, approachSpeed: .074, anchorTolerance: .12,
+    },
     nodes: [
       { id: 'nereus_relay_left', visualId: 'nereus_shield_relay', visualStyle: 'shield_relay', laneNorm: -.60, depthNorm: -.12, hp: 420, score: 120, hitRadius: 1.10 },
       { id: 'nereus_relay_center', visualId: 'nereus_shield_relay', visualStyle: 'shield_relay', laneNorm: 0, depthNorm: -.42, hp: 520, score: 160, hitRadius: 1.22 },
@@ -266,6 +286,10 @@ export const DUNGEON_OBJECTIVE_PROFILES_V393 = freezeDeep({
       en: 'Destroy the space-time anchors before the rift stabilizes.',
     },
     layoutId: 'broken_triangle',
+    revealPolicy: {
+      mode: 'sequential_travel', initialDelayMs: 550, betweenNodesMs: 1100,
+      requirePreviousDestroyed: true, entryDepthOffset: 2.4, approachSpeed: .086, anchorTolerance: .13,
+    },
     nodes: [
       { id: 'abaddon_anchor_left', visualId: 'abaddon_rift_anchor', visualStyle: 'rift_anchor', laneNorm: -.58, depthNorm: -.30, hp: 680, score: 190, hitRadius: 1.18 },
       { id: 'abaddon_anchor_center', visualId: 'abaddon_rift_anchor', visualStyle: 'rift_anchor', laneNorm: .04, depthNorm: .20, hp: 760, score: 230, hitRadius: 1.28 },
@@ -481,6 +505,7 @@ function runtimeRoomFromContent(profile, definition) {
     objective: definition.objective || objectiveProfile?.instruction || null,
     objectiveType: objectiveProfile?.type || (template.runtimeKind === 'boss' ? 'defeat_boss' : 'clear_hostiles'),
     layoutId: objectiveProfile?.layoutId || null,
+    objectiveRevealPolicy: objectiveProfile?.revealPolicy || null,
     introMs: finite(definition.introMs, template.introMs),
     clearDelayMs: finite(definition.clearDelayMs, template.clearDelayMs),
     activeEnemyCap: Math.max(1, Math.trunc(finite(definition.activeEnemyCap, template.activeEnemyCap))),
@@ -571,9 +596,14 @@ export function auditDungeonContentCatalogV393() {
     const bossRoom = profile.rooms.find(room => room.id === structure.bossRoomId);
     if (bossRoom?.templateId !== 'boss') issues.push(`DUNGEON_BOSS_ROOM_TEMPLATE:${profile.id}`);
   }
-  const taurusNodes = DUNGEON_OBJECTIVE_PROFILES_V393.taurus_salvage_cluster.nodes;
+  const taurusObjective = DUNGEON_OBJECTIVE_PROFILES_V393.taurus_salvage_cluster;
+  const taurusNodes = taurusObjective.nodes;
   if (new Set(taurusNodes.map(node => node.visualStyle)).size < 3) issues.push('TAURUS_SALVAGE_VISUAL_VARIETY');
   if (new Set(taurusNodes.map(node => node.depthNorm)).size < 3) issues.push('TAURUS_SALVAGE_DEPTH_VARIETY');
   if (!taurusNodes.some(node => node.objectiveRole === 'primary')) issues.push('TAURUS_SALVAGE_PRIMARY');
+  if (taurusObjective.revealPolicy?.mode !== 'sequential_travel') issues.push('TAURUS_SALVAGE_PROGRESSIVE_REVEAL');
+  if (new Set(taurusNodes.map(node => node.sequenceIndex)).size !== taurusNodes.length) issues.push('TAURUS_SALVAGE_SEQUENCE');
+  const taurusHazard = DUNGEON_HAZARD_PROFILES_V393.taurus_scrap_lanes;
+  if (taurusHazard.warningMode !== 'edge_pulse' || taurusHazard.warningMs > 400) issues.push('TAURUS_HAZARD_NATURAL_ENTRY');
   return Object.freeze(issues);
 }
