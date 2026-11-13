@@ -50,6 +50,7 @@ import {
   CAMPAIGN_PROJECTILE_VISUAL_CATALOG_V32,
   resolveCampaignProjectileVisualV32,
 } from '../src/game/rendering/CampaignProjectileVisualV32.js';
+import { DUNGEON_PRESENTATION_FACTORY_VERSION } from '../src/game/rendering/DungeonPresentationFactoryV39.js';
 import {
   createCampaignEnemyCombatSlotRegistryV37,
   getCampaignEnemyCombatSlotV37,
@@ -111,8 +112,8 @@ test('Campaign Gameplay Foundation Lock RC1 is exact and drift-free', () => {
 });
 
 
-test('Dungeon V3.9.5 content catalog is modular, five-room and future-safe', () => {
-  assert.equal(DUNGEON_CONTENT_CATALOG_VERSION, 'dungeon-content-catalog-v3.9.5');
+test('Dungeon V3.9.7 content catalog is modular, production-authored and future-safe', () => {
+  assert.equal(DUNGEON_CONTENT_CATALOG_VERSION, 'dungeon-content-catalog-v3.9.7');
   assert.deepEqual(auditDungeonContentCatalogV393(), []);
   assert.deepEqual(Object.keys(DUNGEON_CONTENT_CATALOG_V393), [
     'dung_taurus', 'dung_nereus', 'dung_abaddon',
@@ -131,6 +132,9 @@ test('Dungeon V3.9.5 content catalog is modular, five-room and future-safe', () 
     assert.equal(profile.rooms.find(room => room.id === profile.runStructure.bossRoomId)?.templateId, 'boss');
     assert.equal(Object.keys(profile.visualSet.enemyByRole).length, 6);
     assert.equal(resolveDungeonVisualAssetRefsV393(profile.id).length, 4);
+    assert.equal(profile.qaReady, true);
+    assert.ok(profile.productionProfile?.combatIdentity?.vi);
+    assert.ok(profile.productionProfile?.recommendedPower > 0);
   }
   assert.ok(DUNGEON_CONTENT_CATALOG_V393.dung_nereus.difficultyRank
     > DUNGEON_CONTENT_CATALOG_V393.dung_taurus.difficultyRank);
@@ -149,12 +153,14 @@ test('Dungeon V3.9.5 content catalog is modular, five-room and future-safe', () 
   assert.deepEqual(cluster.nodes.map(node => node.sequenceIndex), [0, 1, 2]);
 });
 
-test('Dungeon V3.8 catalog exposes one enabled Taurus vertical slice and two briefs', () => {
+test('Dungeon V3.9.7 keeps production availability isolated while all three profiles are QA-runnable', () => {
   assert.equal(DUNGEON_PARITY_FOUNDATION_VERSION, 'dungeon-parity-foundation-v3.8.0');
   assert.deepEqual(auditDungeonEncounterCatalogV38(), []);
   assert.equal(isDungeonParityFoundationEnabledV38({ dungeonId: 'dung_taurus' }), true);
   assert.equal(isDungeonParityFoundationEnabledV38({ dungeonId: 'dung_nereus' }), false);
   assert.equal(isDungeonParityFoundationEnabledV38({ dungeonId: 'dung_abaddon' }), false);
+  assert.equal(isDungeonParityFoundationEnabledV38({ dungeonId: 'dung_nereus', qaEnabled: true }), true);
+  assert.equal(isDungeonParityFoundationEnabledV38({ dungeonId: 'dung_abaddon', qaEnabled: true }), true);
   assert.equal(isDungeonParityFoundationEnabledV38({ dungeonId: 'dung_unknown' }), false);
   const taurus = resolveDungeonRuntimeProfileV38('dung_taurus');
   assert.equal(taurus.rooms.length, 5);
@@ -165,8 +171,12 @@ test('Dungeon V3.8 catalog exposes one enabled Taurus vertical slice and two bri
   assert.equal(salvage.breakables.length, 3);
   const bossRoom = taurus.rooms.at(-1);
   assert.equal(bossRoom.boss.sharedBossProfileId, 'alpha_mech_sentinel');
-  assert.equal(DUNGEON_RUNTIME_PROFILES_V38.dung_nereus.status, 'catalog_ready');
-  assert.equal(DUNGEON_RUNTIME_PROFILES_V38.dung_abaddon.status, 'catalog_ready');
+  assert.equal(DUNGEON_RUNTIME_PROFILES_V38.dung_nereus.status, 'production_candidate');
+  assert.equal(DUNGEON_RUNTIME_PROFILES_V38.dung_abaddon.status, 'production_candidate');
+  assert.equal(DUNGEON_RUNTIME_PROFILES_V38.dung_nereus.enabledByDefault, false);
+  assert.equal(DUNGEON_RUNTIME_PROFILES_V38.dung_abaddon.enabledByDefault, false);
+  assert.equal(DUNGEON_RUNTIME_PROFILES_V38.dung_nereus.rooms.length, 5);
+  assert.equal(DUNGEON_RUNTIME_PROFILES_V38.dung_abaddon.rooms.length, 5);
 });
 
 test('Dungeon room plans are deterministic, bounded and catalog-valid', () => {
@@ -304,9 +314,11 @@ test('Dungeon Boss adapter binds Taurus to shared XState arsenal and scales proj
   assert.equal(projectile.visualId, 'dungeon_taurus_drill_lance');
 });
 
-test('Dungeon V3.9 presentation resolves production Taurus identity without changing combat authority', () => {
+test('Dungeon V3.9.7 presentation resolves all authored Dungeon identities without changing combat authority', () => {
   assert.equal(DUNGEON_PRODUCTION_PRESENTATION_VERSION,
-    'dungeon-production-presentation-v3.9.5');
+    'dungeon-production-presentation-v3.9.7');
+  assert.equal(DUNGEON_PRESENTATION_FACTORY_VERSION,
+    'dungeon-presentation-factory-v3.9.7');
   assert.deepEqual(auditDungeonPresentationV39(), []);
   const profile = resolveDungeonPresentationV39('dung_taurus');
   assert.equal(profile.boss.visualAssetId, 'dung_taurus_boss');
@@ -324,6 +336,13 @@ test('Dungeon V3.9 presentation resolves production Taurus identity without chan
   });
   assert.equal(pattern.patternId, 'taurus_foundry_overdrive');
   assert.equal(pattern.visualId, 'dungeon_taurus_overdrive');
+  for (const dungeonId of ['dung_nereus', 'dung_abaddon']) {
+    const candidate = resolveDungeonPresentationV39(dungeonId);
+    assert.equal(candidate.status, 'production_candidate');
+    assert.ok(candidate.backdrop?.layers?.length >= 3);
+    assert.ok(candidate.hazard?.telegraphProfile);
+    assert.ok(candidate.roomObjectives?.boss?.vi);
+  }
   for (const visualId of [
     'dungeon_taurus_drill_lance',
     'dungeon_taurus_ore_cutter',
@@ -485,6 +504,8 @@ test('DungeonScene integrates parity director, required objectives and shared Bo
   assert.match(source, /remainingSpawns/);
   assert.match(source, /clearDungeonHostileProjectilesV38/);
   assert.match(source, /createDungeonHazardTelegraphV39/);
+  assert.match(source, /dungeonPresentationV39\.backdrop\?\.style/);
+  assert.match(source, /dungeonPresentationV39\.hazard\?\.style/);
   assert.match(source, /resolveDungeonHazardCueV394/);
   assert.match(source, /advanceNaturalHazardMotionV394/);
   assert.match(source, /stepProgressiveObjectiveSequenceV394/);
@@ -509,8 +530,8 @@ test('DungeonScene integrates parity director, required objectives and shared Bo
 });
 
 
-test('Dungeon HUD V3.9.6 is catalog-driven, presentation-only and future-safe', () => {
-  assert.equal(DUNGEON_HUD_CATALOG_VERSION, 'dungeon-hud-catalog-v3.9.6');
+test('Dungeon HUD V3.9.7 is catalog-driven, baseline-aligned and future-safe', () => {
+  assert.equal(DUNGEON_HUD_CATALOG_VERSION, 'dungeon-hud-catalog-v3.9.7');
   assert.deepEqual(auditDungeonHudCatalogV396(), []);
   assert.deepEqual(
     Object.keys(DUNGEON_HUD_PROFILES_V396).sort(),
@@ -520,7 +541,8 @@ test('Dungeon HUD V3.9.6 is catalog-driven, presentation-only and future-safe', 
   assert.equal(taurus.shortCode, 'TAURUS');
   assert.equal(taurus.layout.publishIntervalMs, 100);
   assert.equal(taurus.layout.maxRoomMarkers, DUNGEON_HUD_MAX_VISIBLE_ROOM_MARKERS_V396);
-  assert.equal(taurus.layout.reservedTopPx, 208);
+  assert.equal(taurus.layout.reservedTopPx, 224);
+  assert.equal(taurus.layout.alignmentContract, 'shared-baseline-v397');
   const phoneLine = resolveDungeonHudOcclusionLineV396({
     dungeonId: 'dung_taurus', worldHalfHeight: 15, viewportHeight: 852,
   });
@@ -582,7 +604,7 @@ test('Dungeon HUD objective adapter keeps hostile, node and Boss progress semant
   assert.equal(complete.ratio, 1);
 });
 
-test('Dungeon HUD V3.9.6 owns fixed presentation while Babylon retains world-space UI', () => {
+test('Dungeon HUD V3.9.7 owns fixed presentation while Babylon retains world-space UI', () => {
   const engineSource = fs.readFileSync(new URL('../src/components/Dungeon/DungeonEngine.jsx', import.meta.url), 'utf8');
   const sceneSource = fs.readFileSync(new URL('../src/components/Dungeon/DungeonScene.js', import.meta.url), 'utf8');
   const hudSource = fs.readFileSync(new URL('../src/ui-system/DungeonHudV396.jsx', import.meta.url), 'utf8');
@@ -595,14 +617,19 @@ test('Dungeon HUD V3.9.6 owns fixed presentation while Babylon retains world-spa
   assert.match(sceneSource, /externalHudV396/);
   assert.match(sceneSource, /publishDungeonHudV396/);
   assert.match(sceneSource, /publishIntervalMs/);
+  assert.match(sceneSource, /buildDungeonQaCampaignDataV397/);
+  assert.match(sceneSource, /qaLoadoutLabel/);
   assert.match(sceneSource, /topBar\.isVisible = !externalHudV396/);
   assert.match(sceneSource, /objectivePanel\.isVisible = !externalHudV396/);
   assert.match(hudSource, /RoomRail/);
+  assert.match(hudSource, /qaLoadoutLabel/);
   assert.match(hudSource, /objectiveMode === 'boss'/);
   assert.match(cssSource, /--sf-native-battle-hud-top/);
   assert.match(cssSource, /env\(safe-area-inset-left/);
   assert.match(cssSource, /pointer-events:\s*none/);
   assert.match(cssSource, /\.retreatAction[\s\S]*pointer-events:\s*auto/);
+  assert.match(cssSource, /shared-baseline fixed-screen production presentation/);
+  assert.match(cssSource, /\.qaBadge[\s\S]*width:\s*min\(89%, 620px\)/);
 });
 
 test('Dungeon HUD room metadata is localized and derived from authored content', () => {

@@ -556,7 +556,7 @@
     .statusBadge.open { animation: none; }
     .card, .bgImage, .playBtn { transition: none; }
   }
-/* Dungeon QA V3.9.1 — isolated local test harness */
+/* Dungeon QA V3.9.7 — isolated full-content/loadout test harness */
 .qaBanner {
   display: flex;
   align-items: center;
@@ -588,18 +588,27 @@
   line-height: 1.35;
 }
 
-.qaRoomPicker {
+.qaControlGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.qaRoomPicker,
+.qaLoadoutPicker {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-bottom: 10px;
+  min-width: 0;
   color: #facc15;
   font-family: 'Share Tech Mono', monospace;
   font-size: 10px;
   letter-spacing: 0.12em;
 }
 
-.qaRoomPicker select {
+.qaRoomPicker select,
+.qaLoadoutPicker select {
   width: 100%;
   min-height: 38px;
   padding: 8px 10px;
@@ -611,12 +620,41 @@
   letter-spacing: 0.04em;
 }
 
-.qaPreviewNote {
+.qaRoomPicker select:focus-visible,
+.qaLoadoutPicker select:focus-visible {
+  outline: 2px solid rgba(250, 204, 21, 0.82);
+  outline-offset: 2px;
+}
+
+.qaLoadoutSummary {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 7px;
+  padding: 8px 10px;
+  border: 1px solid rgba(34, 211, 238, 0.26);
+  border-radius: 7px;
+  background: linear-gradient(90deg, rgba(8, 47, 73, 0.42), rgba(3, 19, 34, 0.7));
+  font-family: 'Share Tech Mono', monospace;
+}
+
+.qaLoadoutSummary strong {
+  color: #a5f3fc;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.qaLoadoutSummary span {
+  color: #dbeafe;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.qaProductionNote {
   margin-bottom: 10px;
   padding: 8px 10px;
-  border-left: 3px solid #f59e0b;
-  background: rgba(245, 158, 11, 0.08);
-  color: #fcd34d;
+  border-left: 3px solid #22d3ee;
+  background: rgba(8, 145, 178, 0.09);
+  color: #bae6fd;
   font-family: 'Share Tech Mono', monospace;
   font-size: 11px;
   line-height: 1.35;
@@ -624,5 +662,7 @@
 
 @media (max-width: 768px) and (orientation: portrait) {
   .qaBanner { font-size: 11px; margin-bottom: 10px; }
-  .qaRoomPicker select { min-height: 42px; }
+  .qaControlGrid { grid-template-columns: 1fr; gap: 7px; }
+  .qaRoomPicker select,
+  .qaLoadoutPicker select { min-height: 42px; }
 }

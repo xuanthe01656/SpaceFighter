@@ -1,13 +1,13 @@
 import { ENEMY_ARCHETYPES_V2 } from '../combat/EnemyCombatCatalogV2.js';
 
 /**
- * Dungeon content catalog V3.9.5 (V3.9.3 compatibility module).
+ * Dungeon content catalog V3.9.7 (V3.9.3 compatibility module).
  *
  * This is the authoritative, data-only content schema for all present and future
  * dungeons. Runtime V3.8 consumes a compatibility projection so existing scene,
  * combat, QA and server-authority contracts do not need to be cloned per dungeon.
  */
-export const DUNGEON_CONTENT_CATALOG_VERSION = 'dungeon-content-catalog-v3.9.5';
+export const DUNGEON_CONTENT_CATALOG_VERSION = 'dungeon-content-catalog-v3.9.7';
 export const DUNGEON_CONTENT_SCHEMA_VERSION = 1;
 
 const freezeDeep = value => {
@@ -280,9 +280,9 @@ export const DUNGEON_OBJECTIVE_PROFILES_V393 = freezeDeep({
       reentryDelayMs: 840, passLaneShiftNorm: .10, anchorTolerance: .12,
     },
     nodes: [
-      { id: 'nereus_relay_left', visualId: 'nereus_shield_relay', visualStyle: 'shield_relay', laneNorm: -.60, depthNorm: -.12, hp: 420, score: 120, hitRadius: 1.10 },
-      { id: 'nereus_relay_center', visualId: 'nereus_shield_relay', visualStyle: 'shield_relay', laneNorm: 0, depthNorm: -.42, hp: 520, score: 160, hitRadius: 1.22 },
-      { id: 'nereus_relay_right', visualId: 'nereus_shield_relay', visualStyle: 'shield_relay', laneNorm: .60, depthNorm: .08, hp: 420, score: 120, hitRadius: 1.10 },
+      { id: 'nereus_relay_left', sequenceIndex: 0, objectiveRole: 'relay', visualId: 'nereus_shield_relay', visualStyle: 'shield_relay', laneNorm: -.60, depthNorm: -.12, hp: 460, score: 130, scale: .96, hitRadius: 1.10 },
+      { id: 'nereus_relay_center', sequenceIndex: 1, objectiveRole: 'primary', visualId: 'nereus_shield_relay', visualStyle: 'shield_relay', laneNorm: 0, depthNorm: -.42, hp: 620, score: 180, scale: 1.12, hitRadius: 1.24 },
+      { id: 'nereus_relay_right', sequenceIndex: 2, objectiveRole: 'relay', visualId: 'nereus_shield_relay', visualStyle: 'shield_relay', laneNorm: .60, depthNorm: .08, hp: 460, score: 130, scale: .96, hitRadius: 1.10 },
     ],
   },
   abaddon_rift_anchors: {
@@ -301,9 +301,9 @@ export const DUNGEON_OBJECTIVE_PROFILES_V393 = freezeDeep({
       reentryDelayMs: 720, passLaneShiftNorm: .15, anchorTolerance: .13,
     },
     nodes: [
-      { id: 'abaddon_anchor_left', visualId: 'abaddon_rift_anchor', visualStyle: 'rift_anchor', laneNorm: -.58, depthNorm: -.30, hp: 680, score: 190, hitRadius: 1.18 },
-      { id: 'abaddon_anchor_center', visualId: 'abaddon_rift_anchor', visualStyle: 'rift_anchor', laneNorm: .04, depthNorm: .20, hp: 760, score: 230, hitRadius: 1.28 },
-      { id: 'abaddon_anchor_right', visualId: 'abaddon_rift_anchor', visualStyle: 'rift_anchor', laneNorm: .62, depthNorm: -.06, hp: 680, score: 190, hitRadius: 1.18 },
+      { id: 'abaddon_anchor_left', sequenceIndex: 0, objectiveRole: 'anchor', visualId: 'abaddon_rift_anchor', visualStyle: 'rift_anchor', laneNorm: -.58, depthNorm: -.30, hp: 740, score: 210, scale: 1.02, hitRadius: 1.20 },
+      { id: 'abaddon_anchor_center', sequenceIndex: 1, objectiveRole: 'primary', visualId: 'abaddon_rift_anchor', visualStyle: 'rift_anchor', laneNorm: .04, depthNorm: .20, hp: 900, score: 270, scale: 1.18, hitRadius: 1.32 },
+      { id: 'abaddon_anchor_right', sequenceIndex: 2, objectiveRole: 'anchor', visualId: 'abaddon_rift_anchor', visualStyle: 'rift_anchor', laneNorm: .62, depthNorm: -.06, hp: 740, score: 210, scale: 1.02, hitRadius: 1.20 },
     ],
   },
 });
@@ -329,6 +329,7 @@ const visualSet = dungeonId => freezeDeep({
 
 const dungeon = ({
   id, status, enabledByDefault, difficultyRank, theme, enemyStats, rooms, tags = [],
+  qaReady = false, productionProfile = null,
   runStructure = {}, visualSet: explicitVisualSet = null,
 }) => freezeDeep({
   schemaVersion: DUNGEON_CONTENT_SCHEMA_VERSION,
@@ -336,9 +337,11 @@ const dungeon = ({
   id,
   status,
   enabledByDefault,
+  qaReady: Boolean(qaReady),
   difficultyRank,
   theme,
   tags,
+  productionProfile: productionProfile ? freezeDeep(productionProfile) : null,
   runStructure: {
     mode: runStructure.mode || 'linear',
     minimumRooms: Math.max(1, Math.trunc(finite(runStructure.minimumRooms, 3))),
@@ -357,9 +360,17 @@ export const DUNGEON_CONTENT_CATALOG_V393 = freezeDeep({
     id: 'dung_taurus',
     status: 'vertical_slice',
     enabledByDefault: true,
+    qaReady: true,
     difficultyRank: 1,
     theme: 'salvage_belt',
     tags: ['resource', 'pirates', 'industrial'],
+    productionProfile: {
+      operation: { vi: 'THU HỒI VÀNH ĐAI', en: 'BELT RECOVERY' },
+      combatIdentity: { vi: 'Cơ bản · phế liệu trôi · hải tặc', en: 'Foundation · drifting debris · pirates' },
+      recommendedPower: 2600,
+      defaultQaLoadoutPresetId: 'assault_mk3',
+      validationFocus: ['hazard_drift', 'sequential_objectives', 'boss_foundry_patterns'],
+    },
     runStructure: { minimumRooms: 5, maximumRooms: 8, recommendedRooms: 5, entryRoomId: 'taurus_entry', bossRoomId: 'taurus_boss' },
     enemyStats: {
       baseHp: 105, baseSpeed: .042, hpMultiplier: .92, damageMultiplier: .88,
@@ -403,11 +414,19 @@ export const DUNGEON_CONTENT_CATALOG_V393 = freezeDeep({
 
   dung_nereus: dungeon({
     id: 'dung_nereus',
-    status: 'catalog_ready',
+    status: 'production_candidate',
     enabledByDefault: false,
+    qaReady: true,
     difficultyRank: 2,
     theme: 'shielded_ai_core',
     tags: ['technology', 'ai', 'shield-control'],
+    productionProfile: {
+      operation: { vi: 'XÂM NHẬP LÕI NEREUS', en: 'NEREUS CORE INCURSION' },
+      combatIdentity: { vi: 'Khống chế · dòng ion · đội hình khiên', en: 'Control · ion currents · shield formations' },
+      recommendedPower: 5200,
+      defaultQaLoadoutPresetId: 'control_mk3',
+      validationFocus: ['ion_lane_readability', 'shield_relay_sequence', 'support_artillery_pressure', 'oracle_boss'],
+    },
     runStructure: { minimumRooms: 5, maximumRooms: 10, recommendedRooms: 5, entryRoomId: 'nereus_entry', bossRoomId: 'nereus_oracle' },
     enemyStats: {
       baseHp: 145, baseSpeed: .046, hpMultiplier: 1.18, damageMultiplier: 1.12,
@@ -422,8 +441,8 @@ export const DUNGEON_CONTENT_CATALOG_V393 = freezeDeep({
       {
         id: 'nereus_current_lanes', templateId: 'hazard_clear', encounterPackId: 'nereus_current_guard',
         hazardId: 'nereus_ion_currents',
-        title: { vi: 'DÒNG ION', en: 'ION CURRENTS' },
-        objective: { vi: 'Tránh dòng ion và phá đội tuần tra.', en: 'Avoid the ion currents and clear the patrol.' },
+        title: { vi: 'HÀNH LANG DÒNG ION', en: 'ION CURRENT CORRIDOR' },
+        objective: { vi: 'Đọc nhịp dòng ion, đổi làn và phá đội tuần tra.', en: 'Read the ion cadence, change lanes and clear the patrol.' },
       },
       {
         id: 'nereus_shield_grid', templateId: 'destroy_nodes', encounterPackId: 'nereus_shield_lattice',
@@ -442,7 +461,7 @@ export const DUNGEON_CONTENT_CATALOG_V393 = freezeDeep({
         boss: {
           id: 'nereus_oracle_core', dungeonId: 'dung_nereus', visualAssetId: 'dung_nereus_boss',
           displayName: { vi: 'MẮT THẦN ORACLE', en: 'THE ORACLE CORE' },
-          sharedBossProfileId: 'cryo_mech_warden', hp: 13600,
+          sharedBossProfileId: 'cryo_mech_warden', hp: 14200,
           damageMultiplier: 1.08, projectileSpeedMultiplier: 1.10,
         },
       },
@@ -451,11 +470,19 @@ export const DUNGEON_CONTENT_CATALOG_V393 = freezeDeep({
 
   dung_abaddon: dungeon({
     id: 'dung_abaddon',
-    status: 'catalog_ready',
+    status: 'production_candidate',
     enabledByDefault: false,
+    qaReady: true,
     difficultyRank: 3,
     theme: 'rift_survival',
     tags: ['rift', 'survival', 'biomech'],
+    productionProfile: {
+      operation: { vi: 'PHONG TỎA KHE NỨT', en: 'RIFT CONTAINMENT' },
+      combatIdentity: { vi: 'Sinh tồn · xé trọng lực · bầy lai tạp', en: 'Survival · gravity shear · biomech swarm' },
+      recommendedPower: 8800,
+      defaultQaLoadoutPresetId: 'fortress_mk4',
+      validationFocus: ['gravity_lane_pressure', 'rift_anchor_sequence', 'elite_swarm_density', 'leviathan_boss'],
+    },
     runStructure: { minimumRooms: 5, maximumRooms: 12, recommendedRooms: 5, entryRoomId: 'abaddon_entry', bossRoomId: 'abaddon_leviathan' },
     enemyStats: {
       baseHp: 190, baseSpeed: .052, hpMultiplier: 1.42, damageMultiplier: 1.38,
@@ -470,8 +497,8 @@ export const DUNGEON_CONTENT_CATALOG_V393 = freezeDeep({
       {
         id: 'abaddon_gravity_shear', templateId: 'hazard_clear', encounterPackId: 'abaddon_gravity_assault',
         hazardId: 'abaddon_gravity_shear',
-        title: { vi: 'XÉ TRỌNG LỰC', en: 'GRAVITY SHEAR' },
-        objective: { vi: 'Sống sót qua các dải trọng lực và tiêu diệt địch.', en: 'Survive the gravity lanes and eliminate the swarm.' },
+        title: { vi: 'HÀNH LANG XÉ TRỌNG LỰC', en: 'GRAVITY SHEAR CORRIDOR' },
+        objective: { vi: 'Giữ hành lang, tránh dải xé và tiêu diệt bầy áp sát.', en: 'Hold the corridor, evade shear lanes and destroy the closing swarm.' },
       },
       {
         id: 'abaddon_rift', templateId: 'destroy_nodes', encounterPackId: 'abaddon_rift_anchor_guard',
@@ -490,7 +517,7 @@ export const DUNGEON_CONTENT_CATALOG_V393 = freezeDeep({
         boss: {
           id: 'abaddon_leviathan', dungeonId: 'dung_abaddon', visualAssetId: 'dung_abaddon_boss',
           displayName: { vi: 'LEVIATHAN LAI TẠP', en: 'BIOMECH LEVIATHAN' },
-          sharedBossProfileId: 'inferno_alien_demon', hp: 22000,
+          sharedBossProfileId: 'inferno_alien_demon', hp: 23500,
           damageMultiplier: 1.22, projectileSpeedMultiplier: 1.18,
         },
       },
@@ -605,6 +632,26 @@ export function auditDungeonContentCatalogV393() {
     if (!roomIds.has(structure.bossRoomId)) issues.push(`DUNGEON_BOSS_ROOM:${profile.id}`);
     const bossRoom = profile.rooms.find(room => room.id === structure.bossRoomId);
     if (bossRoom?.templateId !== 'boss') issues.push(`DUNGEON_BOSS_ROOM_TEMPLATE:${profile.id}`);
+  }
+  const qaCandidates = ['dung_taurus', 'dung_nereus', 'dung_abaddon'];
+  for (const id of qaCandidates) {
+    const profile = DUNGEON_CONTENT_CATALOG_V393[id];
+    if (!profile?.qaReady || profile.rooms.length !== 5 || !profile.productionProfile?.defaultQaLoadoutPresetId) {
+      issues.push(`DUNGEON_PRODUCTION_QA_PROFILE:${id}`);
+    }
+  }
+  for (const id of ['dung_nereus', 'dung_abaddon']) {
+    const profile = DUNGEON_CONTENT_CATALOG_V393[id];
+    if (profile.enabledByDefault !== false || profile.status !== 'production_candidate') {
+      issues.push(`DUNGEON_PRODUCTION_CANDIDATE_ISOLATION:${id}`);
+    }
+  }
+  for (const objectiveId of ['nereus_shield_lattice', 'abaddon_rift_anchors']) {
+    const nodes = DUNGEON_OBJECTIVE_PROFILES_V393[objectiveId]?.nodes || [];
+    if (nodes.length !== 3 || new Set(nodes.map(node => node.sequenceIndex)).size !== nodes.length
+      || !nodes.some(node => node.objectiveRole === 'primary')) {
+      issues.push(`DUNGEON_OBJECTIVE_PRODUCTION_SEQUENCE:${objectiveId}`);
+    }
   }
   const taurusObjective = DUNGEON_OBJECTIVE_PROFILES_V393.taurus_salvage_cluster;
   const taurusNodes = taurusObjective.nodes;

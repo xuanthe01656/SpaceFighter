@@ -1,5 +1,5 @@
 /**
- * SpaceFighter Dungeon HUD V3.9.6.
+ * SpaceFighter Dungeon HUD V3.9.7 (V3.9.6 compatibility component).
  *
  * React owns all fixed-screen Dungeon presentation. Babylon retains world-space
  * health bars, hit text and combat visuals. This component never mutates combat,
@@ -42,6 +42,7 @@ export const EMPTY_DUNGEON_HUD_STATE_V396 = Object.freeze({
   bossMaxHp: null,
   roomComplete: false,
   qaLabel: null,
+  qaLoadoutLabel: null,
 });
 
 function DungeonFrame() {
@@ -127,7 +128,7 @@ export default function DungeonHudV396({
   };
 
   return <>
-    <header className={`${styles.hud} ${lowArmor ? styles.lowArmor : ''}`} style={style}
+    <header className={`${styles.hud} ${lowArmor ? styles.lowArmor : ''} ${state.qaLabel ? styles.qaActive : ''}`} style={style}
       aria-label={vi ? 'Thông tin phó bản' : 'Dungeon battle information'}>
       <DungeonFrame />
       <div className={styles.shell}>
@@ -174,7 +175,12 @@ export default function DungeonHudV396({
         <RoomRail markers={state.roomMarkers || []} />
       </section>
 
-      {state.qaLabel && <div className={styles.qaBadge}>{state.qaLabel} · NO REWARDS</div>}
+      {state.qaLabel && <div className={styles.qaBadge}
+        aria-label={`${state.qaLabel}${state.qaLoadoutLabel ? ` · ${state.qaLoadoutLabel}` : ''} · NO REWARDS · NO WRITES`}>
+        <strong>{state.qaLabel}</strong>
+        {state.qaLoadoutLabel && <span>{state.qaLoadoutLabel}</span>}
+        <em>{vi ? 'KHÔNG THƯỞNG · KHÔNG GHI DỮ LIỆU' : 'NO REWARDS · NO WRITES'}</em>
+      </div>}
 
       <section className={`${styles.objectiveCard} ${styles[`objective_${state.roomTone || 'standard'}`] || ''}`}
         aria-label={vi ? 'Mục tiêu hiện tại' : 'Current objective'}>

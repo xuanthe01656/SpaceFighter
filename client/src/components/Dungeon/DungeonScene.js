@@ -89,6 +89,10 @@ import {
 } from '../../game/dungeon/DungeonPresentationV39.js';
 import { isDungeonQaRunV391 } from '../../game/dungeon/DungeonQaAccessV391.js';
 import {
+    buildDungeonQaCampaignDataV397,
+    getDungeonQaLoadoutLabelV397,
+} from '../../game/dungeon/DungeonQaLoadoutV397.js';
+import {
     buildDungeonRoomMarkersV396,
     resolveDungeonHudOcclusionLineV396,
     resolveDungeonHudProfileV396,
@@ -196,6 +200,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     const dungeonParityV38 = isDungeonParityFoundationEnabledV38({
         dungeonId,
         envEnabled: import.meta.env?.VITE_SF_DUNGEON_PARITY_V38 !== 'false',
+        qaEnabled: Boolean(dungeonQaRunV391),
     });
     const dungeonRuntimeProfileV38 = resolveDungeonRuntimeProfileV38(dungeonId);
     const dungeonPresentationV39 = resolveDungeonPresentationV39(dungeonId);
@@ -246,7 +251,11 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             endAfterRoomIndex: dungeonQaRunV391?.singleRoom ? qaStartRoomIndexV391 : null,
         })
         : null;
-    const combat = deriveBattleLoadout(gsRef.current.campaignData, { PILOTS, AIRCRAFTS, GEAR_CATALOG },
+    const dungeonCampaignDataV397 = buildDungeonQaCampaignDataV397(
+        gsRef.current.campaignData,
+        dungeonQaRunV391,
+    );
+    const combat = deriveBattleLoadout(dungeonCampaignDataV397, { PILOTS, AIRCRAFTS, GEAR_CATALOG },
       {mode:'dungeon', location:dungeonConfig});
     const passives = createBattlePassiveState(combat.stats, Date.now());
     const { stats, pilotBase, aircraftBase } = combat;
@@ -358,6 +367,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             worldHalfHeight: ZOOM,
             count: dungeonPresentationV39.backdrop?.decorativeDebrisCount || 0,
             scrollSpeed: dungeonPresentationV39.backdrop?.scrollSpeed || .014,
+            style: dungeonPresentationV39.backdrop?.style || 'salvage_belt',
         })
         : null;
     // Developer-only measurement: ?bgPerf=1; no mission or wallet writes.
@@ -1384,7 +1394,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             x: laneNorm * (boundX() - .65),
             z: -ZOOM + .62,
             width: cue.width,
-            depth: 0,
+            depth: dungeonPresentationV39.hazard?.warningDepth || 0,
             colorHex: dungeonPresentationV39.palette.warning || '#ff8a32',
             mode: cue.mode,
         });
@@ -1421,6 +1431,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             name: `dungeon-hazard-${++dungeonHazardSequenceV38}`,
             position,
             variant: index,
+            style: dungeonPresentationV39.hazard?.style || 'drifting_scrap',
         });
         const mesh = visual.mesh;
         const combat = resolveDungeonHazardCombatV392(hazard);
@@ -1827,7 +1838,9 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             || currentBossSpecV38?.displayName?.vi
             || currentBossSpecV38?.displayName?.en
             || '';
-        const directQaLabel = dungeonQaRunV391?.directRoomId || dungeonQaRunV391?.runtimeMode || '';
+        const directQaLabel = dungeonQaRunV391?.directRoomId
+            ? `${lang === 'vi' ? 'PHÒNG' : 'ROOM'} ${roomIndex + 1}`
+            : (lang === 'vi' ? 'TOÀN BỘ' : 'FULL RUN');
 
         onHudUpdate({
             dungeonId,
@@ -1858,6 +1871,9 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             roomComplete: currentRoomCompleteV396,
             qaLabel: dungeonQaRunV391
                 ? `${dungeonHudProfileV396.qaLabel}${directQaLabel ? ` · ${directQaLabel}` : ''}`
+                : null,
+            qaLoadoutLabel: dungeonQaRunV391
+                ? getDungeonQaLoadoutLabelV397(dungeonQaRunV391.loadoutPresetId, lang)
                 : null,
         });
     };

@@ -55,7 +55,7 @@ const HUD_COMPARE_KEYS_V396 = Object.freeze([
   'roomId', 'roomTitle', 'roomKind', 'roomKindLabel', 'roomTone', 'objectiveTitle',
   'objectiveBody', 'objectiveMode', 'objectiveLabel', 'objectiveValue',
   'objectiveSecondary', 'objectiveRatio', 'bossName', 'bossHp', 'bossMaxHp',
-  'roomComplete', 'qaLabel', 'roomMarkerSignature',
+  'roomComplete', 'qaLabel', 'qaLoadoutLabel', 'roomMarkerSignature',
 ]);
 const sameDungeonHudStateV396 = (previous, next) => HUD_COMPARE_KEYS_V396
   .every(key => previous?.[key] === next?.[key]);

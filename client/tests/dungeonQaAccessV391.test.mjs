@@ -13,6 +13,13 @@ import {
   resolveDungeonQaAccessV391,
 } from '../src/game/dungeon/DungeonQaAccessV391.js';
 import {
+  DUNGEON_QA_DEFAULT_LOADOUT_PRESET_ID_V397,
+  DUNGEON_QA_LOADOUT_VERSION,
+  auditDungeonQaLoadoutsV397,
+  buildDungeonQaCampaignDataV397,
+  listDungeonQaLoadoutPresetsV397,
+} from '../src/game/dungeon/DungeonQaLoadoutV397.js';
+import {
   createDungeonEncounterDirectorV38,
   stepDungeonEncounterDirectorV38,
 } from '../src/game/dungeon/DungeonEncounterDirectorV38.js';
@@ -21,20 +28,22 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
 const read = relative => fs.readFileSync(path.join(repo, relative), 'utf8').replace(/\r\n/g, '\n');
 
-test('Dungeon QA V3.9.1 exposes three isolated profiles without changing production readiness', () => {
-  assert.equal(DUNGEON_QA_ACCESS_VERSION, 'dungeon-qa-access-v3.9.1');
+test('Dungeon QA V3.9.7 exposes three full five-room profiles without changing production availability', () => {
+  assert.equal(DUNGEON_QA_ACCESS_VERSION, 'dungeon-qa-access-v3.9.7');
   assert.deepEqual(auditDungeonQaAccessV391(), []);
   assert.deepEqual(Object.keys(DUNGEON_QA_PROFILES_V391).sort(), [
     'dung_abaddon', 'dung_nereus', 'dung_taurus',
   ]);
-  assert.equal(DUNGEON_QA_PROFILES_V391.dung_taurus.readiness, 'full_vertical_slice');
-  assert.equal(DUNGEON_QA_PROFILES_V391.dung_taurus.roomBriefs.length, 5);
-  assert.equal(DUNGEON_QA_PROFILES_V391.dung_nereus.readiness, 'catalog_preview');
-  assert.equal(DUNGEON_QA_PROFILES_V391.dung_abaddon.allowDirectRoom, false);
+  for (const profile of Object.values(DUNGEON_QA_PROFILES_V391)) {
+    assert.equal(profile.readiness, 'production_qa');
+    assert.equal(profile.runtimeMode, 'parity_v397');
+    assert.equal(profile.roomBriefs.length, 5);
+    assert.equal(profile.allowDirectRoom, true);
+  }
 });
 
 test('query access is DEV-only while the explicit APK build flag is authoritative', () => {
-  const query = '?sfDungeonQa=1&sfDungeon=dung_taurus&sfDungeonRoom=taurus_boss';
+  const query = '?sfDungeonQa=1&sfDungeon=dung_taurus&sfDungeonRoom=taurus_boss&sfDungeonLoadout=stress_mk4';
   const production = resolveDungeonQaAccessV391({ envEnabled: false, isDev: false, search: query });
   assert.equal(production.enabled, false);
   assert.equal(production.source, 'disabled');
@@ -44,6 +53,7 @@ test('query access is DEV-only while the explicit APK build flag is authoritativ
   assert.equal(dev.source, 'dev_query');
   assert.equal(dev.requestedDungeonId, 'dung_taurus');
   assert.equal(dev.requestedRoomId, 'taurus_boss');
+  assert.equal(dev.requestedLoadoutPresetId, 'stress_mk4');
 
   const apk = resolveDungeonQaAccessV391({ envEnabled: true, isDev: false, search: '' });
   assert.equal(apk.enabled, true);
@@ -56,6 +66,7 @@ test('QA run contract is always zero-energy, zero-reward and no trusted writes',
     access,
     dungeonId: 'dung_taurus',
     roomId: 'taurus_boss',
+    loadoutPresetId: 'assault_mk3',
   });
   assert.equal(isDungeonQaRunV391(taurusBoss, 'dung_taurus', { runtimeEnabled: true }), true);
   assert.equal(taurusBoss.directRoomIndex, 4);
@@ -63,7 +74,8 @@ test('QA run contract is always zero-energy, zero-reward and no trusted writes',
   assert.equal(taurusBoss.rewardMode, 'none');
   assert.equal(taurusBoss.consumeEnergy, false);
   assert.equal(taurusBoss.trustedWrites, false);
-  assert.equal(taurusBoss.seedKey, 'qa-v391:dung_taurus:taurus_boss');
+  assert.equal(taurusBoss.loadoutPresetId, 'assault_mk3');
+  assert.equal(taurusBoss.seedKey, 'qa-v397:dung_taurus:taurus_boss:assault_mk3');
   assert.equal(isDungeonQaRunV391(taurusBoss, 'dung_taurus', { runtimeEnabled: false }), false);
   assert.equal(isDungeonQaRunV391({ ...taurusBoss, runtimeMode: 'forged' }, 'dung_taurus', { runtimeEnabled: true }), false);
 
@@ -71,13 +83,41 @@ test('QA run contract is always zero-energy, zero-reward and no trusted writes',
     access,
     dungeonId: 'dung_nereus',
     roomId: 'nereus_oracle',
+    loadoutPresetId: 'control_mk3',
   });
-  assert.equal(nereus.runtimeMode, 'legacy_preview');
-  assert.equal(nereus.directRoomId, null);
-  assert.equal(nereus.singleRoom, false);
+  assert.equal(nereus.runtimeMode, 'parity_v397');
+  assert.equal(nereus.directRoomId, 'nereus_oracle');
+  assert.equal(nereus.directRoomIndex, 4);
+  assert.equal(nereus.singleRoom, true);
+  assert.equal(nereus.loadoutPresetId, 'control_mk3');
 });
 
-test('direct-room director starts at the selected Taurus room and completes only that room', () => {
+test('QA loadouts are complete, selectable and projected without mutating account data', () => {
+  assert.equal(DUNGEON_QA_LOADOUT_VERSION, 'dungeon-qa-loadout-v3.9.7');
+  assert.equal(DUNGEON_QA_DEFAULT_LOADOUT_PRESET_ID_V397, 'assault_mk3');
+  assert.deepEqual(auditDungeonQaLoadoutsV397(), []);
+  assert.equal(listDungeonQaLoadoutPresetsV397().length, 5);
+
+  const account = {
+    loadout: { aircraft: 'ship_xwing', mainGun: 'item_start_gun', wingman: '', armor: '', drone: '' },
+    ownedAircrafts: { ship_xwing: { level: 1, stars: 1 } },
+    items: { item_start_gun: { baseId: 'gun_laser', rarity: 1, level: 1, type: 'mainGun' } },
+  };
+  const projected = buildDungeonQaCampaignDataV397(account, {
+    enabled: true,
+    loadoutPresetId: 'fortress_mk4',
+  });
+  assert.equal(account.loadout.aircraft, 'ship_xwing');
+  assert.equal(account.loadout.wingman, '');
+  assert.equal(projected.loadout.aircraft, 'ship_eternal');
+  assert.ok(projected.loadout.wingman.startsWith('qa_v397_fortress_mk4_'));
+  assert.equal(projected.items[projected.loadout.armor].baseId, 'armor_void');
+  assert.equal(projected.items[projected.loadout.drone].baseId, 'drone_repair');
+  assert.equal(projected.qaProjection.ephemeral, true);
+  assert.equal(projected.qaProjection.trustedWrites, false);
+});
+
+test('direct-room director starts at the selected authored room and completes only that room', () => {
   const director = createDungeonEncounterDirectorV38({
     dungeonId: 'dung_taurus',
     seed: 391,
@@ -130,11 +170,16 @@ test('UI, launch, result and workflow wiring preserve QA isolation', () => {
   assert.match(select, /resolveDungeonQaRuntimeAccessV391/);
   assert.match(select, /createDungeonQaRunV391/);
   assert.match(select, /qaRoomSelections/);
+  assert.match(select, /qaLoadoutSelections/);
+  assert.match(select, /listDungeonQaLoadoutPresetsV397/);
   assert.match(hq, /!dungeonQaRun/);
   assert.match(hq, /NO ENERGY · NO REWARDS · NO PROFILE WRITES/);
   assert.match(engine, /Boolean\(auth\.currentUser\) \|\| Boolean\(dungeonQaRun\)/);
   assert.match(engine, /qa\s+: dungeonQaRun/);
   assert.match(scene, /dungeonQaRunV391\?\.seedKey/);
+  assert.match(scene, /buildDungeonQaCampaignDataV397/);
+  assert.match(scene, /qaEnabled: Boolean\(dungeonQaRunV391\)/);
+  assert.match(scene, /qaLoadoutLabel/);
   assert.match(scene, /startRoomIndex: qaStartRoomIndexV391/);
   assert.match(scene, /endAfterRoomIndex: dungeonQaRunV391\?\.singleRoom/);
   assert.match(result, /if \(qaRun\)/);
@@ -143,7 +188,7 @@ test('UI, launch, result and workflow wiring preserve QA isolation', () => {
   assert.match(workflow, /guest_dungeon_v39_qa:/);
   assert.match(workflow, /VITE_SF_DUNGEON_QA:/);
   assert.match(workflow, /VITE_SF_DUNGEON_QA_REWARDS: 'false'/);
-  assert.match(workflow, /spacefighter-android-dungeon-v391-qa-debug-no-rewards/);
+  assert.match(workflow, /spacefighter-android-dungeon-v397-production-qa-debug-no-rewards/);
   assert.match(workflow, /Dungeon QA cannot be combined with C15 release candidates/);
 
   // Production schedule remains authored in the catalog; QA never rewrites it.

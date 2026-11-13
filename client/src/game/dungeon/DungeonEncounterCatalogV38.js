@@ -25,9 +25,13 @@ export function resolveDungeonRuntimeProfileV38(dungeonId = DUNGEON_VERTICAL_SLI
 export function isDungeonParityFoundationEnabledV38({
   dungeonId = DUNGEON_VERTICAL_SLICE_ID_V38,
   envEnabled = true,
+  qaEnabled = false,
 } = {}) {
   const profile = DUNGEON_RUNTIME_PROFILES_V38[dungeonId];
-  return Boolean(envEnabled && profile?.enabledByDefault && profile.status === 'vertical_slice');
+  const productionEnabled = profile?.enabledByDefault && profile.status === 'vertical_slice';
+  const isolatedQaEnabled = qaEnabled && profile?.qaReady === true
+    && ['vertical_slice', 'production_candidate'].includes(profile.status);
+  return Boolean(envEnabled && (productionEnabled || isolatedQaEnabled));
 }
 
 export function auditDungeonEncounterCatalogV38() {
@@ -60,6 +64,18 @@ export function auditDungeonEncounterCatalogV38() {
   const taurus = DUNGEON_RUNTIME_PROFILES_V38.dung_taurus;
   if (taurus.status !== 'vertical_slice' || taurus.rooms.length !== 5) {
     issues.push('DUNGEON_TAURUS_VERTICAL_SLICE');
+  }
+  for (const id of ['dung_nereus', 'dung_abaddon']) {
+    const profile = DUNGEON_RUNTIME_PROFILES_V38[id];
+    if (profile?.enabledByDefault !== false || profile?.status !== 'production_candidate' || profile?.qaReady !== true) {
+      issues.push(`DUNGEON_QA_CANDIDATE:${id}`);
+    }
+    if (isDungeonParityFoundationEnabledV38({ dungeonId: id, envEnabled: true })) {
+      issues.push(`DUNGEON_QA_CANDIDATE_PRODUCTION_LEAK:${id}`);
+    }
+    if (!isDungeonParityFoundationEnabledV38({ dungeonId: id, envEnabled: true, qaEnabled: true })) {
+      issues.push(`DUNGEON_QA_CANDIDATE_NOT_TESTABLE:${id}`);
+    }
   }
   return Object.freeze(issues);
 }
