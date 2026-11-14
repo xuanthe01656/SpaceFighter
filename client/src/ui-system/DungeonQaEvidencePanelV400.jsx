@@ -39,6 +39,16 @@ export default function DungeonQaEvidencePanelV400({ report, lang = 'vi' }) {
       <p className={styles.note}>{vi?'ĐỊCH TỐI ĐA':'PEAK ENEMIES'} {display(report.peakEnemies)}
         {' · '}{vi?'ĐẠN TỒN TẠI':'PEAK SHOTS'} {display(report.peakHostileProjectiles)}
         {' · '}{vi?'ĐỢT BẮN':'VOLLEYS'} {display(report.volleys)}</p>
+      <p className={styles.note}>
+        {vi?'HP ĐẦU/CUỐI':'START/END HP'} {display(report.hpStart)}/{display(report.hpEnd)}
+        {' · '}{vi?'MẪU BẮN':'FIRE PROBES'} {display(report.fireProbeSamples)}
+        {' · '}{vi?'QUÁI TẦM XA SỐNG LÂU KHÔNG BẮN':'LONG-LIVED UNFIRED'} {display(report.rangedLongLivedWithoutShots)}
+      </p>
+      <p className={styles.note}>
+        {vi?'BOSS SỐNG':'BOSS ALIVE'} {report.bossLifetimeMs == null ? '—' : seconds(report.bossLifetimeMs)}
+        {' · '}{vi?'CẢNH BÁO BOSS':'BOSS WARNINGS'} {display(report.telegraphs)}
+        {' · '}{vi?'NODE ĐÃ PHÁ':'DESTROYED NODES'} {display(report.objectiveNodesDestroyed)}
+      </p>
       <div className={styles.rooms}>
         <div className={styles.roomHeader}><span>{vi?'PHÒNG':'ROOM'}</span><span>{vi?'GIÂY':'SECONDS'}</span><span>{vi?'ĐẠN':'SHOTS'}</span><span>{vi?'MẤT HP':'HP LOST'}</span></div>
         {(report.rooms || []).map(r => <div className={styles.room} key={`${r.roomIndex}-${r.roomId}`}>

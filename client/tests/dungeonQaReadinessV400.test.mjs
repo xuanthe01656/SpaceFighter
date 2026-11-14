@@ -14,8 +14,8 @@ const read = p => fs.readFileSync(path.join(root, p), 'utf8');
 const make = options => createDungeonQaReadinessV400({ enabled: true, dungeonId: 'dung_abaddon',
   presetId: 'fortress_mk4', startedAtMs: 1000, ...options });
 
-test('V4.0 QA reader is audit-clean and production-disabled by default', () => {
-  assert.equal(DUNGEON_QA_READINESS_VERSION_V400, 'dungeon-qa-readiness-v4.0.0');
+test('V4.0.1 QA reader is audit-clean and production-disabled by default', () => {
+  assert.equal(DUNGEON_QA_READINESS_VERSION_V400, 'dungeon-qa-readiness-v4.0.1');
   assert.deepEqual(auditDungeonQaReadinessV400(), []);
   const disabled = createDungeonQaReadinessV400();
   assert.equal(disabled.beginRoom({roomId:'a'}), false);
@@ -107,7 +107,7 @@ test('source wiring keeps QA-only reporting and no trusted write', () => {
   const engine=read('client/src/components/Dungeon/DungeonEngine.jsx');
   const panel=read('client/src/ui-system/DungeonQaEvidencePanelV400.jsx');
   assert.match(scene,/createDungeonQaReadinessV400/);
-  assert.match(scene,/dungeonQaReadinessV400\.recordProjectile\(sourceRole\)/);
+  assert.match(scene,/dungeonQaReadinessV400\.recordProjectile\(sourceRole,/);
   assert.match(scene,/dungeonQaReadinessV400\.recordDamage\(/);
   assert.match(scene,/dungeonQaReadinessV400\.recordTelegraph\(/);
   assert.match(scene,/dungeonQaReadinessV400\.sample\(/);
@@ -117,4 +117,130 @@ test('source wiring keeps QA-only reporting and no trusted write', () => {
   assert.match(panel,/navigator\.clipboard\.writeText/);
   assert.match(panel,/scope !== 'guest_dungeon_qa_only'/);
   assert.doesNotMatch(panel,/fetch\(|gameAction\(|saveUserProfile\(|localStorage|firebase/);
+});
+
+test('V4.0.1 fast fortress 5-room clear still flags a fully silent ranged run', () => {
+  const m=make({dungeonId:'dung_nereus',presetId:'fortress_mk4',startedAtMs:0});
+  const durations=[3142,3776,7909,3103,2828];
+  const ranged=[4,4,4,4,1];
+  let t=0;
+  for(let i=0;i<5;i++){
+    m.beginRoom({roomId:`nereus_${i}`,roomIndex:i,kind:i===4?'boss':'entry',nowMs:t,hp:26120});
+    for(let j=0;j<ranged[i];j++)m.recordSpawn('gunner',{enemyId:`${i}-${j}`,nowMs:t+100});
+    if(i===4)m.recordBossSpawn({nowMs:t+100});
+    t+=durations[i];
+    m.endRoom({nowMs:t,hp:26120});
+  }
+  m.finish({nowMs:t,hp:26120,result:'victory'});
+  const r=m.snapshot(t+1000);
+  assert.equal(r.projectiles,0);
+  assert.equal(r.rangedSpawns,17);
+  assert.equal(r.hpStart,26120);
+  assert.equal(r.hpEnd,26120);
+  assert.equal(r.spawnsByRole.gunner,17);
+  assert.ok(r.reviewFlags.includes('FULL_RUN_RANGED_NO_PROJECTILES_REVIEW'));
+  assert.ok(r.reviewFlags.includes('BOSS_ATTACK_WINDOW_UNTESTED'));
+  assert.equal(r.bossLifetimeMs,2728);
+  assert.equal(r.productionApproved,false);
+});
+
+test('V4.0.1 records enemy lifespan, per-role spawn counts and sampled fire gate reasons without exposing IDs', () => {
+  const m=make();
+  m.beginRoom({roomId:'a',roomIndex:0,nowMs:1000,hp:1050});
+  m.recordSpawn('gunner',{enemyId:'private-001',nowMs:1100});
+  m.recordSpawn('artillery',{enemyId:'private-002',nowMs:1100});
+  m.recordSpawn('raider',{enemyId:'private-003',nowMs:1100});
+  assert.equal(m.recordFireProbe({enemyId:'private-001',nowMs:1200,reason:'windup'}),true);
+  assert.equal(m.recordFireProbe({enemyId:'private-001',nowMs:1250,reason:'windup'}),false);
+  assert.equal(m.recordFireProbe({enemyId:'private-001',nowMs:1800,reason:'out_of_envelope'}),true);
+  m.recordProjectile('raider',{enemyId:'private-003'});
+  m.recordEnemyResolved({enemyId:'private-001',nowMs:1700}); // 600ms: quick
+  m.recordEnemyResolved({enemyId:'private-002',nowMs:5100}); // 4000ms: no projectile
+  m.recordEnemyResolved({enemyId:'private-003',nowMs:5300}); // 4200ms: fired
+  m.endRoom({nowMs:6100,hp:1050});
+  m.finish({nowMs:6200,hp:1050,result:'victory'});
+  const r=m.snapshot(9000);
+  assert.equal(r.rangedResolved,3);
+  assert.equal(r.rangedFired,1);
+  assert.equal(r.rangedShortLivedWithoutShots,1);
+  assert.equal(r.rangedLongLivedWithoutShots,1);
+  assert.equal(r.averageRangedLifetimeMs,2933);
+  assert.equal(r.fireProbeSamples,2);
+  assert.equal(r.fireProbeByReason.windup,1);
+  assert.equal(r.fireProbeByRole.gunner.windup,1);
+  assert.equal(r.fireProbeByReason.out_of_envelope,1);
+  assert.equal(r.spawnsByRole.gunner,1);
+  assert.equal(r.spawnsByRole.artillery,1);
+  assert.equal(r.shotsByRole.raider,1);
+  assert.ok(r.reviewFlags.includes('LONG_LIVED_RANGED_NO_SHOT_REVIEW'));
+  assert.ok(!JSON.stringify(r).includes('private-'));
+});
+
+test('V4.0.1 objective nodes are counted separately from destructible hazards', () => {
+  const m=make();m.beginRoom({roomId:'shield_grid',roomIndex:2,nowMs:1000,hp:1050});
+  m.recordObjectiveNodeDestroyed();m.recordObjectiveNodeDestroyed();
+  m.recordHazardDestroyed();
+  m.endRoom({nowMs:3000,hp:1050});m.finish({nowMs:4000,hp:1050,result:'victory'});
+  const r=m.snapshot(5000);
+  assert.equal(r.objectiveNodesDestroyed,2);
+  assert.equal(r.destroyedHazards,1);
+  assert.equal(r.rooms[0].objectiveNodesDestroyed,2);
+});
+
+test('V4.0.1 boss held long enough without telegraph gets review, not a gameplay decision', () => {
+  const m=make({runMode:'single_room'});
+  m.beginRoom({roomId:'oracle',roomIndex:4,kind:'boss',nowMs:2000,hp:1050});
+  m.recordBossSpawn({nowMs:3000});m.recordProjectile('boss');
+  m.recordBossDefeated({nowMs:13000});
+  m.endRoom({nowMs:14000,hp:700});m.finish({nowMs:14500,hp:700,result:'victory'});
+  const r=m.snapshot(16000);
+  assert.equal(r.bossLifetimeMs,10000);
+  assert.equal(r.bossDefeated,true);
+  assert.equal(r.shotsByRole.boss,1);
+  assert.ok(r.reviewFlags.includes('BOSS_TELEGRAPH_UNOBSERVED_REVIEW'));
+  assert.ok(!r.reviewFlags.includes('BOSS_ATTACK_WINDOW_UNTESTED'));
+  assert.equal(r.hpStart,1050);assert.equal(r.hpEnd,700);
+});
+
+test('V4.0.1 Nereus account defeat preserves per-room HP, damage and zero-auto-certification', () => {
+  const m=make({dungeonId:'dung_nereus',presetId:'account',startedAtMs:0});
+  const hp=[1050,770,683,625,0];
+  const duration=[8541,7666,19080,14975];
+  const shots=[11,3,2,14];
+  const spawns=[5,5,4,4];
+  let at=0;
+  for(let i=0;i<4;i++){
+    m.beginRoom({roomId:`room_${i}`,roomIndex:i,kind:i===3?'elite':'entry',nowMs:at,hp:hp[i]});
+    for(let j=0;j<spawns[i];j++)m.recordSpawn('gunner',{enemyId:`enemy_${i}_${j}`,nowMs:at});
+    for(let k=0;k<shots[i];k++)m.recordProjectile('gunner');
+    m.recordDamage({source:'projectile',hpBefore:hp[i],hpAfter:hp[i+1]});
+    at+=duration[i];
+    if(i!==3)m.endRoom({nowMs:at,hp:hp[i+1]});
+  }
+  m.finish({nowMs:at,hp:0,result:'defeat'});
+  const r=m.snapshot(at+1000);
+  assert.equal(r.hpStart,1050);
+  assert.equal(r.hpEnd,0);
+  assert.equal(r.damageTaken,1050);
+  assert.equal(r.projectiles,30);
+  assert.equal(r.rangedSpawns,18);
+  assert.equal(r.rooms[3].hpStart,625);
+  assert.equal(r.rooms[3].hpEnd,0);
+  assert.ok(r.reviewFlags.includes('ROOM_NOT_CLEARED'));
+  assert.ok(!r.reviewFlags.includes('FULL_RUN_RANGED_NO_PROJECTILES_REVIEW'));
+  assert.equal(r.productionApproved,false);
+});
+
+test('V4.0.1 wiring captures real lifecycle, fire gate, objectives, Boss and runtime HP', () => {
+  const scene=read('client/src/components/Dungeon/DungeonScene.js');
+  const panel=read('client/src/ui-system/DungeonQaEvidencePanelV400.jsx');
+  assert.match(scene,/dungeonQaReadinessV400\.recordEnemyResolved\(/);
+  assert.match(scene,/dungeonQaReadinessV400\.recordFireProbe\(/);
+  assert.match(scene,/sourceRuntimeId: enemy\.runtimeId/);
+  assert.match(scene,/dungeonQaReadinessV400\.recordBossSpawn\(/);
+  assert.match(scene,/dungeonQaReadinessV400\.recordBossDefeated\(/);
+  assert.match(scene,/dungeonQaReadinessV400\.recordObjectiveNodeDestroyed\(/);
+  assert.match(panel,/report\.rangedLongLivedWithoutShots/);
+  assert.match(panel,/report\.hpStart/);
+  assert.doesNotMatch(scene,/saveDungeonQaReport|submitQaReportToServer/);
 });

@@ -1283,6 +1283,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             _dungeonCombatSlot: null,
             _fireBlockedSinceMs: null,
             _fireBlockedPhaseIdV399: null,
+            _lastVolleyGateReasonV401: 'no_fire_window',
             _forcedFireCountV398: 0,
             _lastVolleyPhaseId: null,
             _volleySequence: 0,
@@ -1300,6 +1301,10 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     const cleanEnemy = (e, killedByDamage = false) => {
         if (e._dead) return;
         e._dead = true;
+        dungeonQaReadinessV400.recordEnemyResolved({
+            enemyId: e.runtimeId, nowMs: Date.now(),
+            reason: killedByDamage ? 'killed' : 'despawn',
+        });
         if (killedByDamage) deathVisuals.capture(e.visual);
         else e.visual?.dispose();
         safeDisGui(e.miniHp);
@@ -1566,7 +1571,10 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         }
         if (event.type === 'spawn_enemy') {
             const spawnedEnemyV400 = spawnEnemy(event.entry, currentRoomV38);
-            if (spawnedEnemyV400) dungeonQaReadinessV400.recordSpawn(spawnedEnemyV400.spec?.roleId || 'unknown');
+            if (spawnedEnemyV400) dungeonQaReadinessV400.recordSpawn(
+                spawnedEnemyV400.spec?.roleId || 'unknown',
+                { enemyId: spawnedEnemyV400.runtimeId, nowMs },
+            );
             waveSpawned += 1;
             updateDungeonObjectiveHudV39();
             return;
@@ -1574,6 +1582,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         if (event.type === 'spawn_boss') {
             clearDungeonHostileProjectilesV38();
             spawnBoss(event.boss);
+            dungeonQaReadinessV400.recordBossSpawn({ nowMs });
             updateDungeonObjectiveHudV39();
             publishDungeonHudV396(true);
             return;
@@ -1696,7 +1705,9 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             damageAuthority: 'dungeon-logical-projectile-v392',
         };
         enemyBullets.push(b);
-        dungeonQaReadinessV400.recordProjectile(sourceRole);
+        dungeonQaReadinessV400.recordProjectile(sourceRole, {
+            enemyId: options.sourceRuntimeId || null,
+        });
         return b;
     };
 
@@ -1834,6 +1845,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             damage: projectile.damage,
             damageType: weapon.bulletType || enemy.spec.archetype.damageType,
             sourceRole: enemy.spec.roleId,
+            sourceRuntimeId: enemy.runtimeId,
         });
         dungeonFireQaV399.record(enemy.spec.roleId,
             bullet ? 'projectile_created' : 'projectile_failed');
@@ -1850,6 +1862,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             lastShoot: enemy.lastShoot,
             shootMs: enemy.shootMs,
         });
+        enemy._lastVolleyGateReasonV401 = readiness.reason;
         if (!readiness.allowed) {
             if (choreography?.mayFire && readiness.reason !== 'no_fire_window') {
                 dungeonFireQaV399.record(enemy.spec.roleId, readiness.reason);
@@ -1872,11 +1885,15 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         // after the projectile has actually been created.
         const firstShot = plan.shots?.[0];
         if (!firstShot || firstShot.fireOffsetMs !== 0) {
+            enemy._lastVolleyGateReasonV401 = 'invalid_volley';
             dungeonFireQaV399.record(enemy.spec.roleId, 'invalid_volley');
             return false;
         }
         const initialBulletV399 = fireDungeonEnemyShotV38(enemy, nowMs, firstShot.index, plan.shots.length);
-        if (!initialBulletV399) return false;
+        if (!initialBulletV399) {
+            enemy._lastVolleyGateReasonV401 = 'projectile_failed';
+            return false;
+        }
         for (const shot of plan.shots.slice(1)) {
             scheduleBattleTimer(() => {
                 if (battleSceneDisposed || gameOver || enemy._dead || enemy.mesh?.isDisposed?.()) return;
@@ -1887,6 +1904,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         dungeonQaReadinessV400.recordVolley(enemy.spec.roleId);
         enemy._volleySequence += 1;
         enemy._lastVolleyPhaseId = phaseId;
+        enemy._lastVolleyGateReasonV401 = 'projectile_created';
         dungeonFireQaV399.record(enemy.spec.roleId, 'volley_started');
         return true;
     };
@@ -2296,6 +2314,14 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             dungeonFireQaV399.record(enemy.spec.roleId, fireDecisionV399.reason);
         }
         const firedV399 = tryFireDungeonEnemyVolleyV38(enemy, firingStateV399, nowMs);
+        // Sample diagnostics rather than modifying the combat decision.
+        // A fire-ready pose with zero projectile can now be traced to its gate.
+        if (dungeonQaRunV391) dungeonQaReadinessV400.recordFireProbe({
+            enemyId: enemy.runtimeId, nowMs,
+            reason: firedV399 ? 'projectile_created'
+                : firingStateV399.mayFire ? enemy._lastVolleyGateReasonV401
+                : fireDecisionV399.reason,
+        });
         // Aiming without a valid envelope is movement, not an endless attack VFX.
         const attackFeedbackV399 = firedV399
             || (enemy.lastShoot > 0 && nowMs - enemy.lastShoot < 280)
@@ -2573,6 +2599,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                             : (dungeonPresentationV39.breakable?.hpBarColor || '#ffd166');
                     }
                     if (debris.hp <= 0) {
+                        dungeonQaReadinessV400.recordObjectiveNodeDestroyed();
                         explode(debris.mesh.position, 1.3);
                         updateScore(debris.score);
                         debris.disposeHud?.();
@@ -2742,6 +2769,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 if (hit.consumed || b._splashRadius) { safeDis(b); playerBullets.splice(j, 1); }
 
                 if (bossHp <= 0) {
+                    dungeonQaReadinessV400.recordBossDefeated({ nowMs: now });
                     explode(bossMesh.position, 3.5);
                     triggerShake(0.9, 22);
                     deathVisuals.capture(bossVisual);
