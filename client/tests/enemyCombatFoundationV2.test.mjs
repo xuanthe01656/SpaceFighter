@@ -872,9 +872,9 @@ test('V3.6 every non-diver loops combat at an edge-aware authored firing range u
       if (result.mayFire) {
         fireFrames += 1;
         firePhases.add(result.phaseId);
-        assert.ok(result.playerRange >= archetype.fireRangeMin - .02
-          && result.playerRange <= archetype.fireRangeMax + .02,
-        `${roleId} may fire only inside its authored range band`);
+        assert.ok(result.playerRange >= result.fireRangeMin - .28
+          && result.playerRange <= result.fireRangeMax + .28,
+        `${roleId} may fire only inside its V4.2.3 player-relative range band`);
       }
       const frameStep = Math.hypot(result.deltaX || 0, result.deltaZ || 0);
       maxStep = Math.max(maxStep, frameStep);

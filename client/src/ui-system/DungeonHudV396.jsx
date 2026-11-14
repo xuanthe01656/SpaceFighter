@@ -73,6 +73,7 @@ export default function DungeonHudV396({
     && finite(state.bossMaxHp) > 0;
   return <TacticalCombatHudV411
     lang={lang}
+    hudTheme="dungeon"
     modeCode={profile.shortCode}
     phaseLabel={`${vi ? 'P' : 'R'} ${roomNumber}/${roomTotal}`}
     objectiveCounter={objectiveCounterFor(state, vi)}

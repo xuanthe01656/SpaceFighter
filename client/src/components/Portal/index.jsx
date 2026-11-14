@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { secureStorage } from '../../utils/storageHelper';
 import styles from './Portal.module.css';
+import HudAssetCreditsV423 from './HudAssetCreditsV423.jsx';
 
 export default function Portal({ 
   gsRef, setScreen, currentUser, loginWithGoogle, loginWithApple, 
@@ -202,7 +203,7 @@ export default function Portal({
            </button>
         </motion.div>
       )}
-
+      <HudAssetCreditsV423 lang={lang} />
     </motion.div>
   );
 }

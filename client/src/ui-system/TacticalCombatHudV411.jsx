@@ -75,6 +75,7 @@ export default function TacticalCombatHudV411({
   onRetreat = null,
   retreating = false,
   palette = null,
+  hudTheme = 'campaign',
 } = {}) {
   const [visibleNotice, setVisibleNotice] = useState(null);
   useEffect(() => {
@@ -86,6 +87,9 @@ export default function TacticalCombatHudV411({
   }, [announcement?.id]);
 
   const vi = lang === 'vi';
+  const assetSkinEnabled = import.meta.env?.VITE_SF_HUD_ASSETS_V2 !== 'false';
+  const assetRoot = `${import.meta.env?.BASE_URL || '/'}assets/hud/v423/`;
+  const skin = hudTheme === 'dungeon' ? 'dungeon' : 'campaign';
   const hpNow = integer(hp);
   const hpTotal = Math.max(1, integer(maxHp, 1));
   const hpRatio = clamp(hpNow / hpTotal, 0, 1);
@@ -101,11 +105,16 @@ export default function TacticalCombatHudV411({
     '--sf-hud-danger': palette?.danger || '#ff5164',
     '--sf-hud-text': palette?.text || '#eaffff',
     '--sf-hud-muted': palette?.muted || '#8eb3c0',
+    '--sf-hud-compact-shell': `url("${assetRoot}sf_status_shell_compact__${skin}.webp")`,
+    '--sf-hud-badge-frame': `url("${assetRoot}${skin === 'dungeon' ? 'sf_dungeon_lime_panel_09' : 'sf_alert_panel_h_01'}.webp")`,
+    '--sf-hud-boss-frame': `url("${assetRoot}sf_status_shell_boss__boss.webp")`,
+    '--sf-hud-ornament': `url("${assetRoot}sf_ornament_01__${skin === 'dungeon' ? 'lime' : 'cyan'}.webp")`,
   };
 
   return <>
     <header className={`${styles.hud} ${lowArmor ? styles.lowArmor : ''} ${bossActive ? styles.bossMode : ''}`}
       style={style} data-hud-version={TACTICAL_COMBAT_HUD_VERSION_V411}
+      data-hud-theme={skin} data-asset-skin={assetSkinEnabled ? 'v423' : 'fallback'}
       aria-label={vi ? 'HUD chiến đấu' : 'Combat HUD'}>
       <TacticalFrameArt bossActive={bossActive} />
 

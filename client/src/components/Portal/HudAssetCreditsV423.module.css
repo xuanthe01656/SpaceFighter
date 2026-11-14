@@ -1,0 +1,9 @@
+/* Portal credits accessible on small Android/iOS screens. */
+.creditsButton{position:fixed;z-index:15;left:max(12px,env(safe-area-inset-left,0px));bottom:max(10px,env(safe-area-inset-bottom,0px));padding:7px 10px;color:#99eaf5;background:rgba(0,14,27,.82);border:1px solid rgba(91,229,243,.45);font:700 10px/1.2 system-ui,sans-serif;letter-spacing:.04em;cursor:pointer}
+.backdrop{position:fixed;inset:0;z-index:999;display:grid;place-items:center;padding:20px;background:rgba(0,5,14,.86)}
+.dialog{position:relative;box-sizing:border-box;width:min(100%,530px);max-height:calc(100dvh - 40px);overflow:auto;padding:20px 18px;border:1px solid rgba(91,229,243,.8);background:#071729;color:#eafcff;font:13px/1.5 system-ui,sans-serif;box-shadow:0 12px 60px #000b}
+.dialog h2{margin:0 38px 12px 0;font-size:17px;color:#66ecfa}
+.dialog p{margin:0 0 10px}
+.dialog ul{padding-left:22px;margin:0}
+.dialog li{margin-bottom:6px}
+.close{position:absolute;right:8px;top:8px;border:1px solid #66ecfa;background:rgba(0,15,29,.9);color:#fff;width:34px;height:34px;cursor:pointer;font-size:24px}

@@ -4,6 +4,7 @@ import {
   resolveCampaignFireEnvelopeV36,
 } from './CampaignEnemyEngagementV36.js';
 import { resolveCampaignEnemyCombatSlotAnchorV37 } from './CampaignEnemyCombatSlotsV37.js';
+import { resolveCampaignAdaptiveEnemyArchetypeV423 } from './CampaignAdaptiveEngagementV423.js';
 
 /**
  * Campaign combat choreography V3.7.0
@@ -396,7 +397,6 @@ export function createCampaignEnemyChoreographyStateV29({
 }
 
 const targetForEnemyPhase = (state, phaseContract, input, band) => {
-  const archetype = getArchetype(state.roleId);
   const role = state.roleId;
   const phaseId = phaseContract.id;
   const halfWidth = Math.max(2.8, finite(input.arenaHalfWidth, 7));
@@ -404,6 +404,9 @@ const targetForEnemyPhase = (state, phaseContract, input, band) => {
   const playerX = clamp(finite(input.playerX, 0), -xBound, xBound);
   const playerZ = clamp(finite(input.playerZ, band.worldHalfHeight - 2.5),
     band.topSafeRootZ + 5, band.bottomSafeZ);
+  const archetype = resolveCampaignAdaptiveEnemyArchetypeV423(getArchetype(state.roleId), {
+    playerZ, topSafeRootZ: band.topSafeRootZ,
+  });
   const combatSlot = input.combatSlot || null;
   const authoredBaseX = clamp((state.laneNorm + finite(state.laneBiasNorm, 0)) * xBound, -xBound, xBound);
   const slotBase = combatSlot
@@ -680,7 +683,6 @@ export function stepCampaignEnemyChoreographyV29(state, input = {}) {
     });
   }
   const nowMs = Math.max(0, finite(input.nowMs, 0));
-  const archetype = getArchetype(state.roleId);
   const contract = choreographyForState(state);
   const band = resolveCampaignCombatSafeBandV29({
     worldHalfHeight: input.worldHalfHeight,
@@ -690,6 +692,9 @@ export function stepCampaignEnemyChoreographyV29(state, input = {}) {
     hpBarOffsetPx: input.hpBarOffsetPx,
     hpBarHeightPx: input.hpBarHeightPx,
     playerZ: input.playerZ,
+  });
+  const archetype = resolveCampaignAdaptiveEnemyArchetypeV423(getArchetype(state.roleId), {
+    playerZ: finite(input.playerZ, band.bottomSafeZ), topSafeRootZ: band.topSafeRootZ,
   });
 
   let current = state.phaseId ? contract.phases[state.phaseIndex] : enterEnemyPhase(state, 0, nowMs, input, band);

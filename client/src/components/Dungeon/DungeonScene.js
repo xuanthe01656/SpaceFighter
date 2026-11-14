@@ -121,6 +121,10 @@ import {
 } from '../../game/dungeon/DungeonRoleEngagementV410.js';
 import { createDungeonShipSkillAdapterV410 } from '../../game/dungeon/DungeonShipSkillAdapterV410.js';
 import {
+    advanceDungeonEnemyEntryShieldV422, createDungeonEnemyEntryShieldV422,
+    isDungeonEnemyEntryActiveV422, isDungeonEnemyEntryRevealingV422,
+} from '../../game/dungeon/DungeonEnemyEntryShieldV422.js';
+import {
     logicalCircleHitV392,
     logicalSegmentCircleHitV392,
     resolveDungeonHazardCombatV392,
@@ -1238,6 +1242,10 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         return mesh;
     };
 
+    // Scene-owned material shared by all temporary entry rings (no per-frame allocations).
+    const dungeonEntryRingMatV422 = makeMat(scene, new BABYLON.Color3(.12, .77, .98));
+    dungeonEntryRingMatV422.alpha = .8;
+    dungeonEntryRingMatV422.backFaceCulling = false;
     const spawnEnemy = (spawnEntry = null, room = currentRoomV38) => {
         const nowMs = Date.now();
         const runtimeId = spawnEntry?.id || `legacy:${currentWave}:${waveSpawned}:${nowMs}`;
@@ -1331,6 +1339,16 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         miniHp.thickness = 0;
         miniHp.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
         miniHpBg.addControl(miniHp);
+        miniHpBg.isVisible = false;
+        const entryHaloV422 = BABYLON.MeshBuilder.CreateTorus(`dungeon-entry-${mesh.uniqueId}`, {
+            diameter: spec?.elite || type === 'elite' ? 2.9 : 2.25,
+            thickness: .07, tessellation: 28,
+        }, scene);
+        entryHaloV422.parent = mesh;
+        entryHaloV422.position.y = .36;
+        entryHaloV422.material = dungeonEntryRingMatV422;
+        entryHaloV422.isPickable = false;
+        entryHaloV422.visibility = 0;
 
         const enemy = {
             runtimeId,
@@ -1347,6 +1365,10 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             sineOff: spec ? ((seed % 6284) / 1000) : Math.random() * Math.PI * 2,
             miniHp,
             miniHpBg,
+            _entryShieldV422: createDungeonEnemyEntryShieldV422({
+                roleId: resolvedRoleId, elite: Boolean(spec?.elite),
+            }),
+            _entryHaloV422: entryHaloV422,
             _contactHitId: `dungeon-enemy-contact-${mesh.uniqueId}`,
             _facingYaw: 0,
             _combatSlot: null,
@@ -1382,6 +1404,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         else e.visual?.dispose();
         safeDisGui(e.miniHp);
         safeDisGui(e.miniHpBg);
+        safeDis(e._entryHaloV422);
+        e._entryHaloV422 = null;
         safeDis(e.mesh); // collider removed synchronously; only noninteractive art remains
     };
 
@@ -1710,7 +1734,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     });
     const liveTargets = () => {
         const combatTargets = [
-            ...enemies.filter(e => !e.mesh.isDisposed()),
+            ...enemies.filter(e => !e.mesh.isDisposed()
+                && isDungeonEnemyEntryActiveV422(e._entryShieldV422)),
             ...(bossMesh && !bossMesh.isDisposed() ? [{ mesh: bossMesh, isBoss: true }] : []),
         ];
         const hazardTargets = dungeonHazardsV38
@@ -2146,7 +2171,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         // Battle passives hit nearby enemies, without changing cloud rewards.
         if (result.reflected || result.novaDamage) {
             for(const enemy of [...enemies]) {
-                if(!enemy.mesh?.position || enemy.hp<=0) continue;
+                if(!enemy.mesh?.position || enemy.hp<=0
+                    || !isDungeonEnemyEntryActiveV422(enemy._entryShieldV422)) continue;
                 const dx=enemy.mesh.position.x-playerRoot.position.x;
                 const dz=enemy.mesh.position.z-playerRoot.position.z;
                 if(dx*dx+dz*dz <= (result.novaDamage ? 25 : 9))
@@ -2249,7 +2275,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     }
 
     const applyPlayerDamageToEnemy = (enemy, damage) => {
-        if (!enemy || enemy.mesh.isDisposed() || enemy.hp <= 0) return false;
+        if (!enemy || enemy.mesh.isDisposed() || enemy.hp <= 0
+            || !isDungeonEnemyEntryActiveV422(enemy._entryShieldV422)) return false;
         let resolvedDamageV410 = Math.max(0, Number(damage) || 0);
         if (enemy._dungeonSkillMarkUntilTickV410 > dungeonShipSkillV410.tick) {
             resolvedDamageV410 *= 1 + Math.max(0, Number(enemy._dungeonSkillMarkBonusV410) || 0);
@@ -2278,7 +2305,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         if (!bullet._splashRadius) return;
         explode(new BABYLON.Vector3(impact.x, 0, impact.z), bullet._splashRadius * .45);
         const nearby = enemies.filter(other => other !== primary && !other.mesh.isDisposed()
-          && projectileHitsPoint({ position: impact }, other.mesh.position, bullet._splashRadius));
+            && isDungeonEnemyEntryActiveV422(other._entryShieldV422)
+            && projectileHitsPoint({ position: impact }, other.mesh.position, bullet._splashRadius));
         nearby.forEach(other => {
             if (bullet._slowMs) other._slowUntil = Date.now() + bullet._slowMs;
             applyPlayerDamageToEnemy(other, damage * .4);
@@ -2346,7 +2374,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         return 'TRANSITION';
     };
     const liveAbilityTargetsV410 = () => [
-        ...enemies.filter(enemy => enemy?.mesh && !enemy.mesh.isDisposed?.() && enemy.hp > 0),
+        ...enemies.filter(enemy => enemy?.mesh && !enemy.mesh.isDisposed?.()
+            && enemy.hp > 0 && isDungeonEnemyEntryActiveV422(enemy._entryShieldV422)),
         ...(bossActive && bossMesh && !bossMesh.isDisposed?.() && bossHp > 0
             ? [{ mesh: bossMesh, isBoss: true }] : []),
     ];
@@ -2425,7 +2454,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             } else if (event.type === 'area' || event.type === 'pull') {
                 const radius = Math.max(0, Number(event.radius) || 0);
                 for (const enemy of [...enemies]) {
-                    if (!enemy?.mesh || enemy.mesh.isDisposed?.() || enemy.hp <= 0) continue;
+                    if (!enemy?.mesh || enemy.mesh.isDisposed?.() || enemy.hp <= 0
+                        || !isDungeonEnemyEntryActiveV422(enemy._entryShieldV422)) continue;
                     const dx = enemy.mesh.position.x - playerRoot.position.x;
                     const dz = enemy.mesh.position.z - playerRoot.position.z;
                     const distance = Math.hypot(dx, dz);
@@ -2672,7 +2702,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             || fireDecisionV399.reason === 'out_of_envelope') {
             dungeonFireQaV399.record(enemy.spec.roleId, fireDecisionV399.reason);
         }
-        const firedV399 = tryFireDungeonEnemyVolleyV38(enemy, firingStateV399, nowMs);
+        const firedV399 = isDungeonEnemyEntryActiveV422(enemy._entryShieldV422)
+            && tryFireDungeonEnemyVolleyV38(enemy, firingStateV399, nowMs);
         if (firedV399 && enemy.spec.roleId === 'raider') {
             enemy._raiderOpeningVolleyDoneV405 = true;
         }
@@ -3294,7 +3325,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                     engine.getDeltaTime(),
                 );
 
-                if (e.type !== 'scout' && now - e.lastShoot > e.shootMs) {
+                if (isDungeonEnemyEntryActiveV422(e._entryShieldV422)
+                    && e.type !== 'scout' && now - e.lastShoot > e.shootMs) {
                     fireEnemyBullet(e.mesh.position, 0, enemyBulletVelZ);
                     e.visual?.setState('attack');
                     e.lastShoot = now;
@@ -3308,7 +3340,28 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 }
             }
 
-            if (e.mesh.intersectsMesh(shipVisual.collider, false)) {
+            // Update after movement: the shield clears only after the enemy
+            // crosses the visible HUD-safe line and completes its reveal.
+            advanceDungeonEnemyEntryShieldV422(e._entryShieldV422, {
+                nowMs: now, enemyZ: e.mesh.position.z,
+                hudOcclusionLineZ: resolveDungeonHudOcclusionLineV396({
+                    dungeonId, worldHalfHeight: ZOOM,
+                    viewportHeight: canvas?.clientHeight || engine.getRenderHeight(),
+                }),
+            });
+            const entryActiveV422 = isDungeonEnemyEntryActiveV422(e._entryShieldV422);
+            if (e.miniHpBg) e.miniHpBg.isVisible = entryActiveV422;
+            if (e._entryHaloV422 && !e._entryHaloV422.isDisposed?.()) {
+                if (entryActiveV422) {
+                    safeDis(e._entryHaloV422);
+                    e._entryHaloV422 = null;
+                } else {
+                    e._entryHaloV422.visibility = isDungeonEnemyEntryRevealingV422(e._entryShieldV422)
+                        ? .60 + .14 * Math.sin(now * .014 + e.sineOff) : 0;
+                }
+            }
+
+            if (entryActiveV422 && e.mesh.intersectsMesh(shipVisual.collider, false)) {
                 explode(e.mesh.position, e.spec?.roleId === 'charger' ? 1.35 : .75);
                 damagePlayer({
                     rawDamage: e.spec?.weapon?.contactDamage || 150,
@@ -3334,6 +3387,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             for (let j = playerBullets.length - 1; j >= 0; j--) {
                 const bullet = playerBullets[j];
                 if (bullet.isDisposed()) { playerBullets.splice(j, 1); continue; }
+                if (!isDungeonEnemyEntryActiveV422(e._entryShieldV422)) continue;
                 if (!projectileHitsPoint(bullet, e.mesh.position, 1.5)) continue;
                 const hit = shots.registerHit(bullet, e);
                 if (!hit.accepted) continue;

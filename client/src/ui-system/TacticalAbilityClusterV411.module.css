@@ -68,3 +68,12 @@
 @media (min-width: 700px) { .root { right: max(24px, calc(env(safe-area-inset-right, 0px) + 14px)); top: 58%; gap: 10px; } }
 @media (orientation: landscape) and (max-height: 560px) { .root { top: 50%; } }
 @media (prefers-reduced-motion: reduce) { .action, .actionIcon { transition: none; } .actionReady, .activePulse, .passivePulse { animation: none; } }
+
+/* V4.2.3 visual only: icon frames use licensed user-supplied HUD pack V2. */
+.artFrameActive, .artFramePassive { display: none; position: absolute; inset: 0; z-index: 2; pointer-events: none; background-position: center; background-repeat: no-repeat; background-size: 100% 100%; }
+.root[data-asset-skin="v423"] .artFrameActive { display: block; background-image: var(--sf-hud-active-frame); }
+.root[data-asset-skin="v423"] .artFramePassive { display: block; background-image: var(--sf-hud-passive-frame); }
+.root[data-asset-skin="v423"] .actionCore { opacity: .76; }
+.root[data-asset-skin="v423"] .passiveCore { opacity: .74; }
+.root[data-asset-skin="v423"] .actionIcon { z-index: 3; }
+.root[data-asset-skin="v423"] .passiveIcon { z-index: 3; }

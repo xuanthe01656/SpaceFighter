@@ -1,0 +1,26 @@
+Space Fighter - HUD Asset Pack V2 attribution
+
+The following third-party visual resources used by this game's HUD are
+credited under the attribution requirements accompanying the user's original
+SpaceFighter_HUD_AssetPack_V2_FULL_LEGAL_COMPLETE.zip archive.
+
+Game live stream interface elements
+  designed by upklyak - Magnific.com
+Different HUD elements flat frames set
+  designed by pch.vector - Magnific.com
+Vector set of futuristic abstract HUD frames
+  designed by redgreystock - Magnific.com
+Futuristic HUD frames vector set
+  designed by redgreystock - Magnific.com
+Gradient video game elements collection
+  designed by pikisuperstar - Magnific.com
+Art deco ornament collection
+  designed by Freepik - Magnific.com
+
+Not used in this HUD runtime build (licensed candidates in source archive):
+Gradient twitch panels - designed by Freepik - Magnific.com
+Cartoon set of square game rang badges - designed by upklyak - Magnific.com
+
+Commercial use is subject to the individual license terms included in the
+source archive. Keep the originals and license PDFs privately for review.
+Do not separately redistribute the original/modified source asset pack.

@@ -15,6 +15,8 @@ export default function TacticalAbilityClusterV411({
 } = {}) {
   if (!active || typeof onActivate !== 'function') return null;
   const ready = Boolean(active.ready) && !active.locked;
+  const assetSkinEnabled = import.meta.env?.VITE_SF_HUD_ASSETS_V2 !== 'false';
+  const assetRoot = `${import.meta.env?.BASE_URL || '/'}assets/hud/v423/`;
   const cooling = !ready && !active.active;
   const activeProgress = clamp(active.cooldownProgress, 0, 1);
   const activeAngle = `${Math.round(activeProgress * 360)}deg`;
@@ -35,12 +37,15 @@ export default function TacticalAbilityClusterV411({
 
   return <aside className={styles.root}
     data-cluster-version={TACTICAL_ABILITY_CLUSTER_VERSION_V411}
+    data-asset-skin={assetSkinEnabled ? 'v423' : 'fallback'}
     style={{
       '--sf-ability-color': active.color || '#5be5f3',
       '--sf-ability-secondary': active.secondary || '#72a7ff',
       '--sf-ability-angle': activeAngle,
       '--sf-passive-color': passive?.color || '#67ef9f',
       '--sf-passive-angle': passiveAngle,
+      '--sf-hud-active-frame': `url("${assetRoot}sf_cyan_hex_05.webp")`,
+      '--sf-hud-passive-frame': `url("${assetRoot}sf_cyan_hex_06.webp")`,
     }} aria-label={lang === 'vi' ? 'Kỹ năng và giáp nội tại' : 'Skill and passive armor'}>
 
     {feedback?.visible && <div className={`${styles.feedback} ${feedback.rejected ? styles.feedbackRejected : ''}`}
@@ -58,6 +63,7 @@ export default function TacticalAbilityClusterV411({
       title={active.label || ''} data-multitouch-contract="pointerdown-primary">
       <span className={styles.actionRing} aria-hidden="true" />
       <span className={styles.actionCore} aria-hidden="true" />
+      <span className={styles.artFrameActive} aria-hidden="true" />
       <span className={styles.actionIcon} aria-hidden="true">{active.icon || 'S'}</span>
       {cooling && <span className={styles.actionTimer}>{active.remainingSeconds}</span>}
       {active.active && <span className={styles.activePulse} aria-hidden="true" />}
@@ -68,6 +74,7 @@ export default function TacticalAbilityClusterV411({
       title={passive.label || ''} aria-label={passive.label || (lang === 'vi' ? 'Giáp nội tại' : 'Passive armor')}>
       <span className={styles.passiveRing} aria-hidden="true" />
       <span className={styles.passiveCore} aria-hidden="true" />
+      <span className={styles.artFramePassive} aria-hidden="true" />
       <span className={styles.passiveIcon} aria-hidden="true">{passive.icon || '⬡'}</span>
       {passive.badge && <span className={styles.passiveBadge}>{passive.badge}</span>}
       {passive.pulse && <span key={passive.pulseKey || passive.pulse} className={styles.passivePulse} aria-hidden="true" />}
