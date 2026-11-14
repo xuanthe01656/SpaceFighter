@@ -8,6 +8,7 @@ import { auth } from '../../firebase';
 import toast from 'react-hot-toast';
 import { isDungeonQaRunV391 } from '../../game/dungeon/DungeonQaAccessV391.js';
 import DungeonHudV396, { EMPTY_DUNGEON_HUD_STATE_V396 } from '../../ui-system/DungeonHudV396.jsx';
+import DungeonQaEvidencePanelV400 from '../../ui-system/DungeonQaEvidencePanelV400.jsx';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -71,6 +72,8 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
   const [dungeonHud, setDungeonHud] = React.useState(EMPTY_DUNGEON_HUD_STATE_V396);
   const [dungeonNotice, setDungeonNotice] = React.useState(null);
   const noticeSequenceRef = useRef(0);
+  const [dungeonQaEvidence, setDungeonQaEvidence] = React.useState(null);
+  const dungeonQaEvidenceRef = useRef(null);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -109,6 +112,12 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
         ...notice,
         id: notice?.id || `dungeon-notice-${++noticeSequenceRef.current}`,
       }),
+      // Snapshot is volatile and shown only when the existing Dungeon QA gate is active.
+      onQaUpdate: report => {
+        if (!dungeonQaRun || !report) return;
+        dungeonQaEvidenceRef.current = report;
+        setDungeonQaEvidence(report);
+      },
       onHudUpdate: next => setDungeonHud(previous => {
         const normalized = { ...EMPTY_DUNGEON_HUD_STATE_V396, ...next };
         return sameDungeonHudStateV396(previous, normalized) ? previous : normalized;
@@ -125,6 +134,7 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
           maxWaves     : result.maxWaves     || 5,
           earnedRewards: [],   // Thua → không nhận thưởng
           qa            : dungeonQaRun,
+          qaReport      : dungeonQaRun ? (result.qaReport || dungeonQaEvidenceRef.current) : null,
         };
         setScreen('dungeon_result');
       },
@@ -152,6 +162,7 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
           maxWaves     : result.maxWaves     || 5,
           earnedRewards,
           qa            : dungeonQaRun,
+          qaReport      : dungeonQaRun ? (result.qaReport || dungeonQaEvidenceRef.current) : null,
         };
         setScreen('dungeon_result');
       },
@@ -211,6 +222,8 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
       />
 
 
+      {isDungeonQaRunV391(gsRef.current?.dungeonQa, gsRef.current?.selectedDungeonId) &&
+        <DungeonQaEvidencePanelV400 report={dungeonQaEvidence} lang={lang} />}
       <DungeonHudV396
         lang={lang}
         state={dungeonHud}

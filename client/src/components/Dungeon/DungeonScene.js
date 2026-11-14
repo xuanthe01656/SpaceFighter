@@ -108,6 +108,7 @@ import {
     resolveDungeonEnemyFireDecisionV399,
     resolveDungeonVolleyReadinessV399,
 } from '../../game/dungeon/DungeonFireReliabilityV399.js';
+import { createDungeonQaReadinessV400 } from '../../game/dungeon/DungeonQaReadinessV400.js';
 import {
     logicalCircleHitV392,
     logicalSegmentCircleHitV392,
@@ -167,7 +168,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
     const {
       gsRef, lang, onGameOver, onVictory, onBossDefeated, isCloud, getRealTime,
-      onHudUpdate, onAnnouncement,
+      onHudUpdate, onAnnouncement, onQaUpdate,
     } = data;
     const externalHudV396 = typeof onHudUpdate === 'function';
     const externalAnnouncementV396 = typeof onAnnouncement === 'function';
@@ -273,6 +274,22 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
       {mode:'dungeon', location:dungeonConfig});
     const passives = createBattlePassiveState(combat.stats, Date.now());
     const { stats, pilotBase, aircraftBase } = combat;
+    // A volatile per-room QA report; no profile, reward or network writes.
+    const dungeonQaReadinessV400 = createDungeonQaReadinessV400({
+        enabled: Boolean(dungeonQaRunV391),
+        dungeonId,
+        presetId: dungeonQaRunV391?.loadoutPresetId || 'account',
+        runMode: dungeonQaRunV391?.singleRoom ? 'single_room' : 'full_run',
+        expectedRooms: dungeonRuntimeProfileV38?.rooms?.length || 5,
+        startedAtMs: Date.now(),
+    });
+    let lastDungeonQaPublishAtV400 = -Infinity;
+    const publishDungeonQaV400 = (nowMs, force = false) => {
+        if (!dungeonQaRunV391 || typeof onQaUpdate !== 'function' || battleSceneDisposed) return;
+        if (!force && nowMs - lastDungeonQaPublishAtV400 < 1200) return;
+        lastDungeonQaPublishAtV400 = nowMs;
+        onQaUpdate(dungeonQaReadinessV400.snapshot(nowMs));
+    };
     const mainGunBase = combat.gear.mainGun.base;
     const wingmanBase = combat.gear.wingman.base;
     const droneBase = combat.gear.drone.base;
@@ -1517,6 +1534,11 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             clearDungeonHostileProjectilesV38();
             disposeDungeonBossTelegraphsV38();
             currentRoomV38 = event.room;
+            dungeonQaReadinessV400.beginRoom({
+                roomId: event.room.id, roomIndex: event.roomIndex,
+                kind: event.room.kind, nowMs, hp: stats.hp,
+            });
+            publishDungeonQaV400(nowMs, true);
             currentWave = event.roomIndex + 1;
             currentRoomInitialEnemyCountV39 = event.roomPlan?.entries?.length || 0;
             currentRoomInitialBreakableCountV39 = event.room.breakables?.length || 0;
@@ -1543,7 +1565,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             return;
         }
         if (event.type === 'spawn_enemy') {
-            spawnEnemy(event.entry, currentRoomV38);
+            const spawnedEnemyV400 = spawnEnemy(event.entry, currentRoomV38);
+            if (spawnedEnemyV400) dungeonQaReadinessV400.recordSpawn(spawnedEnemyV400.spec?.roleId || 'unknown');
             waveSpawned += 1;
             updateDungeonObjectiveHudV39();
             return;
@@ -1557,6 +1580,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         }
         if (event.type === 'room_cleared') {
             currentRoomCompleteV396 = true;
+            dungeonQaReadinessV400.endRoom({ nowMs, hp: stats.hp });
+            publishDungeonQaV400(nowMs, true);
             clearDungeonRoomObjectsV38();
             clearDungeonHostileProjectilesV38();
             disposeDungeonBossTelegraphsV38();
@@ -1671,6 +1696,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             damageAuthority: 'dungeon-logical-projectile-v392',
         };
         enemyBullets.push(b);
+        dungeonQaReadinessV400.recordProjectile(sourceRole);
         return b;
     };
 
@@ -1858,6 +1884,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             }, shot.fireOffsetMs);
         }
         enemy.lastShoot = nowMs;
+        dungeonQaReadinessV400.recordVolley(enemy.spec.roleId);
         enemy._volleySequence += 1;
         enemy._lastVolleyPhaseId = phaseId;
         dungeonFireQaV399.record(enemy.spec.roleId, 'volley_started');
@@ -1996,6 +2023,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             source, nowMs: Date.now(),
         });
         if (result.dodged) {
+            dungeonQaReadinessV400.recordDamage({ source, hpBefore, hpAfter: stats.hp, dodged: true });
             showAnnouncement(lang === 'vi' ? 'NÉ TRÁNH!' : 'DODGED!', '#4ade80', 1000);
             return createPlayerDamageOutcomeV25({
                 gate, source, hitId, contactId, rawDamage: scaledRawDamage,
@@ -2019,6 +2047,10 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             hpBefore, hpAfter: stats.hp, absorbed: result.absorbed,
             reflected: result.reflected, novaDamage: result.novaDamage,
         });
+        dungeonQaReadinessV400.recordDamage({
+            source, hpBefore, hpAfter: stats.hp,
+            absorbed: outcome.outcome === 'absorbed',
+        });
         updateHpUI();
         if (outcome.outcome === 'absorbed' || outcome.outcome === 'no_damage') return outcome;
         triggerShake(0.28, 10);
@@ -2029,6 +2061,9 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     const triggerGameOver = () => {
         if (gameOver) return;
         gameOver = true;
+        dungeonQaReadinessV400.finish({ nowMs: Date.now(), hp: stats.hp, result: 'defeat' });
+        publishDungeonQaV400(Date.now(), true);
+        if (dungeonQaRunV391) console.info('[DUNGEON_QA_READINESS_V400]', dungeonQaReadinessV400.snapshot(Date.now()));
         publishDungeonHudV396(true);
         explode(playerRoot.position, 4);
         triggerShake(0.6, 20);
@@ -2047,12 +2082,16 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             totalKills,
             wavesCleared : dungeonSnapshot?.roomsCleared ?? Math.max(0, currentWave - 1),
             maxWaves     : dungeonSnapshot?.totalRooms ?? ACTIVE_MAX_WAVES,
+            qaReport     : dungeonQaRunV391 ? dungeonQaReadinessV400.snapshot(Date.now()) : null,
         }), 1800);
     };
 
     const triggerVictory = () => {
         if (gameOver) return;
         gameOver = true;
+        dungeonQaReadinessV400.finish({ nowMs: Date.now(), hp: stats.hp, result: 'victory' });
+        publishDungeonQaV400(Date.now(), true);
+        if (dungeonQaRunV391) console.info('[DUNGEON_QA_READINESS_V400]', dungeonQaReadinessV400.snapshot(Date.now()));
         currentRoomCompleteV396 = true;
         publishDungeonHudV396(true);
         showAnnouncement(
@@ -2070,6 +2109,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             totalKills,
             wavesCleared : dungeonSnapshot?.roomsCleared ?? currentWave,
             maxWaves     : dungeonSnapshot?.totalRooms ?? ACTIVE_MAX_WAVES,
+            qaReport     : dungeonQaRunV391 ? dungeonQaReadinessV400.snapshot(Date.now()) : null,
         }), 2800);
     };
 
@@ -2278,7 +2318,14 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     scene.onBeforeRenderObservable.add(() => {
         if (gameOver || (typeof scene.isDisposed === 'function' ? scene.isDisposed() : scene.isDisposed)) return;
         const now = Date.now();
-        if (dungeonQaRunV391) dungeonFireQaV399.maybeLog(now, (tag, summary) => console.info(tag, summary));
+        if (dungeonQaRunV391) {
+            dungeonFireQaV399.maybeLog(now, (tag, summary) => console.info(tag, summary));
+            dungeonQaReadinessV400.sample({
+                nowMs: now, frameMs: engine.getDeltaTime(),
+                enemyCount: enemies.length, projectileCount: enemyBullets.length,
+            });
+            publishDungeonQaV400(now);
+        }
         publishDungeonHudV396();
         const frameFactor = frameScale(engine.getDeltaTime());
         tick += frameFactor;
@@ -2492,6 +2539,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                         explode(hazard.mesh.position, 1.15);
                         triggerShake(.10, 3);
                         updateScore(hazard.score || 0);
+                        dungeonQaReadinessV400.recordHazardDestroyed();
                         hazard.disposeHud?.();
                         hazard.visual?.dispose?.();
                         safeDis(hazard.mesh);
@@ -2638,8 +2686,13 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 bossVisual?.setState(bossStep.visualState || 'move');
                 bossFallbackVisualV39?.tick?.(engine.getDeltaTime(), bossStep.visualState || 'move');
                 for (const event of bossStep.events || []) {
-                    if (event.type === 'telegraph_started') createDungeonBossTelegraphsV38(event.plan);
-                    else if (event.type === 'fire_pattern') fireDungeonBossAttackPlanV38(event.plan);
+                    if (event.type === 'telegraph_started') {
+                        dungeonQaReadinessV400.recordTelegraph();
+                        createDungeonBossTelegraphsV38(event.plan);
+                    } else if (event.type === 'fire_pattern') {
+                        dungeonQaReadinessV400.recordVolley('boss');
+                        fireDungeonBossAttackPlanV38(event.plan);
+                    }
                     else if (event.type === 'enrage_started') {
                         showAnnouncement(
                             lang === 'vi' ? 'CẢNH BÁO: TRÙM NỔI ĐIÊN!' : 'WARNING: BOSS ENRAGED!',

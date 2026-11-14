@@ -1,0 +1,11 @@
+/* QA-only tray is collapsed by default, below the gameplay HUD. */
+.root{position:absolute;z-index:95;top:calc(env(safe-area-inset-top,0px) + 244px);right:calc(env(safe-area-inset-right,0px) + 10px);width:min(312px,calc(100vw - 24px));color:#e5faff;font-family:system-ui,sans-serif;pointer-events:none}
+.toggle{float:right;min-height:44px;border:1px solid #3a7989;border-radius:5px;padding:8px 11px;background:rgba(5,24,38,.94);color:#b2faff;font-weight:700;font-size:11px;letter-spacing:.05em;touch-action:manipulation;pointer-events:auto}
+.panel{clear:both;margin-top:49px;padding:12px;border:1px solid #276478;border-radius:7px;background:rgba(3,19,33,.97);box-shadow:0 8px 25px rgba(0,0,0,.5);max-height:min(55dvh,470px);overflow-y:auto;pointer-events:auto;-webkit-overflow-scrolling:touch;font-size:11px}
+.panel strong{font-size:12px}.note{color:#b7d9e4;font-size:10px;line-height:1.5}.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+.metrics div{min-width:0;padding:6px 2px;text-align:center;border:1px solid #275064}.metrics small{display:block;font-size:9px;white-space:nowrap;color:#aed7df}.metrics b{display:block;font-size:16px;font-variant-numeric:tabular-nums}
+.rooms{border:1px solid #204759;max-height:160px;overflow-y:auto}.roomHeader,.room{display:grid;grid-template-columns:1.7fr .8fr .7fr .8fr;gap:4px;padding:7px 5px;font-size:10px}
+.roomHeader{background:#123649;color:#c1f9fc;font-weight:700}.room:nth-child(odd){background:rgba(43,95,108,.16)}.room span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.warning{color:#ffd085;font-size:10px;word-break:break-word}.actions{display:flex;gap:7px}.actions button{flex:1;min-height:44px;background:#104059;color:#e4faff;border:1px solid #377187;border-radius:4px}
+.json{box-sizing:border-box;width:100%;min-height:130px;margin-top:7px;border:1px solid #366c77;background:#031626;color:#e0faff;resize:vertical;font:10px/1.45 monospace}
+@media(max-height:690px){.root{top:calc(env(safe-area-inset-top,0px) + 204px)}.panel{max-height:43dvh}}
