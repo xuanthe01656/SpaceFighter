@@ -101,9 +101,13 @@ import {
 } from '../../game/dungeon/DungeonHudCatalogV396.js';
 import {
     resolveDungeonCombatSlotV398,
-    resolveDungeonEnemyFireDecisionV398,
     resolveDungeonEnemySeparationV398,
 } from '../../game/dungeon/DungeonProductionTuningV398.js';
+import {
+    createDungeonFireQaMonitorV399,
+    resolveDungeonEnemyFireDecisionV399,
+    resolveDungeonVolleyReadinessV399,
+} from '../../game/dungeon/DungeonFireReliabilityV399.js';
 import {
     logicalCircleHitV392,
     logicalSegmentCircleHitV392,
@@ -201,6 +205,11 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     const dungeonQaRunV391 = isDungeonQaRunV391(gsRef.current?.dungeonQa, dungeonId)
         ? gsRef.current.dungeonQa
         : null;
+    const dungeonFireQaV399 = createDungeonFireQaMonitorV399({
+        enabled: Boolean(dungeonQaRunV391)
+            && import.meta.env?.VITE_SF_DUNGEON_FIRE_DIAGNOSTICS !== 'false',
+        dungeonId,
+    });
     const DIFF = resolveDungeonDifficulty(dungeonConfig);
     const dungeonParityV38 = isDungeonParityFoundationEnabledV38({
         dungeonId,
@@ -1256,6 +1265,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             _combatSlot: null,
             _dungeonCombatSlot: null,
             _fireBlockedSinceMs: null,
+            _fireBlockedPhaseIdV399: null,
             _forcedFireCountV398: 0,
             _lastVolleyPhaseId: null,
             _volleySequence: 0,
@@ -1616,20 +1626,33 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             visual,
             requestedRadius: options.hitRadius || plan?.hitRadius,
         });
-        const b = visual
-            ? hostileProjectileVisualsV38.create({
-                name: hitId,
-                visual,
-                position: pos,
-                vx: velX,
-                vz: velZ,
-            })
-            : BABYLON.MeshBuilder.CreateSphere(hitId, { diameter: 0.5 }, scene);
-        if (!b) return null;
-        if (!visual) {
+        // A failed sprite/material factory must not silently erase a logical shot.
+        // Fall back to a small visible mesh only for this Dungeon projectile.
+        let b = null;
+        if (visual) {
+            try {
+                b = hostileProjectileVisualsV38.create({
+                    name: hitId,
+                    visual,
+                    position: pos,
+                    vx: velX,
+                    vz: velZ,
+                });
+            } catch (error) {
+                if (dungeonQaRunV391) console.warn('[DUNGEON_FIRE_VISUAL_FALLBACK_V399]', sourceRole, error?.message || String(error));
+            }
+        }
+        if (!b) {
+            b = BABYLON.MeshBuilder.CreateSphere(hitId, {
+                diameter: Math.max(.3, Math.min(1.0, Number(visual?.width) || .5)),
+                segments: 8,
+            }, scene);
+            if (!b) return null;
             b.position = pos.clone();
             b.position.y = 0;
             b.material = MAT.bulletEnemy;
+            b.isPickable = false;
+            if (visual) dungeonFireQaV399.record(sourceRole, 'visual_fallback');
         }
         b._velX = velX;
         b._velZ = velZ;
@@ -1780,37 +1803,64 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             pattern: weapon.bulletPattern,
             createdAtMs: nowMs,
         });
-        enemy.visual?.setState('attack');
-        return fireEnemyBullet(origin, plan.velocity.x, plan.velocity.z, {
+        const bullet = fireEnemyBullet(origin, plan.velocity.x, plan.velocity.z, {
             plan,
             damage: projectile.damage,
             damageType: weapon.bulletType || enemy.spec.archetype.damageType,
             sourceRole: enemy.spec.roleId,
         });
+        dungeonFireQaV399.record(enemy.spec.roleId,
+            bullet ? 'projectile_created' : 'projectile_failed');
+        return bullet;
     };
 
     const tryFireDungeonEnemyVolleyV38 = (enemy, choreography, nowMs) => {
-        if (!dungeonParityV38 || !enemy?.spec || !enemy.canShoot || !choreography?.mayFire) return false;
-        if (nowMs <= enemy.lastShoot + enemy.shootMs) return false;
+        if (!dungeonParityV38 || !enemy?.spec) return false;
+        const readiness = resolveDungeonVolleyReadinessV399({
+            mayFire: Boolean(choreography?.mayFire),
+            canShoot: enemy.canShoot,
+            hasProjectile: Boolean(enemy.spec.weapon?.projectile),
+            nowMs,
+            lastShoot: enemy.lastShoot,
+            shootMs: enemy.shootMs,
+        });
+        if (!readiness.allowed) {
+            if (choreography?.mayFire && readiness.reason !== 'no_fire_window') {
+                dungeonFireQaV399.record(enemy.spec.roleId, readiness.reason);
+            }
+            return false;
+        }
         const phaseId = choreography.phaseId || 'attack';
         const cadence = enemy.spec.weapon.cadence || {};
         const plan = createCampaignEnemyVolleyPlanV34({
             roleId: enemy.spec.roleId,
             phaseId,
-            sequence: enemy._volleySequence++,
+            sequence: enemy._volleySequence,
             burstCount: cadence.burstCount || 1,
             burstGapMs: cadence.burstGapMs || 0,
             projectileDamage: enemy.spec.weapon.projectile?.damage || 1,
             createdAtMs: nowMs,
         });
-        enemy.lastShoot = nowMs;
-        enemy._lastVolleyPhaseId = phaseId;
-        for (const shot of plan.shots) {
+        // A scheduled zero-delay timer is not proof that a bullet exists.
+        // Emit the first catalog shot synchronously, and commit cooldown only
+        // after the projectile has actually been created.
+        const firstShot = plan.shots?.[0];
+        if (!firstShot || firstShot.fireOffsetMs !== 0) {
+            dungeonFireQaV399.record(enemy.spec.roleId, 'invalid_volley');
+            return false;
+        }
+        const initialBulletV399 = fireDungeonEnemyShotV38(enemy, nowMs, firstShot.index, plan.shots.length);
+        if (!initialBulletV399) return false;
+        for (const shot of plan.shots.slice(1)) {
             scheduleBattleTimer(() => {
                 if (battleSceneDisposed || gameOver || enemy._dead || enemy.mesh?.isDisposed?.()) return;
                 fireDungeonEnemyShotV38(enemy, Date.now(), shot.index, plan.shots.length);
             }, shot.fireOffsetMs);
         }
+        enemy.lastShoot = nowMs;
+        enemy._volleySequence += 1;
+        enemy._lastVolleyPhaseId = phaseId;
+        dungeonFireQaV399.record(enemy.spec.roleId, 'volley_started');
         return true;
     };
 
@@ -2179,20 +2229,43 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 frameDeltaMs,
             );
         }
-        const fireDecisionV398 = resolveDungeonEnemyFireDecisionV398({
+        // Never carry one phase's blocked wind-up clock into another phase.
+        if (enemy._fireBlockedPhaseIdV399 !== result.phaseId) {
+            enemy._fireBlockedSinceMs = null;
+            enemy._fireBlockedPhaseIdV399 = result.phaseId;
+        }
+        const fireDecisionV399 = resolveDungeonEnemyFireDecisionV399({
             choreography: result,
             roleId: enemy.spec.roleId,
             seed: enemy.seed,
             nowMs,
             blockedSinceMs: enemy._fireBlockedSinceMs,
+            enemyX: enemy.mesh.position.x,
+            enemyZ: enemy.mesh.position.z,
+            playerX: playerRoot.position.x,
+            playerZ: playerRoot.position.z,
+            canShoot: enemy.canShoot,
+            hasProjectile: Boolean(enemy.spec.weapon?.projectile),
         });
-        enemy._fireBlockedSinceMs = fireDecisionV398.blockedSinceMs;
-        const firingStateV398 = fireDecisionV398.mayFire && !result.mayFire
-            ? { ...result, mayFire: true, dungeonFireFailSafeV398: true }
+        enemy._fireBlockedSinceMs = fireDecisionV399.blockedSinceMs;
+        const firingStateV399 = fireDecisionV399.mayFire && !result.mayFire
+            ? { ...result, mayFire: true, dungeonFireRecoveryV399: true }
             : result;
-        enemy.visual?.setState(result.fireWindup || fireDecisionV398.mayFire ? 'attack' : 'move');
-        if (tryFireDungeonEnemyVolleyV38(enemy, firingStateV398, nowMs)) {
-            if (fireDecisionV398.forced) enemy._forcedFireCountV398 += 1;
+        if (fireDecisionV399.reason === 'windup'
+            || fireDecisionV399.reason === 'out_of_envelope') {
+            dungeonFireQaV399.record(enemy.spec.roleId, fireDecisionV399.reason);
+        }
+        const firedV399 = tryFireDungeonEnemyVolleyV38(enemy, firingStateV399, nowMs);
+        // Aiming without a valid envelope is movement, not an endless attack VFX.
+        const attackFeedbackV399 = firedV399
+            || (enemy.lastShoot > 0 && nowMs - enemy.lastShoot < 280)
+            || (result.fireWindup && fireDecisionV399.reason === 'windup');
+        enemy.visual?.setState(attackFeedbackV399 ? 'attack' : 'move');
+        if (firedV399) {
+            if (fireDecisionV399.forced) {
+                enemy._forcedFireCountV398 += 1;
+                dungeonFireQaV399.record(enemy.spec.roleId, 'recovered_volley');
+            }
             enemy._fireBlockedSinceMs = null;
         }
         return true;
@@ -2205,6 +2278,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     scene.onBeforeRenderObservable.add(() => {
         if (gameOver || (typeof scene.isDisposed === 'function' ? scene.isDisposed() : scene.isDisposed)) return;
         const now = Date.now();
+        if (dungeonQaRunV391) dungeonFireQaV399.maybeLog(now, (tag, summary) => console.info(tag, summary));
         publishDungeonHudV396();
         const frameFactor = frameScale(engine.getDeltaTime());
         tick += frameFactor;

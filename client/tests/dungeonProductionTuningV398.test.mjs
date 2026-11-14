@@ -13,10 +13,10 @@ import {
   auditDungeonDifficultyCurveV398,
   auditDungeonProductionTuningV398,
   resolveDungeonCombatSlotV398,
-  resolveDungeonEnemyFireDecisionV398,
   resolveDungeonEnemySeparationV398,
   summarizeDungeonDifficultyV398,
 } from '../src/game/dungeon/DungeonProductionTuningV398.js';
+import { resolveDungeonEnemyFireDecisionV399 } from '../src/game/dungeon/DungeonFireReliabilityV399.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
@@ -43,7 +43,7 @@ test('Dungeon V3.9.8 production tuning is deterministic and audit-clean', () => 
   assert.ok(projected.minSpacing >= 2.20);
 });
 
-test('Dungeon V3.9.8 fire fail-safe preserves wind-up and never fires behind the player', () => {
+test('Dungeon V3.9.9 live-geometry fire recovery preserves wind-up and never fires behind the player', () => {
   const base = {
     mayFire: false,
     fireWindup: true,
@@ -56,22 +56,25 @@ test('Dungeon V3.9.8 fire fail-safe preserves wind-up and never fires behind the
     fireRangeMin: 5,
     fireRangeMax: 9,
   };
-  const early = resolveDungeonEnemyFireDecisionV398({
+  const early = resolveDungeonEnemyFireDecisionV399({
     choreography: base, roleId: 'gunner', seed: 77, nowMs: 500, blockedSinceMs: 0,
+    enemyX: 0, enemyZ: 0, playerX: 1.2, playerZ: 7,
   });
   assert.equal(early.mayFire, false);
   assert.equal(early.reason, 'windup');
 
-  const ready = resolveDungeonEnemyFireDecisionV398({
+  const ready = resolveDungeonEnemyFireDecisionV399({
     choreography: base, roleId: 'gunner', seed: 77, nowMs: 2000, blockedSinceMs: 0,
+    enemyX: 0, enemyZ: 0, playerX: 1.2, playerZ: 7,
   });
   assert.equal(ready.mayFire, true);
   assert.equal(ready.forced, true);
-  assert.equal(ready.reason, 'dungeon_arrival_fail_safe');
+  assert.equal(ready.reason, 'dungeon_arrival_recovery');
 
-  const behind = resolveDungeonEnemyFireDecisionV398({
+  const behind = resolveDungeonEnemyFireDecisionV399({
     choreography: { ...base, targetAhead: false, forwardDepth: -2 },
     roleId: 'gunner', seed: 77, nowMs: 3000, blockedSinceMs: 0,
+    enemyX: 0, enemyZ: 0, playerX: 1.2, playerZ: -2,
   });
   assert.equal(behind.mayFire, false);
 });
@@ -149,7 +152,7 @@ test('V3.9.8 source wires compact QA UI, swept hazard hits, slot spread and fire
   assert.match(scene, /resolveDungeonEnemySeparationV398/);
   assert.match(scene, /roleId === 'charger' \? 2\.05 : 1\.95/);
   assert.match(scene, /charge\.direction\.x \* speed \* enemyFrame \+ separation\.correctionX/);
-  assert.match(scene, /resolveDungeonEnemyFireDecisionV398/);
+  assert.match(scene, /resolveDungeonEnemyFireDecisionV399/);
   assert.match(scene, /_dungeonPreviousPositionV398/);
   assert.match(scene, /logicalSegmentCircleHitV392\(/);
   assert.match(scene, /targetPriority: 'survival_hazard'/);

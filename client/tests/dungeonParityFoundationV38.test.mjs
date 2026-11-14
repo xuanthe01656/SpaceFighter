@@ -502,7 +502,7 @@ test('DungeonScene integrates parity director, required objectives and shared Bo
   assert.match(source, /syncCampaignEnemyCombatSlotsV37\(/);
   assert.match(source, /resolveDungeonCombatSlotV398\(/);
   assert.match(source, /resolveDungeonEnemySeparationV398\(/);
-  assert.match(source, /resolveDungeonEnemyFireDecisionV398\(/);
+  assert.match(source, /resolveDungeonEnemyFireDecisionV399\(/);
   assert.match(source, /resolveDungeonEnemyMuzzleOriginV38/);
   assert.match(source, /remainingSpawns/);
   assert.match(source, /clearDungeonHostileProjectilesV38/);
