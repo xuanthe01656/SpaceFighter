@@ -4,6 +4,14 @@
  * campaignData, localStorage, Firebase, economy, or authoritative battle state.
  * QA warnings are review signals, NOT production certification.
  */
+import { DUNGEON_ENGAGEMENT_VERSION_V404 } from './DungeonEngagementContractV404.js';
+import { DUNGEON_RAIDER_OPENING_VERSION_V405 } from './DungeonRaiderOpeningV405.js';
+import {
+  DUNGEON_COMBAT_UX_VERSION_V410,
+  DUNGEON_ROLE_ENGAGEMENT_VERSION_V410,
+} from './DungeonRoleEngagementV410.js';
+import { DUNGEON_SHIP_SKILL_ADAPTER_VERSION_V410 } from './DungeonShipSkillAdapterV410.js';
+import { DUNGEON_HUD_CATALOG_VERSION } from './DungeonHudCatalogV396.js';
 export const DUNGEON_QA_READINESS_VERSION_V400 = 'dungeon-qa-readiness-v4.0.1';
 export const DUNGEON_QA_READINESS_POLICY_V400 = Object.freeze({
   maxRooms: 15,
@@ -28,8 +36,19 @@ const SOURCES = new Set(['projectile', 'environment', 'contact', 'unknown']);
 const FIRE_PROBE_REASONS = new Set([
   'no_fire_window', 'out_of_envelope', 'windup', 'cooldown', 'no_weapon',
   'invalid_cadence', 'invalid_volley', 'projectile_failed', 'projectile_created',
-  'ready', 'other',
+  // Actual V3.9.9 runtime decisions: these must never be mislabeled 'other'.
+  'no_fire_intent', 'non_ranged_role', 'no_choreography', 'invalid_position',
+  'shared_ready', 'ready', 'other',
 ]);
+const RAIDER_OPENING_REASONS_V405 = Object.freeze([
+  'not_opening_phase', 'opening_consumed', 'weapon_unavailable',
+  'invalid_geometry', 'shared_ready', 'outside_visible_approach',
+  'approaching_fire_band', 'in_band_windup', 'opening_ready', 'other',
+]);
+const raiderOpeningCountsV405 = () => ({
+  probeSamples: 0, successfulOpeningVolleys: 0,
+  reasons: Object.fromEntries(RAIDER_OPENING_REASONS_V405.map(key => [key, 0])),
+});
 const roleCounts = () => Object.fromEntries([...ROLES, 'unknown'].map(role => [role, 0]));
 const fireReasonCounts = () => Object.fromEntries([...FIRE_PROBE_REASONS].map(reason => [reason, 0]));
 const safeNum = (n, fallback = 0) => Number.isFinite(n) ? n : fallback;
@@ -41,7 +60,9 @@ const round = (value, digits = 1) => Number(safeNum(value).toFixed(digits));
 const shortId = value => String(value || 'unknown').replace(/[^a-z0-9_-]/gi, '').slice(0, 64) || 'unknown';
 const emptyCounts = () => ({ spawns: 0, rangedSpawns: 0, volleys: 0, projectiles: 0,
   telegraphs: 0, destroyedHazards: 0, objectiveNodesDestroyed: 0, damageTaken: 0, dodged: 0, absorbed: 0,
+  shipSkillActivations: 0, shipSkillRejected: 0,
   damageBySource: { projectile: 0, contact: 0, environment: 0, unknown: 0 },
+  raiderOpeningV405: raiderOpeningCountsV405(),
   shotsByRole: roleCounts(), spawnsByRole: roleCounts(), fireProbeByReason: fireReasonCounts(),
   fireProbeByRole: Object.fromEntries([...ROLES, 'unknown'].map(role => [role, fireReasonCounts()])),
   fireProbeSamples: 0, enemiesResolved: 0, rangedResolved: 0, rangedFired: 0,
@@ -56,6 +77,13 @@ const publicCounts = counts => ({
   destroyedHazards: counts.destroyedHazards, objectiveNodesDestroyed: counts.objectiveNodesDestroyed,
   damageTaken: round(counts.damageTaken), damageBySource: { ...counts.damageBySource },
   dodged: counts.dodged, absorbed: counts.absorbed,
+  shipSkillActivations: counts.shipSkillActivations,
+  shipSkillRejected: counts.shipSkillRejected,
+  raiderOpeningV405: {
+    probeSamples: counts.raiderOpeningV405.probeSamples,
+    successfulOpeningVolleys: counts.raiderOpeningV405.successfulOpeningVolleys,
+    reasons: { ...counts.raiderOpeningV405.reasons },
+  },
   shotsByRole: { ...counts.shotsByRole }, spawnsByRole: { ...counts.spawnsByRole },
   fireProbeSamples: counts.fireProbeSamples, fireProbeByReason: { ...counts.fireProbeByReason },
   fireProbeByRole: Object.fromEntries(Object.entries(counts.fireProbeByRole)
@@ -104,6 +132,7 @@ const status = (record, nowMs, finished) => {
 export function createDungeonQaReadinessV400({
   enabled = false, dungeonId = 'dung_taurus', presetId = 'account',
   runMode = 'full_run', expectedRooms = 5, startedAtMs = 0,
+  qaOutgoingDamageScale = 1,
 } = {}) {
   const active = enabled === true;
   const originMs = positive(startedAtMs);
@@ -155,7 +184,7 @@ export function createDungeonQaReadinessV400({
         && liveEnemies.size < DUNGEON_QA_READINESS_POLICY_V400.maxTrackedEnemies) {
       liveEnemies.set(String(enemyId), {
         roleId: role, startedAtMs: positive(nowMs), projectileCount: 0,
-        lastProbeAtMs: -Infinity,
+        lastProbeAtMs: -Infinity, lastRaiderOpeningProbeAtMsV405: -Infinity,
       });
     }
   };
@@ -192,6 +221,26 @@ export function createDungeonQaReadinessV400({
       b.fireProbeSamples += 1;
       b.fireProbeByReason[key] += 1;
       b.fireProbeByRole[enemy.roleId][key] += 1;
+    }
+    return true;
+  };
+  const recordRaiderOpeningV405 = ({ enemyId, nowMs = null,
+    reason = 'other', successfulOpening = false } = {}) => {
+    if (!active || finished || !current || enemyId == null || !Number.isFinite(nowMs)) return false;
+    const enemy = liveEnemies.get(String(enemyId));
+    if (!enemy || enemy.roleId !== 'raider') return false;
+    const at = positive(nowMs);
+    const sample = at - enemy.lastRaiderOpeningProbeAtMsV405
+      >= DUNGEON_QA_READINESS_POLICY_V400.enemyProbeSpacingMs;
+    if (!sample && !successfulOpening) return false;
+    if (sample) enemy.lastRaiderOpeningProbeAtMsV405 = at;
+    const safeReason = RAIDER_OPENING_REASONS_V405.includes(reason) ? reason : 'other';
+    for (const b of buckets()) {
+      if (sample) {
+        b.raiderOpeningV405.probeSamples += 1;
+        b.raiderOpeningV405.reasons[safeReason] += 1;
+      }
+      if (successfulOpening) b.raiderOpeningV405.successfulOpeningVolleys += 1;
     }
     return true;
   };
@@ -232,6 +281,14 @@ export function createDungeonQaReadinessV400({
   const recordHazardDestroyed = () => {
     if (!active || finished || !current) return;
     for (const b of buckets()) b.destroyedHazards += 1;
+  };
+  const recordShipSkill = ({ accepted = false } = {}) => {
+    if (!active || finished || !current) return false;
+    for (const b of buckets()) {
+      if (accepted) b.shipSkillActivations += 1;
+      else b.shipSkillRejected += 1;
+    }
+    return true;
   };
   const recordDamage = ({ source = 'unknown', hpBefore = 0, hpAfter = 0,
     dodged = false, absorbed = false } = {}) => {
@@ -317,8 +374,19 @@ export function createDungeonQaReadinessV400({
     // Never silently certify production: a real APK/device assessment is required.
     return {
       version: DUNGEON_QA_READINESS_VERSION_V400,
+      // V4.0.4 runtime marker; report schema version stays V4.0.1.
+      dungeonEngagementVersion: DUNGEON_ENGAGEMENT_VERSION_V404,
+      dungeonRaiderOpeningVersion: DUNGEON_RAIDER_OPENING_VERSION_V405,
+      dungeonCombatUxVersion: DUNGEON_COMBAT_UX_VERSION_V410,
+      dungeonRoleEngagementVersion: DUNGEON_ROLE_ENGAGEMENT_VERSION_V410,
+      dungeonShipSkillAdapterVersion: DUNGEON_SHIP_SKILL_ADAPTER_VERSION_V410,
+      dungeonHudVersion: DUNGEON_HUD_CATALOG_VERSION,
       scope: 'guest_dungeon_qa_only',
       dungeonId: shortId(dungeonId), presetId: shortId(presetId),
+      // V4.0.3: never compare QA runs without knowing their damage calibration.
+      qaOutgoingDamageScale: Number.isFinite(qaOutgoingDamageScale)
+        && qaOutgoingDamageScale >= 0.03 && qaOutgoingDamageScale <= 1
+        ? round(qaOutgoingDamageScale, 3) : 1,
       runMode: runMode === 'single_room' ? 'single_room' : 'full_run',
       expectedRooms: Math.min(15, Math.max(1, whole(expectedRooms, 5))),
       outcome, finished, elapsedMs: Math.max(0, at - originMs),
@@ -331,8 +399,8 @@ export function createDungeonQaReadinessV400({
   };
   return Object.freeze({ beginRoom, recordSpawn, recordVolley, recordProjectile,
     recordTelegraph, recordHazardDestroyed, recordObjectiveNodeDestroyed,
-    recordEnemyResolved, recordFireProbe, recordBossSpawn, recordBossDefeated,
-    recordDamage, sample, endRoom, finish, snapshot });
+    recordEnemyResolved, recordFireProbe, recordRaiderOpeningV405, recordBossSpawn, recordBossDefeated,
+    recordShipSkill, recordDamage, sample, endRoom, finish, snapshot });
 }
 
 export function auditDungeonQaReadinessV400() {

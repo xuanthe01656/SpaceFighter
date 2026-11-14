@@ -336,25 +336,26 @@ export default function GuestAbilityControls({
   qaResult = null,
   onQaResultAction = null,
   lang = 'vi',
+  hideCombatControls = false,
 }) {
   if (!state?.ship && !qaResult) return null;
   return <>
     {state?.ship && <aside
-      className={styles.controls}
+      className={`${styles.controls} ${hideCombatControls ? styles.qaOnlyControls : ''}`}
       aria-label={lang === 'vi' ? 'Kỹ năng trận Guest' : 'Guest battle skill'}
       data-feedback-version="guest-ability-feedback-v2.6a"
       data-battle-phase={state.activationGate?.battlePhase || 'UNKNOWN'}
     >
       <DebugReadout state={state} feedback={feedback} qaSelection={qaSelection} lang={lang} />
-      <ShipAction
+      {!hideCombatControls && <ShipAction
         slot={state.ship}
         activationGate={state.activationGate}
         lang={lang}
         onActivate={onActivate}
         feedback={feedback}
         currentTick={state.tick}
-      />
-      <ArmorPassive armor={state.armor} lang={lang} currentTick={state.tick} />
+      />}
+      {!hideCombatControls && <ArmorPassive armor={state.armor} lang={lang} currentTick={state.tick} />}
       <MobileQaLoadoutSwitcher activationGate={state.activationGate} qaSelection={qaSelection}
         onQaCycle={onQaCycle} onQaNavigate={onQaNavigate} lang={lang} />
     </aside>}

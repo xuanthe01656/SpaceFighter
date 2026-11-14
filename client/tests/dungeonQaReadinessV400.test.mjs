@@ -47,6 +47,9 @@ test('room boundary, source-specific damage, real projectile and telegraph count
   assert.equal(report.dodged,1);
   assert.equal(report.productionApproved,false);
   assert.equal(report.releaseStatus,'APK_QA_REVIEW_REQUIRED');
+  assert.equal(report.dungeonCombatUxVersion,'dungeon-combat-ux-parity-v4.1.0');
+  assert.equal(report.dungeonRoleEngagementVersion,'dungeon-role-engagement-v4.1.0');
+  assert.equal(report.dungeonShipSkillAdapterVersion,'dungeon-ship-skill-adapter-v4.1.1');
   assert.ok(!JSON.stringify(report).includes('profileId'));
 });
 
@@ -240,6 +243,8 @@ test('V4.0.1 wiring captures real lifecycle, fire gate, objectives, Boss and run
   assert.match(scene,/dungeonQaReadinessV400\.recordBossSpawn\(/);
   assert.match(scene,/dungeonQaReadinessV400\.recordBossDefeated\(/);
   assert.match(scene,/dungeonQaReadinessV400\.recordObjectiveNodeDestroyed\(/);
+  assert.match(scene,/dungeonQaReadinessV400\.recordShipSkill/);
+  assert.match(scene,/createDungeonShipSkillAdapterV410/);
   assert.match(panel,/report\.rangedLongLivedWithoutShots/);
   assert.match(panel,/report\.hpStart/);
   assert.doesNotMatch(scene,/saveDungeonQaReport|submitQaReportToServer/);

@@ -23,7 +23,12 @@ test('F12 parity: both gameplay lanes use one battle notice overlay without a se
   const hud=read('src/ui-system/BattleHud.jsx');
   const css=read('src/ui-system/BattleHud.module.css');
   assert.match(guest,/onAnnouncement: notice=>setBattleNotice/);
-  assert.match(guest,/<BattleHud[^>]*announcement=\{battleNotice\}/);
+  assert.match(guest, /<CampaignTacticalHudV420\b[\s\S]*?announcement=\{battleNotice\}/);
+  const campaignHud = read('src/ui-system/CampaignTacticalHudV420.jsx');
+  const sharedHud = read('src/ui-system/TacticalCombatHudV411.jsx');
+  assert.match(campaignHud, /announcement=\{announcement\}/);
+  assert.match(sharedHud, /normalizeBattleNotice\(announcement\)/);
+  assert.match(sharedHud, /visibleNotice/);
   assert.match(scene,/if\(externalHud&&typeof data\.onAnnouncement==='function'\)/);
   assert.match(scene,/data\.onAnnouncement\(\{text,colorHex,duration\}\);return;/);
   assert.match(c15,/c15WaveNotice\(activeWave,lang\)/);

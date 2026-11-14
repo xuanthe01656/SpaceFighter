@@ -535,8 +535,8 @@ test('DungeonScene integrates parity director, required objectives and shared Bo
 });
 
 
-test('Dungeon HUD V3.9.8 is catalog-driven, baseline-aligned and future-safe', () => {
-  assert.equal(DUNGEON_HUD_CATALOG_VERSION, 'dungeon-hud-catalog-v3.9.8');
+test('Dungeon HUD V4.1.1 is compact, catalog-driven and future-safe', () => {
+  assert.equal(DUNGEON_HUD_CATALOG_VERSION, 'dungeon-hud-catalog-v4.1.1');
   assert.deepEqual(auditDungeonHudCatalogV396(), []);
   assert.deepEqual(
     Object.keys(DUNGEON_HUD_PROFILES_V396).sort(),
@@ -546,8 +546,8 @@ test('Dungeon HUD V3.9.8 is catalog-driven, baseline-aligned and future-safe', (
   assert.equal(taurus.shortCode, 'TAURUS');
   assert.equal(taurus.layout.publishIntervalMs, 100);
   assert.equal(taurus.layout.maxRoomMarkers, DUNGEON_HUD_MAX_VISIBLE_ROOM_MARKERS_V396);
-  assert.equal(taurus.layout.reservedTopPx, 232);
-  assert.equal(taurus.layout.alignmentContract, 'shared-baseline-v398');
+  assert.equal(taurus.layout.reservedTopPx, 92);
+  assert.equal(taurus.layout.alignmentContract, 'unified-tactical-v411');
   const phoneLine = resolveDungeonHudOcclusionLineV396({
     dungeonId: 'dung_taurus', worldHalfHeight: 15, viewportHeight: 852,
   });
@@ -560,7 +560,7 @@ test('Dungeon HUD V3.9.8 is catalog-driven, baseline-aligned and future-safe', (
   assert.equal(Object.prototype.hasOwnProperty.call(taurus, 'reward'), false);
 });
 
-test('Dungeon HUD room rail scales beyond the current five-room vertical slice', () => {
+test('Dungeon HUD bounded room-marker metadata remains future-safe without rendering a rail', () => {
   const rooms = Array.from({ length: 12 }, (_, index) => ({
     id: `future_room_${index + 1}`,
     kind: index === 11 ? 'boss' : (index % 4 === 2 ? 'breakable' : 'entry'),
@@ -609,13 +609,17 @@ test('Dungeon HUD objective adapter keeps hostile, node and Boss progress semant
   assert.equal(complete.ratio, 1);
 });
 
-test('Dungeon HUD V3.9.8 owns fixed presentation while Babylon retains world-space UI', () => {
+test('Dungeon HUD V4.1.1 uses unified tactical shell while Babylon retains world-space UI', () => {
   const engineSource = fs.readFileSync(new URL('../src/components/Dungeon/DungeonEngine.jsx', import.meta.url), 'utf8');
   const sceneSource = fs.readFileSync(new URL('../src/components/Dungeon/DungeonScene.js', import.meta.url), 'utf8');
   const hudSource = fs.readFileSync(new URL('../src/ui-system/DungeonHudV396.jsx', import.meta.url), 'utf8');
-  const cssSource = fs.readFileSync(new URL('../src/ui-system/DungeonHudV396.module.css', import.meta.url), 'utf8');
+  const sharedSource = fs.readFileSync(new URL('../src/ui-system/TacticalCombatHudV411.jsx', import.meta.url), 'utf8');
+  const sharedCss = fs.readFileSync(new URL('../src/ui-system/TacticalCombatHudV411.module.css', import.meta.url), 'utf8');
+  const compatibilityCss = fs.readFileSync(new URL('../src/ui-system/DungeonHudV396.module.css', import.meta.url), 'utf8');
 
+  // Babylon remains authoritative; its old fixed HUD is hidden when React is active.
   assert.match(engineSource, /<DungeonHudV396/);
+  assert.match(engineSource, /<DungeonShipSkillButtonV410/);
   assert.match(engineSource, /onHudUpdate:/);
   assert.match(engineSource, /onAnnouncement:/);
   assert.doesNotMatch(engineSource, /DUNGEON QA · NO REWARDS\s*<br/);
@@ -626,15 +630,37 @@ test('Dungeon HUD V3.9.8 owns fixed presentation while Babylon retains world-spa
   assert.match(sceneSource, /qaLoadoutLabel/);
   assert.match(sceneSource, /topBar\.isVisible = !externalHudV396/);
   assert.match(sceneSource, /objectivePanel\.isVisible = !externalHudV396/);
-  assert.match(hudSource, /RoomRail/);
-  assert.match(hudSource, /qaLoadoutLabel/);
-  assert.match(hudSource, /objectiveMode === 'boss'/);
-  assert.match(cssSource, /--sf-native-battle-hud-top/);
-  assert.match(cssSource, /env\(safe-area-inset-left/);
-  assert.match(cssSource, /pointer-events:\s*none/);
-  assert.match(cssSource, /\.retreatAction[\s\S]*pointer-events:\s*auto/);
-  assert.match(cssSource, /shared-baseline fixed-screen production presentation/);
-  assert.match(cssSource, /\.qaBadge[\s\S]*width:\s*min\(89%, 620px\)/);
+
+  // One shared shell for Campaign and Dungeon; preserve real objective semantics.
+  assert.match(hudSource, /import TacticalCombatHudV411 from/);
+  assert.match(hudSource, /<TacticalCombatHudV411/);
+  assert.match(hudSource, /objectiveCounter=\{objectiveCounterFor\(state, vi\)\}/);
+  assert.match(hudSource, /case 'hostiles':[\s\S]*?'ĐỊCH'/);
+  assert.match(hudSource, /case 'nodes':[\s\S]*?'NODE'/);
+  assert.match(hudSource, /state\.roomComplete/);
+  assert.match(hudSource, /state\.objectiveMode === 'boss'/);
+  assert.match(hudSource, /state\.bossHp !== null/);
+  assert.match(hudSource, /finite\(state\.bossMaxHp\) > 0/);
+  assert.match(hudSource, /qa=\{Boolean\(state\.qaLabel\)\}/);
+  assert.match(hudSource, /onRetreat=\{onRetreat\}/);
+  assert.doesNotMatch(hudSource, /function RoomRail|<RoomRail|objectiveChip|qaDot|bossBar/);
+
+  // Compact, safe-area-aware, pointer-safe presentation lives in the shared shell.
+  assert.match(sharedSource, /objectiveCounter && <small>/);
+  assert.match(sharedSource, /bossActive && <section className=\{styles\.bossStrip\}/);
+  assert.match(sharedSource, /styles\.bossRail/);
+  assert.match(sharedSource, /qa && <span className=\{styles\.qaBadge\}/);
+  assert.match(sharedSource, /styles\.retreatButton/);
+  assert.match(sharedCss, /--sf-native-battle-hud-top/);
+  assert.match(sharedCss, /env\(safe-area-inset-left/);
+  assert.match(sharedCss, /env\(safe-area-inset-right/);
+  assert.match(sharedCss, /\.hud\s*\{[^}]*pointer-events:\s*none/s);
+  assert.match(sharedCss, /\.retreatButton\s*\{[^}]*pointer-events:\s*auto/s);
+  assert.match(sharedCss, /\.bossStrip\s*\{/);
+  assert.match(sharedCss, /\.bossRail\s*\{/);
+  assert.match(sharedCss, /height:\s*82px/);
+  assert.doesNotMatch(sharedCss, /\.roomRail|\.objectiveCard/);
+  assert.match(compatibilityCss, /shared-baseline styles live in TacticalCombatHudV411/);
 });
 
 test('Dungeon HUD room metadata is localized and derived from authored content', () => {

@@ -157,7 +157,12 @@ test('V8B-2B0 BLOCKER: current ms-based fireRate cannot always equal integer 30H
   assert.equal(fixture().state.pilot.fireEveryTicks * 1000 / TICK_HZ, 400);
   assert.match(campaignSrc, /const\s+mainInterval\s*=\s*stats\.fireRate/);
   assert.match(campaignSrc, /now\s*>\s*lastFire\s*\+\s*mainInterval/);
-  assert.match(dungeonSrc, /now\s*>\s*lastFire\s*\+\s*stats\.fireRate/);
+  // Dungeon V4.1+ keeps the ms-based stat but applies the shared SHIP-skill
+  // fire interval multiplier. This does NOT grant kernel tick-rate parity.
+  assert.match(dungeonSrc, /const\s+dungeonSkillModifiersV410\s*=\s*dungeonShipSkillV410\.modifiers\(\)/);
+  assert.match(dungeonSrc,
+    /const\s+mainFireIntervalV410\s*=\s*stats\.fireRate\s*\*\s*Math\.max\(\s*\.35\s*,\s*Number\(dungeonSkillModifiersV410\.fireIntervalMultiplier\)\s*\|\|\s*1\s*\)/);
+  assert.match(dungeonSrc, /now\s*>\s*lastFire\s*\+\s*mainFireIntervalV410/);
 });
 
 test('V8B-2B0 BLOCKER: Campaign and Dungeon have wave/boss lifecycle outside core state', () => {

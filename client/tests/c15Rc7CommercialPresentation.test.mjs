@@ -23,14 +23,17 @@ test('C15 and Guest use distinct gameplay lanes, but C15 delegates visual-only s
   assert.doesNotMatch(renderer,/claimSettlement|wallet|awardCoins|calculateDamage|setHp/);
 });
 
-test('C15 and Guest render the same battle HUD primitives, without an early VERIFIED label',()=>{
+test('C15 keeps approved BattleHud while Guest Campaign uses shared tactical HUD without a VERIFIED label',()=>{
   const c15=read('src/components/C15LocalAlpha1/index.jsx');
   const guest=read('src/components/Campaign/CampaignEngine.jsx');
   const scene=read('src/components/Campaign/CampaignScene.js');
   const hud=read('src/ui-system/BattleHud.jsx');
   const css=read('src/ui-system/BattleHud.module.css');
   assert.match(c15,/BattleHud/);assert.match(c15,/bossHp=/);
-  assert.match(guest,/<BattleHud/);assert.match(scene,/onHudUpdate/);
+  assert.match(guest, /<CampaignTacticalHudV420\b/);
+  assert.doesNotMatch(guest, /<BattleHud\b/);
+  assert.match(read('src/ui-system/CampaignTacticalHudV420.jsx'), /TacticalCombatHudV411/);
+  assert.match(scene,/onHudUpdate/);
   assert.match(scene,/topBar\.isVisible=!externalHud/);
   assert.match(hud,/styles\.shieldSegments/);assert.match(hud,/role="meter"/);assert.match(hud,/styles\.boss/);
   assert.doesNotMatch(hud,/ĐÃ XÁC MINH|Verified battle|Đã xác minh/);

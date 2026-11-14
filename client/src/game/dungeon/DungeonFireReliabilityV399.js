@@ -75,7 +75,9 @@ export function resolveDungeonEnemyFireDecisionV399({
     ? choreography.fireRangeMax : Math.max(7, authoredMin + 3);
   const minRange = Math.max(1.8, authoredMin * .78);
   const maxRange = Math.max(minRange + 1, authoredMax * 1.30);
-  const lateralLimit = LATERAL_MAX[roleId] ?? LATERAL_MAX.gunner;
+  const lateralLimit = finite(choreography.lateralLimit)
+    ? Math.max(2.5, choreography.lateralLimit)
+    : (LATERAL_MAX[roleId] ?? LATERAL_MAX.gunner);
   const geometryReady = forwardDepth >= minRange && forwardDepth <= maxRange
     && lateralDistance <= lateralLimit
     && directDistance <= maxRange * 1.48;

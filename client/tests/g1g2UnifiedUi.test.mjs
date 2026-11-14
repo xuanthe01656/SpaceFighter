@@ -7,7 +7,11 @@ test('G1: one CSS/SVG game UI system is imported from both gameplay lanes and re
   const paths=['src/components/Campaign/CampaignEngine.jsx','src/components/C15LocalAlpha1/index.jsx',
     'src/components/ResourceDownloads/StartupResourceGate.jsx','src/components/ResourceDownloads/ResourceManagerScreen.jsx'];
   for(const name of paths)assert.match(read(name),/ui-system\/(GameButton|GamePanel|BattleHud)/,name);
-  assert.match(read('src/components/Campaign/CampaignEngine.jsx'),/<BattleHud/);
+  const campaign = read('src/components/Campaign/CampaignEngine.jsx');
+  assert.match(campaign, /import CampaignTacticalHudV420 from/);
+  assert.match(campaign, /<CampaignTacticalHudV420\b/);
+  assert.doesNotMatch(campaign, /<BattleHud\b/);
+  assert.match(read('src/ui-system/CampaignTacticalHudV420.jsx'), /TacticalCombatHudV411/);
   assert.match(read('src/components/C15LocalAlpha1/index.jsx'),/<BattleHud/);
   assert.match(read('src/ui-system/BattleHud.module.css'),/pointer-events:none/);
   assert.match(read('src/ui-system/GameButton.module.css'),/min-height:var\(--sf-ui-touch-target\)/);

@@ -35,15 +35,22 @@ export const DUNGEON_QA_LOADOUT_PRESETS_V397 = freezeDeep({
     tier: 3,
     label: { vi: 'CÔNG KÍCH MK-III', en: 'ASSAULT MK-III' },
     summary: {
-      vi: 'Raptor + Neutron + tên lửa tự hướng + giáp phản ứng + drone laser.',
-      en: 'Raptor, Neutron, homing wing, reactive armor and laser drone.',
+      vi: 'Raptor + Neutron + tên lửa, giáp và drone ở cấp QA thấp để quái có thời gian phản công.',
+      en: 'Raptor and Neutron with lower-level QA support gear so enemies can counterattack.',
     },
-    aircraft: { id: 'ship_raptor', level: 36, stars: 3 },
+    // V4.0.2 QA-only calibration, based on Taurus V4.0.1 evidence:
+    // 28/28 ranged enemies resolved before firing; avg lifetime 119ms; boss 1189ms.
+    // Keep the same IDs/slots; do not modify production aircraft/gear or global damage.
+    // V4.0.3: QA combat offense is calibrated separately at the enemy/boss damage
+    // boundary; this keeps the gear identity and the actual product catalog intact.
+    // Default QA outgoing damage scale: 0.10 (10%), with a dev-query override.
+    // First-pass numbers require Web/APK validation, not an asserted production balance.
+    aircraft: { id: 'ship_raptor', level: 12, stars: 1 },
     equipment: {
-      mainGun: gear('gun_neutron', 'mainGun', 36, 4),
-      wingman: gear('wing_homing', 'wingman', 34, 4),
-      armor: gear('armor_reactive', 'armor', 34, 4),
-      drone: gear('drone_laser', 'drone', 34, 4),
+      mainGun: gear('gun_neutron', 'mainGun', 10, 2),
+      wingman: gear('wing_homing', 'wingman', 8, 2),
+      armor: gear('armor_reactive', 'armor', 8, 2),
+      drone: gear('drone_laser', 'drone', 8, 2),
     },
   },
   control_mk3: {
@@ -95,6 +102,41 @@ export const DUNGEON_QA_LOADOUT_PRESETS_V397 = freezeDeep({
     },
   },
 });
+
+/**
+ * V4.0.3: CALIBRATION ONLY. Never applies to a real/account run or non-assault
+ * preset. Web QA may set sfDungeonDmg=0.05...1.0 so a new patch is not needed
+ * for each balance experiment. Build/non-dev QA uses the 0.10 default.
+ *
+ * This is NOT a production power rebalance or an authorization mechanism.
+ */
+export const DUNGEON_QA_ASSAULT_DAMAGE_SCALE_V403 = 0.10;
+
+export function resolveDungeonQaOutgoingDamageScaleV403({
+  qaRun = null,
+  isDev = false,
+  search = '',
+} = {}) {
+  if (qaRun?.enabled !== true || qaRun?.rewardMode !== 'none'
+      || qaRun?.trustedWrites !== false || qaRun?.loadoutPresetId !== 'assault_mk3') return 1;
+  if (isDev === true) {
+    const raw = new URLSearchParams(String(search || '').replace(/^\?/, '')).get('sfDungeonDmg');
+    // Reject blank, exponential, negative and non-numeric input. No implicit zero.
+    if (raw !== null && /^(?:0(?:\.\d{1,3})?|1(?:\.0{1,3})?)$/.test(raw)) {
+      const value = Number(raw);
+      if (Number.isFinite(value) && value >= 0.03 && value <= 1) return value;
+    }
+  }
+  return DUNGEON_QA_ASSAULT_DAMAGE_SCALE_V403;
+}
+
+/** Apply once, at the damage-to-enemy/boss boundary. Never scale objectives. */
+export function scaleDungeonQaOutgoingDamageV403(rawDamage, factor = 1) {
+  const damage = Number(rawDamage);
+  const scale = Number(factor);
+  if (!Number.isFinite(damage) || damage <= 0) return 0;
+  return damage * (Number.isFinite(scale) && scale >= 0.03 && scale <= 1 ? scale : 1);
+}
 
 export function resolveDungeonQaLoadoutPresetV397(
   presetId = DUNGEON_QA_DEFAULT_LOADOUT_PRESET_ID_V397,

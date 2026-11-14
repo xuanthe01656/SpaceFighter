@@ -29,6 +29,10 @@ export default function DungeonQaEvidencePanelV400({ report, lang = 'vi' }) {
       <p className={styles.note}>{report.dungeonId} · {report.presetId}<br/>
         {vi ? 'Chỉ QA · Không thưởng/ghi dữ liệu · Chưa duyệt production'
           : 'QA only · No rewards/writes · Not production approved'}</p>
+      {Number.isFinite(report.qaOutgoingDamageScale) && report.qaOutgoingDamageScale < 1 &&
+        <p className={styles.note}>{vi ? 'HỎA LỰC QA LÊN ĐỊCH' : 'QA DAMAGE VS ENEMIES'}
+          {' '}{Math.round(report.qaOutgoingDamageScale * 100)}%
+          {' · '}{vi ? 'Không áp dụng cho tài khoản thật' : 'No impact on real account'}</p>}
       <div className={styles.metrics}>
         {[[vi?'FPS TB':'AVG FPS',display(report.averageFps)],
           [vi?'FPS THẤP':'LOW FPS',report.lowFpsPercent == null ? '—' : `${report.lowFpsPercent}%`],

@@ -147,6 +147,7 @@ test('V3.9.8 source wires compact QA UI, swept hazard hits, slot spread and fire
   const select = read('client/src/components/DungeonSelect/index.jsx');
   const selectCss = read('client/src/components/DungeonSelect/DungeonSelect.module.css');
   const hudCss = read('client/src/ui-system/DungeonHudV396.module.css');
+  const tacticalHudCss = read('client/src/ui-system/TacticalCombatHudV411.module.css');
 
   assert.match(scene, /resolveDungeonCombatSlotV398/);
   assert.match(scene, /resolveDungeonEnemySeparationV398/);
@@ -163,5 +164,5 @@ test('V3.9.8 source wires compact QA UI, swept hazard hits, slot spread and fire
   assert.match(selectCss, /\.card\.qaCard\s*\{\s*max-height:\s*none/);
   assert.match(selectCss, /\.qaCard \.playBtn[\s\S]*min-height:\s*52px/);
   assert.match(hudCss, /shared-baseline|share one baseline/);
-  assert.match(hudCss, /align-items:\s*baseline/);
+  assert.match(tacticalHudCss, /align-items:\s*baseline/);
 });

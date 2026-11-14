@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 import { isDungeonQaRunV391 } from '../../game/dungeon/DungeonQaAccessV391.js';
 import DungeonHudV396, { EMPTY_DUNGEON_HUD_STATE_V396 } from '../../ui-system/DungeonHudV396.jsx';
 import DungeonQaEvidencePanelV400 from '../../ui-system/DungeonQaEvidencePanelV400.jsx';
+import DungeonShipSkillButtonV410 from '../../ui-system/DungeonShipSkillButtonV410.jsx';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -74,6 +75,9 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
   const noticeSequenceRef = useRef(0);
   const [dungeonQaEvidence, setDungeonQaEvidence] = React.useState(null);
   const dungeonQaEvidenceRef = useRef(null);
+  const dungeonAbilityControllerRef = useRef(null);
+  const [dungeonAbilityState, setDungeonAbilityState] = React.useState(null);
+  const [dungeonAbilityFeedback, setDungeonAbilityFeedback] = React.useState(null);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -118,6 +122,11 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
         dungeonQaEvidenceRef.current = report;
         setDungeonQaEvidence(report);
       },
+      onAbilityController: controller => {
+        dungeonAbilityControllerRef.current = typeof controller === 'function' ? controller : null;
+      },
+      onAbilityState: snapshot => setDungeonAbilityState(snapshot || null),
+      onAbilityFeedback: feedback => setDungeonAbilityFeedback(feedback || null),
       onHudUpdate: next => setDungeonHud(previous => {
         const normalized = { ...EMPTY_DUNGEON_HUD_STATE_V396, ...next };
         return sameDungeonHudStateV396(previous, normalized) ? previous : normalized;
@@ -184,6 +193,7 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
     return () => {
       window.removeEventListener('resize', handleResize);
       performance.dispose();
+      dungeonAbilityControllerRef.current = null;
       scene.dispose();
       engine.dispose();
     };
@@ -224,6 +234,12 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
 
       {isDungeonQaRunV391(gsRef.current?.dungeonQa, gsRef.current?.selectedDungeonId) &&
         <DungeonQaEvidencePanelV400 report={dungeonQaEvidence} lang={lang} />}
+      <DungeonShipSkillButtonV410
+        lang={lang}
+        state={dungeonAbilityState}
+        feedback={dungeonAbilityFeedback}
+        onActivate={slot => dungeonAbilityControllerRef.current?.(slot)}
+      />
       <DungeonHudV396
         lang={lang}
         state={dungeonHud}

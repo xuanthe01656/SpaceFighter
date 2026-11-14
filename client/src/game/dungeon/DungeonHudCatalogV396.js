@@ -5,12 +5,12 @@ import {
 import { resolveDungeonPresentationV39 } from './DungeonPresentationV39.js';
 
 /**
- * Dungeon HUD catalog V3.9.8 (V3.9.6 compatibility module).
+ * Dungeon HUD catalog V4.1.1 (V3.9.6 compatibility module).
  *
  * Presentation-only metadata for the React HUD. Combat authority, reward values,
  * HP tuning and encounter timing remain in their existing catalogs/runtime.
  */
-export const DUNGEON_HUD_CATALOG_VERSION = 'dungeon-hud-catalog-v3.9.8';
+export const DUNGEON_HUD_CATALOG_VERSION = 'dungeon-hud-catalog-v4.1.1';
 export const DUNGEON_HUD_MAX_VISIBLE_ROOM_MARKERS_V396 = 8;
 
 const freezeDeep = value => {
@@ -112,9 +112,9 @@ const buildHudProfile = dungeonId => {
       publishIntervalMs: 100,
       compactWidthPx: 390,
       objectiveMaxLines: 2,
-      reservedTopPx: 232,
-      alignmentContract: 'shared-baseline-v398',
-      worldSafetyMargin: .45,
+      reservedTopPx: 92,
+      alignmentContract: 'unified-tactical-v411',
+      worldSafetyMargin: .22,
     },
   });
 };
@@ -136,10 +136,10 @@ export function resolveDungeonHudOcclusionLineV396({
   const profile = resolveDungeonHudProfileV396(dungeonId);
   const half = Math.max(1, Number(worldHalfHeight) || 15);
   const height = Math.max(320, Number(viewportHeight) || 852);
-  const reservedPx = Math.max(120, Number(profile.layout?.reservedTopPx) || 208);
+  const reservedPx = Math.max(72, Number(profile.layout?.reservedTopPx) || 92);
   const margin = Math.max(0, Number(profile.layout?.worldSafetyMargin) || 0);
   const projected = (reservedPx / height) * (half * 2) + margin;
-  const reservedWorld = clamp(projected, 3.8, 8.2);
+  const reservedWorld = clamp(projected, 2.7, 4.6);
   return -half + reservedWorld;
 }
 
@@ -324,7 +324,7 @@ export function auditDungeonHudCatalogV396() {
   const tabletLine = resolveDungeonHudOcclusionLineV396({
     dungeonId: 'dung_taurus', worldHalfHeight: 15, viewportHeight: 1280,
   });
-  if (!(phoneLine > -11.2 && phoneLine < -6.5) || !(tabletLine > -11.2 && tabletLine < -6.5)) {
+  if (!(phoneLine > -11.8 && phoneLine < -11.2) || !(tabletLine > -12.5 && tabletLine < -12.0)) {
     issues.push('DUNGEON_HUD_WORLD_OCCLUSION');
   }
   const longMarkers = buildDungeonRoomMarkersV396({

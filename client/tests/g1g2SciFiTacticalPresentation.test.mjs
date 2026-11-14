@@ -7,7 +7,13 @@ test('Approved Tactical V4 shows actual kills in both lanes without fabricating 
   const guest=read('src/components/Campaign/CampaignEngine.jsx');
   const cloud=read('src/components/C15LocalAlpha1/index.jsx');
   const hud=read('src/ui-system/BattleHud.jsx');
-  assert.match(guest,/<BattleHud lang=\{lang\} \{\.\.\.battleHud\} announcement=\{battleNotice\}/);
+  assert.match(guest, /<CampaignTacticalHudV420\b[\s\S]*?announcement=\{battleNotice\}/);
+  const campaignHud = read('src/ui-system/CampaignTacticalHudV420.jsx');
+  const sharedHud = read('src/ui-system/TacticalCombatHudV411.jsx');
+  assert.match(campaignHud, /TacticalCombatHudV411/);
+  assert.match(sharedHud, /integer\(kills\)/);
+  assert.match(sharedHud, /integer\(score\)/);
+  assert.doesNotMatch(sharedHud, /\bfetch\(|gameAction\(|claimReward\(|localStorage|firestore/i);
   assert.match(cloud,/<BattleHud lang=\{lang\}/);
   assert.doesNotMatch(cloud,/score=\{(?:ui|k|.*reward)/);
   assert.match(hud,/metricValue = integer\(kills\)/);

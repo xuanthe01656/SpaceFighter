@@ -11,6 +11,7 @@ import { createBattlePassiveState, receiveBattleHit, shouldEchoShot } from '../.
 import { createPlayerShipVisual } from '../../game/rendering/ShipVisualFactory';
 import { attachBattleEntityVisual, preloadBattleEntityVisualProfiles } from '../../game/rendering/BattleEntityVisual';
 import { createBattleDeathVisualQueue } from '../../game/rendering/BattleDeathVisualQueue';
+import { createGuestAbilityVisualFeedbackV2 } from '../../game/rendering/GuestAbilityVisualFeedbackV2.js';
 import { resolveAssetVisual } from '../../game/assets/AssetRegistry.js';
 import { createShipEngineFx } from '../../game/rendering/ShipEngineFx';
 import { createShipInputController } from '../../game/combat/ShipInputController';
@@ -91,6 +92,8 @@ import { isDungeonQaRunV391 } from '../../game/dungeon/DungeonQaAccessV391.js';
 import {
     buildDungeonQaCampaignDataV397,
     getDungeonQaLoadoutLabelV397,
+    resolveDungeonQaOutgoingDamageScaleV403,
+    scaleDungeonQaOutgoingDamageV403,
 } from '../../game/dungeon/DungeonQaLoadoutV397.js';
 import {
     buildDungeonRoomMarkersV396,
@@ -109,6 +112,14 @@ import {
     resolveDungeonVolleyReadinessV399,
 } from '../../game/dungeon/DungeonFireReliabilityV399.js';
 import { createDungeonQaReadinessV400 } from '../../game/dungeon/DungeonQaReadinessV400.js';
+import { resolveDungeonRaiderEntryFireV404 } from '../../game/dungeon/DungeonEngagementContractV404.js';
+import { resolveDungeonRaiderOpeningV405 } from '../../game/dungeon/DungeonRaiderOpeningV405.js';
+import {
+    applyDungeonRoleEngagementV410,
+    projectDungeonCombatSlotV410,
+    resolveDungeonRoleEngagementV410,
+} from '../../game/dungeon/DungeonRoleEngagementV410.js';
+import { createDungeonShipSkillAdapterV410 } from '../../game/dungeon/DungeonShipSkillAdapterV410.js';
 import {
     logicalCircleHitV392,
     logicalSegmentCircleHitV392,
@@ -169,6 +180,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     const {
       gsRef, lang, onGameOver, onVictory, onBossDefeated, isCloud, getRealTime,
       onHudUpdate, onAnnouncement, onQaUpdate,
+      onAbilityState, onAbilityFeedback, onAbilityController,
     } = data;
     const externalHudV396 = typeof onHudUpdate === 'function';
     const externalAnnouncementV396 = typeof onAnnouncement === 'function';
@@ -191,6 +203,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     battleSceneDisposed = true;
     pendingTimers.forEach(clearTimeout);
     pendingTimers.clear();
+    if (typeof onAbilityController === 'function') onAbilityController(null);
   });
   // Updates death sprites even after gameOver freezes the combat loop.
   const deathVisuals = createBattleDeathVisualQueue(scene);
@@ -206,6 +219,18 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     const dungeonQaRunV391 = isDungeonQaRunV391(gsRef.current?.dungeonQa, dungeonId)
         ? gsRef.current.dungeonQa
         : null;
+    // V4.0.3: QA-only damage calibration. Real Dungeon/Campaign and account
+    // loadouts remain bit-for-bit at damage multiplier 1.
+    const qaOutgoingDamageScaleV403 = resolveDungeonQaOutgoingDamageScaleV403({
+        qaRun: dungeonQaRunV391,
+        isDev: Boolean(import.meta.env?.DEV),
+        search: globalThis.location?.search || '',
+    });
+    // Production default ON; build-time rollback only, never URL-controlled.
+    const dungeonRaiderEntryEnabledV404 =
+        import.meta.env?.VITE_SF_DUNGEON_RAIDER_ENTRY_FIRE_V404 !== 'false';
+    const dungeonRaiderOpeningEnabledV405 =
+        import.meta.env?.VITE_SF_DUNGEON_RAIDER_OPENING_V405 !== 'false';
     const dungeonFireQaV399 = createDungeonFireQaMonitorV399({
         enabled: Boolean(dungeonQaRunV391)
             && import.meta.env?.VITE_SF_DUNGEON_FIRE_DIAGNOSTICS !== 'false',
@@ -273,7 +298,44 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     const combat = deriveBattleLoadout(dungeonCampaignDataV397, { PILOTS, AIRCRAFTS, GEAR_CATALOG },
       {mode:'dungeon', location:dungeonConfig});
     const passives = createBattlePassiveState(combat.stats, Date.now());
-    const { stats, pilotBase, aircraftBase } = combat;
+    const { stats, pilotBase, aircraftBase, gear } = combat;
+    const armorBase = gear?.armor?.base || null;
+    // V4.1.1 reuses the exact Campaign/Guest Combat V2 ship-skill runtime and
+    // projects the existing Dungeon passive armor into the shared HUD only.
+    // Armor/pilot/dodge remain on the existing Dungeon passive authority, so
+    // the adapter bridges only the one manual SHIP skill and its active effects.
+    const dungeonShipSkillV410 = createDungeonShipSkillAdapterV410({
+        aircraftId: aircraftBase.id,
+        armorId: armorBase?.id || null,
+        armorName: armorBase?.name || null,
+        maxHp: stats.maxHp,
+        seed: stableSeed(dungeonId, dungeonSeedV38, aircraftBase.id, 'ship-skill-v410'),
+        getPassiveState: () => ({
+            armorPassive: stats.armorPassive,
+            passiveShieldHp: passives.shieldHp,
+            passiveShieldMax: stats.passiveShieldMax,
+            hp: stats.hp,
+            maxHp: stats.maxHp,
+            hpRegenRate: stats.hpRegenRate,
+            reflectRate: stats.reflectRate,
+            damageReduction: stats.dmgReduce,
+        }),
+    });
+    let dungeonAbilityAccumulatorV410 = 0;
+    let lastDungeonAbilityPublishAtV410 = -Infinity;
+    const publishDungeonAbilityStateV410 = (force = false) => {
+        if (typeof onAbilityState !== 'function' || battleSceneDisposed) return null;
+        const nowMs = Date.now();
+        if (!force && nowMs - lastDungeonAbilityPublishAtV410 < 100) return null;
+        lastDungeonAbilityPublishAtV410 = nowMs;
+        const snapshot = dungeonShipSkillV410.snapshot();
+        onAbilityState(snapshot);
+        return snapshot;
+    };
+    const publishDungeonAbilityFeedbackV410 = feedback => {
+        if (feedback && typeof onAbilityFeedback === 'function') onAbilityFeedback(feedback);
+        return feedback;
+    };
     // A volatile per-room QA report; no profile, reward or network writes.
     const dungeonQaReadinessV400 = createDungeonQaReadinessV400({
         enabled: Boolean(dungeonQaRunV391),
@@ -282,6 +344,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         runMode: dungeonQaRunV391?.singleRoom ? 'single_room' : 'full_run',
         expectedRooms: dungeonRuntimeProfileV38?.rooms?.length || 5,
         startedAtMs: Date.now(),
+        qaOutgoingDamageScale: qaOutgoingDamageScaleV403,
     });
     let lastDungeonQaPublishAtV400 = -Infinity;
     const publishDungeonQaV400 = (nowMs, force = false) => {
@@ -644,10 +707,14 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
     // --- 5A. One player-ship visual pipeline shared with Campaign ---
     const shipVisual = createPlayerShipVisual(scene, playerRoot, {
-        aircraftId: gsRef.current.campaignData.loadout.aircraft,
+        aircraftId: aircraftBase.id,
         aircraftCatalog: AIRCRAFTS, glowLayer: glow,
     });
     const playerPlane = shipVisual.tiltNode; // visual tilt, NOT collision geometry
+    const dungeonAbilityVisualV410 = createGuestAbilityVisualFeedbackV2({
+        scene, BABYLON, playerRoot, shipVisual,
+        getTick: () => dungeonShipSkillV410.tick,
+    });
 
     // --- 5B. WINGMAN (VŨ KHÍ PHỤ TRÊN 2 CÁNH TÀU) ---
     const wingNodes = [];
@@ -877,6 +944,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     let waveBossEnabled = false;
     let bossSpawned    = false;
     let bossActive     = false;
+    let dungeonBossSkillUnlockAtV410 = 0;
     let bossMesh       = null;
     let bossVisual     = null;
     let bossFallbackVisualV39 = null;
@@ -947,6 +1015,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         waveBossEnabled = n % 3 === 0;
         bossSpawned     = false;
         bossActive      = false;
+        dungeonBossSkillUnlockAtV410 = 0;
         waveSpawned     = 0;
         waveKilled      = 0;
         waitingForNext  = false;
@@ -983,6 +1052,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         if (bossSpawned) return;
         bossSpawned = true;
         bossActive  = true;
+        dungeonBossSkillUnlockAtV410 = Date.now() + 1300;
         bossHp = bossSpec?.hp
             ? Math.max(1, Math.round(bossSpec.hp))
             : (DIFF.bossBase + currentWave * DIFF.bossPerWave);
@@ -1286,6 +1356,9 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             _lastVolleyGateReasonV401: 'no_fire_window',
             _forcedFireCountV398: 0,
             _lastVolleyPhaseId: null,
+            _raiderEntryFireSinceMsV404: null,
+            _raiderOpeningSinceMsV405: null,
+            _raiderOpeningVolleyDoneV405: false,
             _volleySequence: 0,
             _choreographyState: spec
                 ? createDungeonEnemyChoreographyStateV38(spec, { seed, nowMs })
@@ -1552,6 +1625,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             waveKilled = 0;
             bossSpawned = false;
             bossActive = false;
+            dungeonBossSkillUnlockAtV410 = 0;
             bossDefeatedPulseV38 = false;
             waveText.text = `${lang === 'vi' ? 'PHÒNG' : 'ROOM'} ${currentWave}/${ACTIVE_MAX_WAVES} · ${event.room.title?.[lang] || event.room.title?.vi || event.room.id}`;
             showAnnouncement(event.room.title?.[lang] || event.room.title?.vi || event.room.id,
@@ -1637,7 +1711,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     const liveTargets = () => {
         const combatTargets = [
             ...enemies.filter(e => !e.mesh.isDisposed()),
-            ...(bossMesh && !bossMesh.isDisposed() ? [{ mesh: bossMesh }] : []),
+            ...(bossMesh && !bossMesh.isDisposed() ? [{ mesh: bossMesh, isBoss: true }] : []),
         ];
         const hazardTargets = dungeonHazardsV38
             .filter(hazard => hazard.destructible && hazard.mesh && !hazard.mesh.isDisposed())
@@ -2037,15 +2111,35 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         }
 
         const scaledRawDamage = Math.max(0, Number(rawDamage) || 0) * shieldDamageFactor(droneBase);
-        const result = receiveBattleHit(stats, passives, scaledRawDamage, {
-            source, nowMs: Date.now(),
+        // Manual SHIP defenses (barrier/cloak/fortress) are resolved by the same
+        // deterministic Combat V2 runtime as Campaign. Existing Dungeon armor,
+        // dodge and retaliation stay on BattlePassives and receive only the
+        // remaining damage, preventing double mitigation or double passives.
+        const activeSkillHitV410 = dungeonShipSkillV410.resolveIncomingHit({
+            damage: scaledRawDamage,
+            source,
+            damageType,
         });
+        const remainingAfterSkillV410 = Math.max(0, Number(activeSkillHitV410.remaining) || 0);
+        const result = remainingAfterSkillV410 > 0
+            ? receiveBattleHit(stats, passives, remainingAfterSkillV410, {
+                source, nowMs: Date.now(),
+            })
+            : { dodged: false, absorbed: 0, reflected: 0, novaDamage: 0 };
+        if (result.absorbed > 0 && stats.armorPassive === 'shield') {
+            dungeonShipSkillV410.notifyPassiveProc('shield_absorb');
+        }
+        if (result.reflected > 0 && (stats.armorPassive === 'reactive' || stats.armorPassive === 'crystal')) {
+            dungeonShipSkillV410.notifyPassiveProc('reflect');
+        }
+        publishDungeonAbilityStateV410(true);
         if (result.dodged) {
             dungeonQaReadinessV400.recordDamage({ source, hpBefore, hpAfter: stats.hp, dodged: true });
             showAnnouncement(lang === 'vi' ? 'NÉ TRÁNH!' : 'DODGED!', '#4ade80', 1000);
             return createPlayerDamageOutcomeV25({
                 gate, source, hitId, contactId, rawDamage: scaledRawDamage,
                 hpBefore, hpAfter: stats.hp, dodged: true, dodgeSource: 'pilot',
+                absorbed: activeSkillHitV410.absorbed || 0,
             });
         }
 
@@ -2058,11 +2152,19 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 if(dx*dx+dz*dz <= (result.novaDamage ? 25 : 9))
                     applyPlayerDamageToEnemy(enemy,result.reflected+result.novaDamage);
             }
+            if (bossActive && bossMesh && !bossMesh.isDisposed?.()) {
+                const dx = bossMesh.position.x - playerRoot.position.x;
+                const dz = bossMesh.position.z - playerRoot.position.z;
+                if (dx * dx + dz * dz <= (result.novaDamage ? 25 : 9)) {
+                    applyPlayerDamageToBossV410(result.reflected + result.novaDamage);
+                }
+            }
         }
 
         const outcome = createPlayerDamageOutcomeV25({
             gate, source, hitId, contactId, rawDamage: scaledRawDamage,
-            hpBefore, hpAfter: stats.hp, absorbed: result.absorbed,
+            hpBefore, hpAfter: stats.hp,
+            absorbed: (activeSkillHitV410.absorbed || 0) + (result.absorbed || 0),
             reflected: result.reflected, novaDamage: result.novaDamage,
         });
         dungeonQaReadinessV400.recordDamage({
@@ -2079,6 +2181,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     const triggerGameOver = () => {
         if (gameOver) return;
         gameOver = true;
+        dungeonShipSkillV410.setBattlePhase({ phase: 'GAMEOVER', ended: true });
+        publishDungeonAbilityStateV410(true);
         dungeonQaReadinessV400.finish({ nowMs: Date.now(), hp: stats.hp, result: 'defeat' });
         publishDungeonQaV400(Date.now(), true);
         if (dungeonQaRunV391) console.info('[DUNGEON_QA_READINESS_V400]', dungeonQaReadinessV400.snapshot(Date.now()));
@@ -2107,6 +2211,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     const triggerVictory = () => {
         if (gameOver) return;
         gameOver = true;
+        dungeonShipSkillV410.setBattlePhase({ phase: 'CLEAR', ended: true });
+        publishDungeonAbilityStateV410(true);
         dungeonQaReadinessV400.finish({ nowMs: Date.now(), hp: stats.hp, result: 'victory' });
         publishDungeonQaV400(Date.now(), true);
         if (dungeonQaRunV391) console.info('[DUNGEON_QA_READINESS_V400]', dungeonQaReadinessV400.snapshot(Date.now()));
@@ -2144,7 +2250,13 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
     const applyPlayerDamageToEnemy = (enemy, damage) => {
         if (!enemy || enemy.mesh.isDisposed() || enemy.hp <= 0) return false;
-        enemy.hp -= damage;
+        let resolvedDamageV410 = Math.max(0, Number(damage) || 0);
+        if (enemy._dungeonSkillMarkUntilTickV410 > dungeonShipSkillV410.tick) {
+            resolvedDamageV410 *= 1 + Math.max(0, Number(enemy._dungeonSkillMarkBonusV410) || 0);
+        }
+        // One QA-only scale for main, wing, drone, passive reflection and splash.
+        // Keep production damage and objective/hazard damage unchanged.
+        enemy.hp -= scaleDungeonQaOutgoingDamageV403(resolvedDamageV410, qaOutgoingDamageScaleV403);
         enemy.visual?.setState('hit');
         const ratio = clamp(enemy.hp / enemy.maxHp, 0, 1);
         enemy.miniHp.width = `${(ratio * 100).toFixed(0)}%`;
@@ -2172,6 +2284,192 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             applyPlayerDamageToEnemy(other, damage * .4);
         });
     };
+
+
+    const defeatDungeonBossV410 = nowMs => {
+        if (!bossMesh || bossMesh.isDisposed?.() || bossHp > 0) return false;
+        dungeonQaReadinessV400.recordBossDefeated({ nowMs });
+        explode(bossMesh.position, 3.5);
+        triggerShake(0.9, 22);
+        deathVisuals.capture(bossVisual);
+        bossVisual = null;
+        bossFallbackVisualV39?.dispose?.();
+        bossFallbackVisualV39 = null;
+        stopDungeonBossControllerV38(dungeonBossRuntimeV38);
+        dungeonBossRuntimeV38 = null;
+        disposeDungeonBossTelegraphsV38();
+        clearDungeonHostileProjectilesV38();
+        currentBossSpecV38 = null;
+        safeDis(bossMesh);
+        bossMesh = null;
+        bossActive = false;
+        dungeonBossSkillUnlockAtV410 = 0;
+        bossPanel.isVisible = false;
+        updateScore(500 * currentWave);
+        totalKills++;
+        if (!isCloud) recordGuestEventKill(
+            gsRef.current.campaignData,
+            EVENT_CONFIG,
+            getRealTime?.() ?? Date.now(),
+        );
+        showAnnouncement(
+            lang === 'vi' ? '✦ BOSS ĐÃ TIÊU DIỆT ✦' : '✦ BOSS DEFEATED ✦',
+            '#f1c40f',
+        );
+        if (typeof onBossDefeated === 'function') onBossDefeated();
+        if (dungeonParityV38) bossDefeatedPulseV38 = true;
+        else advanceWave();
+        return true;
+    };
+
+    const applyPlayerDamageToBossV410 = (damage, nowMs = Date.now()) => {
+        if (!bossActive || !bossMesh || bossMesh.isDisposed?.() || bossHp <= 0) return false;
+        let resolvedDamage = Math.max(0, Number(damage) || 0);
+        if (bossMesh._dungeonSkillMarkUntilTickV410 > dungeonShipSkillV410.tick) {
+            resolvedDamage *= 1 + Math.max(0, Number(bossMesh._dungeonSkillMarkBonusV410) || 0);
+        }
+        bossHp -= scaleDungeonQaOutgoingDamageV403(resolvedDamage, qaOutgoingDamageScaleV403);
+        bossVisual?.setState('hit');
+        bossFallbackVisualV39?.tick?.(0, 'hit');
+        bossHpFill.width = `${clamp(bossHp / bossMaxHp, 0, 1) * 100}%`;
+        updateDungeonObjectiveHudV39();
+        return bossHp <= 0 ? defeatDungeonBossV410(nowMs) : false;
+    };
+
+
+    const resolveDungeonAbilityPhaseV410 = () => {
+        if (gameOver) return 'GAMEOVER';
+        if (bossActive && bossMesh && !bossMesh.isDisposed?.()) {
+            return Date.now() < dungeonBossSkillUnlockAtV410 ? 'BOSS_INTRO' : 'BOSS_FIGHT';
+        }
+        if (currentWave > 0 && !waitingForNext) return 'PLAYING';
+        return 'TRANSITION';
+    };
+    const liveAbilityTargetsV410 = () => [
+        ...enemies.filter(enemy => enemy?.mesh && !enemy.mesh.isDisposed?.() && enemy.hp > 0),
+        ...(bossActive && bossMesh && !bossMesh.isDisposed?.() && bossHp > 0
+            ? [{ mesh: bossMesh, isBoss: true }] : []),
+    ];
+    const activateDungeonShipSkillV410 = slot => {
+        if (slot !== 'ship_skill' || gameOver) return false;
+        dungeonShipSkillV410.setBattlePhase({ phase: resolveDungeonAbilityPhaseV410(), ended: gameOver });
+        const before = dungeonShipSkillV410.snapshot();
+        let selectedTarget = null;
+        let hasValidTarget = true;
+        if (before.ship?.kind === 'mark') {
+            selectedTarget = pickWeaponTarget(liveAbilityTargetsV410(), playerRoot.position);
+            const position = selectedTarget?.mesh?.position;
+            const dx = Number(position?.x) - playerRoot.position.x;
+            const dz = Number(position?.z) - playerRoot.position.z;
+            hasValidTarget = Boolean(selectedTarget)
+                && Number.isFinite(dx) && Number.isFinite(dz)
+                && Math.hypot(dx, dz) <= 18;
+        }
+        const activation = dungeonShipSkillV410.activate({ slot, hasValidTarget });
+        publishDungeonAbilityFeedbackV410(activation.feedback);
+        if (!activation.ok) {
+            dungeonQaReadinessV400.recordShipSkill?.({ accepted: false, reason: activation.reason });
+            publishDungeonAbilityStateV410(true);
+            return false;
+        }
+        dungeonQaReadinessV400.recordShipSkill?.({ accepted: true, reason: 'activated' });
+        if (activation.feedback) dungeonAbilityVisualV410.play(activation.feedback);
+        for (const event of activation.result?.events || []) {
+            if (event.type === 'heal') {
+                stats.hp = clamp(stats.hp + Math.max(0, Number(event.amount) || 0), 0, stats.maxHp);
+                updateHpUI();
+            } else if (event.type === 'pierce') {
+                const target = pickWeaponTarget(liveAbilityTargetsV410(), playerRoot.position);
+                const railGun = GEAR_CATALOG.mainGun.find(gun => gun.id === 'gun_rail') || mainGunBase;
+                const salvo = describeMainSalvo(
+                    railGun,
+                    playerRoot.position,
+                    stats.atk * Math.max(0, Number(event.damageMultiplier) || 1),
+                    target,
+                );
+                shots.fire(salvo.map(shot => ({
+                    ...shot,
+                    penetration: Math.max(1, Number(event.penetration) || 1),
+                    projectileType: 'rail',
+                })));
+            } else if (event.type === 'burst') {
+                const target = pickWeaponTarget(liveAbilityTargetsV410(), playerRoot.position);
+                const base = describeMainSalvo(
+                    mainGunBase || GEAR_CATALOG.mainGun[0],
+                    playerRoot.position,
+                    stats.atk * Math.max(0, Number(event.damageMultiplier) || 1),
+                    target,
+                )[0];
+                if (base) {
+                    const shotCount = Math.max(1, Math.trunc(Number(event.shots) || 1));
+                    const center = (shotCount - 1) / 2;
+                    shots.fire(Array.from({ length: shotCount }, (_, index) => ({
+                        ...base,
+                        x: base.x + (index - center) * (Number(event.spread) || 0),
+                        delayMs: index * 70,
+                    })));
+                }
+            } else if (event.type === 'mark' && selectedTarget) {
+                const marked = selectedTarget.isBoss ? bossMesh : selectedTarget;
+                if (marked) {
+                    marked._dungeonSkillMarkUntilTickV410 = dungeonShipSkillV410.tick
+                        + Math.max(1, Math.trunc(Number(event.durationTicks) || 1));
+                    marked._dungeonSkillMarkBonusV410 = Math.max(0, Number(event.bonus) || 0);
+                    selectedTarget.isBoss ? bossVisual?.setState('hit') : selectedTarget.visual?.setState('hit');
+                    dungeonAbilityVisualV410.markTarget(
+                        selectedTarget.mesh,
+                        activation.feedback,
+                        event.durationTicks,
+                    );
+                }
+            } else if (event.type === 'area' || event.type === 'pull') {
+                const radius = Math.max(0, Number(event.radius) || 0);
+                for (const enemy of [...enemies]) {
+                    if (!enemy?.mesh || enemy.mesh.isDisposed?.() || enemy.hp <= 0) continue;
+                    const dx = enemy.mesh.position.x - playerRoot.position.x;
+                    const dz = enemy.mesh.position.z - playerRoot.position.z;
+                    const distance = Math.hypot(dx, dz);
+                    if (distance > radius) continue;
+                    if (event.type === 'area') {
+                        applyPlayerDamageToEnemy(
+                            enemy,
+                            stats.atk * Math.max(0, Number(event.damageMultiplier) || 0),
+                        );
+                    } else if (distance > .001) {
+                        const amount = Math.min(Math.max(0, Number(event.distance) || 0), distance);
+                        enemy.mesh.position.x = clamp(
+                            enemy.mesh.position.x - dx / distance * amount,
+                            -boundX() + .35,
+                            boundX() - .35,
+                        );
+                        enemy.mesh.position.z = clamp(
+                            enemy.mesh.position.z - dz / distance * amount,
+                            -ZOOM + .5,
+                            ZOOM - 3,
+                        );
+                    }
+                    if (event.slowTicks) {
+                        enemy._slowUntil = Date.now() + Math.max(0, Number(event.slowTicks) || 0) * 1000 / 30;
+                    }
+                }
+                if (event.type === 'area' && bossActive && bossMesh && !bossMesh.isDisposed?.()) {
+                    const dx = bossMesh.position.x - playerRoot.position.x;
+                    const dz = bossMesh.position.z - playerRoot.position.z;
+                    if (Math.hypot(dx, dz) <= radius) {
+                        applyPlayerDamageToBossV410(
+                            stats.atk * Math.max(0, Number(event.damageMultiplier) || 0) * .65,
+                        );
+                    }
+                }
+            }
+        }
+        updateHpUI();
+        publishDungeonAbilityStateV410(true);
+        return true;
+    };
+    if (typeof onAbilityController === 'function') onAbilityController(activateDungeonShipSkillV410);
+    dungeonShipSkillV410.setBattlePhase({ phase: 'TRANSITION' });
+    publishDungeonAbilityStateV410(true);
 
     const resolveDungeonEnemySeparationV38 = (enemy, frameFactorValue = 1) => resolveDungeonEnemySeparationV398({
         enemyX: enemy?.mesh?.position?.x,
@@ -2236,6 +2534,22 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             return true;
         }
 
+        const hudOcclusionLineZV410 = resolveDungeonHudOcclusionLineV396({
+            dungeonId,
+            worldHalfHeight: ZOOM,
+            viewportHeight: canvas?.clientHeight || engine.getRenderHeight(),
+        });
+        const engagementV410 = enemy._dungeonEngagementV410
+            || resolveDungeonRoleEngagementV410({
+                roleId: enemy.spec.roleId,
+                playerZ: playerRoot.position.z,
+                hudOcclusionLineZ: hudOcclusionLineZV410,
+                worldHalfHeight: ZOOM,
+                authoredPreferredRange: enemy.spec.preferredRange,
+                authoredFireRangeMin: enemy.spec.fireRangeMin,
+                authoredFireRangeMax: enemy.spec.fireRangeMax,
+            });
+        enemy._dungeonEngagementV410 = engagementV410;
         const result = stepCampaignEnemyChoreographyV29(enemy._choreographyState, {
             nowMs,
             frameScale: enemyFrame,
@@ -2247,11 +2561,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             arenaHalfWidth: boundX(),
             worldHalfHeight: ZOOM,
             viewportHeight: canvas?.clientHeight || engine.getRenderHeight(),
-            hudOcclusionLineZ: resolveDungeonHudOcclusionLineV396({
-                dungeonId,
-                worldHalfHeight: ZOOM,
-                viewportHeight: canvas?.clientHeight || engine.getRenderHeight(),
-            }),
+            hudOcclusionLineZ: hudOcclusionLineZV410,
             entityScale: enemy.spec.elite ? 1.15 : 1,
             hpBarOffsetPx: -34,
             hpBarHeightPx: 6,
@@ -2261,18 +2571,67 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             fireCooldownMs: enemy.shootMs,
         });
         if (!result.handled) return false;
+        const engagementResultV410 = applyDungeonRoleEngagementV410({
+            choreography: result,
+            engagement: engagementV410,
+        });
         enemy.mesh.position.x = clamp(
-            enemy.mesh.position.x + result.deltaX + separation.correctionX,
+            enemy.mesh.position.x + engagementResultV410.deltaX + separation.correctionX,
             -boundX() + .35,
             boundX() - .35,
         );
-        enemy.mesh.position.z += result.deltaZ + separation.correctionZ;
-        if (!result.canCrossPlayer && Number.isFinite(Number(result.maxCombatZ))
-            && enemy.mesh.position.z > result.maxCombatZ) {
-            enemy.mesh.position.z = result.maxCombatZ;
+        enemy.mesh.position.z += engagementResultV410.deltaZ + separation.correctionZ;
+        if (!engagementResultV410.canCrossPlayer && Number.isFinite(Number(engagementResultV410.maxCombatZ))
+            && enemy.mesh.position.z > engagementResultV410.maxCombatZ) {
+            enemy.mesh.position.z = engagementResultV410.maxCombatZ;
             enemy._choreographyState.velocityZ = Math.min(0, enemy._choreographyState.velocityZ || 0);
         }
-        if (result.facePlayer) {
+        // V4.0.4 applies to the actual Dungeon runtime (account + QA).
+        // Raider entry is still moved by the shared FSM; one authentic catalog
+        // volley becomes possible after a visible, bounded approach wind-up.
+        let combatResultV404 = engagementResultV410;
+        // Avoid per-frame allocations/geometry work for other roles on phones.
+        if (dungeonRaiderEntryEnabledV404 && enemy.spec.roleId === 'raider') {
+            const raiderEntryV404 = resolveDungeonRaiderEntryFireV404({
+                choreography: engagementResultV410,
+                roleId: enemy.spec.roleId,
+                nowMs,
+                enteredAtMs: enemy._raiderEntryFireSinceMsV404,
+                lastVolleyPhaseId: enemy._lastVolleyPhaseId,
+                enemyX: enemy.mesh.position.x, enemyZ: enemy.mesh.position.z,
+                playerX: playerRoot.position.x, playerZ: playerRoot.position.z,
+                hudOcclusionLineZ: hudOcclusionLineZV410,
+                fireRangeMin: engagementV410.fireRangeMin,
+                fireRangeMax: engagementV410.fireRangeMax,
+                canShoot: enemy.canShoot,
+                hasProjectile: Boolean(enemy.spec.weapon?.projectile),
+            });
+            enemy._raiderEntryFireSinceMsV404 = raiderEntryV404.enteredAtMs;
+            combatResultV404 = raiderEntryV404.choreography;
+        }
+        // V4.0.5: preserve a visible approach wind-up across the first attack
+        // pass. V4.0.4 only armed inside the narrow authored fire band; the
+        // bounded skirmish-entry travel phase could expire before 420ms elapsed.
+        // All projectile/cooldown checks still run through the real V399 gate.
+        let raiderOpeningV405 = null;
+        if (dungeonRaiderOpeningEnabledV405 && enemy.spec.roleId === 'raider') {
+            raiderOpeningV405 = resolveDungeonRaiderOpeningV405({
+                choreography: combatResultV404,
+                nowMs,
+                armedSinceMs: enemy._raiderOpeningSinceMsV405,
+                alreadyFired: enemy._raiderOpeningVolleyDoneV405,
+                enemyX: enemy.mesh.position.x, enemyZ: enemy.mesh.position.z,
+                playerX: playerRoot.position.x, playerZ: playerRoot.position.z,
+                hudOcclusionLineZ: hudOcclusionLineZV410,
+                fireRangeMin: engagementV410.fireRangeMin,
+                fireRangeMax: engagementV410.fireRangeMax,
+                canShoot: enemy.canShoot,
+                hasProjectile: Boolean(enemy.spec.weapon?.projectile),
+            });
+            enemy._raiderOpeningSinceMsV405 = raiderOpeningV405.armedSinceMs;
+            combatResultV404 = raiderOpeningV405.choreography;
+        }
+        if (combatResultV404.facePlayer) {
             updateDungeonEnemyFacingV38(
                 enemy,
                 playerRoot.position.x - enemy.mesh.position.x,
@@ -2293,7 +2652,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             enemy._fireBlockedPhaseIdV399 = result.phaseId;
         }
         const fireDecisionV399 = resolveDungeonEnemyFireDecisionV399({
-            choreography: result,
+            choreography: combatResultV404,
             roleId: enemy.spec.roleId,
             seed: enemy.seed,
             nowMs,
@@ -2306,14 +2665,24 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             hasProjectile: Boolean(enemy.spec.weapon?.projectile),
         });
         enemy._fireBlockedSinceMs = fireDecisionV399.blockedSinceMs;
-        const firingStateV399 = fireDecisionV399.mayFire && !result.mayFire
-            ? { ...result, mayFire: true, dungeonFireRecoveryV399: true }
-            : result;
+        const firingStateV399 = fireDecisionV399.mayFire && !combatResultV404.mayFire
+            ? { ...combatResultV404, mayFire: true, dungeonFireRecoveryV399: true }
+            : combatResultV404;
         if (fireDecisionV399.reason === 'windup'
             || fireDecisionV399.reason === 'out_of_envelope') {
             dungeonFireQaV399.record(enemy.spec.roleId, fireDecisionV399.reason);
         }
         const firedV399 = tryFireDungeonEnemyVolleyV38(enemy, firingStateV399, nowMs);
+        if (firedV399 && enemy.spec.roleId === 'raider') {
+            enemy._raiderOpeningVolleyDoneV405 = true;
+        }
+        if (raiderOpeningV405 && dungeonQaRunV391) {
+            dungeonQaReadinessV400.recordRaiderOpeningV405({
+                enemyId: enemy.runtimeId, nowMs,
+                reason: raiderOpeningV405.reason,
+                successfulOpening: firedV399 && raiderOpeningV405.reason === 'opening_ready',
+            });
+        }
         // Sample diagnostics rather than modifying the combat decision.
         // A fire-ready pose with zero projectile can now be traced to its gate.
         if (dungeonQaRunV391) dungeonQaReadinessV400.recordFireProbe({
@@ -2325,7 +2694,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         // Aiming without a valid envelope is movement, not an endless attack VFX.
         const attackFeedbackV399 = firedV399
             || (enemy.lastShoot > 0 && nowMs - enemy.lastShoot < 280)
-            || (result.fireWindup && fireDecisionV399.reason === 'windup');
+            || (combatResultV404.fireWindup && fireDecisionV399.reason === 'windup');
         enemy.visual?.setState(attackFeedbackV399 ? 'attack' : 'move');
         if (firedV399) {
             if (fireDecisionV399.forced) {
@@ -2353,8 +2722,28 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             publishDungeonQaV400(now);
         }
         publishDungeonHudV396();
-        const frameFactor = frameScale(engine.getDeltaTime());
+        const frameDeltaMsV410 = Math.max(0, Math.min(100, Number(engine.getDeltaTime()) || 0));
+        const frameFactor = frameScale(frameDeltaMsV410);
         tick += frameFactor;
+        dungeonShipSkillV410.setBattlePhase({
+            phase: resolveDungeonAbilityPhaseV410(),
+            ended: gameOver,
+        });
+        dungeonAbilityAccumulatorV410 += frameDeltaMsV410;
+        const abilityStepsV410 = Math.min(3, Math.floor(dungeonAbilityAccumulatorV410 / (1000 / 30)));
+        if (abilityStepsV410 > 0) {
+            dungeonShipSkillV410.advanceTicks(abilityStepsV410);
+            dungeonAbilityAccumulatorV410 -= abilityStepsV410 * (1000 / 30);
+            for (const event of dungeonShipSkillV410.drainEvents()) {
+                if (event.type === 'heal' && event.amount > 0) {
+                    stats.hp = clamp(stats.hp + event.amount, 0, stats.maxHp);
+                    updateHpUI();
+                }
+            }
+        }
+        if (!Number.isFinite(dungeonAbilityAccumulatorV410)) dungeonAbilityAccumulatorV410 = 0;
+        dungeonAbilityVisualV410.update();
+        publishDungeonAbilityStateV410();
         dungeonBackdropV39?.tick?.(frameFactor);
         samplePlayerCombatVelocityV38(frameFactor);
         // A. Screen shake
@@ -2388,8 +2777,16 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         }
        // D. Shared weapon policy, unchanged across Campaign and Dungeon.
        const target = pickWeaponTarget(liveTargets(), playerRoot.position);
-       if (now > lastFire + stats.fireRate) {
-           const salvo=describeMainSalvo(mainGunBase || GEAR_CATALOG.mainGun[0], playerRoot.position, stats.atk, target);
+       const dungeonSkillModifiersV410 = dungeonShipSkillV410.modifiers();
+       const mainFireIntervalV410 = stats.fireRate
+           * Math.max(.35, Number(dungeonSkillModifiersV410.fireIntervalMultiplier) || 1);
+       if (now > lastFire + mainFireIntervalV410) {
+           const salvo=describeMainSalvo(
+               mainGunBase || GEAR_CATALOG.mainGun[0],
+               playerRoot.position,
+               stats.atk * Math.max(.1, Number(dungeonSkillModifiersV410.damageMultiplier) || 1),
+               target,
+           );
            shots.fire(salvo);
            if(salvo.length && shouldEchoShot(stats, passives, Date.now())) {
              const extra=salvo[0];
@@ -2760,39 +3157,14 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 const hit = shots.registerHit(b, { mesh: bossMesh });
                 if (!hit.accepted) continue;
 
-                bossHp -= calculateProjectileDamage(b.atk, stats.critDamageBoost);
-                bossVisual?.setState('hit');
-                bossFallbackVisualV39?.tick?.(0, 'hit');
-                bossHpFill.width = `${clamp(bossHp / bossMaxHp, 0, 1) * 100}%`;
-                updateDungeonObjectiveHudV39();
+                const rawBossDamageV410 = calculateProjectileDamage(b.atk, stats.critDamageBoost);
+                const bossDefeatedV410 = applyPlayerDamageToBossV410(rawBossDamageV410, now);
 
-                if (hit.consumed || b._splashRadius) { safeDis(b); playerBullets.splice(j, 1); }
-
-                if (bossHp <= 0) {
-                    dungeonQaReadinessV400.recordBossDefeated({ nowMs: now });
-                    explode(bossMesh.position, 3.5);
-                    triggerShake(0.9, 22);
-                    deathVisuals.capture(bossVisual);
-                    bossVisual = null;
-                    bossFallbackVisualV39?.dispose?.();
-                    bossFallbackVisualV39 = null;
-                    stopDungeonBossControllerV38(dungeonBossRuntimeV38);
-                    dungeonBossRuntimeV38 = null;
-                    disposeDungeonBossTelegraphsV38();
-                    clearDungeonHostileProjectilesV38();
-                    currentBossSpecV38 = null;
-                    safeDis(bossMesh); // boss hitbox removed without waiting for the clip
-                    bossMesh   = null;
-                    bossActive = false;
-                    bossPanel.isVisible = false;
-                    updateScore(500 * currentWave);
-                    totalKills++;
-                    if (!isCloud) recordGuestEventKill(gsRef.current.campaignData, EVENT_CONFIG, getRealTime?.() ?? Date.now());
-                    showAnnouncement(lang === 'vi' ? '✦ BOSS ĐÃ TIÊU DIỆT ✦' : '✦ BOSS DEFEATED ✦', '#f1c40f');
-                    if (typeof onBossDefeated === 'function') onBossDefeated();
-                    if (dungeonParityV38) bossDefeatedPulseV38 = true;
-                    else advanceWave();
+                if (hit.consumed || b._splashRadius) {
+                    safeDis(b);
+                    playerBullets.splice(j, 1);
                 }
+                if (bossDefeatedV410) break;
                 break;
             }
         }
@@ -2867,11 +3239,29 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                     enemyCombatSlotRegistryV38,
                     enemy.runtimeId,
                 );
-                enemy._dungeonCombatSlot = resolveDungeonCombatSlotV398({
+                const projectedSlotV398 = resolveDungeonCombatSlotV398({
                     slot: enemy._combatSlot,
                     seed: enemy.seed,
                     roleId: enemy.spec.roleId,
                     difficultyRank: dungeonRuntimeProfileV38?.difficultyRank || 1,
+                });
+                const hudOcclusionLineZV410 = resolveDungeonHudOcclusionLineV396({
+                    dungeonId,
+                    worldHalfHeight: ZOOM,
+                    viewportHeight: canvas?.clientHeight || engine.getRenderHeight(),
+                });
+                enemy._dungeonEngagementV410 = resolveDungeonRoleEngagementV410({
+                    roleId: enemy.spec.roleId,
+                    playerZ: playerRoot.position.z,
+                    hudOcclusionLineZ: hudOcclusionLineZV410,
+                    worldHalfHeight: ZOOM,
+                    authoredPreferredRange: enemy.spec.preferredRange,
+                    authoredFireRangeMin: enemy.spec.fireRangeMin,
+                    authoredFireRangeMax: enemy.spec.fireRangeMax,
+                });
+                enemy._dungeonCombatSlot = projectDungeonCombatSlotV410({
+                    slot: projectedSlotV398,
+                    engagement: enemy._dungeonEngagementV410,
                 });
             }
         }
@@ -2934,7 +3324,9 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 }
                 // Ranged roles never become accidental kamikaze units. Push
                 // them back into their authored firing band and keep fighting.
-                e.mesh.position.z = Math.min(e.mesh.position.z, playerRoot.position.z - 2.2);
+                const pushbackRangeV410 = Math.min(4.8, Math.max(2.2,
+                    Number(e._dungeonEngagementV410?.fireRangeMin) || 2.2));
+                e.mesh.position.z = Math.min(e.mesh.position.z, playerRoot.position.z - pushbackRangeV410);
                 if (e._choreographyState) e._choreographyState.velocityZ = Math.min(0, e._choreographyState.velocityZ || 0);
             }
 

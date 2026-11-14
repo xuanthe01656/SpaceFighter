@@ -6,7 +6,8 @@ import { auth } from '../../firebase';
 import toast from 'react-hot-toast';
 import C15LocalAlpha1 from '../C15LocalAlpha1/index.jsx';
 import GuestC15Alpha1QA from './GuestC15Alpha1QA.jsx';
-import BattleHud from '../../ui-system/BattleHud.jsx';
+import CampaignTacticalHudV420 from '../../ui-system/CampaignTacticalHudV420.jsx';
+import CampaignTacticalAbilityAdapterV420 from '../../ui-system/CampaignTacticalAbilityAdapterV420.jsx';
 import GuestAbilityControls from '../../ui-system/GuestAbilityControls.jsx';
 import GamePanel from '../../ui-system/GamePanel.jsx';
 import GameButton from '../../ui-system/GameButton.jsx';
@@ -285,6 +286,7 @@ function LegacyCampaignEngine({ gsRef, setScreen, lang, saveUserProfile, getReal
   const runtimeFaultCopy=lang==='vi'
     ?'Trận đã được dừng an toàn. Hãy tải lại đúng trận hiện tại hoặc thoát về chọn ải.'
     :'The battle stopped safely. Retry the current battle or return to stage select.';
+  const campaignPlanetId=Math.max(1,Number(gsRef.current?.campaignData?.progress?.currentPlanet)||1);
   const runtimeFaultDetails=runtimeFault?JSON.stringify({
     code:runtimeFault.code,
     message:runtimeFault.message||undefined,
@@ -306,10 +308,14 @@ function LegacyCampaignEngine({ gsRef, setScreen, lang, saveUserProfile, getReal
         }}
       />
 
-      {/* Guest shows its actual local score. C15 never invents a trusted score. */}
-      <BattleHud lang={lang} {...battleHud} announcement={battleNotice} onRetreat={retreat} retreating={retreating}/>
+      {/* Campaign and Dungeon now share one presentation shell. Gameplay authority stays in CampaignScene. */}
+      <CampaignTacticalHudV420 lang={lang} state={battleHud} planetId={campaignPlanetId}
+        qa={guestAbilityQa} announcement={battleNotice} onRetreat={retreat} retreating={retreating}/>
+      {guestAbilityQa&&abilityHud&&<CampaignTacticalAbilityAdapterV420 lang={lang}
+        state={abilityHud} feedback={abilityFeedback}
+        onActivate={slot=>abilityActionRef.current?.(slot)}/>}
       {guestAbilityQa&&(abilityHud||qaResult)&&<GuestAbilityControls lang={lang} state={abilityHud}
-        feedback={abilityFeedback} onActivate={slot=>abilityActionRef.current?.(slot)}
+        feedback={abilityFeedback} hideCombatControls
         onQaCycle={cycleQaLoadout} qaSelection={qaSelection} onQaNavigate={cycleQaBattle}
         qaResult={qaResult} onQaResultAction={handleQaResultAction}/>}
       {runtimeFault&&<div className={styles.runtimeFaultOverlay} role="alertdialog" aria-modal="true"
