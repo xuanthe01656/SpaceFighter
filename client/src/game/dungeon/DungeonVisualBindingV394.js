@@ -7,10 +7,10 @@
  */
 import { resolveAssetVisual } from '../assets/AssetRegistry.js';
 import {
-  DUNGEON_CONTENT_CATALOG_V393,
-  resolveDungeonContentProfileV393,
-  resolveDungeonVisualAssetIdV393,
-} from './DungeonContentCatalogV393.js';
+  DUNGEON_CONTENT_CATALOG_V430,
+  resolveDungeonContentProfileV430,
+  resolveDungeonVisualAssetIdV430,
+} from '../content/DungeonContentRegistryV430.js';
 
 export const DUNGEON_VISUAL_BINDING_VERSION = 'dungeon-visual-binding-v3.9.4';
 
@@ -51,7 +51,7 @@ export function resolveDungeonEnemyVisualBindingV394({
 } = {}) {
   const canonicalAssetId = elite
     ? `${dungeonId}_elite`
-    : resolveDungeonVisualAssetIdV393(dungeonId, roleId);
+    : resolveDungeonVisualAssetIdV430(dungeonId, roleId);
   const resolved = firstUsableProfile('dungeon_enemy', [requestedAssetId, canonicalAssetId], profileResolver);
   const assetId = resolved?.assetId || canonicalAssetId || requestedAssetId || `${dungeonId}_scout`;
   const profile = resolved?.profile || null;
@@ -73,7 +73,7 @@ export function resolveDungeonBossVisualBindingV394({
   requestedAssetId = null,
   profileResolver = resolveAssetVisual,
 } = {}) {
-  const profileDefinition = resolveDungeonContentProfileV393(dungeonId);
+  const profileDefinition = resolveDungeonContentProfileV430(dungeonId);
   const canonicalAssetId = profileDefinition.visualSet.bossAsset.id;
   const resolved = firstUsableProfile('dungeon_boss', [requestedAssetId, canonicalAssetId], profileResolver);
   const assetId = resolved?.assetId || canonicalAssetId || requestedAssetId || `${dungeonId}_boss`;
@@ -93,7 +93,7 @@ export function resolveDungeonBossVisualBindingV394({
 export function auditDungeonVisualBindingsV394() {
   const issues = [];
   const roleIds = ['raider', 'gunner', 'charger', 'shieldbearer', 'support', 'artillery'];
-  for (const dungeonId of Object.keys(DUNGEON_CONTENT_CATALOG_V393)) {
+  for (const dungeonId of Object.keys(DUNGEON_CONTENT_CATALOG_V430)) {
     for (const roleId of roleIds) {
       const binding = resolveDungeonEnemyVisualBindingV394({ dungeonId, roleId });
       if (binding.mode !== 'authored_atlas') issues.push(`DUNGEON_ENEMY_ATLAS:${dungeonId}:${roleId}:${binding.mode}`);

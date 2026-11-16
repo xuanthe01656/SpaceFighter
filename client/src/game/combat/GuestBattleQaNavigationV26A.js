@@ -1,4 +1,4 @@
-import { PLANET_CONFIG, STAGE_CONFIG } from '../catalog/worlds.js';
+import { CAMPAIGN_PLANET_CONFIG_V430 as PLANET_CONFIG, CAMPAIGN_STAGE_CONFIG_V430 as STAGE_CONFIG } from '../content/CampaignContentRegistryV430.js';
 
 export const GUEST_BATTLE_QA_NAV_VERSION = 'guest-battle-qa-v2.6a';
 export const GUEST_BATTLE_QA_PLANET_IDS = Object.freeze(

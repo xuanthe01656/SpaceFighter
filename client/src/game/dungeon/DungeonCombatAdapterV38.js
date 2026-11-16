@@ -7,7 +7,7 @@ import {
 } from '../combat/EnemyCombatCatalogV2.js';
 import { resolveCampaignEnemyWeaponContractV37 } from '../combat/CombatWeaponCatalogV37.js';
 import { resolveDungeonRuntimeProfileV38 } from './DungeonEncounterCatalogV38.js';
-import { resolveDungeonVisualAssetIdV393 } from './DungeonContentCatalogV393.js';
+import { resolveDungeonVisualAssetIdV430 } from '../content/DungeonContentRegistryV430.js';
 
 export const DUNGEON_COMBAT_ADAPTER_VERSION = 'dungeon-combat-adapter-v3.8.0';
 
@@ -46,7 +46,7 @@ export function resolveDungeonEnemySpecV38({
   const runtime = enemyRuntimeFromCatalogV3(roleId);
   const visualAssetKind = entry?.elite ? 'elite' : resolveDungeonEnemyAssetKindV38(roleId);
   const visualAssetId = entry?.visualAssetId
-    || (entry?.elite ? `${dungeonId}_elite` : resolveDungeonVisualAssetIdV393(dungeonId, roleId));
+    || (entry?.elite ? `${dungeonId}_elite` : resolveDungeonVisualAssetIdV430(dungeonId, roleId));
   const weapon = resolveCampaignEnemyWeaponContractV37(roleId);
   const globalStats = profile.enemyStats;
   const hpMultiplier = finite(entry?.hpMultiplier, finite(room?.hpMultiplier, 1));

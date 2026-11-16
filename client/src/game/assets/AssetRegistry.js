@@ -6,10 +6,10 @@
 import { AIRCRAFTS } from '../catalog/aircraft.js';
 import { PILOTS } from '../catalog/pilots.js';
 import { GEAR_CATALOG } from '../catalog/gear.js';
-import { PLANET_ENEMIES, PLANET_BOSSES } from '../catalog/worlds.js';
+import { CAMPAIGN_PLANET_ENEMIES_V430 as PLANET_ENEMIES, CAMPAIGN_PLANET_BOSSES_V430 as PLANET_BOSSES } from '../content/CampaignContentRegistryV430.js';
 import { AVAILABLE_ASSET_PATHS } from './AssetAvailability.generated.js';
 import { BATTLE_ANIMATION_CLIPS, BATTLE_ANIMATION_GRID, DUNGEON_BATTLE_ANIMATION_CLIPS_V393, isAnimatedBattleKind } from './EnemyBossAnimationCatalog.js';
-import { DUNGEON_CONTENT_CATALOG_V393 } from '../dungeon/DungeonContentCatalogV393.js';
+import { DUNGEON_CONTENT_CATALOG_V430 } from '../content/DungeonContentRegistryV430.js';
 import { createEnemyBossModelContract } from './EnemyBossModelCatalog.js';
 
 export const VISUAL_CONTRACT_VERSION = '1.2.0';
@@ -75,7 +75,7 @@ for (const configGroup of Object.values(PLANET_BOSSES)) {
   for (const boss of Object.values(configGroup)) entries.push(definition('boss', boss.id,
     { legacyIcon: boss.imgSrc, role: 'boss', size: 5.2, sockets: [{id:'gun:left',offset:{x:-1.1,y:0,z:0.75}},{id:'gun:right',offset:{x:1.1,y:0,z:0.75}}] }));
 }
-for (const dungeon of Object.values(DUNGEON_CONTENT_CATALOG_V393)) {
+for (const dungeon of Object.values(DUNGEON_CONTENT_CATALOG_V430)) {
   for (const enemyAsset of dungeon.visualSet.enemyAssets) {
     entries.push(definition('dungeon_enemy', enemyAsset.id, {
       role: enemyAsset.role,

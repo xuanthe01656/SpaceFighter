@@ -47,7 +47,7 @@ import {
     isDungeonParityFoundationEnabledV38,
     resolveDungeonRuntimeProfileV38,
 } from '../../game/dungeon/DungeonEncounterCatalogV38.js';
-import { resolveDungeonVisualAssetRefsV393 } from '../../game/dungeon/DungeonContentCatalogV393.js';
+import { resolveDungeonVisualAssetRefsV430 } from '../../game/content/DungeonContentRegistryV430.js';
 import {
     advanceNaturalHazardMotionV394,
     createNaturalHazardMotionV394,
@@ -260,7 +260,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     const dungeonRuntimeProfileV38 = resolveDungeonRuntimeProfileV38(dungeonId);
     const dungeonPresentationV39 = resolveDungeonPresentationV39(dungeonId);
     const dungeonHudProfileV396 = resolveDungeonHudProfileV396(dungeonId);
-    const dungeonVisualProfilesV392 = resolveDungeonVisualAssetRefsV393(dungeonId)
+    const dungeonVisualProfilesV392 = resolveDungeonVisualAssetRefsV430(dungeonId)
         .map(({ kind, id }) => resolveAssetVisual(kind, id))
         .filter(Boolean);
     const dungeonVisualPreloadV392 = {

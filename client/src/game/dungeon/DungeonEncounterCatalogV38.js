@@ -1,9 +1,11 @@
 import { ENEMY_ARCHETYPES_V2 } from '../combat/EnemyCombatCatalogV2.js';
 import {
-  DUNGEON_CONTENT_CATALOG_VERSION,
-  auditDungeonContentCatalogV393,
-  projectDungeonRuntimeProfilesV393,
-} from './DungeonContentCatalogV393.js';
+  DUNGEON_CONTENT_REGISTRY_VERSION_V430,
+  DUNGEON_CONTENT_REGISTRY_V430,
+  DUNGEON_CONTENT_CATALOG_V430,
+  DUNGEON_RUNTIME_PROFILES_V430,
+  auditDungeonContentRegistryV430,
+} from '../content/DungeonContentRegistryV430.js';
 
 /**
  * Dungeon Parity Foundation V3.8 compatibility projection.
@@ -13,9 +15,9 @@ import {
  */
 export const DUNGEON_PARITY_FOUNDATION_VERSION = 'dungeon-parity-foundation-v3.8.0';
 export const DUNGEON_VERTICAL_SLICE_ID_V38 = 'dung_taurus';
-export const DUNGEON_CONTENT_PROJECTION_VERSION_V393 = DUNGEON_CONTENT_CATALOG_VERSION;
+export const DUNGEON_CONTENT_PROJECTION_VERSION_V393 = DUNGEON_CONTENT_REGISTRY_VERSION_V430;
 
-export const DUNGEON_RUNTIME_PROFILES_V38 = projectDungeonRuntimeProfilesV393();
+export const DUNGEON_RUNTIME_PROFILES_V38 = DUNGEON_RUNTIME_PROFILES_V430;
 
 export function resolveDungeonRuntimeProfileV38(dungeonId = DUNGEON_VERTICAL_SLICE_ID_V38) {
   return DUNGEON_RUNTIME_PROFILES_V38[dungeonId]
@@ -28,15 +30,18 @@ export function isDungeonParityFoundationEnabledV38({
   qaEnabled = false,
 } = {}) {
   const profile = DUNGEON_RUNTIME_PROFILES_V38[dungeonId];
-  const productionEnabled = profile?.enabledByDefault && profile.status === 'vertical_slice';
-  const isolatedQaEnabled = qaEnabled && profile?.qaReady === true
-    && ['vertical_slice', 'production_candidate'].includes(profile.status);
+  const releaseState = DUNGEON_CONTENT_REGISTRY_V430.meta[dungeonId]?.releaseState;
+  const productionEnabled = profile?.enabledByDefault === true && releaseState === 'production';
+  const isolatedQaEnabled = qaEnabled && profile?.qaReady === true && releaseState !== 'disabled';
   return Boolean(envEnabled && (productionEnabled || isolatedQaEnabled));
 }
 
 export function auditDungeonEncounterCatalogV38() {
-  const issues = [...auditDungeonContentCatalogV393()];
+  const issues = [...auditDungeonContentRegistryV430()];
   const validRoles = new Set(Object.keys(ENEMY_ARCHETYPES_V2));
+  if (Object.keys(DUNGEON_CONTENT_CATALOG_V430).length !== Object.keys(DUNGEON_RUNTIME_PROFILES_V38).length) {
+    issues.push('DUNGEON_REGISTRY_RUNTIME_PARITY');
+  }
   for (const profile of Object.values(DUNGEON_RUNTIME_PROFILES_V38)) {
     if (!profile.rooms?.length) issues.push(`DUNGEON_NO_ROOMS:${profile.id}`);
     const roomIds = new Set();

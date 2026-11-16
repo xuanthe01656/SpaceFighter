@@ -534,7 +534,7 @@ export const DUNGEON_CONTENT_CATALOG_V393 = freezeDeep({
   }),
 });
 
-function runtimeRoomFromContent(profile, definition) {
+export function projectDungeonRuntimeRoomV393(profile, definition) {
   const template = DUNGEON_ROOM_TEMPLATES_V393[definition.templateId];
   const pack = DUNGEON_ENCOUNTER_PACKS_V393[definition.encounterPackId];
   const objectiveProfile = definition.objectiveProfileId
@@ -571,13 +571,18 @@ function runtimeRoomFromContent(profile, definition) {
   });
 }
 
-export function projectDungeonRuntimeProfilesV393() {
-  return freezeDeep(Object.fromEntries(Object.values(DUNGEON_CONTENT_CATALOG_V393).map(profile => [
+export function projectDungeonRuntimeProfileV393(profile) {
+  if (!profile) return null;
+  return freezeDeep({
+    ...profile,
+    rooms: (profile.rooms || []).map(room => projectDungeonRuntimeRoomV393(profile, room)),
+  });
+}
+
+export function projectDungeonRuntimeProfilesV393(catalog = DUNGEON_CONTENT_CATALOG_V393) {
+  return freezeDeep(Object.fromEntries(Object.values(catalog || {}).map(profile => [
     profile.id,
-    {
-      ...profile,
-      rooms: profile.rooms.map(room => runtimeRoomFromContent(profile, room)),
-    },
+    projectDungeonRuntimeProfileV393(profile),
   ])));
 }
 

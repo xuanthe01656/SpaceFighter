@@ -1,3 +1,4 @@
+import { resolveDungeonContentProfileV430, resolveDungeonListingV430 } from '../content/DungeonContentRegistryV430.js';
 /**
  * Dungeon production presentation contracts V3.9.
  *
@@ -230,9 +231,62 @@ export const DUNGEON_PRESENTATION_PROFILES_V39 = freezeDeep({
   },
 });
 
+const genericPresentationV430 = dungeonId => {
+  const content = resolveDungeonContentProfileV430(dungeonId);
+  const listing = resolveDungeonListingV430(dungeonId);
+  const authored = content?.presentation || {};
+  const accent = authored.palette?.accent || listing?.themeColor || '#4beaf4';
+  return freezeDeep({
+    id: content?.id || dungeonId,
+    status: content?.status || 'production_candidate',
+    palette: {
+      clearColor: authored.palette?.clearColor || '#04101a',
+      fogColor: authored.palette?.fogColor || '#081b29',
+      ambientDiffuse: authored.palette?.ambientDiffuse || '#7ca7b9',
+      ambientGround: authored.palette?.ambientGround || '#06131d',
+      accent,
+      accentSoft: authored.palette?.accentSoft || '#b6f4ff',
+      objective: authored.palette?.objective || '#ffd166',
+      warning: authored.palette?.warning || '#ff9d3d',
+      danger: authored.palette?.danger || '#ff4757',
+      panel: authored.palette?.panel || 'rgba(3,12,20,.94)',
+      starNear: authored.palette?.starNear || '#ecfdff',
+      starMid: authored.palette?.starMid || '#78b9cc',
+      starFar: authored.palette?.starFar || '#315d70',
+    },
+    backdrop: {
+      style: authored.backdrop?.style || content?.theme || 'deep_space',
+      decorativeDebrisCount: authored.backdrop?.decorativeDebrisCount ?? 8,
+      scrollSpeed: authored.backdrop?.scrollSpeed ?? .016,
+      ...(authored.backdrop || {}),
+    },
+    boss: {
+      visualAssetId: authored.boss?.visualAssetId || content?.visualSet?.bossAsset?.id || null,
+      fallbackStyle: authored.boss?.fallbackStyle || 'boss_core',
+      patternPresentation: authored.boss?.patternPresentation || {},
+    },
+    hazard: {
+      style: authored.hazard?.style || 'generic_hazard',
+      warningMode: authored.hazard?.warningMode || 'edge_pulse',
+      warningMs: authored.hazard?.warningMs ?? 700,
+      warningWidth: authored.hazard?.warningWidth ?? 1.25,
+      warningDepth: authored.hazard?.warningDepth ?? 0,
+      warningPulseHz: authored.hazard?.warningPulseHz ?? 3.2,
+      ...(authored.hazard || {}),
+    },
+    breakable: {
+      style: authored.breakable?.style || 'objective_node',
+      hpBarColor: authored.breakable?.hpBarColor || accent,
+      criticalColor: authored.breakable?.criticalColor || '#ff4757',
+      ...(authored.breakable || {}),
+    },
+    roomObjectives: authored.roomObjectives || {},
+  });
+};
+
 export function resolveDungeonPresentationV39(dungeonId = 'dung_taurus') {
   return DUNGEON_PRESENTATION_PROFILES_V39[dungeonId]
-    || DUNGEON_PRESENTATION_PROFILES_V39.dung_taurus;
+    || genericPresentationV430(dungeonId);
 }
 
 export function resolveDungeonRoomObjectiveV39({ dungeonId = 'dung_taurus', room = null, lang = 'vi' } = {}) {

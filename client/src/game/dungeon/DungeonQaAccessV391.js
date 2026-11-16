@@ -1,12 +1,14 @@
 import { DUNGEON_RUNTIME_PROFILES_V38 } from './DungeonEncounterCatalogV38.js';
+import { DUNGEON_CONTENT_REGISTRY_V430 } from '../content/DungeonContentRegistryV430.js';
 import {
   DUNGEON_QA_DEFAULT_LOADOUT_PRESET_ID_V397,
   DUNGEON_QA_LOADOUT_PRESETS_V397,
   auditDungeonQaLoadoutsV397,
 } from './DungeonQaLoadoutV397.js';
 
-/** Stable function names retained for V3.9.1 callers; contract advanced in V3.9.8. */
+/** Stable function names retained for V3.9.1 callers; content discovery is V4.3-driven. */
 export const DUNGEON_QA_ACCESS_VERSION = 'dungeon-qa-access-v3.9.8';
+export const DUNGEON_QA_RUNTIME_MODE_V430 = 'parity_v398';
 
 const freezeDeep = value => {
   if (Array.isArray(value)) return Object.freeze(value.map(freezeDeep));
@@ -26,38 +28,32 @@ const roomBriefs = dungeonId => (DUNGEON_RUNTIME_PROFILES_V38[dungeonId]?.rooms 
   title: room.title || { vi: room.id, en: room.id },
 }));
 
-export const DUNGEON_QA_PROFILES_V391 = freezeDeep({
-  dung_taurus: {
-    id: 'dung_taurus',
-    visible: true,
-    runtimeMode: 'parity_v398',
-    readiness: 'production_qa',
-    difficultyTier: 1,
-    allowDirectRoom: true,
-    defaultLoadoutPresetId: 'assault_mk3',
-    roomBriefs: roomBriefs('dung_taurus'),
-  },
-  dung_nereus: {
-    id: 'dung_nereus',
-    visible: true,
-    runtimeMode: 'parity_v398',
-    readiness: 'production_candidate_qa',
-    difficultyTier: 2,
-    allowDirectRoom: true,
-    defaultLoadoutPresetId: 'control_mk3',
-    roomBriefs: roomBriefs('dung_nereus'),
-  },
-  dung_abaddon: {
-    id: 'dung_abaddon',
-    visible: true,
-    runtimeMode: 'parity_v398',
-    readiness: 'production_candidate_qa',
-    difficultyTier: 3,
-    allowDirectRoom: true,
-    defaultLoadoutPresetId: 'fortress_mk4',
-    roomBriefs: roomBriefs('dung_abaddon'),
-  },
-});
+const readinessFor = (profile, releaseState) => releaseState === 'production' || profile.enabledByDefault
+  ? 'production_qa'
+  : 'production_candidate_qa';
+
+const buildQaProfiles = () => Object.fromEntries(Object.values(DUNGEON_RUNTIME_PROFILES_V38)
+  .filter(profile => profile?.qaReady)
+  .sort((left, right) => (Number(left.difficultyRank) || 0) - (Number(right.difficultyRank) || 0)
+    || left.id.localeCompare(right.id))
+  .map(profile => {
+    const releaseState = DUNGEON_CONTENT_REGISTRY_V430.meta[profile.id]?.releaseState || 'qa';
+    const defaultPreset = profile.productionProfile?.defaultQaLoadoutPresetId;
+    return [profile.id, {
+      id: profile.id,
+      visible: releaseState !== 'disabled',
+      runtimeMode: DUNGEON_QA_RUNTIME_MODE_V430,
+      readiness: readinessFor(profile, releaseState),
+      difficultyTier: Math.max(1, Number(profile.difficultyRank) || 1),
+      allowDirectRoom: true,
+      defaultLoadoutPresetId: DUNGEON_QA_LOADOUT_PRESETS_V397[defaultPreset]
+        ? defaultPreset
+        : DUNGEON_QA_DEFAULT_LOADOUT_PRESET_ID_V397,
+      roomBriefs: roomBriefs(profile.id),
+    }];
+  }));
+
+export const DUNGEON_QA_PROFILES_V391 = freezeDeep(buildQaProfiles());
 
 export function parseDungeonQaQueryV391(search = '') {
   const params = new URLSearchParams(String(search || '').replace(/^\?/, ''));
@@ -174,37 +170,41 @@ export function getDungeonQaStatusLabelV391(profile, lang = 'vi') {
 
 export function auditDungeonQaAccessV391() {
   const issues = [...auditDungeonQaLoadoutsV397()];
-  const ids = Object.keys(DUNGEON_QA_PROFILES_V391);
-  if (ids.length !== 3) issues.push('DUNGEON_QA_PROFILE_COUNT');
-  for (const profile of Object.values(DUNGEON_QA_PROFILES_V391)) {
-    if (!profile.visible || !DUNGEON_RUNTIME_PROFILES_V38[profile.id]) {
-      issues.push(`DUNGEON_QA_PROFILE_INVALID:${profile.id}`);
-    }
-    const expectedReadiness = profile.id === 'dung_taurus'
-      ? 'production_qa'
-      : 'production_candidate_qa';
-    if (profile.readiness !== expectedReadiness || profile.runtimeMode !== 'parity_v398') {
+  const profiles = Object.values(DUNGEON_QA_PROFILES_V391);
+  if (!profiles.length) issues.push('DUNGEON_QA_NO_PROFILES');
+  for (const baseId of ['dung_taurus', 'dung_nereus', 'dung_abaddon']) {
+    if (!DUNGEON_QA_PROFILES_V391[baseId]) issues.push(`DUNGEON_QA_BASE_PROFILE:${baseId}`);
+  }
+  for (const profile of profiles) {
+    const runtime = DUNGEON_RUNTIME_PROFILES_V38[profile.id];
+    if (!profile.visible || !runtime) issues.push(`DUNGEON_QA_PROFILE_INVALID:${profile.id}`);
+    const releaseState = DUNGEON_CONTENT_REGISTRY_V430.meta[profile.id]?.releaseState;
+    const expectedReadiness = releaseState === 'production' ? 'production_qa' : 'production_candidate_qa';
+    if (profile.readiness !== expectedReadiness || profile.runtimeMode !== DUNGEON_QA_RUNTIME_MODE_V430) {
       issues.push(`DUNGEON_QA_PROFILE_MODE:${profile.id}`);
     }
-    if (!profile.allowDirectRoom || profile.roomBriefs.length !== 5) {
+    if (!profile.allowDirectRoom || profile.roomBriefs.length !== (runtime?.rooms?.length || 0)) {
       issues.push(`DUNGEON_QA_ROOM_ACCESS:${profile.id}`);
     }
     if (!DUNGEON_QA_LOADOUT_PRESETS_V397[profile.defaultLoadoutPresetId]) {
       issues.push(`DUNGEON_QA_DEFAULT_LOADOUT:${profile.id}`);
     }
   }
-  const access = resolveDungeonQaAccessV391({ envEnabled: true });
-  const run = createDungeonQaRunV391({
-    access,
-    dungeonId: 'dung_abaddon',
-    roomId: 'abaddon_leviathan',
-    loadoutPresetId: 'fortress_mk4',
-  });
-  if (!isDungeonQaRunV391(run, 'dung_abaddon', { runtimeEnabled: true })
-    || run.directRoomIndex !== 4
-    || !run.singleRoom
-    || run.loadoutPresetId !== 'fortress_mk4') {
-    issues.push('DUNGEON_QA_RUN_CONTRACT');
+  const sample = profiles.at(-1);
+  if (sample) {
+    const room = sample.roomBriefs.at(-1);
+    const access = resolveDungeonQaAccessV391({ envEnabled: true });
+    const run = createDungeonQaRunV391({
+      access,
+      dungeonId: sample.id,
+      roomId: room?.id,
+      loadoutPresetId: sample.defaultLoadoutPresetId,
+    });
+    if (!isDungeonQaRunV391(run, sample.id, { runtimeEnabled: true })
+      || run.directRoomIndex !== room?.index
+      || !run.singleRoom) {
+      issues.push('DUNGEON_QA_RUN_CONTRACT');
+    }
   }
   return Object.freeze(issues);
 }

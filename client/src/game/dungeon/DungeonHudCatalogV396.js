@@ -1,7 +1,8 @@
 import {
-  DUNGEON_CONTENT_CATALOG_V393,
-  resolveDungeonContentProfileV393,
-} from './DungeonContentCatalogV393.js';
+  DUNGEON_CONTENT_CATALOG_V430,
+  resolveDungeonContentProfileV430,
+  resolveDungeonListingV430,
+} from '../content/DungeonContentRegistryV430.js';
 import { resolveDungeonPresentationV39 } from './DungeonPresentationV39.js';
 
 /**
@@ -81,13 +82,14 @@ const PROFILE_META = freezeDeep({
 });
 
 const buildHudProfile = dungeonId => {
-  const content = resolveDungeonContentProfileV393(dungeonId);
+  const content = resolveDungeonContentProfileV430(dungeonId);
   const presentation = resolveDungeonPresentationV39(dungeonId);
+  const listing = resolveDungeonListingV430(dungeonId);
   const meta = PROFILE_META[dungeonId] || {
     shortCode: String(dungeonId || 'DUNGEON').replace(/^dung_/, '').toUpperCase(),
-    displayName: { vi: content.id, en: content.id },
-    missionLabel: { vi: 'PHÓ BẢN', en: 'DUNGEON' },
-    qaLabel: 'DUNGEON QA',
+    displayName: listing?.title || { vi: content.id, en: content.id },
+    missionLabel: listing?.subtitle || { vi: 'PHÓ BẢN', en: 'DUNGEON' },
+    qaLabel: content.enabledByDefault ? 'PRODUCTION QA' : 'CANDIDATE QA',
   };
   return freezeDeep({
     id: dungeonId,
@@ -120,7 +122,7 @@ const buildHudProfile = dungeonId => {
 };
 
 export const DUNGEON_HUD_PROFILES_V396 = freezeDeep(Object.fromEntries(
-  Object.keys(DUNGEON_CONTENT_CATALOG_V393).map(dungeonId => [dungeonId, buildHudProfile(dungeonId)]),
+  Object.keys(DUNGEON_CONTENT_CATALOG_V430).map(dungeonId => [dungeonId, buildHudProfile(dungeonId)]),
 ));
 
 export function resolveDungeonHudProfileV396(dungeonId = 'dung_taurus') {
@@ -149,7 +151,7 @@ export function resolveDungeonHudRoomV396({
   roomIndex = 0,
   lang = 'vi',
 } = {}) {
-  const content = resolveDungeonContentProfileV393(dungeonId);
+  const content = resolveDungeonContentProfileV430(dungeonId);
   const resolvedRoom = room
     || content.rooms[clamp(roomIndex, 0, Math.max(0, content.rooms.length - 1))]
     || null;
@@ -183,7 +185,7 @@ export function buildDungeonRoomMarkersV396({
 } = {}) {
   const sourceRooms = Array.isArray(rooms) && rooms.length
     ? rooms
-    : resolveDungeonContentProfileV393(dungeonId).rooms;
+    : resolveDungeonContentProfileV430(dungeonId).rooms;
   const count = sourceRooms.length;
   if (!count) return Object.freeze([]);
   const current = clamp(integer(currentRoomIndex), 0, count - 1);
@@ -294,7 +296,7 @@ export function resolveDungeonObjectiveProgressV396({
 
 export function auditDungeonHudCatalogV396() {
   const issues = [];
-  const contentIds = Object.keys(DUNGEON_CONTENT_CATALOG_V393).sort();
+  const contentIds = Object.keys(DUNGEON_CONTENT_CATALOG_V430).sort();
   const hudIds = Object.keys(DUNGEON_HUD_PROFILES_V396).sort();
   if (JSON.stringify(contentIds) !== JSON.stringify(hudIds)) issues.push('DUNGEON_HUD_PROFILE_PARITY');
   const forbiddenKeys = new Set(['hp', 'damage', 'reward', 'projectileSpeed', 'fireCooldownMs']);
