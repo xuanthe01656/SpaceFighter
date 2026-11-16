@@ -164,6 +164,7 @@ export const DUNGEON_HAZARD_PROFILES_V393 = freezeDeep({
     warningWidth: 1.05,
     naturalDrift: true,
     damage: 65,
+    damageType: 'kinetic',
     speed: .082,
     destructible: true,
     hp: 180,
@@ -179,6 +180,7 @@ export const DUNGEON_HAZARD_PROFILES_V393 = freezeDeep({
     warningMs: 900,
     warningWidth: 1.35,
     damage: 72,
+    damageType: 'ion',
     speed: .088,
     destructible: false,
     contactRadius: 1.18,
@@ -191,6 +193,7 @@ export const DUNGEON_HAZARD_PROFILES_V393 = freezeDeep({
     warningMs: 840,
     warningWidth: 1.55,
     damage: 88,
+    damageType: 'void',
     speed: .102,
     destructible: true,
     hp: 300,
@@ -432,8 +435,8 @@ export const DUNGEON_CONTENT_CATALOG_V393 = freezeDeep({
     },
     runStructure: { minimumRooms: 5, maximumRooms: 10, recommendedRooms: 5, entryRoomId: 'nereus_entry', bossRoomId: 'nereus_oracle' },
     enemyStats: {
-      baseHp: 145, baseSpeed: .046, hpMultiplier: 1.12, damageMultiplier: 1.08,
-      speedMultiplier: 1.02, projectileSpeedMultiplier: 1.08, fireCooldownMultiplier: .94,
+      baseHp: 145, baseSpeed: .046, hpMultiplier: 1.12, damageMultiplier: 1.12,
+      speedMultiplier: 1.02, projectileSpeedMultiplier: 1.10, fireCooldownMultiplier: .92,
     },
     rooms: [
       {
@@ -465,7 +468,7 @@ export const DUNGEON_CONTENT_CATALOG_V393 = freezeDeep({
           id: 'nereus_oracle_core', dungeonId: 'dung_nereus', visualAssetId: 'dung_nereus_boss',
           displayName: { vi: 'MẮT THẦN ORACLE', en: 'THE ORACLE CORE' },
           sharedBossProfileId: 'cryo_mech_warden', hp: 13600,
-          damageMultiplier: 1.04, projectileSpeedMultiplier: 1.06,
+          damageMultiplier: 1.10, projectileSpeedMultiplier: 1.08,
         },
       },
     ],

@@ -24,11 +24,12 @@ test('V4.0.3 keeps 4 QA equipment identities and previous V4.0.2 stats', () => {
   assert.equal(DUNGEON_QA_ASSAULT_DAMAGE_SCALE_V403, 0.10);
 });
 
-test('V4.0.3 applies QA-offense multiplier only for isolated assault run', () => {
+test('V4.2.6 calibrates every strong QA preset while account stays unscaled', () => {
   assert.equal(resolveDungeonQaOutgoingDamageScaleV403({ qaRun: qa() }), 0.10);
-  for (const preset of ['account','control_mk3','fortress_mk4','stress_mk4']) {
-    assert.equal(resolveDungeonQaOutgoingDamageScaleV403({qaRun:qa(preset),isDev:true,search:'?sfDungeonDmg=0.05'}),1);
-  }
+  assert.equal(resolveDungeonQaOutgoingDamageScaleV403({ qaRun: qa('control_mk3') }), 0.22);
+  assert.equal(resolveDungeonQaOutgoingDamageScaleV403({ qaRun: qa('fortress_mk4') }), 0.28);
+  assert.equal(resolveDungeonQaOutgoingDamageScaleV403({ qaRun: qa('stress_mk4') }), 0.12);
+  assert.equal(resolveDungeonQaOutgoingDamageScaleV403({qaRun:qa('account'),isDev:true,search:'?sfDungeonDmg=0.05'}),1);
   assert.equal(resolveDungeonQaOutgoingDamageScaleV403({ qaRun: null }), 1);
   assert.equal(resolveDungeonQaOutgoingDamageScaleV403({ qaRun: {...qa(),enabled:false} }), 1);
   assert.equal(resolveDungeonQaOutgoingDamageScaleV403({ qaRun: {...qa(), trustedWrites:true} }), 1);
@@ -43,6 +44,7 @@ test('V4.0.3 development URL can tune between 3% and 100% without new patch', ()
     assert.equal(resolveDungeonQaOutgoingDamageScaleV403({qaRun:qa(),isDev:true,search:`?sfDungeonDmg=${value}`}),0.10);
   }
   assert.equal(resolveDungeonQaOutgoingDamageScaleV403({qaRun:qa(),isDev:false,search:'?sfDungeonDmg=1'}),0.10);
+  assert.equal(resolveDungeonQaOutgoingDamageScaleV403({qaRun:qa('control_mk3'),isDev:true,search:'?sfDungeonDmg=0.18'}),0.18);
 });
 
 test('V4.0.3 scales all positive enemy/boss hits once and leaves base mode equal', () => {

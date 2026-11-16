@@ -121,6 +121,10 @@ import {
 } from '../../game/dungeon/DungeonRoleEngagementV410.js';
 import { createDungeonShipSkillAdapterV410 } from '../../game/dungeon/DungeonShipSkillAdapterV410.js';
 import {
+    resolveDungeonHostileHitRadiusV426,
+    resolveDungeonIncomingDamageV426,
+} from '../../game/dungeon/DungeonBalanceV426.js';
+import {
     advanceDungeonEnemyEntryShieldV422, createDungeonEnemyEntryShieldV422,
     isDungeonEnemyEntryActiveV422, isDungeonEnemyEntryRevealingV422,
 } from '../../game/dungeon/DungeonEnemyEntryShieldV422.js';
@@ -1612,6 +1616,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             rotationY: .015 + (index % 2) * .004,
             rotationZ: .008 + (index % 4) * .002,
             damage: Math.max(1, Math.round(Number(hazard.damage) || 60)),
+            damageType: hazard.damageType || (dungeonId === 'dung_nereus' ? 'ion'
+                : dungeonId === 'dung_abaddon' ? 'void' : 'kinetic'),
             hitId: `dungeon-hazard-${currentWave}-${index}-${Math.trunc(nowMs)}`,
             destructible: combat.destructible,
             hp: combat.hp,
@@ -1754,10 +1760,15 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             visualId: options.visualId || plan?.visualId || null,
             pattern: options.pattern || plan?.pattern || null,
         });
-        const hitRadius = resolveDungeonHostileProjectileHitRadiusV392({
+        const baseHitRadiusV392 = resolveDungeonHostileProjectileHitRadiusV392({
             priority,
             visual,
             requestedRadius: options.hitRadius || plan?.hitRadius,
+        });
+        const hitRadius = resolveDungeonHostileHitRadiusV426({
+            dungeonId,
+            baseRadius: baseHitRadiusV392,
+            priority,
         });
         // A failed sprite/material factory must not silently erase a logical shot.
         // Fall back to a small visible mesh only for this Dungeon projectile.
@@ -2120,6 +2131,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         damageType = 'kinetic',
         hitId = null,
         contactId = null,
+        priority = 'normal',
     } = {}) => {
         const nowMs = globalThis.performance?.now?.() ?? Date.now();
         const hpBefore = stats.hp;
@@ -2136,12 +2148,20 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         }
 
         const scaledRawDamage = Math.max(0, Number(rawDamage) || 0) * shieldDamageFactor(droneBase);
+        const balancedIncomingV426 = resolveDungeonIncomingDamageV426({
+            dungeonId,
+            rawDamage: scaledRawDamage,
+            source,
+            damageType,
+            priority,
+            passiveShieldHp: passives.shieldHp,
+        });
         // Manual SHIP defenses (barrier/cloak/fortress) are resolved by the same
         // deterministic Combat V2 runtime as Campaign. Existing Dungeon armor,
         // dodge and retaliation stay on BattlePassives and receive only the
         // remaining damage, preventing double mitigation or double passives.
         const activeSkillHitV410 = dungeonShipSkillV410.resolveIncomingHit({
-            damage: scaledRawDamage,
+            damage: balancedIncomingV426.damage,
             source,
             damageType,
         });
@@ -2151,6 +2171,20 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 source, nowMs: Date.now(),
             })
             : { dodged: false, absorbed: 0, reflected: 0, novaDamage: 0 };
+        // Nereus ion/energy pressure drains passive shield faster, but the extra
+        // pressure is shield-only: it never spills into HP after the shield breaks.
+        // Apply only after the ordinary hit resolves so a successful dodge never
+        // consumes shield energy.
+        const extraPassiveShieldAbsorbedV426 = !result.dodged && result.absorbed > 0
+            ? Math.min(
+                Math.max(0, Number(passives.shieldHp) || 0),
+                remainingAfterSkillV410 * Math.max(0,
+                    balancedIncomingV426.shieldPressureMultiplier - 1),
+            )
+            : 0;
+        if (extraPassiveShieldAbsorbedV426 > 0) {
+            passives.shieldHp = Math.max(0, passives.shieldHp - extraPassiveShieldAbsorbedV426);
+        }
         if (result.absorbed > 0 && stats.armorPassive === 'shield') {
             dungeonShipSkillV410.notifyPassiveProc('shield_absorb');
         }
@@ -2159,12 +2193,15 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         }
         publishDungeonAbilityStateV410(true);
         if (result.dodged) {
-            dungeonQaReadinessV400.recordDamage({ source, hpBefore, hpAfter: stats.hp, dodged: true });
+            dungeonQaReadinessV400.recordDamage({
+                source, hpBefore, hpAfter: stats.hp, dodged: true,
+                absorbedAmount: (activeSkillHitV410.absorbed || 0) + extraPassiveShieldAbsorbedV426,
+            });
             showAnnouncement(lang === 'vi' ? 'NÉ TRÁNH!' : 'DODGED!', '#4ade80', 1000);
             return createPlayerDamageOutcomeV25({
                 gate, source, hitId, contactId, rawDamage: scaledRawDamage,
                 hpBefore, hpAfter: stats.hp, dodged: true, dodgeSource: 'pilot',
-                absorbed: activeSkillHitV410.absorbed || 0,
+                absorbed: (activeSkillHitV410.absorbed || 0) + extraPassiveShieldAbsorbedV426,
             });
         }
 
@@ -2190,12 +2227,14 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         const outcome = createPlayerDamageOutcomeV25({
             gate, source, hitId, contactId, rawDamage: scaledRawDamage,
             hpBefore, hpAfter: stats.hp,
-            absorbed: (activeSkillHitV410.absorbed || 0) + (result.absorbed || 0),
+            absorbed: (activeSkillHitV410.absorbed || 0)
+                + extraPassiveShieldAbsorbedV426 + (result.absorbed || 0),
             reflected: result.reflected, novaDamage: result.novaDamage,
         });
         dungeonQaReadinessV400.recordDamage({
             source, hpBefore, hpAfter: stats.hp,
             absorbed: outcome.outcome === 'absorbed',
+            absorbedAmount: outcome.absorbed || 0,
         });
         updateHpUI();
         if (outcome.outcome === 'absorbed' || outcome.outcome === 'no_damage') return outcome;
@@ -2941,7 +2980,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                     damagePlayer({
                         rawDamage: hazard.damage,
                         source: 'environment',
-                        damageType: 'kinetic',
+                        damageType: hazard.damageType || 'kinetic',
                         hitId: hazard.hitId,
                     });
                     hazard.disposeHud?.();
@@ -3244,6 +3283,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                     source: 'projectile',
                     damageType: eb._damageType || 'energy',
                     hitId: eb._damageHitId,
+                    priority: eb._priority || 'normal',
                 });
                 safeDis(eb);
                 enemyBullets.splice(i, 1);

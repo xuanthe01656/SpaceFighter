@@ -12,6 +12,7 @@ import {
 } from './DungeonRoleEngagementV410.js';
 import { DUNGEON_SHIP_SKILL_ADAPTER_VERSION_V410 } from './DungeonShipSkillAdapterV410.js';
 import { DUNGEON_HUD_CATALOG_VERSION } from './DungeonHudCatalogV396.js';
+import { DUNGEON_BALANCE_VERSION_V426 } from './DungeonBalanceV426.js';
 export const DUNGEON_QA_READINESS_VERSION_V400 = 'dungeon-qa-readiness-v4.0.1';
 export const DUNGEON_QA_READINESS_POLICY_V400 = Object.freeze({
   maxRooms: 15,
@@ -59,7 +60,7 @@ const cleanSource = value => SOURCES.has(value) ? value : 'unknown';
 const round = (value, digits = 1) => Number(safeNum(value).toFixed(digits));
 const shortId = value => String(value || 'unknown').replace(/[^a-z0-9_-]/gi, '').slice(0, 64) || 'unknown';
 const emptyCounts = () => ({ spawns: 0, rangedSpawns: 0, volleys: 0, projectiles: 0,
-  telegraphs: 0, destroyedHazards: 0, objectiveNodesDestroyed: 0, damageTaken: 0, dodged: 0, absorbed: 0,
+  telegraphs: 0, destroyedHazards: 0, objectiveNodesDestroyed: 0, damageTaken: 0, shieldDamageAbsorbed: 0, dodged: 0, absorbed: 0,
   shipSkillActivations: 0, shipSkillRejected: 0,
   damageBySource: { projectile: 0, contact: 0, environment: 0, unknown: 0 },
   raiderOpeningV405: raiderOpeningCountsV405(),
@@ -75,7 +76,8 @@ const publicCounts = counts => ({
   spawns: counts.spawns, rangedSpawns: counts.rangedSpawns,
   volleys: counts.volleys, projectiles: counts.projectiles, telegraphs: counts.telegraphs,
   destroyedHazards: counts.destroyedHazards, objectiveNodesDestroyed: counts.objectiveNodesDestroyed,
-  damageTaken: round(counts.damageTaken), damageBySource: { ...counts.damageBySource },
+  damageTaken: round(counts.damageTaken), shieldDamageAbsorbed: round(counts.shieldDamageAbsorbed),
+  damageBySource: { ...counts.damageBySource },
   dodged: counts.dodged, absorbed: counts.absorbed,
   shipSkillActivations: counts.shipSkillActivations,
   shipSkillRejected: counts.shipSkillRejected,
@@ -291,13 +293,14 @@ export function createDungeonQaReadinessV400({
     return true;
   };
   const recordDamage = ({ source = 'unknown', hpBefore = 0, hpAfter = 0,
-    dodged = false, absorbed = false } = {}) => {
+    dodged = false, absorbed = false, absorbedAmount = 0 } = {}) => {
     if (!active || finished || !current) return;
     const loss = Math.max(0, positive(hpBefore) - positive(hpAfter));
     const key = cleanSource(source);
     for (const b of buckets()) {
       b.damageTaken += loss;
       b.damageBySource[key] += loss;
+      b.shieldDamageAbsorbed += Math.max(0, positive(absorbedAmount));
       if (dodged) b.dodged += 1;
       if (absorbed) b.absorbed += 1;
     }
@@ -374,6 +377,7 @@ export function createDungeonQaReadinessV400({
     // Never silently certify production: a real APK/device assessment is required.
     return {
       version: DUNGEON_QA_READINESS_VERSION_V400,
+      dungeonBalanceVersion: DUNGEON_BALANCE_VERSION_V426,
       // V4.0.4 runtime marker; report schema version stays V4.0.1.
       dungeonEngagementVersion: DUNGEON_ENGAGEMENT_VERSION_V404,
       dungeonRaiderOpeningVersion: DUNGEON_RAIDER_OPENING_VERSION_V405,

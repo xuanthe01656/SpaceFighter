@@ -5,6 +5,8 @@
  * onto a cloned campaign payload before deriveBattleLoadout() runs; no owned item,
  * selected loadout, reward, progression or trusted profile field is mutated.
  */
+import { resolveDungeonQaPresetDamageScaleV426 } from './DungeonBalanceV426.js';
+
 export const DUNGEON_QA_LOADOUT_VERSION = 'dungeon-qa-loadout-v3.9.7';
 export const DUNGEON_QA_DEFAULT_LOADOUT_PRESET_ID_V397 = 'assault_mk3';
 
@@ -104,11 +106,9 @@ export const DUNGEON_QA_LOADOUT_PRESETS_V397 = freezeDeep({
 });
 
 /**
- * V4.0.3: CALIBRATION ONLY. Never applies to a real/account run or non-assault
- * preset. Web QA may set sfDungeonDmg=0.05...1.0 so a new patch is not needed
- * for each balance experiment. Build/non-dev QA uses the 0.10 default.
- *
- * This is NOT a production power rebalance or an authorization mechanism.
+ * V4.2.6 QA calibration. Strong QA presets are intentionally scaled so each
+ * Dungeon lives long enough to exercise enemy, hazard and Boss mechanics.
+ * Account loadouts remain exactly 1.0. A DEV-only query may override 3%-100%.
  */
 export const DUNGEON_QA_ASSAULT_DAMAGE_SCALE_V403 = 0.10;
 
@@ -118,7 +118,9 @@ export function resolveDungeonQaOutgoingDamageScaleV403({
   search = '',
 } = {}) {
   if (qaRun?.enabled !== true || qaRun?.rewardMode !== 'none'
-      || qaRun?.trustedWrites !== false || qaRun?.loadoutPresetId !== 'assault_mk3') return 1;
+      || qaRun?.trustedWrites !== false) return 1;
+  const defaultScale = resolveDungeonQaPresetDamageScaleV426(qaRun?.loadoutPresetId || 'account');
+  if (!(defaultScale < 1)) return 1;
   if (isDev === true) {
     const raw = new URLSearchParams(String(search || '').replace(/^\?/, '')).get('sfDungeonDmg');
     // Reject blank, exponential, negative and non-numeric input. No implicit zero.
@@ -127,7 +129,7 @@ export function resolveDungeonQaOutgoingDamageScaleV403({
       if (Number.isFinite(value) && value >= 0.03 && value <= 1) return value;
     }
   }
-  return DUNGEON_QA_ASSAULT_DAMAGE_SCALE_V403;
+  return defaultScale;
 }
 
 /** Apply once, at the damage-to-enemy/boss boundary. Never scale objectives. */
