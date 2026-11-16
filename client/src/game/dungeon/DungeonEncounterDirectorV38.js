@@ -3,6 +3,7 @@ import {
   DUNGEON_PARITY_FOUNDATION_VERSION,
   resolveDungeonRuntimeProfileV38,
 } from './DungeonEncounterCatalogV38.js';
+import { resolveDungeonRequiredRoleSequenceV427 } from './DungeonAttackGuaranteeV427.js';
 
 export const DUNGEON_ENCOUNTER_DIRECTOR_VERSION = 'dungeon-encounter-director-v3.8.0';
 
@@ -64,11 +65,8 @@ export function buildDungeonRoomSpawnPlanV38({
   let remainingBudget = Math.max(0, Math.trunc(finite(room.threatBudget, 0)));
   let guard = 0;
 
-  while (remainingBudget > 0 && guard < 40) {
-    guard += 1;
-    const selected = weightedRole(room, remainingBudget, next);
-    if (!selected) break;
-    const archetype = selected.archetype;
+  const appendRole = (archetype, requiredRoleV427 = false) => {
+    if (!archetype) return false;
     const cost = Math.max(1, Math.trunc(archetype.threatCost));
     const index = entries.length;
     const jitterMs = (Number(next() % 181) - 90);
@@ -85,13 +83,28 @@ export function buildDungeonRoomSpawnPlanV38({
       spawnAtMs: Math.max(0, room.introMs + index * room.spawnGapMs + jitterMs),
       threatCost: cost,
       elite,
+      requiredRoleV427: Boolean(requiredRoleV427),
       hpMultiplier: room.hpMultiplier * (elite ? 1.22 : 1),
       damageMultiplier: room.damageMultiplier * (elite ? 1.14 : 1),
       speedMultiplier: room.speedMultiplier * (elite ? 1.06 : 1),
       projectileSpeedMultiplier: room.projectileSpeedMultiplier * (elite ? 1.05 : 1),
       fireCooldownMultiplier: room.fireCooldownMultiplier * (elite ? .92 : 1),
     }));
-    remainingBudget -= cost;
+    remainingBudget = Math.max(0, remainingBudget - cost);
+    return true;
+  };
+
+  const required = resolveDungeonRequiredRoleSequenceV427({
+    requiredRoles: room.requiredRoles,
+    roleCatalog: ENEMY_ARCHETYPES_V2,
+    threatBudget: remainingBudget,
+  });
+  for (const row of required.sequence) appendRole(row.archetype, true);
+
+  while (remainingBudget > 0 && guard < 40) {
+    guard += 1;
+    const selected = weightedRole(room, remainingBudget, next);
+    if (!selected || !appendRole(selected.archetype)) break;
   }
 
   return freezeDeep({
@@ -311,5 +324,8 @@ export function auditDungeonEncounterDirectorV38() {
   if (bossFirst.events.find(event => event.type === 'room_started')?.room?.id !== 'taurus_boss') {
     issues.push('DUNGEON_QA_DIRECT_ROOM_START');
   }
+  const abaddonBoss = buildDungeonRoomSpawnPlanV38({ dungeonId: 'dung_abaddon', roomIndex: 4, seed: 11 });
+  const requiredRoles = abaddonBoss.entries.filter(entry => entry.requiredRoleV427).map(entry => entry.roleId);
+  if (requiredRoles.join(',') !== 'charger,artillery') issues.push('DUNGEON_REQUIRED_BOSS_GUARD');
   return Object.freeze(issues);
 }

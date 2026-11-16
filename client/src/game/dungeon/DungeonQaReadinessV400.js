@@ -13,6 +13,7 @@ import {
 import { DUNGEON_SHIP_SKILL_ADAPTER_VERSION_V410 } from './DungeonShipSkillAdapterV410.js';
 import { DUNGEON_HUD_CATALOG_VERSION } from './DungeonHudCatalogV396.js';
 import { DUNGEON_BALANCE_VERSION_V426 } from './DungeonBalanceV426.js';
+import { DUNGEON_ATTACK_GUARANTEE_VERSION_V427 } from './DungeonAttackGuaranteeV427.js';
 export const DUNGEON_QA_READINESS_VERSION_V400 = 'dungeon-qa-readiness-v4.0.1';
 export const DUNGEON_QA_READINESS_POLICY_V400 = Object.freeze({
   maxRooms: 15,
@@ -39,7 +40,10 @@ const FIRE_PROBE_REASONS = new Set([
   'invalid_cadence', 'invalid_volley', 'projectile_failed', 'projectile_created',
   // Actual V3.9.9 runtime decisions: these must never be mislabeled 'other'.
   'no_fire_intent', 'non_ranged_role', 'no_choreography', 'invalid_position',
-  'shared_ready', 'ready', 'other',
+  'shared_ready', 'ready',
+  'entry_protected', 'first_volley_complete', 'first_volley_outside_approach',
+  'first_volley_waiting_band', 'first_volley_arming', 'first_volley_deadline',
+  'first_volley_forced_recorded', 'first_volley_shared_recorded', 'other',
 ]);
 const RAIDER_OPENING_REASONS_V405 = Object.freeze([
   'not_opening_phase', 'opening_consumed', 'weapon_unavailable',
@@ -51,6 +55,7 @@ const raiderOpeningCountsV405 = () => ({
   reasons: Object.fromEntries(RAIDER_OPENING_REASONS_V405.map(key => [key, 0])),
 });
 const roleCounts = () => Object.fromEntries([...ROLES, 'unknown'].map(role => [role, 0]));
+const rangedRoleCounts = () => Object.fromEntries([...RANGED_ROLES].map(role => [role, 0]));
 const fireReasonCounts = () => Object.fromEntries([...FIRE_PROBE_REASONS].map(reason => [reason, 0]));
 const safeNum = (n, fallback = 0) => Number.isFinite(n) ? n : fallback;
 const positive = (n, fallback = 0) => Math.max(0, safeNum(n, fallback));
@@ -62,6 +67,14 @@ const shortId = value => String(value || 'unknown').replace(/[^a-z0-9_-]/gi, '')
 const emptyCounts = () => ({ spawns: 0, rangedSpawns: 0, volleys: 0, projectiles: 0,
   telegraphs: 0, destroyedHazards: 0, objectiveNodesDestroyed: 0, damageTaken: 0, shieldDamageAbsorbed: 0, dodged: 0, absorbed: 0,
   shipSkillActivations: 0, shipSkillRejected: 0,
+  attackGuaranteeV427: {
+    forcedFirstVolleys: 0,
+    firstVolleyByRole: rangedRoleCounts(),
+    firstVolleyTimeMsSumByRole: rangedRoleCounts(),
+    chargerTelegraphs: 0,
+    chargerCharges: 0,
+    chargerContacts: 0,
+  },
   damageBySource: { projectile: 0, contact: 0, environment: 0, unknown: 0 },
   raiderOpeningV405: raiderOpeningCountsV405(),
   shotsByRole: roleCounts(), spawnsByRole: roleCounts(), fireProbeByReason: fireReasonCounts(),
@@ -81,6 +94,16 @@ const publicCounts = counts => ({
   dodged: counts.dodged, absorbed: counts.absorbed,
   shipSkillActivations: counts.shipSkillActivations,
   shipSkillRejected: counts.shipSkillRejected,
+  attackGuaranteeV427: {
+    forcedFirstVolleys: counts.attackGuaranteeV427.forcedFirstVolleys,
+    firstVolleyByRole: { ...counts.attackGuaranteeV427.firstVolleyByRole },
+    averageFirstVolleyMsByRole: Object.fromEntries(Object.entries(counts.attackGuaranteeV427.firstVolleyByRole)
+      .map(([role, count]) => [role, count > 0
+        ? Math.round(counts.attackGuaranteeV427.firstVolleyTimeMsSumByRole[role] / count) : null])),
+    chargerTelegraphs: counts.attackGuaranteeV427.chargerTelegraphs,
+    chargerCharges: counts.attackGuaranteeV427.chargerCharges,
+    chargerContacts: counts.attackGuaranteeV427.chargerContacts,
+  },
   raiderOpeningV405: {
     probeSamples: counts.raiderOpeningV405.probeSamples,
     successfulOpeningVolleys: counts.raiderOpeningV405.successfulOpeningVolleys,
@@ -246,6 +269,32 @@ export function createDungeonQaReadinessV400({
     }
     return true;
   };
+  const recordAttackGuaranteeV427 = ({
+    roleId = 'unknown', event = 'other', timeToFirstVolleyMs = null,
+  } = {}) => {
+    if (!active || finished || !current) return false;
+    const role = cleanRole(roleId);
+    for (const b of buckets()) {
+      const row = b.attackGuaranteeV427;
+      if (event === 'first_volley') {
+        if (RANGED_ROLES.has(role)) {
+          row.firstVolleyByRole[role] += 1;
+          if (Number.isFinite(timeToFirstVolleyMs)) {
+            row.firstVolleyTimeMsSumByRole[role] += Math.max(0, timeToFirstVolleyMs);
+          }
+        }
+      } else if (event === 'forced_first_volley') {
+        row.forcedFirstVolleys += 1;
+      } else if (event === 'charger_telegraph') {
+        row.chargerTelegraphs += 1;
+      } else if (event === 'charger_charge') {
+        row.chargerCharges += 1;
+      } else if (event === 'charger_contact') {
+        row.chargerContacts += 1;
+      }
+    }
+    return true;
+  };
   const recordBossSpawn = ({ nowMs = null } = {}) => {
     if (!active || finished || !current || !Number.isFinite(nowMs)) return false;
     bossStartedAtMs = positive(nowMs);
@@ -378,6 +427,7 @@ export function createDungeonQaReadinessV400({
     return {
       version: DUNGEON_QA_READINESS_VERSION_V400,
       dungeonBalanceVersion: DUNGEON_BALANCE_VERSION_V426,
+      dungeonAttackGuaranteeVersion: DUNGEON_ATTACK_GUARANTEE_VERSION_V427,
       // V4.0.4 runtime marker; report schema version stays V4.0.1.
       dungeonEngagementVersion: DUNGEON_ENGAGEMENT_VERSION_V404,
       dungeonRaiderOpeningVersion: DUNGEON_RAIDER_OPENING_VERSION_V405,
@@ -403,8 +453,9 @@ export function createDungeonQaReadinessV400({
   };
   return Object.freeze({ beginRoom, recordSpawn, recordVolley, recordProjectile,
     recordTelegraph, recordHazardDestroyed, recordObjectiveNodeDestroyed,
-    recordEnemyResolved, recordFireProbe, recordRaiderOpeningV405, recordBossSpawn, recordBossDefeated,
-    recordShipSkill, recordDamage, sample, endRoom, finish, snapshot });
+    recordEnemyResolved, recordFireProbe, recordRaiderOpeningV405, recordAttackGuaranteeV427,
+    recordBossSpawn, recordBossDefeated, recordShipSkill, recordDamage,
+    sample, endRoom, finish, snapshot });
 }
 
 export function auditDungeonQaReadinessV400() {

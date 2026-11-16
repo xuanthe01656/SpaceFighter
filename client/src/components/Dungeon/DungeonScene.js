@@ -125,6 +125,13 @@ import {
     resolveDungeonIncomingDamageV426,
 } from '../../game/dungeon/DungeonBalanceV426.js';
 import {
+    createDungeonAttackGuaranteeStateV427,
+    markDungeonFirstVolleyV427,
+    observeDungeonChargerStepV427,
+    resolveDungeonChargerWatchdogV427,
+    resolveDungeonRangedFirstVolleyV427,
+} from '../../game/dungeon/DungeonAttackGuaranteeV427.js';
+import {
     advanceDungeonEnemyEntryShieldV422, createDungeonEnemyEntryShieldV422,
     isDungeonEnemyEntryActiveV422, isDungeonEnemyEntryRevealingV422,
 } from '../../game/dungeon/DungeonEnemyEntryShieldV422.js';
@@ -1385,6 +1392,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             _raiderEntryFireSinceMsV404: null,
             _raiderOpeningSinceMsV405: null,
             _raiderOpeningVolleyDoneV405: false,
+            _attackGuaranteeV427: createDungeonAttackGuaranteeStateV427({ roleId: resolvedRoleId }),
             _volleySequence: 0,
             _choreographyState: spec
                 ? createDungeonEnemyChoreographyStateV38(spec, { seed, nowMs })
@@ -2572,6 +2580,21 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         if (enemy.spec.roleId === 'charger') {
             const returnX = clamp(enemy.spec.laneNorm * (boundX() - .75), -boundX() + .5, boundX() - .5);
             const returnZ = -ZOOM * .48;
+            const hudOcclusionLineZV427 = resolveDungeonHudOcclusionLineV396({
+                dungeonId,
+                worldHalfHeight: ZOOM,
+                viewportHeight: canvas?.clientHeight || engine.getRenderHeight(),
+            });
+            const chargerWatchdogV427 = resolveDungeonChargerWatchdogV427({
+                state: enemy._attackGuaranteeV427,
+                chargerState: enemy._chargerState,
+                nowMs,
+                entryActive: isDungeonEnemyEntryActiveV422(enemy._entryShieldV422),
+                enemyZ: enemy.mesh.position.z,
+                hudOcclusionLineZ: hudOcclusionLineZV427,
+            });
+            enemy._attackGuaranteeV427 = chargerWatchdogV427.state;
+            enemy._chargerState = chargerWatchdogV427.chargerState;
             const charge = stepChargerMotionV26A3(enemy._chargerState, {
                 nowMs,
                 enemyX: enemy.mesh.position.x,
@@ -2582,6 +2605,19 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 returnTargetZ: returnZ,
             });
             enemy._chargerState = charge.state;
+            enemy._attackGuaranteeV427 = observeDungeonChargerStepV427(
+                enemy._attackGuaranteeV427,
+                { event: charge.event, phase: charge.state.phase },
+            );
+            if (charge.event === 'telegraph_started') {
+                dungeonQaReadinessV400.recordAttackGuaranteeV427({
+                    roleId: 'charger', event: 'charger_telegraph',
+                });
+            } else if (charge.event === 'charge_started') {
+                dungeonQaReadinessV400.recordAttackGuaranteeV427({
+                    roleId: 'charger', event: 'charger_charge',
+                });
+            }
             const speed = enemy.speed * Math.max(0, Number(charge.speedMultiplier) || 0);
             enemy.mesh.position.x = clamp(
                 enemy.mesh.position.x + charge.direction.x * speed * enemyFrame + separation.correctionX,
@@ -2700,6 +2736,24 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             enemy._raiderOpeningSinceMsV405 = raiderOpeningV405.armedSinceMs;
             combatResultV404 = raiderOpeningV405.choreography;
         }
+        const firstVolleyV427 = resolveDungeonRangedFirstVolleyV427({
+            state: enemy._attackGuaranteeV427,
+            choreography: combatResultV404,
+            roleId: enemy.spec.roleId,
+            nowMs,
+            entryActive: isDungeonEnemyEntryActiveV422(enemy._entryShieldV422),
+            enemyX: enemy.mesh.position.x,
+            enemyZ: enemy.mesh.position.z,
+            playerX: playerRoot.position.x,
+            playerZ: playerRoot.position.z,
+            hudOcclusionLineZ: hudOcclusionLineZV410,
+            fireRangeMin: engagementV410.fireRangeMin,
+            fireRangeMax: engagementV410.fireRangeMax,
+            canShoot: enemy.canShoot,
+            hasProjectile: Boolean(enemy.spec.weapon?.projectile),
+        });
+        enemy._attackGuaranteeV427 = firstVolleyV427.state;
+        combatResultV404 = firstVolleyV427.choreography;
         if (combatResultV404.facePlayer) {
             updateDungeonEnemyFacingV38(
                 enemy,
@@ -2746,6 +2800,26 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         if (firedV399 && enemy.spec.roleId === 'raider') {
             enemy._raiderOpeningVolleyDoneV405 = true;
         }
+        if (firedV399) {
+            const firstVolleyRecordedV427 = markDungeonFirstVolleyV427(
+                enemy._attackGuaranteeV427,
+                { nowMs, forced: firstVolleyV427.forced },
+            );
+            enemy._attackGuaranteeV427 = firstVolleyRecordedV427.state;
+            if (firstVolleyRecordedV427.recorded) {
+                dungeonQaReadinessV400.recordAttackGuaranteeV427({
+                    roleId: enemy.spec.roleId,
+                    event: 'first_volley',
+                    timeToFirstVolleyMs: firstVolleyRecordedV427.timeToFirstVolleyMs,
+                });
+                if (firstVolleyV427.forced) {
+                    dungeonQaReadinessV400.recordAttackGuaranteeV427({
+                        roleId: enemy.spec.roleId,
+                        event: 'forced_first_volley',
+                    });
+                }
+            }
+        }
         if (raiderOpeningV405 && dungeonQaRunV391) {
             dungeonQaReadinessV400.recordRaiderOpeningV405({
                 enemyId: enemy.runtimeId, nowMs,
@@ -2758,6 +2832,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         if (dungeonQaRunV391) dungeonQaReadinessV400.recordFireProbe({
             enemyId: enemy.runtimeId, nowMs,
             reason: firedV399 ? 'projectile_created'
+                : String(firstVolleyV427.reason || '').startsWith('first_volley_')
+                    ? firstVolleyV427.reason
                 : firingStateV399.mayFire ? enemy._lastVolleyGateReasonV401
                 : fireDecisionV399.reason,
         });
@@ -3403,6 +3479,15 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
             if (entryActiveV422 && e.mesh.intersectsMesh(shipVisual.collider, false)) {
                 explode(e.mesh.position, e.spec?.roleId === 'charger' ? 1.35 : .75);
+                if (e.spec?.roleId === 'charger') {
+                    e._attackGuaranteeV427 = observeDungeonChargerStepV427(
+                        e._attackGuaranteeV427,
+                        { phase: e._chargerState?.phase, contact: true },
+                    );
+                    dungeonQaReadinessV400.recordAttackGuaranteeV427({
+                        roleId: 'charger', event: 'charger_contact',
+                    });
+                }
                 damagePlayer({
                     rawDamage: e.spec?.weapon?.contactDamage || 150,
                     source: 'contact',

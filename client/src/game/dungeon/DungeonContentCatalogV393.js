@@ -88,8 +88,9 @@ export const DUNGEON_ENCOUNTER_PACKS_V393 = freezeDeep({
     fireCooldownMultiplier: .94,
   },
   taurus_boss_guard: {
-    threatBudget: 5,
-    roles: [{ id: 'gunner', weight: 4 }, { id: 'support', weight: 2 }],
+    threatBudget: 6,
+    requiredRoles: ['gunner', 'shieldbearer'],
+    roles: [{ id: 'gunner', weight: 4 }, { id: 'shieldbearer', weight: 3 }, { id: 'support', weight: 2 }],
   },
 
   nereus_entry_screen: {
@@ -114,7 +115,8 @@ export const DUNGEON_ENCOUNTER_PACKS_V393 = freezeDeep({
     fireCooldownMultiplier: .96,
   },
   nereus_boss_guard: {
-    threatBudget: 7,
+    threatBudget: 8,
+    requiredRoles: ['support', 'shieldbearer'],
     roles: [{ id: 'support', weight: 4 }, { id: 'shieldbearer', weight: 3 }],
   },
 
@@ -147,6 +149,7 @@ export const DUNGEON_ENCOUNTER_PACKS_V393 = freezeDeep({
   },
   abaddon_boss_guard: {
     threatBudget: 8,
+    requiredRoles: ['charger', 'artillery'],
     roles: [{ id: 'charger', weight: 4 }, { id: 'artillery', weight: 3 }],
   },
 });
@@ -555,6 +558,7 @@ function runtimeRoomFromContent(profile, definition) {
     threatBudget: Math.max(0, Math.trunc(finite(definition.threatBudget, pack.threatBudget))),
     spawnGapMs: Math.max(1, finite(definition.spawnGapMs, template.spawnGapMs)),
     roles: pack.roles,
+    requiredRoles: pack.requiredRoles || [],
     hpMultiplier: finite(definition.hpMultiplier, finite(pack.hpMultiplier, 1)),
     damageMultiplier: finite(definition.damageMultiplier, finite(pack.damageMultiplier, 1)),
     speedMultiplier: finite(definition.speedMultiplier, finite(pack.speedMultiplier, 1)),
@@ -623,6 +627,16 @@ export function auditDungeonContentCatalogV393() {
       if (!pack) issues.push(`DUNGEON_ENCOUNTER_PACK:${profile.id}:${definition.id}`);
       for (const role of pack?.roles || []) {
         if (!roleIds.has(role.id) || !(role.weight > 0)) issues.push(`DUNGEON_ROLE:${profile.id}:${definition.id}:${role.id}`);
+      }
+      const weightedRoleIds = new Set((pack?.roles || []).map(role => role.id));
+      const requiredRoleIds = pack?.requiredRoles || [];
+      if (new Set(requiredRoleIds).size !== requiredRoleIds.length) {
+        issues.push(`DUNGEON_REQUIRED_ROLE_DUPLICATE:${profile.id}:${definition.id}`);
+      }
+      for (const roleId of requiredRoleIds) {
+        if (!roleIds.has(roleId) || !weightedRoleIds.has(roleId)) {
+          issues.push(`DUNGEON_REQUIRED_ROLE:${profile.id}:${definition.id}:${roleId}`);
+        }
       }
       if (definition.hazardId && !DUNGEON_HAZARD_PROFILES_V393[definition.hazardId]) {
         issues.push(`DUNGEON_HAZARD:${profile.id}:${definition.id}`);
