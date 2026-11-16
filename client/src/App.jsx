@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
+import { createHudAssetToastOptionsV424 } from './ui-system/HudAssetToastV424.js';
 import { Capacitor } from '@capacitor/core';
 import { Device } from '@capacitor/device';
 import { t } from './utils/translations';
@@ -29,6 +30,9 @@ const Events = lazy(() => import('./components/Events'));
 
 import { secureStorage } from './utils/storageHelper';
 import { DEFAULT_CAMPAIGN_DATA } from './constants';
+
+// UI-only switch. V4.2.4 is an APK evaluation skin; disable with VITE_SF_UI_ASSET_SKIN_V424=false.
+const hudAssetSkinV424Enabled = import.meta.env.VITE_SF_UI_ASSET_SKIN_V424 !== 'false';
 
 // A failed lazy chunk (offline, version mismatch, aborted download) must
 // show an actionable UI instead of crashing into an empty WebView.
@@ -178,7 +182,7 @@ export default function Game() {
   // QUẢN LÝ MÀN HÌNH (ROUTER)
   // ===============================================
   return (
-    <div style={{ 
+    <div data-sf-ui-skin={hudAssetSkinV424Enabled ? 'hud-v2' : 'legacy'} data-sf-ui-screen={screen} style={{
       width: '100%',
       minHeight: '100dvh',
       overflowY: 'auto',
@@ -281,18 +285,7 @@ export default function Game() {
         containerStyle={{
           top: 'calc(env(safe-area-inset-top) + 20px)' 
         }}
-        toastOptions={{
-          duration: 3000,
-          style: {
-            background: '#1a1a2e', color: '#fff', fontFamily: "'VT323', monospace",
-            fontSize: '18px', fontWeight: 'bold', borderRadius: '8px',
-            border: '2px solid #FFD700', boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-            textShadow: '1px 1px 2px rgba(0,0,0,0.5)'
-          },
-          success: { style: { background: '#2ed573', borderColor: '#2ed573' }, iconTheme: { primary: '#fff', secondary: '#2ed573' } },
-          error: { style: { background: '#ff4757', borderColor: '#ff4757' }, iconTheme: { primary: '#fff', secondary: '#ff4757' } },
-          loading: { style: { background: '#0abde3', borderColor: '#0abde3' } }
-        }} 
+        toastOptions={createHudAssetToastOptionsV424(hudAssetSkinV424Enabled)}
       />
     </div>
   );

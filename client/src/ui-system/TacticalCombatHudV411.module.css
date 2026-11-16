@@ -12,22 +12,26 @@
   font-family: var(--sf-ui-title-font, Rajdhani, system-ui, sans-serif);
   pointer-events: none;
   isolation: isolate;
-  filter: drop-shadow(0 4px 8px rgba(0, 3, 10, .72));
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: auto;
+  font-smooth: auto;
 }
 .bossMode { height: 104px; }
-.frameArt { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 0; }
+.frameArt { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 0; filter: drop-shadow(0 4px 7px rgba(0, 3, 10, .68)); }
 .leftPod,
 .rightPod,
+.centerSlot,
 .modeBadge,
 .bossStrip { position: absolute; z-index: 2; box-sizing: border-box; }
 .leftPod {
   left: 1.1%; top: 34%; width: 36%; height: 41%;
   display: grid; grid-template-columns: 34px 26px minmax(0, 1fr); align-items: center; gap: 5px;
   padding: 3px 9px 4px 5px;
-  background: linear-gradient(112deg, rgba(4, 30, 44, .94), rgba(1, 12, 21, .78));
+  background: linear-gradient(112deg, rgba(2, 20, 34, .98), rgba(0, 8, 17, .94));
   clip-path: polygon(0 0, 92% 0, 100% 26%, 100% 73%, 94% 100%, 5% 100%, 0 76%);
 }
 .retreatButton {
+  position: relative; z-index: 3;
   width: 32px; height: 32px; display: grid; place-items: center; padding: 3px;
   border: 1px solid color-mix(in srgb, var(--sf-hud-cyan) 72%, white 8%);
   background: linear-gradient(135deg, rgba(10, 78, 101, .88), rgba(1, 18, 31, .94));
@@ -39,6 +43,7 @@
 .retreatButton:focus-visible { outline: 2px solid var(--sf-hud-amber); outline-offset: 2px; }
 .retreatButton svg { width: 23px; height: 23px; filter: drop-shadow(0 0 4px rgba(91, 229, 243, .5)); }
 .armorGlyph {
+  position: relative; z-index: 3;
   width: 24px; height: 24px; display: grid; place-items: center;
   color: var(--sf-hud-cyan); font-size: 17px; line-height: 1;
   border: 1px solid color-mix(in srgb, var(--sf-hud-cyan) 48%, transparent);
@@ -46,41 +51,46 @@
   clip-path: polygon(25% 0, 75% 0, 100% 25%, 100% 75%, 75% 100%, 25% 100%, 0 75%, 0 25%);
   text-shadow: 0 0 7px var(--sf-hud-cyan);
 }
-.armorReadout { min-width: 0; display: grid; gap: 3px; }
+.armorReadout { position: relative; z-index: 3; min-width: 0; display: grid; gap: 3px; }
 .armorNumbers { display: flex; align-items: baseline; gap: 4px; min-width: 0; font-family: var(--sf-ui-data-font, ui-monospace, monospace); }
-.armorNumbers strong { color: #f6ffff; font-size: clamp(11px, 3.1vw, 15px); line-height: 1; font-variant-numeric: tabular-nums; }
+.armorNumbers strong { color: #ffffff; font-size: clamp(12px, 3.2vw, 16px); line-height: 1; font-weight: 900; font-variant-numeric: tabular-nums; text-shadow: 0 1px 1px #000; }
 .armorNumbers span { color: var(--sf-hud-muted); font-size: clamp(7px, 2vw, 9px); white-space: nowrap; }
 .armorRail { height: 5px; overflow: hidden; background: rgba(28, 83, 96, .28); border: 1px solid rgba(120, 224, 236, .18); transform: skewX(-17deg); }
 .armorRail > span { display: block; height: 100%; background: linear-gradient(90deg, #8effd1, var(--sf-hud-cyan)); box-shadow: 0 0 8px var(--sf-hud-cyan); transition: width .16s linear; }
 .lowArmor .armorRail > span { background: linear-gradient(90deg, #ffb14a, var(--sf-hud-danger)); box-shadow: 0 0 9px var(--sf-hud-danger); animation: armorWarning .72s ease-in-out infinite alternate; }
+.centerSlot {
+  left: 36.5%; right: 32.5%; top: 46%; height: 39%; z-index: 3;
+  display: flex; align-items: stretch; justify-content: center; pointer-events: none;
+}
 .modeBadge {
-  left: 50%; top: 46%; z-index: 3; transform: translateX(-50%); width: min(27%, 180px); min-width: 0; height: 39%;
+  position: relative; top: auto; left: auto; transform: none; width: min(100%, 180px); min-width: 0; height: 100%;
   display: grid; grid-template-columns: auto 1fr; grid-template-rows: 1fr auto; align-items: center; gap: 0 5px;
-  padding: 3px 9px 3px;
-  background: linear-gradient(180deg, rgba(3, 30, 44, .92), rgba(1, 12, 21, .90));
+  padding: 3px 9px 3px; isolation: isolate; overflow: visible;
+  background: linear-gradient(180deg, rgba(2, 22, 36, .98), rgba(0, 8, 17, .96));
   clip-path: polygon(9% 0, 91% 0, 100% 28%, 100% 72%, 91% 100%, 9% 100%, 0 72%, 0 28%);
   text-align: center;
 }
-.modeBadge strong { color: var(--sf-hud-cyan); font-size: clamp(8px, 2.4vw, 11px); line-height: 1; letter-spacing: .09em; white-space: nowrap; }
-.modeBadge > span { color: #f6ffff; font-size: clamp(8px, 2.2vw, 10px); line-height: 1; letter-spacing: .045em; white-space: nowrap; }
-.modeBadge small { grid-column: 1 / -1; color: var(--sf-hud-amber); font: 800 clamp(7px, 1.8vw, 9px)/1 var(--sf-ui-data-font, ui-monospace, monospace); letter-spacing: .035em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.modeBadge strong { position: relative; z-index: 3; color: #a8f8ff; font-size: clamp(9px, 2.55vw, 12px); line-height: 1; font-weight: 900; letter-spacing: .09em; white-space: nowrap; text-shadow: 0 1px 1px #000; }
+.modeBadge > span:not(.badgeContrast) { position: relative; z-index: 3; color: #ffffff; font-size: clamp(9px, 2.35vw, 11px); line-height: 1; font-weight: 850; letter-spacing: .045em; white-space: nowrap; text-shadow: 0 1px 1px #000; }
+.modeBadge small { position: relative; z-index: 3; grid-column: 1 / -1; color: #ffd16f; font: 900 clamp(7px, 1.9vw, 9px)/1 var(--sf-ui-data-font, ui-monospace, monospace); letter-spacing: .035em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 1px #000; }
 .rightPod {
   right: 1.1%; top: 34%; width: 32%; height: 41%;
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; align-items: stretch;
   padding: 3px 5px 4px 9px;
-  background: linear-gradient(248deg, rgba(4, 30, 44, .94), rgba(1, 12, 21, .78));
+  background: linear-gradient(248deg, rgba(2, 20, 34, .98), rgba(0, 8, 17, .94));
   clip-path: polygon(8% 0, 100% 0, 100% 76%, 95% 100%, 6% 100%, 0 73%, 0 26%);
 }
-.metric { min-width: 0; display: grid; align-content: center; justify-items: end; padding: 0 5px; border-left: 1px solid rgba(91, 229, 243, .14); }
+.metric { position: relative; z-index: 3; min-width: 0; display: grid; align-content: center; justify-items: end; padding: 0 5px; border-left: 1px solid rgba(91, 229, 243, .14); }
 .metric:first-child { border-left: 0; }
-.metric span { color: var(--sf-hud-muted); font: 800 clamp(6px, 1.7vw, 8px)/1 var(--sf-ui-data-font, ui-monospace, monospace); letter-spacing: .08em; }
-.metric strong { color: #fff; font: 900 clamp(12px, 3.4vw, 17px)/1 var(--sf-ui-data-font, ui-monospace, monospace); font-variant-numeric: tabular-nums; text-shadow: 0 0 6px rgba(91, 229, 243, .36); }
+.metric span { color: #a9d8e2; font: 900 clamp(7px, 1.75vw, 9px)/1 var(--sf-ui-data-font, ui-monospace, monospace); letter-spacing: .08em; text-shadow: 0 1px 1px #000; }
+.metric strong { color: #fff; font: 900 clamp(13px, 3.45vw, 18px)/1 var(--sf-ui-data-font, ui-monospace, monospace); font-variant-numeric: tabular-nums; text-shadow: 0 1px 1px #000; }
 .qaBadge { position: absolute; z-index: 4; right: 4px; top: 1px; min-width: 18px; height: 13px; display: grid; place-items: center; border: 1px solid rgba(255, 196, 93, .65); background: rgba(34, 21, 2, .88); color: var(--sf-hud-amber); font: 900 6px/1 var(--sf-ui-data-font, monospace); letter-spacing: .06em; clip-path: polygon(12% 0, 100% 0, 100% 78%, 88% 100%, 0 100%, 0 22%); }
 .bossStrip { left: 14%; right: 14%; top: 81%; height: 20%; display: grid; gap: 2px; padding: 0 6px; }
-.bossHeading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.bossHeading { position: relative; z-index: 3; display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .bossHeading strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #fff0e8; font-size: clamp(8px, 2.2vw, 10px); line-height: 1; letter-spacing: .06em; }
 .bossHeading span { color: var(--sf-hud-danger); font: 900 8px/1 var(--sf-ui-data-font, monospace); }
-.bossRail { height: 5px; overflow: hidden; background: rgba(90, 22, 34, .40); border: 1px solid rgba(255, 100, 115, .20); transform: skewX(-14deg); }
+.bossRail {
+  position: relative; z-index: 3; height: 5px; overflow: hidden; background: rgba(90, 22, 34, .40); border: 1px solid rgba(255, 100, 115, .20); transform: skewX(-14deg); }
 .bossRail > span { display: block; height: 100%; background: linear-gradient(90deg, #ffae45, var(--sf-hud-danger)); box-shadow: 0 0 8px var(--sf-hud-danger); transition: width .16s linear; }
 .notice {
   position: fixed; z-index: 91; top: 19%; left: 50%; transform: translate(-50%, -50%);
@@ -102,16 +112,20 @@
   .leftPod { width: 36%; grid-template-columns: 31px 22px minmax(0, 1fr); gap: 3px; padding-right: 5px; }
   .rightPod { width: 32%; padding-left: 6px; }
   .modeBadge { min-width: 0; width: 27%; padding-inline: 4px; }
-  .retreatButton { width: 29px; height: 29px; }
-  .armorGlyph { width: 21px; height: 21px; font-size: 14px; }
+  .retreatButton {
+  position: relative; z-index: 3; width: 29px; height: 29px; }
+  .armorGlyph {
+  position: relative; z-index: 3; width: 21px; height: 21px; font-size: 14px; }
   .metric { padding-inline: 2px; }
 }
 @media (min-width: 700px) {
   .hud { height: 92px; }
   .bossMode { height: 116px; }
   .leftPod { grid-template-columns: 39px 30px minmax(0, 1fr); padding-inline: 7px 14px; }
-  .retreatButton { width: 37px; height: 37px; }
-  .armorGlyph { width: 29px; height: 29px; font-size: 20px; }
+  .retreatButton {
+  position: relative; z-index: 3; width: 37px; height: 37px; }
+  .armorGlyph {
+  position: relative; z-index: 3; width: 29px; height: 29px; font-size: 20px; }
   .modeBadge { min-width: 160px; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -119,46 +133,97 @@
   .armorRail > span, .bossRail > span { transition: none; }
 }
 
-/* V4.2.3: authored HUD V2 art; health, boss fill and labels remain live DOM. */
-.hud[data-asset-skin="v423"] .frameArt { opacity: .14; }
-.hud[data-asset-skin="v423"] .leftPod,
-.hud[data-asset-skin="v423"] .rightPod {
-  isolation: isolate;
+/* V4.2.5: high-density HUD art is a direct <img>, not a low-opacity CSS background.
+   This avoids Android WebView root-filter raster blur and makes the licensed art unmistakable. */
+.podArt,
+.badgeArt,
+.bossArt,
+.ornamentArt {
+  position: absolute;
+  display: block;
+  max-width: none;
+  user-select: none;
+  pointer-events: none;
+  image-rendering: auto;
+  -webkit-user-drag: none;
+}
+.podArt {
+  z-index: 0;
+  inset: -4px;
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+  object-fit: fill;
+  opacity: 1;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .82));
+}
+.podArtRight { transform: scaleX(-1); }
+.podContrast {
+  position: absolute;
+  z-index: 1;
+  inset: 5px 8px;
+  background: linear-gradient(110deg, rgba(0, 8, 17, .90), rgba(0, 13, 24, .72));
+  clip-path: polygon(0 0, 92% 0, 100% 28%, 100% 72%, 94% 100%, 5% 100%, 0 76%);
+  pointer-events: none;
+}
+.rightPod .podContrast { transform: scaleX(-1); }
+.badgeArt {
+  z-index: 0;
+  inset: -4px -7px;
+  width: calc(100% + 14px);
+  height: calc(100% + 8px);
+  object-fit: fill;
+  opacity: 1;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .82));
+}
+.badgeContrast {
+  position: absolute;
+  z-index: 1;
+  inset: 4px 8px;
+  background: rgba(0, 8, 17, .78);
+  clip-path: polygon(9% 0, 91% 0, 100% 28%, 100% 72%, 91% 100%, 9% 100%, 0 72%, 0 28%);
+  pointer-events: none;
+}
+.ornamentArt {
+  z-index: 0;
+  left: 50%; top: 72%;
+  width: min(220px, 150%);
+  height: 18px;
+  transform: translateX(-50%);
+  object-fit: contain;
+  opacity: .68;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .72));
+}
+.bossArt {
+  z-index: 0;
+  left: -12px; right: -12px; top: -8px;
+  width: calc(100% + 24px);
+  height: calc(100% + 14px);
+  object-fit: fill;
+  opacity: 1;
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, .84));
+}
+.bossContrast {
+  position: absolute;
+  z-index: 1;
+  inset: -1px 4%;
+  background: linear-gradient(90deg, rgba(0, 7, 14, .38), rgba(0, 7, 14, .82) 18%, rgba(0, 7, 14, .82) 82%, rgba(0, 7, 14, .38));
+  pointer-events: none;
+}
+.hud[data-asset-skin="v425"] .frameArt { display: none; }
+.hud[data-asset-skin="v425"] .leftPod,
+.hud[data-asset-skin="v425"] .rightPod,
+.hud[data-asset-skin="v425"] .modeBadge {
   clip-path: none;
   background: transparent;
+  overflow: visible;
 }
-.hud[data-asset-skin="v423"] .leftPod::before,
-.hud[data-asset-skin="v423"] .rightPod::before {
-  content: ''; position: absolute; z-index: -1; inset: -3px;
-  background-image: var(--sf-hud-compact-shell);
-  background-repeat: no-repeat; background-position: center; background-size: 100% 100%;
-  opacity: .98; pointer-events: none;
-}
-.hud[data-asset-skin="v423"] .rightPod::before { transform: scaleX(-1); }
-.hud[data-asset-skin="v423"] .leftPod .armorGlyph { background: rgba(1, 11, 22, .84); }
-.hud[data-asset-skin="v423"] .modeBadge { isolation: isolate; clip-path: none; background: transparent; }
-.hud[data-asset-skin="v423"] .modeBadge::before {
-  content: ''; position: absolute; inset: -2px; z-index: -1;
-  background-image: var(--sf-hud-badge-frame);
-  background-position: center; background-repeat: no-repeat; background-size: 100% 100%;
-  opacity: .91; pointer-events: none;
-}
-.hud[data-asset-skin="v423"] .bossStrip { top: 81%; isolation: isolate; }
-.hud[data-asset-skin="v423"] .bossStrip::before {
-  content: ''; position: absolute; z-index: -1; left: -10px; right: -10px; top: -6px; bottom: -4px;
-  background: var(--sf-hud-boss-frame) center / 100% 100% no-repeat;
-  opacity: .78; pointer-events: none;
-}
-.hud[data-asset-skin="v423"] .bossRail { margin: 0 6%; }
-.hud[data-asset-skin="v423"] .bossHeading { padding: 0 7%; }
-.hud[data-asset-skin="v423"] .metric { background: rgba(0, 9, 19, .34); }
+.hud[data-asset-skin="v425"] .leftPod .armorGlyph { background: rgba(1, 11, 22, .94); }
+.hud[data-asset-skin="v425"] .metric { background: rgba(0, 9, 19, .58); }
+.hud[data-asset-skin="v425"] .bossStrip { top: 81%; isolation: isolate; }
+.hud[data-asset-skin="v425"] .bossRail { margin: 0 6%; }
+.hud[data-asset-skin="v425"] .bossHeading { padding: 0 7%; }
 @media (max-width: 390px) {
-  .hud[data-asset-skin="v423"] .leftPod::before,
-  .hud[data-asset-skin="v423"] .rightPod::before { inset: -2px; }
-}
-.hud[data-asset-skin="v423"] .modeBadge::after {
-  content: ''; position: absolute; z-index: -1;
-  left: -14px; right: -14px; top: 76%; height: 15px;
-  background: var(--sf-hud-ornament) center / contain no-repeat;
-  opacity: .24; pointer-events: none;
+  .podArt { inset: -3px; width: calc(100% + 6px); height: calc(100% + 6px); }
+  .badgeArt { inset: -3px -5px; width: calc(100% + 10px); height: calc(100% + 6px); }
+  .ornamentArt { width: 140%; opacity: .58; }
 }

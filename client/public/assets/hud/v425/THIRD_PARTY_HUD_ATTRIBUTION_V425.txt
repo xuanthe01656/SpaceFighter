@@ -1,0 +1,6 @@
+SpaceFighter HUD Asset Pack V2 — selected high-density 2x runtime assets.
+
+Source archive: SpaceFighter_HUD_AssetPack_V2_FULL_LEGAL_COMPLETE.zip supplied by the project owner.
+Attribution and commercial-use conditions remain governed by the license PDFs and legal/ATTRIBUTION_REQUIRED.txt in the original archive.
+
+Used only as integrated UI frames inside SpaceFighter. Do not redistribute these files as a standalone asset pack.

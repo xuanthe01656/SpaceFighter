@@ -1,0 +1,56 @@
+/* HUD Asset V2 global non-combat UI skin, V4.2.4R1.
+   Asset audit: the supplied pack contains status shells, alert panels,
+   panels/bars, icons and ornaments, but no authored button set.
+   Therefore this stylesheet intentionally does not skin any button.
+   Existing screen-specific and shared GameButton styles remain authoritative. */
+:root {
+  --sf-v424-cyan:#69e8f4;
+  --sf-v424-muted:#afceda;
+  --sf-v424-glow:rgba(48,202,229,.26);
+}
+
+/* Fixed-aspect ornament: heading decoration only, never a button background. */
+[data-sf-ui-skin="hud-v2"]:not([data-sf-ui-screen="campaign"]):not([data-sf-ui-screen="dungeon"])
+  :is([class*="headerTitle" i],[class*="boxTitle" i]) {
+  background-image:url('/assets/hud/v424/sf_ornament_01__cyan.webp');
+  background-position:center bottom;
+  background-size:min(210px, 70%) auto;
+  background-repeat:no-repeat;
+}
+
+[data-sf-ui-skin="hud-v2"]:not([data-sf-ui-screen="campaign"]):not([data-sf-ui-screen="dungeon"])
+  :is(h1,h2,h3)[class*="title" i] {
+  font-family:'Barlow Condensed','Arial Narrow',Arial,sans-serif;
+  letter-spacing:.075em;
+  text-shadow:0 1px 0 #030c16,0 0 18px rgba(76,217,236,.27);
+  text-wrap:balance;
+}
+
+[data-sf-ui-skin="hud-v2"]:not([data-sf-ui-screen="campaign"]):not([data-sf-ui-screen="dungeon"])
+  :is([class*="label" i],[class*="subTitle" i]):not(button) {
+  font-family:'Share Tech Mono',ui-monospace,Consolas,monospace;
+  letter-spacing:.035em;
+}
+
+/* Notice-card artwork is used only for compact status badges. */
+[data-sf-ui-skin="hud-v2"]:not([data-sf-ui-screen="campaign"]):not([data-sf-ui-screen="dungeon"])
+  :is([class*="progressBadge" i],[class*="statusBadge" i],[class*="equippedBadge" i]) {
+  background-image:url('/assets/hud/v424/sf_purple_notice_card_01.webp');
+  background-position:center;
+  background-size:100% 100%;
+  border-color:rgba(116,227,246,.48);
+}
+
+/* Existing cards retain layout and scrolling. The authored panel is used only
+   as a sliced panel border; it is not repurposed as a control or button. */
+[data-sf-ui-skin="hud-v2"]:not([data-sf-ui-screen="campaign"]):not([data-sf-ui-screen="dungeon"])
+  :is([class*="glassPanel" i],[class*="missionCard" i],[class*="eventCard" i],
+      [class*="profileModal" i],[class*="detailPanel" i],[class*="resultCard" i]) {
+  border-image-source:url('/assets/hud/v424/sf_cyan_panel_rect_03.webp');
+  border-image-slice:65 fill;
+  border-image-width:14px;
+  border-image-repeat:stretch;
+  box-shadow:0 8px 22px rgba(0,0,0,.3), inset 0 1px 0 rgba(119,236,246,.06);
+}
+
+/* Toasts remain handled by HudAssetToastV424.js. */

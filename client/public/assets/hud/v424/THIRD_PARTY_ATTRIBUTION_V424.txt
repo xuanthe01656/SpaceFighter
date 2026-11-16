@@ -1,0 +1,34 @@
+Space Fighter - third-party visual-resource attribution
+
+Required attribution for the Magnific Free licenses used or retained by this project:
+
+1. Game live stream interface elements
+   designed by upklyak - Magnific.com
+
+2. Different HUD elements flat frames set
+   designed by pch.vector - Magnific.com
+
+3. Vector set of futuristic abstract HUD frames science text box hologram borders or scifi labels
+   designed by redgreystock - Magnific.com
+
+4. Futuristic HUD frames vector set abstract science text box hologram borders scifi yellow labels
+   designed by redgreystock - Magnific.com
+
+5. Gradient video game elements collection
+   designed by pikisuperstar - Magnific.com
+
+6. Art deco ornament collection
+   designed by Freepik - Magnific.com
+
+7. Gradient twitch panels
+   designed by Freepik - Magnific.com
+
+8. Cartoon set of square game rang badges
+   designed by upklyak - Magnific.com
+
+Recommended in-game location:
+Settings -> Credits -> Third-party visual resources
+
+The resources may be modified and integrated into the original Space Fighter interface.
+Do not redistribute original or modified source assets as a standalone downloadable asset pack.
+The two resources marked CANDIDATE in LICENSE_INDEX.csv are licensed and archived but are not yet integrated into the HUD V2 runtime.

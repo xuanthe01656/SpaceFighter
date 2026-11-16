@@ -8,3 +8,18 @@
 .standard{border-radius:var(--sf-ui-radius-standard);padding:15px}
 .modal{border-radius:var(--sf-ui-radius-modal);padding:22px;
   box-shadow:0 20px 65px rgba(0,0,0,.55),inset 0 1px 0 rgba(193,245,255,.1)}
+
+/* V4.2.4: use sliced source panel so corners remain readable at mobile widths. */
+:global([data-sf-ui-skin="hud-v2"]) .base {
+  border:1px solid rgba(76,224,241,.52);
+  border-image-source:url('/assets/hud/v424/sf_cyan_panel_rect_03.webp');
+  border-image-slice:65 fill;
+  border-image-width:13px;
+  border-image-repeat:stretch;
+  background-color:#071827;
+}
+:global([data-sf-ui-skin="hud-v2"]) .modal {
+  border-image-source:url('/assets/hud/v424/sf_purple_main_frame.webp');
+  border-image-slice:50 fill;
+  border-image-width:17px;
+}

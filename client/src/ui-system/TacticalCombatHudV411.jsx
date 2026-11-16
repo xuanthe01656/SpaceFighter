@@ -11,10 +11,13 @@ import './GameUiTokens.css';
 import styles from './TacticalCombatHudV411.module.css';
 
 export const TACTICAL_COMBAT_HUD_VERSION_V411 = 'unified-tactical-hud-v4.1.1';
+export const TACTICAL_HUD_ASSET_VISIBILITY_VERSION_V425 = 'tactical-hud-asset-visibility-v4.2.5';
 
 const clamp = (value, low, high) => Math.max(low, Math.min(high, Number(value) || 0));
 const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const integer = (value, fallback = 0) => Math.max(0, Math.round(finite(value, fallback)));
+const hideBrokenArt = event => { if (event?.currentTarget) event.currentTarget.hidden = true; };
+const markLoadedArt = event => { if (event?.currentTarget) event.currentTarget.dataset.loaded = 'true'; };
 
 function TacticalFrameArt({ bossActive = false }) {
   return <svg className={styles.frameArt} viewBox="0 0 430 104" preserveAspectRatio="none"
@@ -88,7 +91,7 @@ export default function TacticalCombatHudV411({
 
   const vi = lang === 'vi';
   const assetSkinEnabled = import.meta.env?.VITE_SF_HUD_ASSETS_V2 !== 'false';
-  const assetRoot = `${import.meta.env?.BASE_URL || '/'}assets/hud/v423/`;
+  const assetRoot = `${import.meta.env?.BASE_URL || '/'}assets/hud/v425/`;
   const skin = hudTheme === 'dungeon' ? 'dungeon' : 'campaign';
   const hpNow = integer(hp);
   const hpTotal = Math.max(1, integer(maxHp, 1));
@@ -105,20 +108,24 @@ export default function TacticalCombatHudV411({
     '--sf-hud-danger': palette?.danger || '#ff5164',
     '--sf-hud-text': palette?.text || '#eaffff',
     '--sf-hud-muted': palette?.muted || '#8eb3c0',
-    '--sf-hud-compact-shell': `url("${assetRoot}sf_status_shell_compact__${skin}.webp")`,
-    '--sf-hud-badge-frame': `url("${assetRoot}${skin === 'dungeon' ? 'sf_dungeon_lime_panel_09' : 'sf_alert_panel_h_01'}.webp")`,
-    '--sf-hud-boss-frame': `url("${assetRoot}sf_status_shell_boss__boss.webp")`,
-    '--sf-hud-ornament': `url("${assetRoot}sf_ornament_01__${skin === 'dungeon' ? 'lime' : 'cyan'}.webp")`,
   };
+  const compactShellSrc = `${assetRoot}sf_status_shell_compact__${skin}.webp`;
+  const badgeFrameSrc = `${assetRoot}${skin === 'dungeon' ? 'sf_dungeon_lime_panel_09' : 'sf_alert_panel_h_01'}.webp`;
+  const bossFrameSrc = `${assetRoot}sf_status_shell_boss__boss.webp`;
+  const ornamentSrc = `${assetRoot}sf_ornament_01__${skin === 'dungeon' ? 'lime' : 'cyan'}.webp`;
 
   return <>
     <header className={`${styles.hud} ${lowArmor ? styles.lowArmor : ''} ${bossActive ? styles.bossMode : ''}`}
       style={style} data-hud-version={TACTICAL_COMBAT_HUD_VERSION_V411}
-      data-hud-theme={skin} data-asset-skin={assetSkinEnabled ? 'v423' : 'fallback'}
+      data-hud-theme={skin} data-asset-skin={assetSkinEnabled ? 'v425' : 'fallback'}
+      data-hud-asset-version={TACTICAL_HUD_ASSET_VISIBILITY_VERSION_V425}
       aria-label={vi ? 'HUD chiến đấu' : 'Combat HUD'}>
       <TacticalFrameArt bossActive={bossActive} />
 
       <section className={styles.leftPod} aria-label={`${vi ? 'Giáp' : 'Armor'} ${hpNow}/${hpTotal}`}>
+        {assetSkinEnabled && <img className={styles.podArt} src={compactShellSrc} alt="" aria-hidden="true"
+          draggable="false" decoding="async" onLoad={markLoadedArt} onError={hideBrokenArt} />}
+        <span className={styles.podContrast} aria-hidden="true" />
         {typeof onRetreat === 'function' && <button type="button" className={styles.retreatButton}
           onClick={onRetreat} disabled={retreating}
           title={vi ? 'Rút lui' : 'Retreat'} aria-label={vi ? 'Rút lui khỏi trận' : 'Retreat from battle'}>
@@ -137,13 +144,23 @@ export default function TacticalCombatHudV411({
         </div>
       </section>
 
-      <section className={styles.modeBadge} aria-label={`${modeCode} ${phaseLabel}`}>
-        <strong>{modeCode}</strong>
-        <span>{phaseLabel}</span>
-        {objectiveCounter && <small>{objectiveCounter}</small>}
-      </section>
+      <div className={styles.centerSlot}>
+        {assetSkinEnabled && <img className={styles.ornamentArt} src={ornamentSrc} alt="" aria-hidden="true"
+          draggable="false" decoding="async" onLoad={markLoadedArt} onError={hideBrokenArt} />}
+        <section className={styles.modeBadge} aria-label={`${modeCode} ${phaseLabel}`}>
+          {assetSkinEnabled && <img className={styles.badgeArt} src={badgeFrameSrc} alt="" aria-hidden="true"
+            draggable="false" decoding="async" onLoad={markLoadedArt} onError={hideBrokenArt} />}
+          <span className={styles.badgeContrast} aria-hidden="true" />
+          <strong>{modeCode}</strong>
+          <span>{phaseLabel}</span>
+          {objectiveCounter && <small>{objectiveCounter}</small>}
+        </section>
+      </div>
 
       <section className={styles.rightPod}>
+        {assetSkinEnabled && <img className={`${styles.podArt} ${styles.podArtRight}`} src={compactShellSrc} alt=""
+          aria-hidden="true" draggable="false" decoding="async" onLoad={markLoadedArt} onError={hideBrokenArt} />}
+        <span className={styles.podContrast} aria-hidden="true" />
         <div className={styles.metric} aria-label={`${vi ? 'Điểm' : 'Score'} ${integer(score)}`}>
           <span>{vi ? 'ĐIỂM' : 'SCORE'}</span>
           <strong>{integer(score).toLocaleString('en-US')}</strong>
@@ -158,6 +175,9 @@ export default function TacticalCombatHudV411({
 
       {bossActive && <section className={styles.bossStrip}
         aria-label={`${boss?.name || (vi ? 'Trùm' : 'Boss')} ${Math.round(bossRatio * 100)}%`}>
+        {assetSkinEnabled && <img className={styles.bossArt} src={bossFrameSrc} alt="" aria-hidden="true"
+          draggable="false" decoding="async" onLoad={markLoadedArt} onError={hideBrokenArt} />}
+        <span className={styles.bossContrast} aria-hidden="true" />
         <div className={styles.bossHeading}>
           <strong>{boss?.name || (vi ? 'TRÙM KHU VỰC' : 'SECTOR BOSS')}</strong>
           <span>{Math.round(bossRatio * 100)}%</span>
