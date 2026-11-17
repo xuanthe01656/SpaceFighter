@@ -3,6 +3,11 @@ import { Capacitor } from '@capacitor/core';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { secureStorage } from '../../utils/storageHelper';
+import GameButton from '../../ui-system/GameButton.jsx';
+import GameIcon from '../../ui-system/GameIconRegistry.jsx';
+import GamePanel from '../../ui-system/GamePanel.jsx';
+import StatusBadge from '../../ui-system/StatusBadge.jsx';
+import { PRODUCT_PORTAL_MIGRATION_VERSION_V441 } from '../../ui-system/ProductPortalMigrationV441.js';
 import styles from './Portal.module.css';
 import HudAssetCreditsV423 from './HudAssetCreditsV423.jsx';
 
@@ -109,17 +114,36 @@ export default function Portal({
   const itemVariants = { hidden: { y: 20, opacity: 0 }, visible: { y: 0, opacity: 1, transition: { type: 'spring' } } };
 
   return (
-    <motion.div variants={containerVariants} initial="hidden" animate="visible" className={styles.container}>
+    <motion.div
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+      className={styles.container}
+      data-sf-product-ui={PRODUCT_PORTAL_MIGRATION_VERSION_V441}
+      data-sf-portal-step={step}
+    >
       <div className={styles.backgroundLayer} style={portalBackgrounds} />
       
       <div className={styles.topNav}>
-        <motion.button whileTap={{ scale: 0.9 }} onClick={toggleLanguage} className={styles.langBtn}>
-          {lang === 'vi' ? '🇻🇳 TIẾNG VIỆT' : '🇬🇧 ENGLISH'}
-        </motion.button>
+        <GameButton
+          variant="ghost"
+          size="sm"
+          onClick={toggleLanguage}
+          className={styles.langBtn}
+          leadingIcon={<GameIcon name="language" />}
+        >
+          {lang === 'vi' ? 'TIẾNG VIỆT' : 'ENGLISH'}
+        </GameButton>
         {currentUser && (
-           <button onClick={logout} className={styles.logoutBtn}>
+           <GameButton
+             variant="danger"
+             size="sm"
+             onClick={logout}
+             className={styles.logoutBtn}
+             leadingIcon={<GameIcon name="logout" />}
+           >
              {lang === 'vi' ? 'ĐĂNG XUẤT' : 'LOGOUT'}
-           </button>
+           </GameButton>
         )}
       </div>
 
@@ -127,42 +151,63 @@ export default function Portal({
         SPACE FIGHTER 4.0
       </motion.h1>
       <motion.p variants={itemVariants} className={styles.subtitle}>GALAXY WARS</motion.p>
+      <StatusBadge tone={currentUser ? 'success' : 'accent'} className={styles.connectionBadge}>
+        {currentUser
+          ? (lang === 'vi' ? 'ĐÃ KẾT NỐI HỒ SƠ' : 'PROFILE CONNECTED')
+          : (lang === 'vi' ? 'SẴN SÀNG CHƠI OFFLINE' : 'OFFLINE READY')}
+      </StatusBadge>
 
       {/* KHUNG ĐĂNG NHẬP (Lúc chưa có User) */}
       {step === 'login' && (
-        <motion.div variants={itemVariants} className={styles.authBox}>
+        <GamePanel as={motion.div} variants={itemVariants} variant="modal" tone="accent" className={styles.authBox}>
           <h2 className={styles.boxTitle}>{lang === 'vi' ? 'THIẾT LẬP KẾT NỐI' : 'ESTABLISH CONNECTION'}</h2>
           
           {platform !== 'ios' && (
-            <button onClick={loginWithGoogle} className={`${styles.loginBtn} ${styles.googleBtn}`}>
-              <img src="/images/google.png" alt="G" className={styles.loginIcon} /> 
+            <GameButton
+              variant="secondary"
+              size="lg"
+              wide
+              onClick={loginWithGoogle}
+              className={`${styles.loginBtn} ${styles.googleBtn}`}
+              leadingIcon={<img src="/images/google.png" alt="" className={styles.loginIcon} />}
+            >
               {lang === 'vi' ? 'TIẾP TỤC VỚI GOOGLE' : 'CONTINUE WITH GOOGLE'}
-            </button>
+            </GameButton>
           )}
 
           {platform === 'ios' && (
-            <button onClick={loginWithApple} className={`${styles.loginBtn} ${styles.appleBtn}`}>
-              🍎 {lang === 'vi' ? 'ĐĂNG NHẬP APPLE ID' : 'SIGN IN WITH APPLE'}
-            </button>
+            <GameButton
+              variant="secondary"
+              size="lg"
+              wide
+              onClick={loginWithApple}
+              className={`${styles.loginBtn} ${styles.appleBtn}`}
+              leadingIcon={<GameIcon name="apple" />}
+            >
+              {lang === 'vi' ? 'ĐĂNG NHẬP APPLE ID' : 'SIGN IN WITH APPLE'}
+            </GameButton>
           )}
           
-          <button 
-             onClick={handleGuestPlay} 
+          <GameButton
+             variant="ghost"
+             size="lg"
+             wide
+             onClick={handleGuestPlay}
              className={`${styles.loginBtn} ${styles.guestBtn}`}
-             style={{ background: 'transparent', border: '1px solid #00e5ff', color: '#00e5ff', marginTop: '10px' }}
+             leadingIcon={<GameIcon name="offline" />}
           >
               {lang === 'vi' ? 'CHƠI NGAY (KHÔNG LƯU MẠNG)' : 'GUEST PLAY (OFFLINE)'}
-          </button>
+          </GameButton>
 
           <div className={styles.guestNote}>
             {lang === 'vi' ? 'Chú ý: Dữ liệu Khách có thể bị mất khi cài lại thiết bị hoặc gỡ ứng dụng.' : 'Warning: Guest data may be lost upon app uninstallation.'}
           </div>
-        </motion.div>
+        </GamePanel>
       )}
 
       {/* KHUNG ĐẶT TÊN (Đã đăng nhập) */}
       {step === 'name' && (
-        <motion.div variants={itemVariants} className={styles.authBox}>
+        <GamePanel as={motion.div} variants={itemVariants} variant="modal" tone="accent" className={styles.authBox}>
           <h2 className={styles.boxTitle}>{lang === 'vi' ? 'HỒ SƠ PHI CÔNG' : 'PILOT DOSSIER'}</h2>
           
           <div className={styles.inputGroup}>
@@ -174,34 +219,47 @@ export default function Portal({
               placeholder={lang === 'vi' ? 'Nhập mã định danh...' : 'Enter your codename...'}
               maxLength={15}
             />
-            <button className={styles.diceBtn} onClick={generateRandomName} title="Random">
-              🎲
-            </button>
+            <GameButton
+              variant="ghost"
+              size="sm"
+              className={styles.diceBtn}
+              onClick={generateRandomName}
+              title="Random"
+              aria-label={lang === 'vi' ? 'Tạo tên ngẫu nhiên' : 'Generate random name'}
+              leadingIcon={<GameIcon name="dice" />}
+            />
           </div>
 
-          <button 
-            className={styles.confirmBtn} 
+          <GameButton
+            variant="primary"
+            size="lg"
+            wide
+            className={styles.confirmBtn}
             onClick={handleConfirmName}
-            disabled={isLoading}
+            busy={isLoading}
           >
             {isLoading ? (lang === 'vi' ? 'ĐANG ĐỒNG BỘ DỮ LIỆU...' : 'SYNCING DATA...') : (lang === 'vi' ? 'HOÀN TẤT ĐĂNG KÝ' : 'FINISH REGISTRATION')}
-          </button>
-        </motion.div>
+          </GameButton>
+        </GamePanel>
       )}
 
       {/* KHUNG VÀO GAME (Đã hoàn tất tên) */}
       {step === 'ready' && (
-        <motion.div variants={itemVariants} className={styles.authBox}>
+        <GamePanel as={motion.div} variants={itemVariants} variant="modal" tone="accent" className={styles.authBox}>
            <h2 className={styles.welcomeText}>
              {lang === 'vi' ? `XÁC NHẬN, ${displayName}!` : `AFFIRMATIVE, ${displayName}!`}
            </h2>
-           <button 
-             className={styles.enterGameBtn} 
-             onClick={() => setScreen('campaign_portal')}
-           >
-             {lang === 'vi' ? 'XUẤT KÍCH NGAY' : 'LAUNCH MISSION'}
-           </button>
-        </motion.div>
+           <GameButton
+              variant="primary"
+              size="lg"
+              wide
+              className={styles.enterGameBtn}
+              onClick={() => setScreen('campaign_portal')}
+              trailingIcon={<GameIcon name="chevronRight" />}
+            >
+              {lang === 'vi' ? 'XUẤT KÍCH NGAY' : 'LAUNCH MISSION'}
+            </GameButton>
+        </GamePanel>
       )}
       <HudAssetCreditsV423 lang={lang} />
     </motion.div>
