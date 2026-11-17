@@ -12,6 +12,8 @@ import { loadCampaignEngine, loadDungeonEngine } from './game/routing/BattleScre
 // route-level chunks: Babylon is downloaded only when battle/map opens.
 import Portal from './components/Portal';
 import StartupResourceGate from './components/ResourceDownloads/StartupResourceGate.jsx';
+import ProductScreenShell from './ui-system/ProductScreenShell.jsx';
+import ProductStateScreen from './ui-system/ProductStateScreen.jsx';
 const HQ = lazy(() => import('./components/HQ'));
 const ResourceManagerScreen = lazy(() => import('./components/ResourceDownloads/ResourceManagerScreen.jsx'));
 const Pilots = lazy(() => import('./components/Pilots'));
@@ -41,28 +43,21 @@ class ScreenLoadBoundary extends React.Component {
   static getDerivedStateFromError(error) { return { error }; }
   render() {
     if (!this.state.error) return this.props.children;
+    const isVi = this.props.lang === 'vi';
     return (
-      <div role="alert" style={{
-        minHeight: '100dvh', display: 'grid', placeContent: 'center',
-        gap: '14px', padding: '24px', textAlign: 'center',
-        background: '#020c1b', color: '#66fcf1',
-        fontFamily: "'VT323', monospace", fontSize: '22px',
-      }}>
-        <span>{this.props.lang === 'vi'
-          ? 'KHÔNG THỂ TẢI KHU VỰC. VUI LÒNG KIỂM TRA MẠNG.'
-          : 'UNABLE TO LOAD THIS AREA. PLEASE CHECK YOUR CONNECTION.'}</span>
-        <button type="button" onClick={() => window.location.reload()} style={{
-          padding: '10px 20px', border: '1px solid #66fcf1',
-          borderRadius: '6px', background: '#12223b', color: '#66fcf1',
-          cursor: 'pointer', fontFamily: 'inherit', fontSize: '20px',
-        }}>
-          {this.props.lang === 'vi' ? 'TẢI LẠI' : 'RELOAD'}
-        </button>
-      </div>
+      <ProductStateScreen
+        state="error"
+        overlay
+        title={isVi ? 'KHÔNG THỂ TẢI KHU VỰC' : 'UNABLE TO LOAD THIS AREA'}
+        description={isVi
+          ? 'Vui lòng kiểm tra kết nối hoặc tải lại phiên hiện tại.'
+          : 'Please check your connection or reload the current session.'}
+        actionLabel={isVi ? 'TẢI LẠI' : 'RELOAD'}
+        onAction={() => window.location.reload()}
+      />
     );
   }
 }
-
 export default function Game() {
   const [screen, setScreen] = useState('portal');
   const [lang, setLang] = useState(secureStorage.getItem('astro_lang') || 'vi');
@@ -182,23 +177,22 @@ export default function Game() {
   // QUẢN LÝ MÀN HÌNH (ROUTER)
   // ===============================================
   return (
-    <div data-sf-ui-skin={hudAssetSkinV424Enabled ? 'hud-v2' : 'legacy'} data-sf-ui-screen={screen} style={{
-      width: '100%',
-      minHeight: '100dvh',
-      overflowY: 'auto',
-      position: 'relative',
-      backgroundColor: '#0d0e15'
-    }}>
+    <ProductScreenShell
+      data-sf-ui-skin={hudAssetSkinV424Enabled ? 'hud-v2' : 'legacy'}
+      data-sf-ui-screen={screen}
+      screen={screen}
+      uiSkin={hudAssetSkinV424Enabled ? 'hud-v2' : 'legacy'}
+    >
       <ScreenLoadBoundary key={screen} lang={lang}>
       <Suspense fallback={
-        <div role="status" aria-live="polite" style={{
-          position: 'absolute', inset: 0, zIndex: 50, display: 'flex',
-          justifyContent: 'center', alignItems: 'center',
-          background: '#020c1b', color: '#66fcf1',
-          fontFamily: "'VT323', monospace", fontSize: '24px',
-        }}>
-          {lang === 'vi' ? 'ĐANG TẢI KHU VỰC...' : 'LOADING AREA...'}
-        </div>
+        <ProductStateScreen
+          state="loading"
+          overlay
+          title={lang === 'vi' ? 'ĐANG TẢI KHU VỰC' : 'LOADING AREA'}
+          description={lang === 'vi'
+            ? 'Đang chuẩn bị giao diện và dữ liệu cục bộ.'
+            : 'Preparing the interface and local data.'}
+        />
       }>
       {screen === 'portal' && (
         <Portal renamePlayer={renamePlayer} 
@@ -226,7 +220,15 @@ export default function Game() {
           candidate={import.meta.env.VITE_C12_CANDIDATE_QA_UI === 'true'}/>
       )}
       {screen === 'cloud_qa_alpha1' && import.meta.env.VITE_C8_CLOUD_QA_UI !== 'true' && (
-        <div role="alert">Cloud QA disabled. <button onClick={()=>setScreen('hq')}>HQ</button></div>
+        <ProductStateScreen
+          state="disabled"
+          title={lang === 'vi' ? 'CLOUD QA ĐANG TẮT' : 'CLOUD QA IS DISABLED'}
+          description={lang === 'vi'
+            ? 'Build hiện tại không bật giao diện QA máy chủ.'
+            : 'This build does not enable the server QA interface.'}
+          actionLabel="HQ"
+          onAction={() => setScreen('hq')}
+        />
       )}
 
       {screen === 'campaign' && (
@@ -287,6 +289,6 @@ export default function Game() {
         }}
         toastOptions={createHudAssetToastOptionsV424(hudAssetSkinV424Enabled)}
       />
-    </div>
+    </ProductScreenShell>
   );
 }

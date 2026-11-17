@@ -2,6 +2,8 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import Game from './App';
 import './index.css';
+import './ui-system/GameUiTokens.css';
+import './ui-system/ProductUiFoundationV440.css';
 import './ui-system/HudAssetSkinV424.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(

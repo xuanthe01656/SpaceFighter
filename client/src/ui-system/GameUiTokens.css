@@ -19,5 +19,49 @@
   --sf-ui-data-font:'Share Tech Mono',ui-monospace,Consolas,monospace;
   --sf-ui-touch-target:48px;
   --sf-ui-safe-top:env(safe-area-inset-top,0px);
+  --sf-ui-safe-right:env(safe-area-inset-right,0px);
   --sf-ui-safe-bottom:env(safe-area-inset-bottom,0px);
+  --sf-ui-safe-left:env(safe-area-inset-left,0px);
+
+  /* V4.4A Product UI foundation. Local/system stacks avoid a runtime font request. */
+  --sf-product-bg:#020711;
+  --sf-product-surface:#061424;
+  --sf-product-surface-raised:#0a2338;
+  --sf-product-surface-soft:rgba(10,35,56,.72);
+  --sf-product-text:#edfaff;
+  --sf-product-muted:#a7c1cf;
+  --sf-product-faint:#708c9d;
+  --sf-product-border:rgba(79,214,232,.34);
+  --sf-product-border-strong:rgba(92,235,249,.62);
+  --sf-product-title-font:'Arial Narrow','Roboto Condensed','Segoe UI Semibold','Segoe UI',Arial,sans-serif;
+  --sf-product-body-font:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  --sf-product-data-font:ui-monospace,'SFMono-Regular',Consolas,'Liberation Mono',monospace;
+
+  --sf-space-1:4px;
+  --sf-space-2:8px;
+  --sf-space-3:12px;
+  --sf-space-4:16px;
+  --sf-space-5:24px;
+  --sf-space-6:32px;
+  --sf-space-7:40px;
+  --sf-space-8:48px;
+
+  --sf-radius-sm:4px;
+  --sf-radius-md:8px;
+  --sf-radius-lg:12px;
+  --sf-radius-xl:18px;
+
+  --sf-shadow-panel:0 18px 48px rgba(0,0,0,.34);
+  --sf-shadow-modal:0 28px 90px rgba(0,0,0,.58);
+  --sf-motion-fast:130ms;
+  --sf-motion-standard:220ms;
+  --sf-motion-slow:360ms;
+
+  --sf-z-screen:1;
+  --sf-z-header:20;
+  --sf-z-modal:80;
+  --sf-z-toast:100;
+  --sf-z-loading:120;
+
+  color-scheme:dark;
 }

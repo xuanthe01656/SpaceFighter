@@ -1,0 +1,81 @@
+.shell {
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  position: relative;
+  isolation: isolate;
+  color: var(--sf-product-text);
+  background-color: var(--sf-product-bg);
+  background-image:
+    radial-gradient(circle at 15% 0%, rgba(42, 196, 223, .12), transparent 34%),
+    radial-gradient(circle at 100% 20%, rgba(116, 83, 205, .10), transparent 31%),
+    linear-gradient(180deg, #030914 0%, #030711 62%, #02050b 100%);
+  font-family: var(--sf-product-body-font);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.shell[data-sf-scroll-policy='auto'] {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+.shell[data-sf-scroll-policy='locked'] {
+  overflow: hidden;
+  touch-action: none;
+}
+
+.battle,
+.map {
+  background: #030711;
+}
+
+.auth {
+  background-image:
+    radial-gradient(circle at 50% -12%, rgba(61, 228, 244, .17), transparent 38%),
+    radial-gradient(circle at 12% 100%, rgba(104, 72, 200, .15), transparent 33%),
+    linear-gradient(180deg, #04101e 0%, #020611 66%, #010308 100%);
+}
+
+.system {
+  background-image:
+    linear-gradient(rgba(61, 223, 238, .025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(61, 223, 238, .025) 1px, transparent 1px),
+    radial-gradient(circle at 50% 5%, rgba(40, 197, 220, .11), transparent 38%),
+    linear-gradient(180deg, #04101d, #02060d);
+  background-size: 24px 24px, 24px 24px, auto, auto;
+}
+
+.result {
+  background-image:
+    radial-gradient(circle at 50% 15%, rgba(255, 194, 109, .12), transparent 35%),
+    linear-gradient(180deg, #07101d 0%, #030711 72%);
+}
+
+.qa {
+  background-image:
+    repeating-linear-gradient(135deg, rgba(255, 194, 109, .025) 0 10px, transparent 10px 20px),
+    linear-gradient(180deg, #10101b, #030711);
+}
+
+.shell::-webkit-scrollbar {
+  width: 6px;
+}
+
+.shell::-webkit-scrollbar-track {
+  background: rgba(2, 10, 18, .45);
+}
+
+.shell::-webkit-scrollbar-thumb {
+  background: rgba(76, 224, 241, .28);
+  border-radius: 999px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell {
+    scroll-behavior: auto;
+  }
+}

@@ -1,0 +1,22 @@
+.badge {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border: 1px solid rgba(169, 202, 216, .35);
+  border-radius: 999px;
+  background: rgba(6, 22, 37, .78);
+  color: var(--sf-product-muted);
+  font: 700 11px / 1 var(--sf-product-data-font);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.accent { color: var(--sf-ui-accent); border-color: rgba(75, 234, 244, .48); }
+.success { color: var(--sf-ui-success); border-color: rgba(128, 239, 188, .45); }
+.warning { color: var(--sf-ui-warning); border-color: rgba(255, 194, 109, .48); }
+.danger { color: var(--sf-ui-danger); border-color: rgba(255, 107, 136, .48); }
+.qa { color: #d5b2ff; border-color: rgba(196, 142, 255, .48); background: rgba(55, 25, 76, .72); }
