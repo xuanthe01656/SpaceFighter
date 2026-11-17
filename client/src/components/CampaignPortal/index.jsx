@@ -226,6 +226,18 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
 
       {/* BOTTOM RIGHT ACTION AREA */}
       <motion.div variants={itemVariants} className={styles.actionArea}>
+        <button
+          type="button"
+          className={styles.hqLaunchBtn}
+          data-sf-hq-entry="command-hangar-v4.4.2"
+          onClick={() => { gsRef.current.hqReturnScreen = 'campaign_portal'; handleNav('hq'); }}
+        >
+          <div className={styles.hqLaunchIcon}><Icons.Armory /></div>
+          <div className={styles.hqLaunchCopy}>
+            <strong>{lang === 'vi' ? 'TỔNG HÀNH DINH' : 'HEADQUARTERS'}</strong>
+            <small>{lang === 'vi' ? 'Phi cơ · Trang bị · Phi công' : 'Aircraft · Equipment · Pilots'}</small>
+          </div>
+        </button>
         <button className={styles.subModeBtn} onClick={() => handleNav('dungeon_select')}>
           <div className={styles.subModeIcon}><Icons.Swords /></div><span>{lang === 'vi' ? 'PHÓ BẢN' : 'DUNGEON'}</span>
         </button>

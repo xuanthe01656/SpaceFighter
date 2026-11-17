@@ -415,3 +415,64 @@
     transition-duration: .01ms !important;
   }
 }
+
+/* V4.4.2 COMMAND HANGAR ENTRY */
+.actionArea {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-areas:
+    "hq hq"
+    "dungeon campaign";
+}
+.hqLaunchBtn {
+  grid-area: hq;
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 300px;
+  padding: 9px 20px 9px 10px;
+  color: #e8faff;
+  cursor: pointer;
+  background:
+    linear-gradient(135deg, rgba(5, 35, 64, .92), rgba(4, 17, 34, .94)),
+    url('/assets/ui/spacefighter-hud-v3/neo_buttons/sf_neo_button_02__campaign_normal.webp') center/100% 100% no-repeat;
+  border: 1px solid rgba(77, 220, 255, .58);
+  clip-path: polygon(4% 0, 96% 0, 100% 22%, 100% 78%, 96% 100%, 4% 100%, 0 78%, 0 22%);
+  box-shadow: 0 0 22px rgba(77, 220, 255, .17);
+  text-align: left;
+}
+.hqLaunchBtn:hover { filter: brightness(1.14); transform: translateY(-1px); }
+.hqLaunchIcon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  color: #03111f;
+  background: #4ddcff;
+  border-radius: 9px;
+  box-shadow: 0 0 16px rgba(77, 220, 255, .58);
+}
+.hqLaunchIcon svg { width: 25px; height: 25px; }
+.hqLaunchCopy { display: flex; flex-direction: column; min-width: 0; }
+.hqLaunchCopy strong { font-family: var(--font-ui); font-size: 18px; letter-spacing: .08em; }
+.hqLaunchCopy small { margin-top: 2px; color: #83dff6; font-family: var(--font-data); font-size: 10px; letter-spacing: .05em; }
+.actionArea .subModeBtn { grid-area: dungeon; }
+.actionArea .mainLaunchBtn { grid-area: campaign; }
+
+@media (max-width: 768px) and (orientation: portrait) {
+  .actionArea {
+    left: calc(10px + env(safe-area-inset-left, 0px));
+    right: calc(10px + env(safe-area-inset-right, 0px));
+    width: auto;
+    grid-template-columns: minmax(0, .72fr) minmax(0, 1.28fr);
+  }
+  .hqLaunchBtn { width: min(100%, 360px); min-width: 0; justify-self: end; padding: 7px 13px 7px 8px; }
+  .hqLaunchIcon { width: 36px; height: 36px; }
+  .hqLaunchCopy strong { font-size: 14px; }
+  .hqLaunchCopy small { font-size: 8px; }
+}
+
+@media (max-width: 390px) and (orientation: portrait) {
+  .hqLaunchCopy small { display: none; }
+}

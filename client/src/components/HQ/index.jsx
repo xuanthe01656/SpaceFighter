@@ -10,6 +10,7 @@ import ShipImage from '../ShipImage/ShipImage';
 import AssetImage from '../AssetImage/AssetImage';
 import { resolveShipVisual } from '../../game/rendering/ShipVisualCatalog';
 import { isDungeonQaRunV391 } from '../../game/dungeon/DungeonQaAccessV391.js';
+import CommandHangarV442 from './CommandHangarV442.jsx';
 
 // Hàm tiện ích: Định dạng số liệu ngắn gọn (1K, 1.5M, 2B) đồng bộ toàn App
 const formatCompactNumber = (number) => {
@@ -175,16 +176,17 @@ export default function HQ({ gsRef, setScreen, lang, saveUserProfile, gameAction
     }).sort((a, b) => (b.rarity || 1) - (a.rarity || 1));
   };
 
-  const handleEquipFromPopup = async (uuid) => {
+  const handleEquipFromPopup = async (uuid, slotOverride = selectingSlot) => {
+    const activeSlot = slotOverride || selectingSlot;
     if (auth.currentUser) {
-      try { await gameAction('inventory.equip',{slot:selectingSlot,itemId:uuid});setRefreshTick(r=>r+1);setSelectingSlot(null);toast.success('Equipped'); }
+      try { await gameAction('inventory.equip',{slot:activeSlot,itemId:uuid});setRefreshTick(r=>r+1);setSelectingSlot(null);toast.success('Equipped'); }
       catch(error){ toast.error(error.message); }
       return;
     }
-    if (selectingSlot === 'aircraft') {
+    if (activeSlot === 'aircraft') {
         gsRef.current.campaignData.loadout.aircraft = uuid;
     } else {
-        gsRef.current.campaignData.loadout[selectingSlot] = uuid;
+        gsRef.current.campaignData.loadout[activeSlot] = uuid;
     }
     if (saveUserProfile) saveUserProfile();
     setRefreshTick(r => r + 1);
@@ -216,6 +218,62 @@ export default function HQ({ gsRef, setScreen, lang, saveUserProfile, gameAction
 
   const popupItemsList = selectingSlot ? getAvailableItemsForPopup() : [];
   const currentlyEquippedId = selectingSlot ? loadout[selectingSlot] : null;
+  const commandHangarEnabledV442 = import.meta.env.VITE_SF_COMMAND_HANGAR_V442 !== 'false';
+  if (commandHangarEnabledV442) {
+    const dungeonQaRunV442 = isDungeonQaRunV391(gsRef.current?.dungeonQa, targetDungeon);
+    const cloudQaVisibleV442 = import.meta.env.VITE_C8_CLOUD_QA_UI === 'true' && Boolean(auth.currentUser)
+      && gameMode === 'campaign' && Number(progress.currentPlanet) === 1 && Number(progress.selectedStage) === 1;
+    return (
+      <CommandHangarV442
+        gsRef={gsRef}
+        setScreen={setScreen}
+        lang={lang}
+        gameMode={gameMode}
+        targetStage={targetStage}
+        dungeonName={dName}
+        energy={energy}
+        coins={coins}
+        diamonds={diamonds}
+        currentAircraft={currentAircraft}
+        aircraftInfo={aircraftInfo}
+        shipVisualInfo={shipVisualInfo}
+        currentPilot={currentPilot}
+        calculatedCP={calculatedCP}
+        currentMainGun={currentMainGun}
+        currentWingman={currentWingman}
+        currentArmor={currentArmor}
+        currentDrone={currentDrone}
+        mainGunItem={mainGunItem}
+        wingmanItem={wingmanItem}
+        armorItem={armorItem}
+        droneItem={droneItem}
+        getDynamicStat={getDynamicStat}
+        ownedAircrafts={campaignData.ownedAircrafts || {}}
+        aircraftCatalog={AIRCRAFTS}
+        selectingSlot={selectingSlot}
+        setSelectingSlot={setSelectingSlot}
+        popupItemsList={popupItemsList}
+        currentlyEquippedId={currentlyEquippedId}
+        slotTitles={slotTitles}
+        onEquipItem={(uuid) => handleEquipFromPopup(uuid)}
+        onSelectAircraft={(id) => handleEquipFromPopup(id, 'aircraft')}
+        onUnequipItem={handleUnequipFromPopup}
+        isLaunching={isLaunching}
+        onLaunch={handleLaunch}
+        onBack={() => {
+          const returnScreen = gsRef.current?.hqReturnScreen;
+          gsRef.current.hqReturnScreen = null;
+          setScreen(returnScreen || (gameMode === 'dungeon' ? 'dungeon_select' : 'stage_select'));
+        }}
+        Icons={Icons}
+        showCloudQa={cloudQaVisibleV442}
+        onCloudQa={() => setScreen('cloud_qa_alpha1')}
+        dungeonQaLabel={dungeonQaRunV442
+          ? `DUNGEON QA · NO ENERGY · NO REWARDS · NO PROFILE WRITES${gsRef.current.dungeonQa?.directRoomId ? ` · ${gsRef.current.dungeonQa.directRoomId}` : ''}`
+          : null}
+      />
+    );
+  }
 
   return (
     <motion.div className={`${styles.container} scrollable-layer`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} >
