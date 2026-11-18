@@ -16,7 +16,6 @@ import FirstTopupModal from './FirstTopupModal';
 import AttendanceModal from './AttendanceModal';
 
 import { openManagementHqV443 } from '../../game/navigation/HangarNavigationV443.js';
-import PortalCommandDeckV444 from './PortalCommandDeckV444.jsx';
 import { openManagementHqV444 } from '../../game/navigation/HangarNavigationV444.js';
 const productIcon = name => function ProductPortalIcon(props) {
   return <GameIcon name={name} {...props} />;
@@ -143,7 +142,7 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
       data-sf-product-ui={PRODUCT_PORTAL_MIGRATION_VERSION_V441}
       data-sf-home-mode={currentUser ? 'cloud' : 'guest'}
 
-      data-sf-portal-layout-v444="command-deck">
+      data-sf-portal-layout-v446="flight-hub">
 
       {/* TOP NAVIGATION & CURRENCY BAR */}
       <div className={styles.topNav}>
@@ -217,24 +216,17 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
 
       {/* BOTTOM NAVIGATION */}
       <motion.div variants={itemVariants} className={styles.bottomNav}>
-        <button
-          type="button"
-          className={`${styles.navBtn} ${styles.managementNavBtn} ${styles.commandDockBtn}`}
-          data-sf-hq-entry-v444="portal-command-deck-v4.4.4"
+        <button type="button"
+          className={`${styles.navBtn} ${styles.managementNavBtn}`}
+          data-sf-hq-entry-v446="fleet-hub-v4.4.6"
           onClick={() => { openManagementHqV444(gsRef); gsRef.current.hqReturnScreen = 'campaign_portal'; handleNav('hq'); }}
-        >
-          <Icons.Armory />
-          <span>{lang === 'vi' ? 'TỔNG HÀNH DINH' : 'HANGAR'}</span>
-        </button>
-        <button
-          type="button"
-          className={`${styles.navBtn} ${styles.hqLaunchBtn} ${styles.managementNavBtn}`}
-          data-sf-hq-entry="command-hangar-v4.4.2"
-          data-sf-hq-entry-v443="portal-hangar-v4.4.3"
-          onClick={() => { openManagementHqV443(gsRef); gsRef.current.hqReturnScreen = 'campaign_portal'; handleNav('hq'); }}
-        >
-          <Icons.Armory />
-          <span>{lang === 'vi' ? 'TỔNG HÀNH DINH' : 'HANGAR'}</span>
+          aria-label={lang === 'vi' ? 'Tổng hành dinh' : 'Headquarters'}>
+          <span className={styles.navIcon} aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 20V9l9-6 9 6v11M3 9h18M7 20v-6h10v6M9 14l3-3 3 3" />
+            </svg>
+          </span>
+          <span>{lang === 'vi' ? 'TỔNG HÀNH DINH' : 'HEADQUARTERS'}</span>
         </button>
         <button className={styles.navBtn} onClick={() => handleNav('inventory')}>
           <div className={styles.navIcon}><Icons.Armory /></div><span>{lang === 'vi' ? 'KHO TRANG BỊ' : 'INVENTORY'}</span>
@@ -248,13 +240,6 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
       </motion.div>
 
       {/* BOTTOM RIGHT ACTION AREA */}
-            <PortalCommandDeckV444
-        gsRef={gsRef}
-        lang={lang}
-        playerName={playerName}
-        currentUser={currentUser}
-        onOpenHq={() => { openManagementHqV444(gsRef); gsRef.current.hqReturnScreen = 'campaign_portal'; handleNav('hq'); }}
-      />
 
 <motion.div variants={itemVariants} className={styles.actionArea}>        <button className={styles.subModeBtn} onClick={() => handleNav('dungeon_select')}>
           <div className={styles.subModeIcon}><Icons.Swords /></div><span>{lang === 'vi' ? 'PHÓ BẢN' : 'DUNGEON'}</span>

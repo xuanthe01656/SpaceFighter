@@ -45,16 +45,15 @@ test('V4.4.3 normalizes legacy campaign profiles so Stage Select never receives 
   assert.match(defaults, /selectedStage\s*:\s*1/);
 });
 
-test('Campaign Portal uses a four-item management dock without a full-width Headquarters CTA', () => {
+test('V446_STRUCTURAL_SUPERSESSION: previous V443 management dock migrated to V446 without duplicates', () => {
   const portal = read('src/components/CampaignPortal/index.jsx');
   const css = read('src/components/CampaignPortal/CampaignPortal.module.css');
-  assert.match(portal, /openManagementHqV443/);
-  assert.match(portal, /data-sf-hq-entry-v443="portal-hangar-v4\.4\.3"/);
-  assert.match(portal, /className=\{`\$\{styles\.navBtn\} \$\{styles\.hqLaunchBtn\} \$\{styles\.managementNavBtn\}`\}/);
+  assert.match(portal, /data-sf-portal-layout-v446="flight-hub"/);
+  assert.match(portal, /data-sf-hq-entry-v446="fleet-hub-v4\.4\.6"/);
+  assert.doesNotMatch(portal, /data-sf-hq-entry-v443/);
   assert.match(portal, /handleNav\('dungeon_select'\)/);
   assert.match(portal, /handleNav\('galaxy_map'\)/);
-  assert.match(css, /V4\.4\.3 PORTAL MANAGEMENT DOCK/);
-  assert.match(css, /grid-template-columns:\s*repeat\(4,/);
+  assert.match(css, /V4\.4\.6 STRUCTURAL FLIGHT HUB/);
   assert.match(css, /grid-template-areas:\s*"dungeon campaign"/);
 });
 

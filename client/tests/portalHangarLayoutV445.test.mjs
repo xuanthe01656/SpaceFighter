@@ -7,38 +7,33 @@ const root = process.cwd();
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const balanced = source => (source.match(/\{/g) || []).length === (source.match(/\}/g) || []).length;
 
-test('V4.4.5 Portal layout resets legacy positioning and reserves separate CTA/dock rows', () => {
+test('V446_STRUCTURAL_SUPERSESSION: single Portal layout separates CTA and four management routes', () => {
   const css = read('src/components/CampaignPortal/CampaignPortal.module.css');
-  assert.match(css, /V4\.4\.5 PORTAL LAYOUT LOCK/);
-  assert.match(css, /\.sideMenu\s*>\s*\*/);
-  assert.match(css, /position:\s*absolute\s*!important/);
-  assert.match(css, /\.actionArea\s*>\s*\*/);
-  assert.match(css, /grid-template-columns:\s*minmax\(0,\s*\.72fr\)\s*minmax\(0,\s*1\.28fr\)/);
-  assert.match(css, /\.bottomNav\s*>\s*\*/);
-  assert.match(css, /position:\s*relative\s*!important/);
-  assert.match(css, /\.bottomNav[^\{]*\{[\s\S]*grid-template-columns:\s*repeat\(4/);
-  assert.match(css, /\.bottomNav[^\n]*span[\s\S]*display:\s*block\s*!important/);
+  const jsx = read('src/components/CampaignPortal/index.jsx');
+  assert.match(css, /V4\.4\.6 STRUCTURAL FLIGHT HUB/);
+  assert.match(css, /\.bottomNav\s*\{/);
+  assert.match(css, /grid-template-columns:\s*repeat\(4/);
+  assert.match(css, /grid-template-areas:\s*"dungeon campaign"/);
+  assert.doesNotMatch(jsx, /PortalCommandDeckV444/);
+  assert.equal((jsx.match(/data-sf-hq-entry-v446=/g)||[]).length, 1);
   assert.equal(balanced(css), true);
 });
 
-test('V4.4.5 central command deck fits between header and bottom controls', () => {
-  const css = read('src/components/CampaignPortal/PortalCommandDeckV444.module.css');
-  assert.match(css, /V4\.4\.5 PORTAL COMMAND DECK FIT/);
-  assert.match(css, /bottom:\s*calc\(164px/);
-  assert.match(css, /width:\s*clamp\(188px,\s*50vw,\s*420px\)/);
-  assert.match(css, /min-height:\s*0/);
-  assert.equal(balanced(css), true);
+test('V446_STRUCTURAL_SUPERSESSION: the unused V444 hero stays available for rollback but is not mounted', () => {
+  const portal = read('src/components/CampaignPortal/index.jsx');
+  assert.doesNotMatch(portal, /PortalCommandDeckV444/);
+  assert.match(portal, /data-sf-portal-layout-v446="flight-hub"/);
 });
 
-test('V4.4.5 Hangar action row is in document flow and mobile stage is compact', () => {
+test('V446_STRUCTURAL_SUPERSESSION: HQ action row stays in flow and six loadout slots are compact', () => {
   const css = read('src/components/HQ/CommandHangarV444.module.css');
-  assert.match(css, /V4\.4\.5 COMMAND HANGAR LAYOUT LOCK/);
-  const block = css.slice(css.indexOf('/* V4.4.5 COMMAND HANGAR LAYOUT LOCK'));
-  assert.match(block, /\.actionBar\s*\{[\s\S]*position:\s*static/);
-  assert.doesNotMatch(block, /\.actionBar\s*\{[\s\S]{0,240}position:\s*fixed/);
-  assert.match(block, /min-height:\s*312px/);
-  assert.match(block, /max-height:\s*186px/);
-  assert.match(block, /\.titleLockup h1[\s\S]*white-space:\s*normal/);
+  const jsx = read('src/components/HQ/CommandHangarV444.jsx');
+  assert.match(css, /V4\.4\.6: HQ is a management surface/);
+  const block = css.slice(css.indexOf('/* V4.4.6: HQ is a management surface'));
+  assert.match(block, /\.actionBar\s*\{[\s\S]*?position:\s*static/);
+  assert.match(block, /grid-template-columns:\s*minmax\(0,\.9fr\) minmax\(0,1\.1fr\)/);
+  assert.match(block, /min-height:\s*290px/);
+  for(const slot of ['mainGun','wingman','armor','drone','pilot','skill']) assert.match(jsx,new RegExp('slot="'+slot+'"'));
   assert.equal(balanced(css), true);
 });
 

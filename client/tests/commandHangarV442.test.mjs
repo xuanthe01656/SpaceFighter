@@ -61,16 +61,16 @@ test('V4.4.2 local Hangar payload contains exact lightweight preview inventories
   assert.ok(totalBytes(all) < 3 * 1024 * 1024, 'local Hangar payload must stay below 3 MiB');
 });
 
-test('Campaign Portal exposes an explicit Headquarters entry without changing campaign or dungeon routes', () => {
+test('V446_STRUCTURAL_SUPERSESSION: Headquarters is single-source in a four-button management dock', () => {
   const portal = read('src/components/CampaignPortal/index.jsx');
   const css = read('src/components/CampaignPortal/CampaignPortal.module.css');
-  assert.match(portal, /data-sf-hq-entry="command-hangar-v4\.4\.2"/);
-  assert.match(portal, /hqReturnScreen\s*=\s*'campaign_portal'/);
-  assert.match(portal, /handleNav\('hq'\)/);
-  assert.match(portal, /handleNav\('dungeon_select'\)/);
+  assert.equal((portal.match(/data-sf-hq-entry-v446=/g)||[]).length,1);
+  assert.doesNotMatch(portal, /data-sf-hq-entry-v44[234]=/);
+  assert.match(portal, /openManagementHqV444/);
   assert.match(portal, /handleNav\('galaxy_map'\)/);
-  assert.match(css, /\.hqLaunchBtn/);
-  assert.match(css, /sf_neo_button_02__campaign_normal\.webp/);
+  assert.match(portal, /handleNav\('dungeon_select'\)/);
+  assert.match(css, /V4\.4\.6 STRUCTURAL FLIGHT HUB/);
+  assert.match(css, /grid-template-columns:\s*repeat\(4/);
 });
 
 test('HQ delegates presentation to Command Hangar while preserving launch and inventory authority', () => {
