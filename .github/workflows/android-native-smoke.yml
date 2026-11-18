@@ -1,6 +1,7 @@
 name: SpaceFighter Android - Capacitor 8 Native Smoke
 
-# Build-only validation after an approved main push. Stable signed DEBUG APK only. No release/distribution.
+# Build-only validation after an approved main push. Stable signed DEBUG APK only.
+# V4.5.0 QA builds assembleDebug APK only; AAB is reserved for a later release gate.
 on:
   workflow_dispatch:
     inputs:
@@ -348,9 +349,8 @@ jobs:
           set -euo pipefail
           [[ -s "$SF_ANDROID_QA_KEYSTORE_PATH" ]] || { echo 'QA signing keystore was not restored' >&2; exit 1; }
           cd android
-          gradle --no-daemon --stacktrace :app:assembleDebug :app:bundleDebug
+          gradle --no-daemon --stacktrace :app:assembleDebug
           test -s app/build/outputs/apk/debug/app-debug.apk
-          test -s app/build/outputs/bundle/debug/app-debug.aab
 
       - name: Verify actual APK uses the registered SHA-1 and SHA-256
         run: |
@@ -418,7 +418,6 @@ jobs:
           name: ${{ env.SF_ANDROID_ARTIFACT_NAME }}
           path: |
             client/android/app/build/outputs/apk/debug/app-debug.apk
-            client/android/app/build/outputs/bundle/debug/app-debug.aab
           if-no-files-found: error
           retention-days: 3
 

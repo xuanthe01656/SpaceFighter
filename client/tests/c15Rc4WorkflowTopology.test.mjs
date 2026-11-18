@@ -19,7 +19,7 @@ test('RC7 is the only full C15 push gate and all Android builds remain manual af
   assert.match(rc7,/spacefighter-c15-rc7-gate-report/);
   const debug=read('android-native-smoke.yml');assert.doesNotMatch(debug,/\n\s+push:/);assert.match(debug,/c15_rc7_assets:/);
   assert.match(debug,/npm run gate:c15-rc7:fast/);assert.match(debug,/VITE_C15_CONTROL_PROFILE_ID:.*arcade-responsive-v2/);
-  assert.match(debug,/:app:assembleDebug :app:bundleDebug/);assert.match(debug,/spacefighter-android-c15-rc7-asset-delivery-candidate/);
+  assert.match(debug,/^(?=[\s\S]*gradle --no-daemon --stacktrace :app:assembleDebug\b)(?![\s\S]*:app:bundleDebug\b)/);assert.match(debug,/spacefighter-android-c15-rc7-asset-delivery-candidate/);
   const release=read('android-release-candidate.yml');assert.doesNotMatch(release,/\n\s+push:/);
   assert.match(release,/BUILD-C15-RC6-ANDROID-RELEASE/);assert.match(release,/:app:assembleRelease :app:bundleRelease/);
   assert.match(release,/spacefighter-android-c15-rc6-upload-ready-candidate/);

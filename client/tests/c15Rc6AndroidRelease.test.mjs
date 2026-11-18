@@ -98,6 +98,7 @@ test('RC6 is frozen manual while RC7 is the only main-push C15 gate',()=>{
   assert.doesNotMatch(rc5Gate,/\n\s+push:/);
   assert.match(rc5Gate,/Run frozen RC5 manual audit gate/);
   assert.doesNotMatch(debugWorkflow,/\n\s+push:/);
-  assert.match(debugWorkflow,/:app:assembleDebug :app:bundleDebug/);
+  assert.match(debugWorkflow,/:app:assembleDebug/);
+  assert.doesNotMatch(debugWorkflow,/:app:bundleDebug|app-debug\.aab/);
   assert.doesNotMatch(debugWorkflow,/:app:assembleRelease|:app:bundleRelease/);
 });

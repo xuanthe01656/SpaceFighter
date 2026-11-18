@@ -76,7 +76,8 @@ test('Android native smoke uses locked dependencies, sync and actual Gradle comp
   assert.match(workflow, /npm ci --no-audit --no-fund/);
   assert.match(workflow, /npm run build:mobile/);
   assert.match(workflow, /npx --no-install cap sync android/);
-  assert.match(workflow, /gradle --no-daemon --stacktrace :app:assembleDebug :app:bundleDebug/);
+  assert.match(workflow, /gradle --no-daemon --stacktrace :app:assembleDebug/);
+  assert.doesNotMatch(workflow, /:app:bundleDebug|app-debug\.aab/);
 });
 test('Native workflow does not automatically distribute builds', () => {
   assert.doesNotMatch(workflow, /publish|deploy|google-play|fastlane|upload_to_play|gradle[^\n]*publish/i);

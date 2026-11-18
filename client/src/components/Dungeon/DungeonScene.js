@@ -196,6 +196,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
       gsRef, lang, onGameOver, onVictory, onBossDefeated, isCloud, getRealTime,
       onHudUpdate, onAnnouncement, onQaUpdate,
       onAbilityState, onAbilityFeedback, onAbilityController,
+      onRuntimeHeartbeat, onRuntimeFault, onRuntimePhase,
     } = data;
     const externalHudV396 = typeof onHudUpdate === 'function';
     const externalAnnouncementV396 = typeof onAnnouncement === 'function';
@@ -2279,6 +2280,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             maxWaves     : dungeonSnapshot?.totalRooms ?? ACTIVE_MAX_WAVES,
             qaReport     : dungeonQaRunV391 ? dungeonQaReadinessV400.snapshot(Date.now()) : null,
         }), 1800);
+        onRuntimePhase?.({ phase: 'terminal', reason: 'defeat' });
     };
 
     const triggerVictory = () => {
@@ -2308,6 +2310,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             maxWaves     : dungeonSnapshot?.totalRooms ?? ACTIVE_MAX_WAVES,
             qaReport     : dungeonQaRunV391 ? dungeonQaReadinessV400.snapshot(Date.now()) : null,
         }), 2800);
+        onRuntimePhase?.({ phase: 'terminal', reason: 'victory' });
     };
 
     if (!dungeonParityV38) {
@@ -2858,6 +2861,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
 
     scene.onBeforeRenderObservable.add(() => {
         if (gameOver || (typeof scene.isDisposed === 'function' ? scene.isDisposed() : scene.isDisposed)) return;
+        try {
         const now = Date.now();
         if (dungeonQaRunV391) {
             dungeonFireQaV399.maybeLog(now, (tag, summary) => console.info(tag, summary));
@@ -3529,7 +3533,23 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             }
             if (destroyed) continue;
         }
-
+        // Mark only a completed simulation pass. A frame that throws before
+        // this line must never be reported as healthy gameplay progress.
+        onRuntimeHeartbeat?.({
+            tick, roomIndex: Math.max(0, currentWave - 1),
+            encounterStatus: dungeonParityV38 ? dungeonDirectorV38?.status : 'legacy',
+            enemies: enemies.length, projectiles: enemyBullets.length,
+            bossActive,
+        });
+        } catch (error) {
+            // Evidence is volatile: no profile, wallet or battle authority writes.
+            onRuntimeFault?.({
+                stage: 'simulation', error,
+                roomIndex: Math.max(0, currentWave - 1),
+                enemies: enemies.length, projectiles: enemyBullets.length,
+            });
+            throw error;
+        }
     });
 
     return scene;

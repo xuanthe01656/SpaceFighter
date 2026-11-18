@@ -7,6 +7,7 @@ import { activeCoinMultiplier } from '../../utils/guestProgress';
 import { auth } from '../../firebase';
 import toast from 'react-hot-toast';
 import { isDungeonQaRunV391 } from '../../game/dungeon/DungeonQaAccessV391.js';
+import { createDungeonRuntimeMonitorV450, DUNGEON_RUNTIME_LIMITS_V450 } from '../../game/dungeon/DungeonRuntimeReliabilityV450.js';
 import DungeonHudV396, { EMPTY_DUNGEON_HUD_STATE_V396 } from '../../ui-system/DungeonHudV396.jsx';
 import DungeonQaEvidencePanelV400 from '../../ui-system/DungeonQaEvidencePanelV400.jsx';
 import DungeonShipSkillButtonV410 from '../../ui-system/DungeonShipSkillButtonV410.jsx';
@@ -78,6 +79,7 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
   const dungeonAbilityControllerRef = useRef(null);
   const [dungeonAbilityState, setDungeonAbilityState] = React.useState(null);
   const [dungeonAbilityFeedback, setDungeonAbilityFeedback] = React.useState(null);
+  const [dungeonRuntimeAlert, setDungeonRuntimeAlert] = React.useState(null);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -97,6 +99,19 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
     const scene = new Scene(engine);
     sceneRef.current = scene;
     const performance = attachAdaptiveRenderQuality(engine, scene, qualityProfile, window.devicePixelRatio || 1);
+    const runtimeNowV450 = () => globalThis.performance?.now?.() ?? Date.now();
+    const runtimeV450 = createDungeonRuntimeMonitorV450({ nowMs: runtimeNowV450() });
+    runtimeV450.setVisible(document.visibilityState !== 'hidden', runtimeNowV450());
+    let runtimeDisposedV450 = false;
+    let runtimeAlertKindV450 = null;
+    let loggedRuntimeStatusV450 = null;
+    const publishRuntimeAlertV450 = (snapshot) => {
+      const kind = ['render_exception', 'render_stalled', 'simulation_stalled', 'webgl_context_lost'].includes(snapshot?.state)
+        ? snapshot.state : null;
+      if (runtimeDisposedV450 || kind === runtimeAlertKindV450) return;
+      runtimeAlertKindV450 = kind;
+      setDungeonRuntimeAlert(kind ? snapshot : null);
+    };
 
 
     // Lấy config dungeon hiện tại để tính thưởng sau
@@ -119,14 +134,20 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
       // Snapshot is volatile and shown only when the existing Dungeon QA gate is active.
       onQaUpdate: report => {
         if (!dungeonQaRun || !report) return;
-        dungeonQaEvidenceRef.current = report;
-        setDungeonQaEvidence(report);
+        const enriched = { ...report, runtimeHealthV450: runtimeV450.snapshot(runtimeNowV450()) };
+        dungeonQaEvidenceRef.current = enriched;
+        setDungeonQaEvidence(enriched);
       },
       onAbilityController: controller => {
         dungeonAbilityControllerRef.current = typeof controller === 'function' ? controller : null;
       },
       onAbilityState: snapshot => setDungeonAbilityState(snapshot || null),
       onAbilityFeedback: feedback => setDungeonAbilityFeedback(feedback || null),
+      onRuntimeHeartbeat: detail => runtimeV450.simulationStep(runtimeNowV450(), detail),
+      onRuntimeFault: detail => runtimeV450.simulationFault(runtimeNowV450(), detail),
+      onRuntimePhase: detail => {
+        if (detail?.phase === 'terminal') runtimeV450.setTerminal();
+      },
       onHudUpdate: next => setDungeonHud(previous => {
         const normalized = { ...EMPTY_DUNGEON_HUD_STATE_V396, ...next };
         return sameDungeonHudStateV396(previous, normalized) ? previous : normalized;
@@ -183,21 +204,90 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
 
     createDungeonScene(scene, canvasRef.current, engine, {...data, qualityProfile});
 
-    engine.runRenderLoop(() => {
-      if (scene && scene.activeCamera) scene.render();
-    });
+    // An exception inside any Babylon before-render observer must not escape
+    // into requestAnimationFrame and leave a frozen canvas with live React UI.
+    const renderDungeonFrameV450 = () => {
+      runtimeV450.frameAttempt(runtimeNowV450());
+      if (!scene?.activeCamera || (typeof scene.isDisposed === 'function' && scene.isDisposed())) return;
+      try {
+        scene.render();
+        runtimeV450.frameSuccess(runtimeNowV450());
+      } catch (error) {
+        const errors = runtimeV450.frameError(runtimeNowV450(), error);
+        if (errors === 1 || errors === DUNGEON_RUNTIME_LIMITS_V450.maxConsecutiveRenderErrors) {
+          console.error('[DUNGEON_RUNTIME_RENDER_ERROR_V450]', error, runtimeV450.snapshot(runtimeNowV450()));
+        }
+        if (errors >= DUNGEON_RUNTIME_LIMITS_V450.maxConsecutiveRenderErrors) {
+          // Never spin forever on a broken scene or manufacture a victory.
+          runtimeV450.setRenderStopped(true);
+          engine.stopRenderLoop(renderDungeonFrameV450);
+        }
+      }
+    };
+    engine.runRenderLoop(renderDungeonFrameV450);
 
     const handleResize = () => engine.resize();
+    const handleVisibilityV450 = () => {
+      runtimeV450.setVisible(document.visibilityState !== 'hidden', runtimeNowV450());
+      if (document.visibilityState !== 'hidden') engine.resize();
+    };
+    const runtimeCanvasV450 = canvasRef.current;
+    const handleContextLostV450 = event => {
+      event.preventDefault();
+      runtimeV450.setContextLost(true, runtimeNowV450());
+      publishRuntimeAlertV450(runtimeV450.inspect(runtimeNowV450()));
+    };
+    const handleContextRestoredV450 = () => {
+      runtimeV450.setContextLost(false, runtimeNowV450());
+      engine.resize();
+    };
     window.addEventListener('resize', handleResize);
+    document.addEventListener('visibilitychange', handleVisibilityV450);
+    runtimeCanvasV450?.addEventListener('webglcontextlost', handleContextLostV450, false);
+    runtimeCanvasV450?.addEventListener('webglcontextrestored', handleContextRestoredV450, false);
+    const runtimeWatchdogV450 = globalThis.setInterval(() => {
+      if (runtimeDisposedV450) return;
+      const now = runtimeNowV450();
+      const status = runtimeV450.inspect(now, {
+        isDisposed: typeof scene.isDisposed === 'function' ? scene.isDisposed() : Boolean(scene.isDisposed),
+      });
+      if (['render_stalled', 'render_exception'].includes(status.state) && runtimeV450.canRestart()) {
+        // One bounded render-loop rearm, preserving the same scene and battle.
+        // A persistent exception is surfaced, not silently reset or rewarded.
+        runtimeV450.noteRestart(now);
+        engine.stopRenderLoop(renderDungeonFrameV450);
+        engine.runRenderLoop(renderDungeonFrameV450);
+        console.warn('[DUNGEON_RUNTIME_REARM_V450]', runtimeV450.snapshot(now));
+      } else {
+        publishRuntimeAlertV450(status);
+        if (['render_stalled', 'render_exception', 'simulation_stalled', 'webgl_context_lost'].includes(status.state)) {
+          if (loggedRuntimeStatusV450 !== status.state) {
+            loggedRuntimeStatusV450 = status.state;
+            console.warn('[DUNGEON_RUNTIME_STALL_V450]', status);
+          }
+        } else loggedRuntimeStatusV450 = null;
+      }
+    }, DUNGEON_RUNTIME_LIMITS_V450.inspectIntervalMs);
 
     return () => {
+      runtimeDisposedV450 = true;
+      runtimeV450.close();
+      globalThis.clearInterval(runtimeWatchdogV450);
+      document.removeEventListener('visibilitychange', handleVisibilityV450);
+      runtimeCanvasV450?.removeEventListener('webglcontextlost', handleContextLostV450, false);
+      runtimeCanvasV450?.removeEventListener('webglcontextrestored', handleContextRestoredV450, false);
       window.removeEventListener('resize', handleResize);
+      engine.stopRenderLoop(renderDungeonFrameV450);
       performance.dispose();
       dungeonAbilityControllerRef.current = null;
       scene.dispose();
       engine.dispose();
     };
-  }, [gsRef, lang, setScreen, saveUserProfile, gameAction, getRealTime]);
+  // App.jsx recreates getRealTime on parent renders. It reads gsRef.current,
+  // so retaining the initial function is safe; including it here tears down
+  // Babylon during unrelated account/UI refreshes and can interrupt a run.
+  // gameAction belongs to the retreat handler, not this scene-owning effect.
+  }, [gsRef, lang, setScreen]);
 
   const retreat = async () => {
     if (retreatLockRef.current) return;
@@ -231,6 +321,18 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
         style={{ display: 'block', width: '100%', height: '100%', touchAction: 'none', outline: 'none' }}
       />
 
+      {dungeonRuntimeAlert && <div role="alert" data-dungeon-runtime-v450="true" style={{
+        position: 'absolute', top: '18%', left: '10%', right: '10%', zIndex: 60,
+        padding: '10px 12px', border: '1px solid #ffbb66', borderRadius: 10,
+        color: '#ffe5bd', background: 'rgba(20, 13, 14, 0.9)',
+        fontSize: 12, textAlign: 'center', pointerEvents: 'none',
+      }}>
+        {lang === 'vi' ? 'Dungeon dang gap loi cap nhat. Co the Rut lui an toan.'
+          : 'Dungeon update stalled. You can safely retreat.'}
+        <div style={{opacity: .8, marginTop: 4}}>
+          {`QA ${dungeonRuntimeAlert.state} | frame ${dungeonRuntimeAlert.frameCount} | tick ${dungeonRuntimeAlert.simulationCount} | ${dungeonRuntimeAlert.lastFault?.message || 'no exception'}`}
+        </div>
+      </div>}
 
       {isDungeonQaRunV391(gsRef.current?.dungeonQa, gsRef.current?.selectedDungeonId) &&
         <DungeonQaEvidencePanelV400 report={dungeonQaEvidence} lang={lang} />}
