@@ -23,7 +23,7 @@
     "check:graphics21:full": "npm run check:phase2 && npm run check:graphics21",
     "check:catalog": "node scripts/check-product-catalog.mjs && node scripts/check-background-catalog.mjs && node scripts/background-asset-manifest.mjs --check && npm run check:asset-contracts && npm run check:content-v430",
     "check:bundle": "node scripts/check-startup-bundle.mjs",
-    "prebuild": "npm run assets:manifest && npm run check:catalog && npm run check:ui-v440 && npm run check:ui-v441 && npm run check:ui-v442 && npm run check:ui-v443 && npm run check:ui-v444 && npm run check:ui-v445 && npm run check:ui-v446 && npm run check:ui-v447",
+    "prebuild": "npm run assets:manifest && npm run check:catalog && npm run check:ui-v440 && npm run check:ui-v441 && npm run check:ui-v442 && npm run check:ui-v443 && npm run check:ui-v444 && npm run check:ui-v445 && npm run check:ui-v446 && npm run check:ui-v447 && npm run check:ui-v448",
     "build:mobile": "npm run build && node scripts/prepare-mobile-bundle.mjs",
     "check:backgrounds": "node scripts/check-background-catalog.mjs && node scripts/background-asset-manifest.mjs --check",
     "backgrounds:manifest": "node scripts/background-asset-manifest.mjs --write",
@@ -55,7 +55,8 @@
     "check:ui-v444": "node --test tests/portalCommandDeckV444.test.mjs",
     "check:ui-v445": "node --test tests/portalHangarLayoutV445.test.mjs",
     "check:ui-v446": "node --test tests/portalHangarStructuralV446.test.mjs",
-    "check:ui-v447": "node --test tests/portalHangarSciFiVisualV447.test.mjs"
+    "check:ui-v447": "node --test tests/portalHangarSciFiVisualV447.test.mjs",
+    "check:ui-v448": "node --test tests/portalAssetNativeIconsV448.test.mjs"
   },
   "dependencies": {
     "@babylonjs/core": "^9.5.1",

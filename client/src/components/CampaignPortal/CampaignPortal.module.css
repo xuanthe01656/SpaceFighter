@@ -477,7 +477,7 @@
   .hqLaunchCopy small { display: none; }
 }
 
-/* V4.4.6 STRUCTURAL FLIGHT HUB retained; V4.4.7 AURORA TACTICAL visual authority.
+/* V4.4.6 STRUCTURAL FLIGHT HUB retained; V4.4.7 AURORA TACTICAL visual authority; V4.4.8 native icon refinement.
    This block REPLACES (does not stack on) the former V446 layout contract.
    The original photo background and all Portal routes/handlers are preserved. */
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] {
@@ -651,17 +651,34 @@
   justify-content: center;
   gap: 5px;
   overflow: visible;
-  border: 1px solid rgba(80,212,244,.36);
-  border-radius: 3px 13px 3px 13px;
+
+  border: 0;
+
+  border-radius: 0;
+
   clip-path: none;
   color: #d9f4ff;
-  background: linear-gradient(135deg, rgba(7,43,64,.91), rgba(2,14,30,.93));
-  box-shadow: inset 2px 0 0 rgba(62,223,255,.5), 0 10px 19px rgba(0,0,0,.36);
+  background: transparent;
+  box-shadow: none;
   text-align: center;
   white-space: normal;
   backdrop-filter: none;
   pointer-events: auto;
 }
+/* The angular glass is on a pseudo layer, NOT clipped on the button:
+   notification badges at top:-5px/right:-5px remain visible and tappable buttons stay full size. */
+.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .sideMenu > *::before,
+.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .leftSidebar > *::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  content: '';
+  pointer-events: none;
+  clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 11px, 100% 100%, 11px 100%, 0 calc(100% - 11px));
+  background: linear-gradient(135deg, rgba(7,43,64,.91), rgba(2,14,30,.93));
+}
+.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .sideMenu > * > :not(.notiBadge),
+.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .leftSidebar > * > :not(.notiBadge) { position: relative; z-index: 1; }
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .sideMenu > *:nth-child(1),
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .leftSidebar > *:nth-child(1) { grid-column: 1; grid-row: 1; }
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .sideMenu > *:nth-child(2),
@@ -687,8 +704,8 @@
   white-space: normal;
 }
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .topupBtn {
-  border-color: rgba(255,121,180,.62);
-  box-shadow: inset 2px 0 0 #ef79b5, 0 9px 17px rgba(0,0,0,.36);
+  border-color: transparent;
+  box-shadow: none;
 }
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .sideBtn:focus-visible,
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .bottomNav button:focus-visible,
@@ -727,39 +744,42 @@
   align-items: center;
   justify-content: center;
   gap: clamp(5px,1.3vw,10px);
-  overflow: hidden;
-  border-radius: 3px 14px 3px 14px;
+
+  overflow: visible;
+
+  border-radius: 0;
   clip-path: none;
   white-space: normal;
 }
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .subModeBtn {
   grid-area: dungeon;
-  border: 1px solid rgba(185,251,133,.73);
+
+  border: 0;
   color: #e7ffd4;
-  background:
-    linear-gradient(130deg, rgba(4,20,22,.20),rgba(3,14,25,.26)),
-    url('/assets/ui/spacefighter-hud-v3/neo_buttons/sf_neo_button_01__dungeon_normal.webp') center / 100% 100% no-repeat,
-    #092a26;
-  box-shadow: 0 0 15px rgba(102,199,122,.18);
+  background: url('/assets/ui/spacefighter-hud-v3/neo_buttons/sf_neo_button_01__dungeon_normal.webp') center / 100% 100% no-repeat transparent;
+
+  box-shadow: none;
 }
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .mainLaunchBtn {
   grid-area: campaign;
-  border: 1px solid #70f0ff;
-  background:
-    linear-gradient(130deg, rgba(2,24,45,.14),rgba(3,17,34,.20)),
-    url('/assets/ui/spacefighter-hud-v3/neo_buttons/sf_neo_button_01__campaign_normal.webp') center / 100% 100% no-repeat,
-    #073955;
-  box-shadow: 0 0 22px rgba(66,215,252,.24);
+
+  border: 0;
+  background: url('/assets/ui/spacefighter-hud-v3/neo_buttons/sf_neo_button_01__campaign_normal.webp') center / 100% 100% no-repeat transparent;
+
+  box-shadow: none;
 }
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .subModeIcon,
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .launchIconBg {
   width: clamp(30px,7vw,43px);
   height: clamp(30px,7vw,43px);
   flex: 0 0 auto;
-  border: 1px solid rgba(202,248,255,.31);
-  border-radius: 7px;
+
+  border: 0;
+
+  border-radius: 0;
   color: #e7fcff;
-  background: rgba(1,12,27,.63);
+
+  background: transparent;
   box-shadow: none;
 }
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .subModeIcon svg,
@@ -808,16 +828,27 @@
   align-items: center;
   justify-content: center;
   gap: 5px;
-  overflow: hidden;
-  border: 1px solid rgba(108,209,243,.39);
-  border-radius: 3px 13px 3px 13px;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
   clip-path: none;
   color: #ccecf7;
-  background: linear-gradient(150deg, rgba(7,38,58,.96),rgba(2,13,28,.98));
-  box-shadow: inset 0 -2px 0 rgba(42,182,220,.39),0 7px 16px rgba(0,0,0,.35);
+  background: transparent;
+  box-shadow: none;
   backdrop-filter: none;
   white-space: normal;
 }
+/* Dock frame painted beneath its children, leaving future red notification badges unclipped. */
+.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .bottomNav > *::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  content: '';
+  pointer-events: none;
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+  background: linear-gradient(150deg, rgba(7,38,58,.96),rgba(2,13,28,.98));
+}
+.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .bottomNav > * > :not(.notiBadge) { position: relative; z-index: 1; }
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .bottomNav .navIcon,
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .bottomNav .navIcon svg {
   width: 23px;
@@ -837,11 +868,47 @@
   white-space: normal;
 }
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] [data-sf-hq-entry-v446] {
-  border-color: rgba(112,235,250,.77);
+  border: 0;
   color: #ecfdff;
-  background: linear-gradient(155deg,rgba(11,74,94,.97),rgba(4,24,41,.99));
-  box-shadow: inset 0 -3px 0 rgba(85,223,246,.69),0 0 14px rgba(58,219,243,.15);
+  background: transparent;
+  box-shadow: none;
 }
+.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .bottomNav [data-sf-hq-entry-v446]::before {
+  background: linear-gradient(150deg,rgba(10,70,91,.98),rgba(4,24,41,.99));
+}
+
+/* V4.4.8 ICONS: local 192px WebP assets from reviewed icons.zip, never button-frame substitutes.
+   The original UI icon remains in the DOM as onError fallback; no network CDN dependency. */
+.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] [data-sf-icon-v448] :is(.sideIcon,.navIcon,.subModeIcon,.launchIconBg) {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: clamp(28px, 6.4vw, 36px);
+  height: clamp(28px, 6.4vw, 36px);
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  filter: none;
+}
+.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .bottomNav [data-sf-icon-v448] .navIcon { width: clamp(29px,6vw,35px); height: clamp(29px,6vw,35px); }
+.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .actionArea [data-sf-icon-v448] :is(.subModeIcon,.launchIconBg) { width: clamp(34px,7.7vw,47px); height: clamp(34px,7.7vw,47px); }
+.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] [data-sf-icon-v448] .assetIconV448 {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(0 3px 5px rgba(0,0,0,.33));
+}
+.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] [data-sf-icon-v448] .assetIconV448[hidden] { display: none !important; }
+.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] [data-sf-icon-v448] :is(.sideIcon,.navIcon,.subModeIcon,.launchIconBg):not([data-sf-icon-fallback="true"]) > :not(.assetIconV448) { display: none; }
+/* The CSS cutout follows the asset, and keyboard focus remains available. */
+.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] [data-sf-icon-v448]:focus-visible { outline: 2px solid #ffffff; outline-offset: -3px; }
+
 @media (max-width: 380px) and (orientation: portrait) {
   .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] {
     --sf-hub-side-w: clamp(68px,20vw,82px);

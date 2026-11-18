@@ -188,23 +188,23 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
       <div className={styles.leftSidebar}>
         {/* THAY ĐỔI Ở ĐÂY: Gắn sự kiện mở Popup Nạp đầu */}
         {!hasClaimedFirstTopup && (
-          <motion.button variants={slideLeft} className={`${styles.sideBtn} ${styles.topupBtn}`} onClick={() => setShowFirstTopup(true)}>
-            <div className={styles.sideIcon}><Icons.Gift /></div>
+          <motion.button data-sf-icon-v448="topup" variants={slideLeft} className={`${styles.sideBtn} ${styles.topupBtn}`} onClick={() => setShowFirstTopup(true)}>
+            <div className={styles.sideIcon}><img className={styles.assetIconV448} src={import.meta.env.BASE_URL + 'assets/ui/spacefighter-portal-icons-v448/portal_topup_reward.webp'} alt="" aria-hidden="true" decoding="async" onError={(event) => { event.currentTarget.hidden = true; event.currentTarget.parentElement.dataset.sfIconFallback = 'true'; }} /><Icons.Gift /></div>
             <span className={styles.sideText}>{lang === 'vi' ? 'NẠP ĐẦU' : 'FIRST TOP-UP'}</span>
           </motion.button>
         )}
-        <motion.button variants={slideLeft} className={`${styles.sideBtn} ${styles.badgedButton}`} onClick={() => setShowAttendance(true)}>
-          <div className={styles.sideIcon}><Icons.Event /></div>
+        <motion.button data-sf-icon-v448="attendance" variants={slideLeft} className={`${styles.sideBtn} ${styles.badgedButton}`} onClick={() => setShowAttendance(true)}>
+          <div className={styles.sideIcon}><img className={styles.assetIconV448} src={import.meta.env.BASE_URL + 'assets/ui/spacefighter-portal-icons-v448/portal_attendance_calendar.webp'} alt="" aria-hidden="true" decoding="async" onError={(event) => { event.currentTarget.hidden = true; event.currentTarget.parentElement.dataset.sfIconFallback = 'true'; }} /><Icons.Event /></div>
           <span className={styles.sideText}>{lang === 'vi' ? 'ĐIỂM DANH' : 'ATTENDANCE'}</span>
           {canClaimAttendance && <span className={styles.notiBadge}>!</span>}
         </motion.button>
-        <motion.button variants={slideLeft} className={`${styles.sideBtn} ${styles.eventBtn}`} onClick={() => setScreen('events')}>
-          <div className={styles.sideIcon}><Icons.Event /></div>
+        <motion.button data-sf-icon-v448="events" variants={slideLeft} className={`${styles.sideBtn} ${styles.eventBtn}`} onClick={() => setScreen('events')}>
+          <div className={styles.sideIcon}><img className={styles.assetIconV448} src={import.meta.env.BASE_URL + 'assets/ui/spacefighter-portal-icons-v448/portal_event.webp'} alt="" aria-hidden="true" decoding="async" onError={(event) => { event.currentTarget.hidden = true; event.currentTarget.parentElement.dataset.sfIconFallback = 'true'; }} /><Icons.Event /></div>
           <span className={styles.sideText}>{lang === 'vi' ? 'SỰ KIỆN' : 'EVENTS'}</span>
           {activeEventCount > 0 && <span className={styles.notiBadge}>{activeEventCount}</span>}
         </motion.button>
-        <motion.button variants={slideLeft} className={`${styles.sideBtn} ${styles.badgedButton}`} onClick={() => setScreen('missions')}>
-          <div className={styles.sideIcon}><Icons.Mission /></div>
+        <motion.button data-sf-icon-v448="missions" variants={slideLeft} className={`${styles.sideBtn} ${styles.badgedButton}`} onClick={() => setScreen('missions')}>
+          <div className={styles.sideIcon}><img className={styles.assetIconV448} src={import.meta.env.BASE_URL + 'assets/ui/spacefighter-portal-icons-v448/portal_missions.webp'} alt="" aria-hidden="true" decoding="async" onError={(event) => { event.currentTarget.hidden = true; event.currentTarget.parentElement.dataset.sfIconFallback = 'true'; }} /><Icons.Mission /></div>
           <span className={styles.sideText}>{lang === 'vi' ? 'NHIỆM VỤ' : 'MISSIONS'}</span>
           {missionBadgeCount > 0 && <span className={styles.notiBadge}>{missionBadgeCount}</span>}
         </motion.button>
@@ -216,23 +216,23 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
 
       {/* BOTTOM NAVIGATION */}
       <motion.div variants={itemVariants} className={styles.bottomNav}>
-        <button type="button"
+        <button data-sf-icon-v448="headquarters" type="button"
           className={`${styles.navBtn} ${styles.managementNavBtn}`}
           data-sf-hq-entry-v446="fleet-hub-v4.4.6"
           onClick={() => { openManagementHqV444(gsRef); gsRef.current.hqReturnScreen = 'campaign_portal'; handleNav('hq'); }}
           aria-label={lang === 'vi' ? 'Tổng hành dinh' : 'Headquarters'}>
-          <span className={styles.navIcon} aria-hidden="true">
+          <span className={styles.navIcon} aria-hidden="true"><img className={styles.assetIconV448} src={import.meta.env.BASE_URL + 'assets/ui/spacefighter-portal-icons-v448/portal_headquarters.webp'} alt="" aria-hidden="true" decoding="async" onError={(event) => { event.currentTarget.hidden = true; event.currentTarget.parentElement.dataset.sfIconFallback = 'true'; }} />
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 20V9l9-6 9 6v11M3 9h18M7 20v-6h10v6M9 14l3-3 3 3" />
             </svg>
           </span>
           <span>{lang === 'vi' ? 'TỔNG HÀNH DINH' : 'HEADQUARTERS'}</span>
         </button>
-        <button className={styles.navBtn} onClick={() => handleNav('inventory')}>
-          <div className={styles.navIcon}><Icons.Armory /></div><span>{lang === 'vi' ? 'KHO TRANG BỊ' : 'INVENTORY'}</span>
+        <button data-sf-icon-v448="inventory" className={styles.navBtn} onClick={() => handleNav('inventory')}>
+          <div className={styles.navIcon}><img className={styles.assetIconV448} src={import.meta.env.BASE_URL + 'assets/ui/spacefighter-portal-icons-v448/portal_inventory.webp'} alt="" aria-hidden="true" decoding="async" onError={(event) => { event.currentTarget.hidden = true; event.currentTarget.parentElement.dataset.sfIconFallback = 'true'; }} /><Icons.Armory /></div><span>{lang === 'vi' ? 'KHO TRANG BỊ' : 'INVENTORY'}</span>
         </button>
-        <button className={styles.navBtn} onClick={() => handleNav('pilots')}>
-          <div className={styles.navIcon}><Icons.Barracks /></div><span>{lang === 'vi' ? 'PHI CÔNG' : 'PILOTS'}</span>
+        <button data-sf-icon-v448="pilots" className={styles.navBtn} onClick={() => handleNav('pilots')}>
+          <div className={styles.navIcon}><img className={styles.assetIconV448} src={import.meta.env.BASE_URL + 'assets/ui/spacefighter-portal-icons-v448/portal_pilots.webp'} alt="" aria-hidden="true" decoding="async" onError={(event) => { event.currentTarget.hidden = true; event.currentTarget.parentElement.dataset.sfIconFallback = 'true'; }} /><Icons.Barracks /></div><span>{lang === 'vi' ? 'PHI CÔNG' : 'PILOTS'}</span>
         </button>
         <button className={styles.navBtn} onClick={() => handleNav('shop_campaign')}>
           <div className={styles.navIcon}><Icons.Supply /></div><span>{lang === 'vi' ? 'CỬA HÀNG' : 'SHOP'}</span>
@@ -241,11 +241,11 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
 
       {/* BOTTOM RIGHT ACTION AREA */}
 
-<motion.div variants={itemVariants} className={styles.actionArea}>        <button className={styles.subModeBtn} onClick={() => handleNav('dungeon_select')}>
-          <div className={styles.subModeIcon}><Icons.Swords /></div><span>{lang === 'vi' ? 'PHÓ BẢN' : 'DUNGEON'}</span>
+<motion.div variants={itemVariants} className={styles.actionArea}>        <button data-sf-icon-v448="dungeon" className={styles.subModeBtn} onClick={() => handleNav('dungeon_select')}>
+          <div className={styles.subModeIcon}><img className={styles.assetIconV448} src={import.meta.env.BASE_URL + 'assets/ui/spacefighter-portal-icons-v448/portal_dungeon.webp'} alt="" aria-hidden="true" decoding="async" onError={(event) => { event.currentTarget.hidden = true; event.currentTarget.parentElement.dataset.sfIconFallback = 'true'; }} /><Icons.Swords /></div><span>{lang === 'vi' ? 'PHÓ BẢN' : 'DUNGEON'}</span>
         </button>
-        <button className={styles.mainLaunchBtn} onClick={() => handleNav('galaxy_map')}>
-          <div className={styles.launchIconBg}><Icons.Map /></div>
+        <button data-sf-icon-v448="campaign" className={styles.mainLaunchBtn} onClick={() => handleNav('galaxy_map')}>
+          <div className={styles.launchIconBg}><img className={styles.assetIconV448} src={import.meta.env.BASE_URL + 'assets/ui/spacefighter-portal-icons-v448/portal_campaign.webp'} alt="" aria-hidden="true" decoding="async" onError={(event) => { event.currentTarget.hidden = true; event.currentTarget.parentElement.dataset.sfIconFallback = 'true'; }} /><Icons.Map /></div>
           <div className={styles.launchContent}>
             <span className={styles.launchTitle}>{lang === 'vi' ? 'CHIẾN DỊCH' : 'CAMPAIGN'}</span>
             <span className={styles.launchSub}>{lang === 'vi' ? 'VÀO BẢN ĐỒ' : 'ENTER MAP'}</span>

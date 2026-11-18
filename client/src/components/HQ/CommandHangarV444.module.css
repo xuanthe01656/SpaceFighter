@@ -549,7 +549,7 @@
 }
 
 /* V4.4.6: HQ is a management surface, never a duplicate Portal.
-   V4.4.7 FLEET INDUSTRIAL visual authority replaces the former V446 block.
+   V4.4.7 FLEET INDUSTRIAL visual authority; V4.4.8 frame de-duplication replaces the former V446 block.
    All equipment selectors, pilot flows, mission context and commands stay in JSX. */
 .screen[data-sf-command-hangar="portal-hangar-v4.4.4"][data-sf-visual-v447="fleet-industrial"] {
   --hangar-cyan: #68e9ff;
@@ -871,22 +871,20 @@
   justify-content: center;
   gap: 7px;
   padding: 8px 10px;
-  border-radius: 4px 13px 4px 13px;
+
+  border-radius: 0;
 }
 .screen[data-sf-visual-v447="fleet-industrial"] .actionBar .primaryAction {
-  border: 1px solid rgba(119,236,255,.86);
+  border: 0;
   color: #e9fbff;
-  background: linear-gradient(130deg,rgba(2,16,31,.09),rgba(2,14,29,.16)),
-    url('/assets/ui/spacefighter-hud-v3/neo_buttons/sf_neo_button_01__campaign_normal.webp') center / 100% 100% no-repeat,
-    #11435f;
-  box-shadow: 0 0 19px rgba(67,204,239,.17);
+  background: url('/assets/ui/spacefighter-hud-v3/neo_buttons/sf_neo_button_01__campaign_normal.webp') center / 100% 100% no-repeat transparent;
+
+  box-shadow: none;
 }
 .screen[data-sf-visual-v447="fleet-industrial"] .actionBar .secondaryAction {
-  border: 1px solid rgba(105,196,222,.43);
+  border: 0;
   color: #d3eff9;
-  background: linear-gradient(135deg,rgba(2,15,30,.15),rgba(3,14,25,.32)),
-    url('/assets/ui/spacefighter-hud-v3/neo_buttons/sf_neo_button_03__campaign_normal.webp') center / 100% 100% no-repeat,
-    #0b263e;
+  background: url('/assets/ui/spacefighter-hud-v3/neo_buttons/sf_neo_button_03__campaign_normal.webp') center / 100% 100% no-repeat transparent;
 }
 .screen[data-sf-visual-v447="fleet-industrial"] .actionBar button strong {
   font: 800 clamp(12px,2.7vw,18px)/1.1 var(--sf-product-title-font,system-ui,sans-serif);
