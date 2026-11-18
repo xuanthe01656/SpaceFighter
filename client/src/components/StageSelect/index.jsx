@@ -4,8 +4,9 @@ import { PLANET_CONFIG, STAGE_CONFIG, PLANET_BOSSES, PLANET_STAGE_NAMES } from '
 import styles from './StageSelect.module.css';
 
 import { normalizeCampaignProgressV443, openCampaignPrebattleHqV443 } from '../../game/navigation/HangarNavigationV443.js';
+import { normalizeCampaignProgressV444, openCampaignPrebattleHqV444 } from '../../game/navigation/HangarNavigationV444.js';
 export default function StageSelect({ gsRef, setScreen, lang }) {
-  normalizeCampaignProgressV443(gsRef.current.campaignData?.progress || (gsRef.current.campaignData.progress = {})); // V443_STAGE_PROGRESS_NORMALIZED
+  normalizeCampaignProgressV444(gsRef.current.campaignData?.progress || (gsRef.current.campaignData.progress = {})); // V443_STAGE_PROGRESS_NORMALIZED
   const [hoveredId, setHoveredId] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
 
@@ -45,7 +46,7 @@ export default function StageSelect({ gsRef, setScreen, lang }) {
     setTimeout(() => {
       progress.selectedStage = stage.id;
       gsRef.current.gameMode = 'campaign';
-      openCampaignPrebattleHqV443(gsRef);
+      openCampaignPrebattleHqV443(gsRef); openCampaignPrebattleHqV444(gsRef);
     setScreen('hq');
     }, 320);
   };

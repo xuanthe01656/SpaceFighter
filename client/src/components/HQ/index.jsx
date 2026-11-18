@@ -14,6 +14,8 @@ import CommandHangarV442 from './CommandHangarV442.jsx';
 
 import CommandHangarV443 from './CommandHangarV443.jsx';
 import { HQ_MODE_PREBATTLE_V443, clearHqContextV443, resolveHqContextV443 } from '../../game/navigation/HangarNavigationV443.js';
+import CommandHangarV444 from './CommandHangarV444.jsx';
+import { HQ_MODE_PREBATTLE_V444, clearHqContextV444, resolveHqContextV444 } from '../../game/navigation/HangarNavigationV444.js';
 // Hàm tiện ích: Định dạng số liệu ngắn gọn (1K, 1.5M, 2B) đồng bộ toàn App
 const formatCompactNumber = (number) => {
   if (number < 1000) return number.toString();
@@ -220,6 +222,64 @@ export default function HQ({ gsRef, setScreen, lang, saveUserProfile, gameAction
 
   const popupItemsList = selectingSlot ? getAvailableItemsForPopup() : [];
   const currentlyEquippedId = selectingSlot ? loadout[selectingSlot] : null;
+  const hqContextV444 = resolveHqContextV444({ gsRef, gameMode });
+  const prebattleV444 = hqContextV444.mode === HQ_MODE_PREBATTLE_V444;
+  const commandHangarEnabledV444 = import.meta.env.VITE_SF_PORTAL_COMMAND_DECK_V444 !== 'false';
+  if (commandHangarEnabledV444) {
+    const dungeonQaRunV444 = isDungeonQaRunV391(gsRef.current?.dungeonQa, targetDungeon);
+    const cloudQaVisibleV444 = import.meta.env.VITE_C8_CLOUD_QA_UI === 'true' && Boolean(auth.currentUser)
+      && gameMode === 'campaign' && Number(progress.currentPlanet) === 1 && Number(progress.selectedStage) === 1;
+    return (
+      <CommandHangarV444
+        gsRef={gsRef}
+        setScreen={setScreen}
+        lang={lang}
+        hangarMode={hqContextV444.mode}
+        gameMode={gameMode}
+        targetStage={targetStage}
+        dungeonName={dName}
+        coins={coins}
+        diamonds={diamonds}
+        currentAircraft={currentAircraft}
+        aircraftInfo={aircraftInfo}
+        shipVisualInfo={shipVisualInfo}
+        currentPilot={currentPilot}
+        calculatedCP={calculatedCP}
+        currentMainGun={currentMainGun}
+        currentWingman={currentWingman}
+        currentArmor={currentArmor}
+        currentDrone={currentDrone}
+        mainGunItem={mainGunItem}
+        wingmanItem={wingmanItem}
+        armorItem={armorItem}
+        droneItem={droneItem}
+        getDynamicStat={getDynamicStat}
+        ownedAircrafts={campaignData.ownedAircrafts || {}}
+        aircraftCatalog={AIRCRAFTS}
+        selectingSlot={selectingSlot}
+        setSelectingSlot={setSelectingSlot}
+        popupItemsList={popupItemsList}
+        currentlyEquippedId={currentlyEquippedId}
+        slotTitles={slotTitles}
+        onEquipItem={(uuid) => handleEquipFromPopup(uuid)}
+        onSelectAircraft={(id) => handleEquipFromPopup(id, 'aircraft')}
+        onUnequipItem={handleUnequipFromPopup}
+        isLaunching={isLaunching}
+        onLaunch={prebattleV444 ? handleLaunch : null}
+        onBack={() => {
+          const returnScreen = hqContextV444.returnScreen;
+          clearHqContextV444(gsRef.current);
+          setScreen(returnScreen);
+        }}
+        Icons={Icons}
+        showCloudQa={cloudQaVisibleV444}
+        onCloudQa={() => setScreen('cloud_qa_alpha1')}
+        dungeonQaLabel={dungeonQaRunV444
+          ? `DUNGEON QA · NO ENERGY · NO REWARDS · NO PROFILE WRITES${gsRef.current.dungeonQa?.directRoomId ? ` · ${gsRef.current.dungeonQa.directRoomId}` : ''}`
+          : null}
+      />
+    );
+  }
   const hqContextV443 = resolveHqContextV443({ gsRef, gameMode });
   const prebattleV443 = hqContextV443.mode === HQ_MODE_PREBATTLE_V443;
   const commandHangarEnabledV443 = import.meta.env.VITE_SF_PORTAL_HANGAR_V443 !== 'false';

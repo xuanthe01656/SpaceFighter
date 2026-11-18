@@ -524,3 +524,131 @@
   .bottomNav .hqLaunchBtn,
   .bottomNav .managementNavBtn { flex-direction: column !important; gap: 4px !important; padding-inline: 3px !important; font-size: 7.5px !important; }
 }
+
+/* V4.4.4 PORTAL COMMAND DECK
+ * Existing handlers and modals remain in CampaignPortal. This block only
+ * reorganizes the presentation into top resources, side utilities, a central
+ * command-deck hero, combat CTAs and a four-item management dock. */
+.container[data-sf-portal-layout-v444="command-deck"] {
+  --v444-dock-height: calc(82px + env(safe-area-inset-bottom, 0px));
+  min-height: 100dvh;
+  overflow: hidden;
+}
+.container[data-sf-portal-layout-v444="command-deck"] .profileBtn {
+  top: max(14px, env(safe-area-inset-top, 0px));
+  left: max(12px, env(safe-area-inset-left, 0px));
+  max-width: min(42vw, 310px);
+}
+.container[data-sf-portal-layout-v444="command-deck"] .currencyBar,
+.container[data-sf-portal-layout-v444="command-deck"] :global([class*="currencyBar"]) {
+  top: max(14px, env(safe-area-inset-top, 0px));
+  right: max(12px, env(safe-area-inset-right, 0px));
+  gap: clamp(5px, 1vw, 10px);
+}
+.container[data-sf-portal-layout-v444="command-deck"] .sideMenu,
+.container[data-sf-portal-layout-v444="command-deck"] :global([class*="sideMenu"]) {
+  position: absolute;
+  top: clamp(176px, 23dvh, 270px);
+  right: max(10px, env(safe-area-inset-right, 0px));
+  left: max(10px, env(safe-area-inset-left, 0px));
+  z-index: 6;
+  display: grid;
+  grid-template-columns: clamp(82px, 23vw, 168px) clamp(82px, 23vw, 168px);
+  grid-auto-rows: minmax(64px, auto);
+  justify-content: space-between;
+  gap: clamp(8px, 1.8dvh, 16px) 0;
+  width: auto;
+  pointer-events: none;
+}
+.container[data-sf-portal-layout-v444="command-deck"] .sideBtn {
+  width: 100%;
+  min-width: 0;
+  min-height: clamp(62px, 8dvh, 88px);
+  padding: 8px 7px;
+  pointer-events: auto;
+  border-radius: 15px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  font-size: clamp(8px, 1.9vw, 13px);
+  line-height: 1.05;
+  text-align: center;
+  white-space: normal;
+}
+.container[data-sf-portal-layout-v444="command-deck"] .sideBtn svg { width: clamp(20px, 4vw, 30px); height: clamp(20px, 4vw, 30px); }
+.container[data-sf-portal-layout-v444="command-deck"] .sideBtn:nth-child(1) { grid-column: 1; grid-row: 1; }
+.container[data-sf-portal-layout-v444="command-deck"] .sideBtn:nth-child(2) { grid-column: 1; grid-row: 2; }
+.container[data-sf-portal-layout-v444="command-deck"] .sideBtn:nth-child(3) { grid-column: 2; grid-row: 1; }
+.container[data-sf-portal-layout-v444="command-deck"] .sideBtn:nth-child(4) { grid-column: 2; grid-row: 2; }
+.container[data-sf-portal-layout-v444="command-deck"] .sideBtn:nth-child(5) { grid-column: 2; grid-row: 3; }
+.container[data-sf-portal-layout-v444="command-deck"] .actionArea {
+  position: absolute;
+  right: max(12px, env(safe-area-inset-right, 0px));
+  bottom: calc(var(--v444-dock-height) + 12px);
+  left: max(12px, env(safe-area-inset-left, 0px));
+  z-index: 10;
+  display: grid !important;
+  grid-template-areas: "dungeon campaign" !important;
+  grid-template-columns: minmax(0, .68fr) minmax(0, 1.32fr) !important;
+  gap: clamp(8px, 2vw, 16px) !important;
+  width: auto !important;
+}
+.container[data-sf-portal-layout-v444="command-deck"] .actionArea .subModeBtn { grid-area: dungeon; min-width: 0; }
+.container[data-sf-portal-layout-v444="command-deck"] .actionArea .mainLaunchBtn { grid-area: campaign; min-width: 0; }
+.container[data-sf-portal-layout-v444="command-deck"] .bottomNav {
+  position: absolute;
+  right: max(10px, env(safe-area-inset-right, 0px));
+  bottom: max(8px, env(safe-area-inset-bottom, 0px));
+  left: max(10px, env(safe-area-inset-left, 0px));
+  z-index: 12;
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: clamp(5px, 1.2vw, 10px) !important;
+  width: auto !important;
+}
+.container[data-sf-portal-layout-v444="command-deck"] .commandDockBtn {
+  --sf-v444-command-tone: #4ddcff;
+}
+.container[data-sf-portal-layout-v444="command-deck"] .bottomNav [data-sf-hq-entry-v443] {
+  display: none !important;
+}
+.container[data-sf-portal-layout-v444="command-deck"] .bottomNav .navBtn,
+.container[data-sf-portal-layout-v444="command-deck"] .bottomNav .managementNavBtn {
+  display: flex !important;
+  min-width: 0 !important;
+  min-height: 66px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  padding: 7px 4px !important;
+  border: 1px solid rgba(78, 217, 248, .31) !important;
+  border-radius: 14px !important;
+  clip-path: none !important;
+  color: #e8faff !important;
+  background: linear-gradient(145deg, rgba(8, 29, 47, .95), rgba(3, 14, 27, .94)) !important;
+  font: 800 clamp(7px, 1.7vw, 11px)/1.08 var(--sf-product-title-font, system-ui, sans-serif) !important;
+  letter-spacing: .03em !important;
+  text-align: center !important;
+  white-space: normal !important;
+}
+.container[data-sf-portal-layout-v444="command-deck"] .bottomNav .navBtn svg,
+.container[data-sf-portal-layout-v444="command-deck"] .bottomNav .managementNavBtn svg { width: clamp(21px, 4vw, 29px); height: clamp(21px, 4vw, 29px); }
+.container[data-sf-portal-layout-v444="command-deck"] .hqLaunchCopy,
+.container[data-sf-portal-layout-v444="command-deck"] .hqLaunchIcon { display: contents; }
+@media (max-width: 430px) and (orientation: portrait) {
+  .container[data-sf-portal-layout-v444="command-deck"] .sideMenu,
+  .container[data-sf-portal-layout-v444="command-deck"] :global([class*="sideMenu"]) {
+    top: max(174px, 21dvh);
+    grid-template-columns: clamp(76px, 22vw, 94px) clamp(76px, 22vw, 94px);
+    gap: 8px 0;
+  }
+  .container[data-sf-portal-layout-v444="command-deck"] .sideBtn { min-height: 60px; font-size: 7.5px; }
+  .container[data-sf-portal-layout-v444="command-deck"] .bottomNav .navBtn,
+  .container[data-sf-portal-layout-v444="command-deck"] .bottomNav .managementNavBtn { flex-direction: column !important; gap: 3px !important; min-height: 64px !important; }
+}
+@media (orientation: landscape) and (max-height: 600px) {
+  .container[data-sf-portal-layout-v444="command-deck"] .sideMenu,
+  .container[data-sf-portal-layout-v444="command-deck"] :global([class*="sideMenu"]) { top: 92px; }
+  .container[data-sf-portal-layout-v444="command-deck"] .actionArea { bottom: 76px; }
+  .container[data-sf-portal-layout-v444="command-deck"] .bottomNav { grid-template-columns: repeat(4, minmax(110px, 1fr)) !important; }
+}

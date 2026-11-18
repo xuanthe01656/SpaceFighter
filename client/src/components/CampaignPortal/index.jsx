@@ -16,6 +16,8 @@ import FirstTopupModal from './FirstTopupModal';
 import AttendanceModal from './AttendanceModal';
 
 import { openManagementHqV443 } from '../../game/navigation/HangarNavigationV443.js';
+import PortalCommandDeckV444 from './PortalCommandDeckV444.jsx';
+import { openManagementHqV444 } from '../../game/navigation/HangarNavigationV444.js';
 const productIcon = name => function ProductPortalIcon(props) {
   return <GameIcon name={name} {...props} />;
 };
@@ -52,7 +54,7 @@ const formatCompactNumber = (number) => {
 export default function CampaignPortal({ gsRef, setScreen, lang, setLang, currentUser, logout, deleteAccount, loginWithGoogle, loginWithApple, saveUserProfile, getRealTime, gameAction }) {
   const platform = Capacitor.getPlatform();
   const [showProfile, setShowProfile] = useState(false);
-  
+
   // STATE cho việc Bật/Tắt Modal Nạp Lần Đầu
   const [showFirstTopup, setShowFirstTopup] = useState(false);
   const [showAttendance, setShowAttendance] = useState(false);
@@ -72,7 +74,7 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
   const activeEventCount = getActiveEvents(getRealTime).length;
   const totalExp = campaignData?.progress?.exp || 0;
   const expData = calculatePlayerLevel(totalExp);
-  
+
   const totalVipPoints = gsRef.current.vipPoints || 0;
   const vipData = calculateVIPLevel(totalVipPoints);
   const [, setMissionRefresh] = useState(0);
@@ -127,10 +129,10 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
     if (gsRef.current?.openAttendance) {
       timeoutId = setTimeout(() => {
         setShowAttendance(true);
-        gsRef.current.openAttendance = false; 
+        gsRef.current.openAttendance = false;
       }, 0);
     }
-    return () => clearTimeout(timeoutId); 
+    return () => clearTimeout(timeoutId);
   }, [gsRef]);
   return (
     <motion.div
@@ -140,8 +142,9 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
       animate="visible"
       data-sf-product-ui={PRODUCT_PORTAL_MIGRATION_VERSION_V441}
       data-sf-home-mode={currentUser ? 'cloud' : 'guest'}
-    >
-      
+
+      data-sf-portal-layout-v444="command-deck">
+
       {/* TOP NAVIGATION & CURRENCY BAR */}
       <div className={styles.topNav}>
         <motion.button variants={itemVariants} className={styles.profileBtn} onClick={() => setShowProfile(true)}>
@@ -216,6 +219,15 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
       <motion.div variants={itemVariants} className={styles.bottomNav}>
         <button
           type="button"
+          className={`${styles.navBtn} ${styles.managementNavBtn} ${styles.commandDockBtn}`}
+          data-sf-hq-entry-v444="portal-command-deck-v4.4.4"
+          onClick={() => { openManagementHqV444(gsRef); gsRef.current.hqReturnScreen = 'campaign_portal'; handleNav('hq'); }}
+        >
+          <Icons.Armory />
+          <span>{lang === 'vi' ? 'TỔNG HÀNH DINH' : 'HANGAR'}</span>
+        </button>
+        <button
+          type="button"
           className={`${styles.navBtn} ${styles.hqLaunchBtn} ${styles.managementNavBtn}`}
           data-sf-hq-entry="command-hangar-v4.4.2"
           data-sf-hq-entry-v443="portal-hangar-v4.4.3"
@@ -236,7 +248,15 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
       </motion.div>
 
       {/* BOTTOM RIGHT ACTION AREA */}
-      <motion.div variants={itemVariants} className={styles.actionArea}>        <button className={styles.subModeBtn} onClick={() => handleNav('dungeon_select')}>
+            <PortalCommandDeckV444
+        gsRef={gsRef}
+        lang={lang}
+        playerName={playerName}
+        currentUser={currentUser}
+        onOpenHq={() => { openManagementHqV444(gsRef); gsRef.current.hqReturnScreen = 'campaign_portal'; handleNav('hq'); }}
+      />
+
+<motion.div variants={itemVariants} className={styles.actionArea}>        <button className={styles.subModeBtn} onClick={() => handleNav('dungeon_select')}>
           <div className={styles.subModeIcon}><Icons.Swords /></div><span>{lang === 'vi' ? 'PHÓ BẢN' : 'DUNGEON'}</span>
         </button>
         <button className={styles.mainLaunchBtn} onClick={() => handleNav('galaxy_map')}>
@@ -249,17 +269,17 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
       </motion.div>
 
       {/* POPUP NẠP LẦN ĐẦU TÁCH RỜI */}
-      <FirstTopupModal 
-        isOpen={showFirstTopup} 
-        onClose={() => setShowFirstTopup(false)} 
-        lang={lang} 
+      <FirstTopupModal
+        isOpen={showFirstTopup}
+        onClose={() => setShowFirstTopup(false)}
+        lang={lang}
         onGoToShop={() => {
           setShowFirstTopup(false);
-          gsRef.current.shopInitialTab = 'topup'; 
-          setScreen('shop_campaign'); 
-        }} 
+          gsRef.current.shopInitialTab = 'topup';
+          setScreen('shop_campaign');
+        }}
       />
-      <AttendanceModal gameAction={gameAction} 
+      <AttendanceModal gameAction={gameAction}
         isOpen={showAttendance}
         onClose={() => setShowAttendance(false)}
         gsRef={gsRef}
@@ -281,7 +301,7 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
               onClick={(e) => e.stopPropagation()}
             >
               <button className={styles.closeModalBtn} onClick={() => setShowProfile(false)}><Icons.Close /></button>
-              
+
               <div className={styles.modalHeader}>
                 <div className={styles.modalAvatarWrap}>
                   {playerAvatar ? (
@@ -296,7 +316,7 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
                     ? (lang === 'vi' ? 'ĐỒNG BỘ ĐÁM MÂY' : 'CLOUD SYNC')
                     : (lang === 'vi' ? 'HỒ SƠ GUEST CỤC BỘ' : 'LOCAL GUEST PROFILE')}
                 </StatusBadge>
-                
+
                 <div className={styles.modalExpContainer}>
                   <div className={styles.modalExpLabel}>
                     <span>{lang === 'vi' ? 'Cấp độ' : 'Level'} {expData.level}</span>
@@ -322,7 +342,7 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
               <div className={styles.langToggleContainer}>
                 <span className={styles.langLabel}>{lang === 'vi' ? 'NGÔN NGỮ / LANG:' : 'LANGUAGE / NGÔN NGỮ:'}</span>
                 <div className={styles.langButtons}>
-                  <button 
+                  <button
                     className={`${styles.langBtn} ${lang === 'vi' ? styles.langActive : ''}`}
                     onClick={() => { if(setLang) { setLang('vi'); secureStorage.setItem('astro_lang', 'vi'); } }}
                   >🇻🇳 VI</button>

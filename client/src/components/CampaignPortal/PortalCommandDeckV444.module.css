@@ -1,0 +1,140 @@
+.root {
+  position: absolute;
+  top: clamp(144px, 18dvh, 220px);
+  left: 50%;
+  z-index: 4;
+  display: grid;
+  width: clamp(176px, 46vw, 430px);
+  min-height: clamp(300px, 46dvh, 520px);
+  padding: 12px 12px 10px;
+  overflow: hidden;
+  transform: translateX(-50%);
+  border: 1px solid rgba(91, 226, 255, .38);
+  border-radius: 26px;
+  color: #e9faff;
+  background:
+    linear-gradient(180deg, rgba(7, 28, 46, .44), rgba(1, 8, 18, .78)),
+    radial-gradient(circle at 50% 34%, rgba(65, 221, 255, .16), transparent 48%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 18px 44px rgba(0,0,0,.26);
+  font-family: var(--sf-product-body-font, system-ui, sans-serif);
+  text-align: left;
+  cursor: pointer;
+  isolation: isolate;
+  appearance: none;
+}
+.root::before {
+  position: absolute;
+  inset: 6px;
+  z-index: -1;
+  border: 1px solid rgba(103, 220, 246, .10);
+  border-radius: 21px;
+  content: '';
+}
+.root:focus-visible { outline: 2px solid #fff; outline-offset: 4px; }
+.windowGlow {
+  position: absolute;
+  top: 18%;
+  left: 50%;
+  z-index: -1;
+  width: 120%;
+  aspect-ratio: 1.25;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(79, 220, 255, .23), rgba(35, 98, 142, .06) 48%, transparent 72%);
+  filter: blur(6px);
+}
+.eyebrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 2px 8px;
+  color: #77e6ff;
+  font: 800 clamp(7px, 1.7vw, 11px)/1 var(--sf-product-data-font, monospace);
+  letter-spacing: .16em;
+}
+.eyebrow em {
+  padding: 5px 7px;
+  border: 1px solid rgba(89, 231, 255, .28);
+  border-radius: 999px;
+  color: #aeefff;
+  background: rgba(3, 19, 34, .58);
+  font-style: normal;
+  letter-spacing: .06em;
+  white-space: nowrap;
+}
+.shipStage {
+  position: relative;
+  display: grid;
+  min-height: clamp(150px, 25dvh, 300px);
+  place-items: center;
+}
+.orbitRing {
+  position: absolute;
+  width: 88%;
+  aspect-ratio: 1.65;
+  border: 1px solid rgba(79, 224, 255, .24);
+  border-radius: 50%;
+  box-shadow: 0 0 28px rgba(67, 221, 255, .12), inset 0 0 22px rgba(67, 221, 255, .08);
+  transform: rotate(-8deg);
+}
+.shipImage,
+.shipFallback {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: clamp(135px, 23dvh, 280px);
+  object-fit: contain;
+  filter: drop-shadow(0 18px 20px rgba(0,0,0,.58)) drop-shadow(0 0 18px rgba(77,221,255,.22));
+}
+.shipInfo { display: grid; justify-items: center; gap: 3px; text-align: center; }
+.shipInfo small,
+.pilotCopy small,
+.commanderCopy small {
+  color: #72dff5;
+  font: 800 clamp(7px, 1.6vw, 10px)/1 var(--sf-product-data-font, monospace);
+  letter-spacing: .16em;
+}
+.shipInfo strong {
+  max-width: 100%;
+  overflow: hidden;
+  font: 900 clamp(17px, 4vw, 29px)/1 var(--sf-product-title-font, system-ui, sans-serif);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.shipInfo > span { color: #b8cedb; font: 700 clamp(8px, 1.8vw, 11px)/1.2 var(--sf-product-data-font, monospace); }
+.pilotStrip {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) minmax(0, .86fr);
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--pilot-tone) 42%, rgba(83, 214, 242, .18));
+  border-radius: 15px;
+  background: rgba(2, 12, 24, .72);
+}
+.pilotPortrait { display: grid; width: 46px; height: 46px; place-items: center; overflow: hidden; border: 1px solid var(--pilot-tone); border-radius: 12px; background: #061323; }
+.pilotImage,
+.pilotFallback { width: 100%; height: 100%; object-fit: cover; }
+.pilotCopy,
+.commanderCopy { display: grid; min-width: 0; gap: 3px; }
+.pilotCopy strong,
+.commanderCopy strong { overflow: hidden; font: 800 clamp(10px, 2.3vw, 14px)/1.05 var(--sf-product-title-font, system-ui, sans-serif); text-overflow: ellipsis; white-space: nowrap; }
+.commanderCopy { padding-left: 8px; border-left: 1px solid rgba(94, 210, 238, .18); }
+@media (max-width: 430px) and (orientation: portrait) {
+  .root { top: max(138px, 17dvh); width: clamp(166px, 48vw, 205px); min-height: clamp(292px, 43dvh, 390px); padding-inline: 9px; }
+  .pilotStrip { grid-template-columns: 40px minmax(0, 1fr); }
+  .pilotPortrait { width: 40px; height: 40px; }
+  .commanderCopy { display: none; }
+  .eyebrow em { display: none; }
+}
+@media (orientation: landscape) and (max-height: 600px) {
+  .root { top: 78px; width: min(36vw, 380px); min-height: calc(100dvh - 160px); }
+  .shipStage { min-height: 150px; }
+  .shipImage,
+  .shipFallback { height: 145px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .root { scroll-behavior: auto; }
+}
