@@ -142,7 +142,7 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
       data-sf-product-ui={PRODUCT_PORTAL_MIGRATION_VERSION_V441}
       data-sf-home-mode={currentUser ? 'cloud' : 'guest'}
 
-      data-sf-portal-layout-v446="flight-hub">
+      data-sf-portal-layout-v446="flight-hub" data-sf-visual-v447="aurora-tactical">
 
       {/* TOP NAVIGATION & CURRENCY BAR */}
       <div className={styles.topNav}>

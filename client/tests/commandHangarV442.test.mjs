@@ -46,7 +46,11 @@ test('V4.4.2 local Hangar payload contains exact lightweight preview inventories
   const ranks = listFiles('public/assets/ui/spacefighter-hud-v3/rank_badges');
   assert.equal(ships.filter(name => name.endsWith('.webp')).length, 16);
   assert.equal(weapons.filter(name => name.endsWith('.webp')).length, 18);
-  assert.equal(buttons.filter(name => name.endsWith('.webp')).length, 12);
+  const originalButtonNamesV442 = ['01', '02', '03'].flatMap(num =>
+    ['normal', 'focused', 'pressed', 'disabled'].map(state => `sf_neo_button_${num}__campaign_${state}.webp`));
+  const expectedHangarButtonsV447 = [...originalButtonNamesV442, 'sf_neo_button_01__dungeon_normal.webp'];
+  assert.deepEqual(buttons.filter(name => name.endsWith('.webp')).sort(), expectedHangarButtonsV447.sort(),
+    'Only the 12 V442 buttons and the approved V447 Dungeon CTA image are permitted');
   assert.equal(panels.filter(name => name.endsWith('.webp')).length, 3);
   assert.equal(ranks.filter(name => name.endsWith('.webp')).length, 18);
   const all = [

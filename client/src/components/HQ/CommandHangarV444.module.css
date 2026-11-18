@@ -548,129 +548,402 @@
   }
 }
 
-/* V4.4.6: HQ is a management surface, never a duplicate Portal. */
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] {
-  --hangar-cyan: #56e5ff;
-  --hangar-border: rgba(89,216,244,.33);
+/* V4.4.6: HQ is a management surface, never a duplicate Portal.
+   V4.4.7 FLEET INDUSTRIAL visual authority replaces the former V446 block.
+   All equipment selectors, pilot flows, mission context and commands stay in JSX. */
+.screen[data-sf-command-hangar="portal-hangar-v4.4.4"][data-sf-visual-v447="fleet-industrial"] {
+  --hangar-cyan: #68e9ff;
+  --hangar-cyan-soft: #b0effb;
+  --hangar-gold: #ffc477;
+  --hangar-border: rgba(98,194,226,.32);
+  --hangar-panel: rgba(5,21,36,.94);
+  --sf-fleet-copper: #ccad80;
+  color: #eff9ff;
+  background:
+    radial-gradient(ellipse 70% 35% at 50% 17%, rgba(52,113,138,.23), transparent 75%),
+    linear-gradient(180deg,#081725 0%,#030b15 62%,#02060e 100%);
 }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .content {
-  width: min(100%, 790px);
-  padding-bottom: max(26px, env(safe-area-inset-bottom, 0px));
+.screen[data-sf-visual-v447="fleet-industrial"] .grid {
+  opacity: .18;
+  background-size: 58px 58px;
 }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .header {
-  grid-template-columns: 48px minmax(0,1fr) auto;
-  min-height: 68px; gap: 9px;
+.screen[data-sf-visual-v447="fleet-industrial"] .content {
+  width: min(100%, 820px);
+  padding: max(13px, env(safe-area-inset-top,0px))
+    max(12px,env(safe-area-inset-right,0px))
+    max(26px,env(safe-area-inset-bottom,0px))
+    max(12px,env(safe-area-inset-left,0px));
 }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .titleLockup h1 {
-  font-size: clamp(20px, 5vw, 31px);
-  line-height: 1.13; white-space: normal; overflow: visible;
+.screen[data-sf-visual-v447="fleet-industrial"] .header {
+  grid-template-columns: 46px minmax(0,1fr) auto;
+  min-height: 70px;
+  gap: 9px;
+  border-bottom: 1px solid rgba(154,200,223,.22);
 }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .currencyChip {
-  min-width: 56px; min-height: 44px;
-  padding: 6px 8px; gap: 4px;
+.screen[data-sf-visual-v447="fleet-industrial"] .backButton,
+.screen[data-sf-visual-v447="fleet-industrial"] .shipSelector > button {
+  min-width: 43px;
+  min-height: 46px;
+  border: 1px solid rgba(109,212,245,.43);
+  border-radius: 3px 12px 3px 12px;
+  color: #c0f7ff;
+  background: linear-gradient(135deg,rgba(17,61,84,.97),rgba(4,18,33,.98));
+  box-shadow: inset 2px 0 0 rgba(91,218,245,.46),0 6px 14px rgba(0,0,0,.22);
 }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .currencyIcon,
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .currencyIcon svg { width: 19px; height: 19px; }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .currencyChip strong { font-size: 16px; }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .shipSelector {
+.screen[data-sf-visual-v447="fleet-industrial"] .titleLockup small {
+  color: #aeccdd;
+  font: 750 10px/1.3 var(--sf-product-data-font,ui-monospace,monospace);
+  letter-spacing: .16em;
+}
+.screen[data-sf-visual-v447="fleet-industrial"] .titleLockup h1 {
+  overflow: visible;
+  font: 850 clamp(18px,4.6vw,30px)/1.12 var(--sf-product-title-font,system-ui,sans-serif);
+  letter-spacing: .025em;
+  text-overflow: clip;
+  white-space: normal;
+}
+.screen[data-sf-visual-v447="fleet-industrial"] .currencyChip {
+  min-width: 58px;
+  min-height: 42px;
+  gap: 4px;
+  padding: 5px 7px;
+  border: 1px solid rgba(133,170,197,.36);
+  border-bottom: 2px solid var(--chip-tone,#69def7);
+  border-radius: 4px 11px 4px 11px;
+  background: linear-gradient(130deg,rgba(13,34,49,.96),rgba(2,11,23,.98));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+}
+.screen[data-sf-visual-v447="fleet-industrial"] .currencyIcon,
+.screen[data-sf-visual-v447="fleet-industrial"] .currencyIcon svg { width: 19px; height: 19px; }
+.screen[data-sf-visual-v447="fleet-industrial"] .currencyChip strong { font-size: 16px; }
+/* Ship identity = name / star-tier / power. Leave data selectors intact. */
+.screen[data-sf-visual-v447="fleet-industrial"] .shipSelector {
+  position: relative;
   display: grid;
-  grid-template-columns: 44px minmax(0,1fr) 100px 44px;
+  grid-template-columns: 44px minmax(0,1fr) 104px 44px;
   grid-template-rows: auto auto;
   grid-template-areas: "prev identity cp next" "prev stars level next";
-  gap: 4px 8px; min-height: 96px; padding: 9px;
+  min-height: 98px;
+  align-items: center;
+  gap: 5px 8px;
+  margin-top: 13px;
+  padding: 10px;
+  border: 1px solid rgba(126,197,225,.40);
+  border-radius: 4px 18px 4px 18px;
+  background: linear-gradient(110deg,rgba(14,43,61,.96),rgba(4,19,35,.98));
+  box-shadow: inset 0 1px 0 rgba(238,250,255,.07),0 12px 22px rgba(0,0,0,.23);
 }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .shipSelector > button:first-child { grid-area: prev; }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .shipSelector > button:last-child { grid-area: next; }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .shipIdentity { grid-area: identity; }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .shipIdentity strong {
-  white-space: normal; overflow: visible; font-size: clamp(16px, 3.7vw, 23px); line-height: 1.1;
+.screen[data-sf-visual-v447="fleet-industrial"] .shipSelector::before {
+  position: absolute;
+  top: 0;
+  right: 22px;
+  left: 22px;
+  height: 2px;
+  content: '';
+  pointer-events: none;
+  background: linear-gradient(90deg,transparent,#8ed6ef 52%,transparent);
+  opacity: .67;
 }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .starRow { grid-area: stars; align-self: center; }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .starRow i { font-size: 13px; }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .levelBadge {
-  grid-area: level; align-self: center; justify-self: center;
-  border: 0; background: transparent; font-size: 12px;
+.screen[data-sf-visual-v447="fleet-industrial"] .shipSelector::after {
+  position: absolute;
+  top: -5px;
+  right: 25%;
+  left: 25%;
+  height: 12px;
+  content: '';
+  pointer-events: none;
+  opacity: .52;
+  background: url('/assets/ui/spacefighter-hud-v3/scifi/sf_ornament_01__cyan.webp') center / contain no-repeat;
 }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .cpBadge {
-  grid-area: cp; min-width: 90px; padding: 4px 8px; text-align: center;
+.screen[data-sf-visual-v447="fleet-industrial"] .shipSelector > button:first-child { grid-area: prev; }
+.screen[data-sf-visual-v447="fleet-industrial"] .shipSelector > button:last-child { grid-area: next; }
+.screen[data-sf-visual-v447="fleet-industrial"] .shipIdentity { grid-area: identity; min-width: 0; }
+.screen[data-sf-visual-v447="fleet-industrial"] .shipIdentity strong {
+  display: block;
+  max-width: 100%;
+  font: 850 clamp(16px,3.7vw,24px)/1.11 var(--sf-product-title-font,system-ui,sans-serif);
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .cpBadge strong { font-size: 21px; }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .hangarStage {
-  display: grid; width: 100%; min-height: 320px;
-  grid-template-columns: clamp(58px,14vw,84px) minmax(0,1fr) clamp(58px,14vw,84px);
+.screen[data-sf-visual-v447="fleet-industrial"] .shipIdentity small { color: #9dbed1; letter-spacing: .13em; }
+.screen[data-sf-visual-v447="fleet-industrial"] .starRow { grid-area: stars; display: flex !important; gap: 1px; }
+.screen[data-sf-visual-v447="fleet-industrial"] .starRow i { font-size: clamp(11px,2.9vw,17px); }
+.screen[data-sf-visual-v447="fleet-industrial"] .levelBadge {
+  grid-area: level;
+  display: inline-flex !important;
+  justify-self: center;
+  align-self: center;
+  min-height: 24px;
+  padding: 1px 4px;
+  border: 0;
+  color: #b8e8f3;
+  background: transparent;
+  font-size: 12px;
+}
+.screen[data-sf-visual-v447="fleet-industrial"] .cpBadge {
+  grid-area: cp;
+  min-width: 92px;
+  min-height: 58px;
+  padding: 7px;
+  border: 1px solid rgba(239,190,116,.48);
+  border-radius: 4px 11px 4px 11px;
+  background: linear-gradient(135deg,rgba(66,47,27,.31),rgba(9,24,38,.9));
+  text-align: center;
+}
+.screen[data-sf-visual-v447="fleet-industrial"] .cpBadge small { color: #edbd7c; }
+.screen[data-sf-visual-v447="fleet-industrial"] .cpBadge strong { color: #ffe0a0; font-size: 22px; }
+/* Metallic maintenance bay with a single decorative holographic radar. */
+.screen[data-sf-visual-v447="fleet-industrial"] .hangarStage {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: clamp(59px,14vw,91px) minmax(0,1fr) clamp(59px,14vw,91px);
   grid-template-rows: repeat(3, 94px);
   grid-template-areas: "main hero wing" "armor hero drone" "pilot hero skill";
-  align-items: center; gap: 7px clamp(7px,1.4vw,12px);
-  padding: 14px 10px; margin-top: 12px;
-  border-radius: 22px;
+  min-height: 322px;
+  align-items: center;
+  gap: 7px clamp(7px,1.6vw,14px);
+  margin-top: 13px;
+  padding: 15px 10px;
+  border: 1px solid rgba(122,191,221,.39);
+  border-radius: 5px 25px 5px 25px;
   background:
-    radial-gradient(ellipse at 50% 48%, rgba(31,179,218,.22), transparent 53%),
-    linear-gradient(160deg,rgba(6,26,45,.93),rgba(1,9,20,.96));
+    radial-gradient(ellipse 68% 74% at 50% 45%,rgba(26,97,131,.27),transparent 75%),
+    linear-gradient(175deg,rgba(14,39,56,.94),rgba(3,13,25,.98));
+  box-shadow: inset 0 0 0 4px rgba(58,112,140,.09),0 18px 34px rgba(0,0,0,.26);
 }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .loadoutSlot {
-  min-height: 0; width: 100%; height: auto;
-  aspect-ratio: 1; padding: 5px;
-  border-radius: 15px;
+.screen[data-sf-visual-v447="fleet-industrial"] .hangarStage::before {
+  position: absolute;
+  z-index: 0;
+  inset: 10% 19%;
+  content: '';
+  pointer-events: none;
+  opacity: .16;
+  background: url('/assets/ui/spacefighter-hud-v3/scifi/sf_cyan_radar_01.webp') center / contain no-repeat;
 }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .slotSurface { border-radius: 12px; }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .slotImage { width: 90%; height: 90%; }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .shipHero {
-  min-height: 298px; padding: 8px 0 34px;
+.screen[data-sf-visual-v447="fleet-industrial"] .hangarStage::after {
+  position: absolute;
+  z-index: 0;
+  inset: 8px;
+  content: '';
+  pointer-events: none;
+  border: 1px solid rgba(116,208,242,.08);
+  border-radius: 3px 18px 3px 18px;
 }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .shipImage {
-  width: 100%; max-height: 242px; filter: drop-shadow(0 12px 18px rgba(0,0,0,.6)) drop-shadow(0 0 18px rgba(52,188,226,.25));
+.screen[data-sf-visual-v447="fleet-industrial"] .hangarStage > * { position: relative; z-index: 1; }
+.screen[data-sf-visual-v447="fleet-industrial"] .loadoutSlot {
+  display: grid;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  aspect-ratio: 1;
+  place-items: center;
+  padding: 5px;
+  border: 1px solid rgba(100,183,216,.49);
+  border-radius: 3px 13px 3px 13px;
+  background: linear-gradient(135deg,rgba(13,42,61,.94),rgba(3,14,26,.98));
+  box-shadow: inset 0 0 16px rgba(2,8,16,.56),0 3px 10px rgba(0,0,0,.25);
 }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .heroCaption { bottom: 8px; }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .heroCaption strong { display: none; }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .heroCaption small { color: #8bdff2; letter-spacing: .1em; font-size: 10px; }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .tabs {
-  position: static; margin-top: 12px; min-height: 53px;
+.screen[data-sf-visual-v447="fleet-industrial"] .loadoutSlot::after {
+  inset: 4px;
+  border: 1px solid rgba(100,207,237,.13);
+  border-radius: 2px 9px 2px 9px;
 }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .pilotPanel {
-  display: grid; grid-template-columns: 66px minmax(0,1fr) 76px;
-  align-items: center; gap: 11px; padding: 12px;
+.screen[data-sf-visual-v447="fleet-industrial"] .loadoutSlot[data-equipped="true"] { border-color: color-mix(in srgb,var(--slot-tone) 67%,rgba(128,191,213,.5)); }
+.screen[data-sf-visual-v447="fleet-industrial"] .loadoutSlot[data-equipped="false"] { opacity: .83; }
+.screen[data-sf-visual-v447="fleet-industrial"] .slotSurface { border-radius: 3px 10px 3px 10px; }
+.screen[data-sf-visual-v447="fleet-industrial"] .slotImage { width: 88%; height: 88%; object-fit: contain; }
+.screen[data-sf-visual-v447="fleet-industrial"] .slotStatus { right: 7px; bottom: 7px; width: 6px; height: 6px; }
+.screen[data-sf-visual-v447="fleet-industrial"] .shipHero {
+  min-height: 290px;
+  padding: 8px 0 35px;
+  background: transparent;
 }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .pilotPortraitShell { width: 66px; height: 66px; }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .pilotCopy h2 { font-size: clamp(17px,3.6vw,21px); }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .pilotCopy p { font-size: 12px; }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .pilotPanel > button {
-  grid-column: auto; min-width: 0; width: 100%; min-height: 42px;
-  padding: 5px 3px; font-size: 11px;
+.screen[data-sf-visual-v447="fleet-industrial"] .heroGlow { background: radial-gradient(circle,rgba(48,185,220,.2),transparent 70%); }
+.screen[data-sf-visual-v447="fleet-industrial"] .shipImage {
+  width: 100%;
+  max-height: 238px;
+  object-fit: contain;
+  filter: drop-shadow(0 13px 16px rgba(0,0,0,.59)) drop-shadow(0 0 15px rgba(48,179,208,.22));
 }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .fleetPanel { padding: 14px; }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .fleetRail { grid-auto-columns: minmax(126px, 30%); }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .fleetRail > button { min-height: 125px; }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .fleetPreview { height: 80px; }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .actionBar {
-  position: static; inset: auto; display: grid;
+.screen[data-sf-visual-v447="fleet-industrial"] .heroCaption { bottom: 4px; }
+.screen[data-sf-visual-v447="fleet-industrial"] .heroCaption strong { display: none; }
+.screen[data-sf-visual-v447="fleet-industrial"] .heroCaption small {
+  color: #a6dae7;
+  font: 700 10px/1.2 var(--sf-product-data-font,ui-monospace,monospace);
+  letter-spacing: .08em;
+}
+/* Tabs and panels: angular corner details, restrained emphasis, readable Vietnamese. */
+.screen[data-sf-visual-v447="fleet-industrial"] .tabs {
+  position: static;
+  z-index: 2;
+  min-height: 53px;
+  margin-top: 13px;
+  overflow: hidden;
+  border: 1px solid rgba(119,185,217,.34);
+  border-radius: 3px 13px 3px 13px;
+  background: rgba(4,18,33,.97);
+}
+.screen[data-sf-visual-v447="fleet-industrial"] .tabs button {
+  min-height: 50px;
+  color: #9cbad0;
+  font: 760 clamp(10px,2.6vw,15px)/1.15 var(--sf-product-title-font,system-ui,sans-serif);
+  letter-spacing: .02em;
+}
+.screen[data-sf-visual-v447="fleet-industrial"] .tabs .activeTab {
+  color: #eaffff;
+  background: linear-gradient(180deg,rgba(30,88,114,.72),rgba(4,29,48,.88));
+  box-shadow: inset 0 -3px 0 #6ce6ff;
+}
+.screen[data-sf-visual-v447="fleet-industrial"] .pilotPanel,
+.screen[data-sf-visual-v447="fleet-industrial"] .fleetPanel,
+.screen[data-sf-visual-v447="fleet-industrial"] .infoPanel {
+  border: 1px solid rgba(117,180,210,.33);
+  border-radius: 4px 20px 4px 20px;
+  background: linear-gradient(146deg,rgba(9,38,54,.90),rgba(3,14,26,.97));
+  box-shadow: inset 0 1px 0 rgba(212,251,255,.06),0 9px 18px rgba(0,0,0,.16);
+}
+.screen[data-sf-visual-v447="fleet-industrial"] .pilotPanel {
+  display: grid;
+  grid-template-columns: 66px minmax(0,1fr) 82px;
+  align-items: center;
+  gap: 11px;
+  padding: 13px;
+}
+.screen[data-sf-visual-v447="fleet-industrial"] .pilotPortraitShell {
+  width: 66px;
+  height: 66px;
+  overflow: hidden;
+  border: 1px solid rgba(86,211,245,.56);
+  border-radius: 4px 12px 4px 12px;
+  background: rgba(2,12,28,.8);
+}
+.screen[data-sf-visual-v447="fleet-industrial"] .pilotCopy h2 { font-size: clamp(17px,3.7vw,22px); }
+.screen[data-sf-visual-v447="fleet-industrial"] .pilotCopy p { font-size: 12px; line-height: 1.4; }
+.screen[data-sf-visual-v447="fleet-industrial"] .pilotPanel > button {
+  grid-column: auto;
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 4px;
+  border: 1px solid rgba(100,206,239,.59);
+  border-radius: 3px 10px 3px 10px;
+  color: #e5f9ff;
+  background: rgba(13,65,87,.68);
+  font-size: 11px;
+}
+.screen[data-sf-visual-v447="fleet-industrial"] .fleetPanel { padding: 14px; }
+.screen[data-sf-visual-v447="fleet-industrial"] .fleetRail { grid-auto-columns: minmax(125px,29%); }
+.screen[data-sf-visual-v447="fleet-industrial"] .fleetRail > button {
+  min-height: 129px;
+  border: 1px solid rgba(113,178,207,.37);
+  border-radius: 4px 13px 4px 13px;
+  background: linear-gradient(145deg,rgba(3,17,34,.96),rgba(5,29,47,.92));
+}
+.screen[data-sf-visual-v447="fleet-industrial"] .fleetRail > button.fleetSelected { border-color: #85eaff; box-shadow: 0 0 12px rgba(72,210,241,.17); }
+.screen[data-sf-visual-v447="fleet-industrial"] .fleetPreview { height: 79px; }
+.screen[data-sf-visual-v447="fleet-industrial"] .statsBar {
+  display: grid;
+  grid-template-columns: repeat(4,minmax(0,1fr));
+  overflow: hidden;
+  border: 1px solid rgba(128,183,207,.31);
+  border-radius: 4px 16px 4px 16px;
+  background: linear-gradient(135deg,rgba(12,37,51,.94),rgba(2,14,26,.96));
+}
+.screen[data-sf-visual-v447="fleet-industrial"] .actionBar {
+  position: static;
+  inset: auto;
+  display: grid;
   grid-template-columns: minmax(0,.9fr) minmax(0,1.1fr);
-  gap: 8px; width: 100%; padding: 0;
-  margin-top: 14px; border: 0; background: transparent;
-  box-shadow: none; backdrop-filter: none;
+  gap: 9px;
+  width: 100%;
+  margin-top: 14px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
 }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .actionBar > button {
-  display: flex; min-width: 0; min-height: 58px;
-  flex-direction: row; align-items: center; justify-content: center;
-  gap: 6px; padding: 6px 7px;
+.screen[data-sf-visual-v447="fleet-industrial"] .actionBar > button {
+  display: flex;
+  min-width: 0;
+  min-height: 64px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border-radius: 4px 13px 4px 13px;
 }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .actionBar > button strong {
-  font-size: clamp(11px,2.65vw,16px); line-height: 1.12; white-space: normal;
+.screen[data-sf-visual-v447="fleet-industrial"] .actionBar .primaryAction {
+  border: 1px solid rgba(119,236,255,.86);
+  color: #e9fbff;
+  background: linear-gradient(130deg,rgba(2,16,31,.09),rgba(2,14,29,.16)),
+    url('/assets/ui/spacefighter-hud-v3/neo_buttons/sf_neo_button_01__campaign_normal.webp') center / 100% 100% no-repeat,
+    #11435f;
+  box-shadow: 0 0 19px rgba(67,204,239,.17);
 }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .actionBar > button small { font-size: 9px; }
+.screen[data-sf-visual-v447="fleet-industrial"] .actionBar .secondaryAction {
+  border: 1px solid rgba(105,196,222,.43);
+  color: #d3eff9;
+  background: linear-gradient(135deg,rgba(2,15,30,.15),rgba(3,14,25,.32)),
+    url('/assets/ui/spacefighter-hud-v3/neo_buttons/sf_neo_button_03__campaign_normal.webp') center / 100% 100% no-repeat,
+    #0b263e;
+}
+.screen[data-sf-visual-v447="fleet-industrial"] .actionBar button strong {
+  font: 800 clamp(12px,2.7vw,18px)/1.1 var(--sf-product-title-font,system-ui,sans-serif);
+  letter-spacing: .01em;
+  white-space: normal;
+}
+.screen[data-sf-visual-v447="fleet-industrial"] .actionBar button small {
+  margin-top: 4px;
+  font-size: 10px;
+  white-space: normal;
+}
+.screen[data-sf-visual-v447="fleet-industrial"] button:focus-visible { outline: 2px solid #ffffff; outline-offset: 2px; }
+@media (max-width: 690px) {
+  .screen[data-sf-visual-v447="fleet-industrial"] .statsBar { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
 @media (max-width: 430px) and (orientation: portrait) {
-  .screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .shipSelector { grid-template-columns: 40px minmax(0,1fr) 88px 40px; gap: 4px 5px; }
-  .screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .hangarStage {
-    min-height: 290px; grid-template-columns: 62px minmax(0,1fr) 62px;
-    grid-template-rows: repeat(3, 82px);
-    gap: 7px; padding: 12px 9px;
+  .screen[data-sf-visual-v447="fleet-industrial"] .header {
+    grid-template-columns: 41px minmax(0,1fr) auto;
+    gap: 6px;
   }
-  .screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .shipHero { min-height: 271px; padding-bottom: 25px; }
-  .screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .shipImage { max-height: 207px; }
-  .screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .pilotPanel { grid-template-columns: 60px minmax(0,1fr) 68px; gap: 8px; }
-  .screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .pilotPortraitShell { width: 60px; height: 60px; }
-  .screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .fleetRail { grid-auto-columns: minmax(112px, 42%); }
+  .screen[data-sf-visual-v447="fleet-industrial"] .titleLockup h1 { font-size: clamp(17px,4.65vw,21px); }
+  .screen[data-sf-visual-v447="fleet-industrial"] .titleLockup small { font-size: 9px; letter-spacing: .08em; }
+  .screen[data-sf-visual-v447="fleet-industrial"] .currencyChip { min-width: 55px; padding: 4px; }
+  .screen[data-sf-visual-v447="fleet-industrial"] .shipSelector {
+    grid-template-columns: 39px minmax(0,1fr) 88px 39px;
+    gap: 4px 5px;
+    min-height: 94px;
+    padding: 7px;
+  }
+  .screen[data-sf-visual-v447="fleet-industrial"] .shipSelector > button { min-width: 38px; }
+  .screen[data-sf-visual-v447="fleet-industrial"] .cpBadge { min-width: 87px; }
+  .screen[data-sf-visual-v447="fleet-industrial"] .hangarStage {
+    min-height: 290px;
+    grid-template-columns: 61px minmax(0,1fr) 61px;
+    grid-template-rows: repeat(3, 82px);
+    gap: 6px;
+    padding: 12px 8px;
+  }
+  .screen[data-sf-visual-v447="fleet-industrial"] .shipHero { min-height: 268px; padding-bottom: 26px; }
+  .screen[data-sf-visual-v447="fleet-industrial"] .shipImage { max-height: 207px; }
+  .screen[data-sf-visual-v447="fleet-industrial"] .pilotPanel { grid-template-columns: 60px minmax(0,1fr) 70px; gap: 8px; }
+  .screen[data-sf-visual-v447="fleet-industrial"] .pilotPortraitShell { width: 60px; height: 60px; }
+  .screen[data-sf-visual-v447="fleet-industrial"] .fleetRail { grid-auto-columns: minmax(112px,42%); }
 }
-/* Restore real level and stars on narrow HQ screens; older media rules hid both. */
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .starRow { display: flex !important; }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .levelBadge { display: inline-flex !important; }
-.screen[data-sf-command-hangar="portal-hangar-v4.4.4"] .currencyIcon { display: grid !important; }
+@media (orientation: landscape) and (max-height: 620px) {
+  .screen[data-sf-visual-v447="fleet-industrial"] .content { width: min(100%,950px); }
+  .screen[data-sf-visual-v447="fleet-industrial"] .hangarStage {
+    min-height: 310px;
+    grid-template-columns: 82px minmax(0,1fr) 82px;
+  }
+  .screen[data-sf-visual-v447="fleet-industrial"] .shipHero { min-height: 288px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .screen[data-sf-visual-v447="fleet-industrial"] *,
+  .screen[data-sf-visual-v447="fleet-industrial"] *::before,
+  .screen[data-sf-visual-v447="fleet-industrial"] *::after {
+    animation-duration: .01ms;
+    transition-duration: .01ms;
+  }
+}

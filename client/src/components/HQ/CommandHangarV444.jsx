@@ -307,6 +307,7 @@ export default function CommandHangarV444({
       animate={{ opacity: 1 }}
       transition={{ duration: 0.22 }}
       data-sf-command-hangar={PORTAL_HANGAR_VERSION_V444}
+      data-sf-visual-v447="fleet-industrial"
       data-sf-hangar-mode={hangarMode}
       data-sf-model-delivery={COMMAND_HANGAR_MODEL_DELIVERY_POLICY_V442.mode}
     >
