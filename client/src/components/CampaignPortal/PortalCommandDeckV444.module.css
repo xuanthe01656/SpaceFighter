@@ -138,3 +138,32 @@
 @media (prefers-reduced-motion: reduce) {
   .root { scroll-behavior: auto; }
 }
+/* V4.4.5 PORTAL COMMAND DECK FIT */
+.root[data-sf-portal-command-deck="portal-command-deck-v4.4.4"] {
+  top: clamp(126px, 15dvh, 184px);
+  bottom: calc(164px + env(safe-area-inset-bottom, 0px));
+  width: clamp(188px, 50vw, 420px);
+  min-height: 0;
+}
+.root[data-sf-portal-command-deck="portal-command-deck-v4.4.4"] .shipStage {
+  min-height: clamp(170px, 25dvh, 300px);
+}
+.root[data-sf-portal-command-deck="portal-command-deck-v4.4.4"] .shipImage,
+.root[data-sf-portal-command-deck="portal-command-deck-v4.4.4"] .shipFallback {
+  height: clamp(150px, 23dvh, 270px);
+}
+@media (max-width: 430px) and (orientation: portrait) {
+  .root[data-sf-portal-command-deck="portal-command-deck-v4.4.4"] {
+    top: max(122px, 14dvh);
+    bottom: calc(156px + env(safe-area-inset-bottom, 0px));
+    width: clamp(190px, 51vw, 218px);
+    padding: 9px 8px 8px;
+  }
+  .root[data-sf-portal-command-deck="portal-command-deck-v4.4.4"] .shipStage {
+    min-height: 170px;
+  }
+  .root[data-sf-portal-command-deck="portal-command-deck-v4.4.4"] .shipImage,
+  .root[data-sf-portal-command-deck="portal-command-deck-v4.4.4"] .shipFallback {
+    height: 165px;
+  }
+}
