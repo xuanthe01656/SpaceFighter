@@ -16,6 +16,7 @@ import {
   resolveDungeonQaLoadoutPresetV397,
 } from '../../game/dungeon/DungeonQaLoadoutV397.js';
 
+import { openDungeonPrebattleHqV443 } from '../../game/navigation/HangarNavigationV443.js';
 // --- HỆ THỐNG SVG ICONS CHUẨN SCI-FI ---
 const Icons = {
   Coin: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" /><line x1="12" y1="2" x2="12" y2="6" /><line x1="12" y1="18" x2="12" y2="22" /><line x1="2" y1="12" x2="6" y2="12" /><line x1="18" y1="12" x2="22" y2="12" /></svg>,
@@ -98,6 +99,7 @@ export default function DungeonSelect({ gsRef, setScreen, lang, getRealTime }) {
     gsRef.current.selectedDungeonId = dungeon.id;
     gsRef.current.pendingEnergyCost = dungeonQaRun ? 0 : dungeon.energyCost;
     gsRef.current.gameMode = 'dungeon';
+    openDungeonPrebattleHqV443(gsRef);
     setScreen('hq');
   };
 

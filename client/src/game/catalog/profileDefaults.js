@@ -7,7 +7,7 @@
 // --- DỮ LIỆU TÂN THỦ MẶC ĐỊNH (NEW PLAYER TEMPLATE) ---
 // ==========================================
 export const DEFAULT_CAMPAIGN_DATA = {
-  progress: { currentStage: 1, highestStage: 1, combatPower: 1200,exp: 0 },
+  progress: { currentPlanet: 1, selectedStage: 1, currentStage: 1, highestStage: 1, combatPower: 1200,exp: 0 },
   loadout: { pilot: "pilot_alpha", aircraft: "ship_xwing", mainGun: "item_start_gun", wingman: "", armor: "", drone: "" },
   ownedPilots: { "pilot_alpha": { level: 1, stars: 1 } },
   ownedAircrafts: { "ship_xwing": { level: 1, stars: 1 } },

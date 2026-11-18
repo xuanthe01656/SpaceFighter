@@ -15,6 +15,7 @@ import { secureStorage } from '../../utils/storageHelper';
 import FirstTopupModal from './FirstTopupModal';
 import AttendanceModal from './AttendanceModal';
 
+import { openManagementHqV443 } from '../../game/navigation/HangarNavigationV443.js';
 const productIcon = name => function ProductPortalIcon(props) {
   return <GameIcon name={name} {...props} />;
 };
@@ -207,17 +208,27 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
         </motion.button>
         <motion.button variants={slideLeft} className={styles.sideBtn} onClick={() => setScreen('resource_manager')}>
           <div className={styles.sideIcon}><Icons.Download /></div>
-          <span className={styles.sideText}>{lang === 'vi' ? 'TÀI NGUYÊN' : 'RESOURCES'}</span>
+          <span className={styles.sideText}>{lang === 'vi' ? 'TẢI DỮ LIỆU' : 'DOWNLOADS'}</span>
         </motion.button>
       </div>
 
       {/* BOTTOM NAVIGATION */}
       <motion.div variants={itemVariants} className={styles.bottomNav}>
+        <button
+          type="button"
+          className={`${styles.navBtn} ${styles.hqLaunchBtn} ${styles.managementNavBtn}`}
+          data-sf-hq-entry="command-hangar-v4.4.2"
+          data-sf-hq-entry-v443="portal-hangar-v4.4.3"
+          onClick={() => { openManagementHqV443(gsRef); gsRef.current.hqReturnScreen = 'campaign_portal'; handleNav('hq'); }}
+        >
+          <Icons.Armory />
+          <span>{lang === 'vi' ? 'TỔNG HÀNH DINH' : 'HANGAR'}</span>
+        </button>
         <button className={styles.navBtn} onClick={() => handleNav('inventory')}>
-          <div className={styles.navIcon}><Icons.Armory /></div><span>{lang === 'vi' ? 'KHO KHÍ TÀI' : 'ARMORY'}</span>
+          <div className={styles.navIcon}><Icons.Armory /></div><span>{lang === 'vi' ? 'KHO TRANG BỊ' : 'INVENTORY'}</span>
         </button>
         <button className={styles.navBtn} onClick={() => handleNav('pilots')}>
-          <div className={styles.navIcon}><Icons.Barracks /></div><span>{lang === 'vi' ? 'DOANH TRẠI' : 'BARRACKS'}</span>
+          <div className={styles.navIcon}><Icons.Barracks /></div><span>{lang === 'vi' ? 'PHI CÔNG' : 'PILOTS'}</span>
         </button>
         <button className={styles.navBtn} onClick={() => handleNav('shop_campaign')}>
           <div className={styles.navIcon}><Icons.Supply /></div><span>{lang === 'vi' ? 'CỬA HÀNG' : 'SHOP'}</span>
@@ -225,20 +236,7 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
       </motion.div>
 
       {/* BOTTOM RIGHT ACTION AREA */}
-      <motion.div variants={itemVariants} className={styles.actionArea}>
-        <button
-          type="button"
-          className={styles.hqLaunchBtn}
-          data-sf-hq-entry="command-hangar-v4.4.2"
-          onClick={() => { gsRef.current.hqReturnScreen = 'campaign_portal'; handleNav('hq'); }}
-        >
-          <div className={styles.hqLaunchIcon}><Icons.Armory /></div>
-          <div className={styles.hqLaunchCopy}>
-            <strong>{lang === 'vi' ? 'TỔNG HÀNH DINH' : 'HEADQUARTERS'}</strong>
-            <small>{lang === 'vi' ? 'Phi cơ · Trang bị · Phi công' : 'Aircraft · Equipment · Pilots'}</small>
-          </div>
-        </button>
-        <button className={styles.subModeBtn} onClick={() => handleNav('dungeon_select')}>
+      <motion.div variants={itemVariants} className={styles.actionArea}>        <button className={styles.subModeBtn} onClick={() => handleNav('dungeon_select')}>
           <div className={styles.subModeIcon}><Icons.Swords /></div><span>{lang === 'vi' ? 'PHÓ BẢN' : 'DUNGEON'}</span>
         </button>
         <button className={styles.mainLaunchBtn} onClick={() => handleNav('galaxy_map')}>
