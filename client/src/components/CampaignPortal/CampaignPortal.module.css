@@ -489,6 +489,11 @@
   --sf-hub-cta-h: clamp(66px, 8.7dvh, 78px);
   --sf-hub-safe-bottom: max(9px, env(safe-area-inset-bottom, 0px));
   --sf-hub-side-w: clamp(72px, 19.5vw, 102px);
+  /* Optical offsets for the asymmetric 320x92 native button art, tunable in DevTools. */
+  --sf-dungeon-art-x: clamp(4px,1.45vw,10px);
+  --sf-dungeon-art-y: clamp(3px,.62dvh,6px);
+  --sf-campaign-art-x: clamp(7px,1.6vw,13px);
+  --sf-campaign-art-y: clamp(4px,.75dvh,7px);
   --font-ui: var(--sf-product-title-font, system-ui, sans-serif);
   --font-data: var(--sf-product-data-font, ui-monospace, monospace);
   position: relative;
@@ -521,96 +526,167 @@
   opacity: .34;
   background: repeating-linear-gradient(180deg, transparent 0 5px, rgba(67,193,242,.034) 5px 6px);
 }
-/* Header: profile is allowed to shrink; five existing currencies take 3+2 compact cells. */
+/* V4.4.11 Portal HUD: two separate strips, as reviewed.
+   One account/profile rail, then five existing resources in one line.
+   No fake Mail/Settings actions; the entire identity rail opens the existing profile.
+   CSS replaces the previous 3+2 currency block instead of stacking an override. */
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .topNav {
   position: absolute;
   z-index: 20;
-  top: calc(12px + env(safe-area-inset-top, 0px));
-  right: calc(12px + env(safe-area-inset-right, 0px));
-  left: calc(12px + env(safe-area-inset-left, 0px));
-  display: flex;
+  top: calc(9px + env(safe-area-inset-top, 0px));
+  right: calc(10px + env(safe-area-inset-right, 0px));
+  left: calc(10px + env(safe-area-inset-left, 0px));
+  display: grid;
   width: auto;
-  min-height: 76px;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: clamp(7px, 1.7vw, 13px);
+  min-height: 0;
+  grid-template-columns: minmax(0,1fr);
+  grid-template-rows: minmax(47px,auto) 43px;
+  align-items: stretch;
+  justify-content: stretch;
+  gap: 4px;
   margin: 0;
   padding: 0;
   transform: none;
 }
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .profileBtn {
-  flex: 0 1 clamp(144px, 40vw, 270px);
-  width: auto;
+  display: flex;
+  width: 100%;
   min-width: 0;
-  min-height: 54px;
-  gap: 8px;
-  padding: 4px 10px 4px 4px;
-  border: 1px solid var(--sf-hub-edge);
-  border-radius: 7px 16px 7px 16px;
-  background: linear-gradient(105deg, rgba(11,49,71,.76), rgba(4,16,32,.82));
-  box-shadow: inset 0 1px 0 rgba(225,250,255,.09), 0 8px 20px rgba(0,0,0,.27);
-  backdrop-filter: blur(5px);
+  min-height: 47px;
+  height: 47px;
+  flex: none;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 9px;
+  padding: 3px 10px 3px 4px;
+  border: 1px solid rgba(95,199,231,.60);
+  border-radius: 5px 13px 5px 13px;
+  background: linear-gradient(105deg,rgba(7,31,50,.81),rgba(4,16,30,.76));
+  box-shadow: inset 0 1px 0 rgba(213,249,255,.08),inset 0 -2px 0 rgba(35,144,188,.18);
+  backdrop-filter: blur(4px);
 }
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .profileAvatarWrap {
-  width: 43px;
-  height: 43px;
-  flex: 0 0 43px;
+  width: 39px;
+  height: 39px;
+  flex: 0 0 39px;
+  overflow: hidden;
   border: 1px solid #66dff9;
-  border-radius: 8px 12px 8px 12px;
+  border-radius: 5px 9px 5px 9px;
   background: #071526;
 }
-.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .profileInfo { min-width: 0; max-width: 100%; }
+.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .profileInfo {
+  display: flex;
+  min-width: 0;
+  max-width: none;
+  flex: 1 1 auto;
+  align-items: flex-start;
+  justify-content: center;
+}
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .profileName {
   display: block;
   max-width: 100%;
   overflow: hidden;
-  font: 750 clamp(12px, 2.8vw, 17px)/1.15 var(--font-ui);
+  font: 780 clamp(12px,3.1vw,16px)/1.16 var(--font-ui);
   letter-spacing: .015em;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .levelRow { width: 100%; }
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .miniExpBarBg {
-  min-width: 14px;
-  max-width: 54px;
-  flex: 1 1 auto;
-  background: rgba(74,145,176,.19);
+  width: 76px;
+  max-width: 110px;
+  min-width: 16px;
+  flex: 0 1 110px;
+  background: rgba(54,134,172,.21);
+}
+.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .headerAccountStatus {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 4px 6px;
+  border: 1px solid rgba(96,173,198,.36);
+  border-radius: 3px 8px 3px 8px;
+  color: #addfe7;
+  background: rgba(5,26,41,.41);
+  font: 700 clamp(8px,1.8vw,10px)/1.15 var(--font-data);
+  white-space: nowrap;
+}
+.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .headerAccountDot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: #8dc8d8;
+  box-shadow: 0 0 6px rgba(101,219,243,.35);
 }
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .currencyBar {
   display: grid;
-  width: min(51vw, 300px);
+  width: 100%;
   min-width: 0;
-  max-width: 300px;
-  flex: 0 1 min(51vw, 300px);
-  grid-template-columns: repeat(3, minmax(0,1fr));
-  gap: 5px;
-  align-content: start;
-  justify-content: end;
+  max-width: none;
+  flex: none;
+  grid-template-columns: repeat(5,minmax(0,1fr));
+  grid-template-rows: minmax(0,1fr);
+  gap: clamp(3px,.9vw,7px);
+  align-content: center;
+  justify-content: stretch;
   padding: 0;
 }
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .currencyChip {
+  display: grid;
   min-width: 0;
-  min-height: 33px;
+  min-height: 43px;
+  height: 43px;
+  grid-template-areas: 'icon amount' 'label label';
+  grid-template-columns: 19px minmax(0,1fr);
+  grid-template-rows: 21px 13px;
+  align-items: center;
   justify-content: center;
-  gap: 5px;
-  padding: 4px 5px;
+  column-gap: 3px;
+  row-gap: 0;
+  padding: 3px 4px;
   border: 1px solid rgba(105,172,210,.30);
   border-bottom: 2px solid currentColor;
-  border-radius: 4px 10px 4px 10px;
-  background: linear-gradient(145deg, rgba(6,25,45,.77),rgba(2,10,24,.82));
-  box-shadow: inset 0 -2px 0 rgba(7,20,35,.8), 0 5px 12px rgba(0,0,0,.22);
+  border-radius: 3px 8px 3px 8px;
+  background: linear-gradient(145deg,rgba(6,25,45,.72),rgba(2,10,24,.80));
+  box-shadow: inset 0 -2px 0 rgba(7,20,35,.72);
   backdrop-filter: blur(3px);
 }
-.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .currencyIcon,
+.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .currencyIcon {
+  grid-area: icon;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  min-width: 0;
+  place-items: center;
+}
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .currencyIcon svg {
   width: 17px;
   height: 17px;
-  flex-shrink: 0;
 }
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .currencyAmt {
+  grid-area: amount;
   min-width: 0;
   overflow: hidden;
-  font: 750 clamp(10px,2.5vw,16px)/1 var(--font-data);
+  font: 770 clamp(10px,2.65vw,14px)/1 var(--font-data);
+  text-align: left;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .currencyLabel {
+  grid-area: label;
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: #9dbacb;
+  font: 720 clamp(6.6px,1.7vw,8px)/1 var(--font-data);
+  letter-spacing: .015em;
+  text-align: center;
+  text-overflow: clip;
   white-space: nowrap;
 }
 /* Four or five existing utility buttons are distributed around the clear center.
@@ -800,6 +876,16 @@
   font: 700 clamp(9px,2vw,13px)/1.1 var(--font-data);
   letter-spacing: .06em;
 }
+/* V4.4.10 Native button optical alignment. WebP art has an asymmetric inner safe zone.
+   Shift only icon/text within that zone; never move the whole button, its hit area or frame. */
+.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .subModeBtn > .subModeIcon,
+.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .subModeBtn > span:last-child {
+  transform: translate(var(--sf-dungeon-art-x),var(--sf-dungeon-art-y));
+}
+.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .mainLaunchBtn > .launchIconBg,
+.container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .mainLaunchBtn > .launchContent {
+  transform: translate(var(--sf-campaign-art-x),var(--sf-campaign-art-y));
+}
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .subModeBtn > span { font: 800 clamp(13px,3.5vw,18px)/1.1 var(--font-ui); }
 .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .bottomNav {
   position: absolute;
@@ -928,14 +1014,16 @@
 
 @media (max-width: 380px) and (orientation: portrait) {
   .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] {
+    --sf-dungeon-art-x: 3px;
+    --sf-dungeon-art-y: 4px;
+    --sf-campaign-art-x: 6px;
+    --sf-campaign-art-y: 5px;
     --sf-hub-side-w: clamp(70px,19.5vw,80px);
     --sf-hub-dock-h: 65px;
     --sf-hub-cta-h: 66px;
   }
   .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .sideMenu,
   .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .leftSidebar { grid-template-rows: repeat(3, 61px); gap: 12px 0; }
-  .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .profileBtn { flex-basis: 132px; }
-  .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .currencyBar { flex-basis: 52vw; }
 }
 @media (max-height: 700px) and (orientation: portrait) {
   .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] {
@@ -954,7 +1042,7 @@
   .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .topNav {
     position: relative;
     inset: auto;
-    min-height: 66px;
+    min-height: 0;
     margin: 9px 12px;
   }
   .container[data-sf-portal-layout-v446="flight-hub"][data-sf-visual-v447="aurora-tactical"] .sideMenu,

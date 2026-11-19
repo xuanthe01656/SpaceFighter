@@ -22,15 +22,6 @@ import {
 import ReliableAssetImageV444 from '../../ui-system/ReliableAssetImageV444.jsx';
 import styles from './CommandHangarV444.module.css';
 
-const compact = value => {
-  const number = Number(value) || 0;
-  if (Math.abs(number) < 1000) return String(Math.round(number));
-  const units = ['', 'K', 'M', 'B'];
-  const index = Math.min(units.length - 1, Math.floor(Math.log10(Math.abs(number)) / 3));
-  const scaled = number / (1000 ** index);
-  return `${scaled >= 100 ? Math.round(scaled) : scaled.toFixed(scaled >= 10 ? 1 : 2).replace(/\.0+$/, '')}${units[index]}`;
-};
-
 const RARITY_COLORS = Object.freeze({
   1: '#93a4bd',
   2: '#4ade80',
@@ -54,15 +45,6 @@ function PreviewImage({ src, fallback, candidates, alt, className, placeholder =
       kind={kind}
       assetId={assetId}
     />
-  );
-}
-
-function CurrencyChip({ Icon, value, tone }) {
-  return (
-    <span className={`${styles.currencyChip} ${styles[`currency_${tone}`] || ''}`}>
-      <span className={styles.currencyIcon}>{Icon ? <Icon /> : null}</span>
-      <strong>{compact(value)}</strong>
-    </span>
   );
 }
 
@@ -190,8 +172,6 @@ export default function CommandHangarV444({
   gameMode,
   targetStage,
   dungeonName,
-  coins,
-  diamonds,
   currentAircraft,
   aircraftInfo,
   shipVisualInfo,
@@ -219,7 +199,6 @@ export default function CommandHangarV444({
   isLaunching,
   onLaunch,
   onBack,
-  Icons,
   showCloudQa,
   onCloudQa,
   dungeonQaLabel,
@@ -313,17 +292,13 @@ export default function CommandHangarV444({
     >
       <div className={styles.grid} aria-hidden="true" />
       <div className={styles.content}>
-        <header className={styles.header}>
+        <header className={styles.header} data-sf-hq-header-v4412="no-wallet">
           <button type="button" className={styles.backButton} onClick={onBack} aria-label={vi ? 'Trở về' : 'Back'}>
             <span aria-hidden="true">‹</span>
           </button>
           <div className={styles.titleLockup}>
             <small>{prebattle ? (vi ? 'CHUẨN BỊ NHIỆM VỤ' : 'MISSION PREP') : 'COMMAND HANGAR'}</small>
             <h1>{vi ? 'TỔNG HÀNH DINH' : 'HEADQUARTERS'}</h1>
-          </div>
-          <div className={styles.wallet}>
-            <CurrencyChip Icon={Icons?.Coin} value={coins} tone="coin" />
-            <CurrencyChip Icon={Icons?.Gem} value={diamonds} tone="gem" />
           </div>
         </header>
 

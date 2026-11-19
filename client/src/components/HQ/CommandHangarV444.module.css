@@ -1,3 +1,4 @@
+/* V4.4.12 removes unused HQ wallet and aligns native CTA label artwork; preserves existing layout and behavior. */
 .screen {
   --hangar-cyan: #4ddcff;
   --hangar-cyan-soft: #9cefff;
@@ -74,23 +75,6 @@
   white-space: nowrap;
 }
 .wallet { display: flex; gap: 8px; }
-.currencyChip {
-  display: inline-flex;
-  min-width: 86px;
-  min-height: 50px;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border: 1px solid rgba(124, 155, 201, .27);
-  border-bottom-color: var(--chip-tone, #4ddcff);
-  border-radius: 12px;
-  background: rgba(4, 12, 27, .9);
-  box-shadow: inset 0 -3px 0 var(--chip-tone, #4ddcff);
-}
-.currencyIcon { display: grid; width: 24px; height: 24px; place-items: center; color: var(--chip-tone, #4ddcff); }
-.currencyIcon svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.8; }
-.currencyChip strong { font: 800 20px/1 var(--sf-product-data-font, monospace); }
 .currency_coin { --chip-tone: #ff9d4d; }
 .currency_gem { --chip-tone: #ca7bff; }
 .shipSelector {
@@ -377,9 +361,6 @@
 @media (max-width: 680px) {
   .content { padding-inline: max(10px, env(safe-area-inset-left, 0px)); }
   .header { grid-template-columns: 52px minmax(0, 1fr) auto; gap: 10px; }
-  .currencyChip { min-width: 62px; padding-inline: 8px; }
-  .currencyChip strong { font-size: 17px; }
-  .currencyIcon { width: 20px; height: 20px; }
   .shipSelector { grid-template-columns: 42px minmax(0, 1fr) auto 42px; }
   .starRow { display: none; }
   .levelBadge { display: none; }
@@ -403,8 +384,6 @@
   .titleLockup small { display: none; }
   .titleLockup h1 { font-size: 22px; }
   .wallet { gap: 5px; }
-  .currencyChip { min-width: 54px; }
-  .currencyIcon { display: none; }
   .shipSelector { grid-template-columns: 40px minmax(0, 1fr) auto 40px; gap: 6px; padding: 9px 7px; }
   .cpBadge { min-width: 76px; padding-inline: 8px; }
   .cpBadge strong { font-size: 18px; }
@@ -550,6 +529,7 @@
 
 /* V4.4.6: HQ is a management surface, never a duplicate Portal.
    V4.4.7 FLEET INDUSTRIAL visual authority; V4.4.8 frame de-duplication replaces the former V446 block.
+   V4.4.10 finish pass: brushed alloy, signal accents and readable item cards without layout changes.
    All equipment selectors, pilot flows, mission context and commands stay in JSX. */
 .screen[data-sf-command-hangar="portal-hangar-v4.4.4"][data-sf-visual-v447="fleet-industrial"] {
   --hangar-cyan: #68e9ff;
@@ -558,13 +538,17 @@
   --hangar-border: rgba(98,194,226,.32);
   --hangar-panel: rgba(5,21,36,.94);
   --sf-fleet-copper: #ccad80;
+  --sf-fleet-hi: rgba(156,230,251,.23);
+  --sf-fleet-deep: #061524;
+  --sf-fleet-ceramic: #071a2a;
   color: #eff9ff;
   background:
-    radial-gradient(ellipse 70% 35% at 50% 17%, rgba(52,113,138,.23), transparent 75%),
-    linear-gradient(180deg,#081725 0%,#030b15 62%,#02060e 100%);
+    radial-gradient(ellipse 90% 38% at 50% 18%, rgba(50,133,165,.25), transparent 76%),
+    linear-gradient(110deg,transparent 0 48%,rgba(67,141,168,.018) 49% 50%,transparent 51%),
+    linear-gradient(180deg,#0b2130 0%,#051524 43%,#030d19 100%);
 }
 .screen[data-sf-visual-v447="fleet-industrial"] .grid {
-  opacity: .18;
+  opacity: .14;
   background-size: 58px 58px;
 }
 .screen[data-sf-visual-v447="fleet-industrial"] .content {
@@ -575,10 +559,11 @@
     max(12px,env(safe-area-inset-left,0px));
 }
 .screen[data-sf-visual-v447="fleet-industrial"] .header {
-  grid-template-columns: 46px minmax(0,1fr) auto;
+  grid-template-columns: 46px minmax(0,1fr);
   min-height: 70px;
   gap: 9px;
-  border-bottom: 1px solid rgba(154,200,223,.22);
+  border-bottom: 1px solid rgba(154,200,223,.20);
+  background: linear-gradient(90deg,rgba(12,48,67,.24),transparent 75%);
 }
 .screen[data-sf-visual-v447="fleet-industrial"] .backButton,
 .screen[data-sf-visual-v447="fleet-industrial"] .shipSelector > button {
@@ -587,8 +572,8 @@
   border: 1px solid rgba(109,212,245,.43);
   border-radius: 3px 12px 3px 12px;
   color: #c0f7ff;
-  background: linear-gradient(135deg,rgba(17,61,84,.97),rgba(4,18,33,.98));
-  box-shadow: inset 2px 0 0 rgba(91,218,245,.46),0 6px 14px rgba(0,0,0,.22);
+  background: linear-gradient(138deg,rgba(34,84,105,.90),rgba(5,23,39,.99) 68%);
+  box-shadow: inset 2px 0 0 rgba(91,218,245,.48),inset 0 1px 0 rgba(183,231,247,.12),0 6px 14px rgba(0,0,0,.22);
 }
 .screen[data-sf-visual-v447="fleet-industrial"] .titleLockup small {
   color: #aeccdd;
@@ -602,20 +587,6 @@
   text-overflow: clip;
   white-space: normal;
 }
-.screen[data-sf-visual-v447="fleet-industrial"] .currencyChip {
-  min-width: 58px;
-  min-height: 42px;
-  gap: 4px;
-  padding: 5px 7px;
-  border: 1px solid rgba(133,170,197,.36);
-  border-bottom: 2px solid var(--chip-tone,#69def7);
-  border-radius: 4px 11px 4px 11px;
-  background: linear-gradient(130deg,rgba(13,34,49,.96),rgba(2,11,23,.98));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
-}
-.screen[data-sf-visual-v447="fleet-industrial"] .currencyIcon,
-.screen[data-sf-visual-v447="fleet-industrial"] .currencyIcon svg { width: 19px; height: 19px; }
-.screen[data-sf-visual-v447="fleet-industrial"] .currencyChip strong { font-size: 16px; }
 /* Ship identity = name / star-tier / power. Leave data selectors intact. */
 .screen[data-sf-visual-v447="fleet-industrial"] .shipSelector {
   position: relative;
@@ -630,8 +601,10 @@
   padding: 10px;
   border: 1px solid rgba(126,197,225,.40);
   border-radius: 4px 18px 4px 18px;
-  background: linear-gradient(110deg,rgba(14,43,61,.96),rgba(4,19,35,.98));
-  box-shadow: inset 0 1px 0 rgba(238,250,255,.07),0 12px 22px rgba(0,0,0,.23);
+  background:
+    linear-gradient(90deg,rgba(103,193,222,.05) 0 1px,transparent 1px calc(100% - 1px),rgba(103,193,222,.05) calc(100% - 1px)),
+    linear-gradient(120deg,rgba(25,64,82,.95),rgba(5,24,42,.98) 67%);
+  box-shadow: inset 0 1px 0 rgba(221,249,255,.10),inset 0 -7px 17px rgba(0,8,18,.25),0 12px 22px rgba(0,0,0,.2);
 }
 .screen[data-sf-visual-v447="fleet-industrial"] .shipSelector::before {
   position: absolute;
@@ -687,7 +660,8 @@
   padding: 7px;
   border: 1px solid rgba(239,190,116,.48);
   border-radius: 4px 11px 4px 11px;
-  background: linear-gradient(135deg,rgba(66,47,27,.31),rgba(9,24,38,.9));
+  background: linear-gradient(135deg,rgba(80,56,26,.24),rgba(13,32,46,.94));
+  box-shadow: inset 0 1px 0 rgba(255,214,149,.17),0 0 16px rgba(231,173,88,.05);
   text-align: center;
 }
 .screen[data-sf-visual-v447="fleet-industrial"] .cpBadge small { color: #edbd7c; }
@@ -708,9 +682,10 @@
   border: 1px solid rgba(122,191,221,.39);
   border-radius: 5px 25px 5px 25px;
   background:
-    radial-gradient(ellipse 68% 74% at 50% 45%,rgba(26,97,131,.27),transparent 75%),
-    linear-gradient(175deg,rgba(14,39,56,.94),rgba(3,13,25,.98));
-  box-shadow: inset 0 0 0 4px rgba(58,112,140,.09),0 18px 34px rgba(0,0,0,.26);
+    radial-gradient(ellipse 54% 64% at 50% 43%,rgba(33,131,165,.31),transparent 75%),
+    linear-gradient(180deg,rgba(65,113,139,.16),transparent 9% 92%,rgba(10,47,73,.20)),
+    linear-gradient(145deg,rgba(20,52,72,.96),rgba(4,18,32,.99) 78%);
+  box-shadow: inset 0 0 0 4px rgba(58,112,140,.07),inset 0 1px 0 rgba(184,243,255,.11),0 18px 34px rgba(0,0,0,.22);
 }
 .screen[data-sf-visual-v447="fleet-industrial"] .hangarStage::before {
   position: absolute;
@@ -718,7 +693,7 @@
   inset: 10% 19%;
   content: '';
   pointer-events: none;
-  opacity: .16;
+  opacity: .23;
   background: url('/assets/ui/spacefighter-hud-v3/scifi/sf_cyan_radar_01.webp') center / contain no-repeat;
 }
 .screen[data-sf-visual-v447="fleet-industrial"] .hangarStage::after {
@@ -727,8 +702,11 @@
   inset: 8px;
   content: '';
   pointer-events: none;
-  border: 1px solid rgba(116,208,242,.08);
+  border: 1px solid rgba(116,208,242,.14);
   border-radius: 3px 18px 3px 18px;
+  background:
+    linear-gradient(90deg,rgba(118,218,245,.26) 0 30px,transparent 30px calc(100% - 30px),rgba(118,218,245,.26) calc(100% - 30px)) top / 100% 1px no-repeat,
+    linear-gradient(90deg,rgba(118,218,245,.16) 0 20px,transparent 20px calc(100% - 20px),rgba(118,218,245,.16) calc(100% - 20px)) bottom / 100% 1px no-repeat;
 }
 .screen[data-sf-visual-v447="fleet-industrial"] .hangarStage > * { position: relative; z-index: 1; }
 .screen[data-sf-visual-v447="fleet-industrial"] .loadoutSlot {
@@ -739,14 +717,16 @@
   aspect-ratio: 1;
   place-items: center;
   padding: 5px;
-  border: 1px solid rgba(100,183,216,.49);
+  border: 1px solid rgba(118,193,218,.46);
   border-radius: 3px 13px 3px 13px;
-  background: linear-gradient(135deg,rgba(13,42,61,.94),rgba(3,14,26,.98));
-  box-shadow: inset 0 0 16px rgba(2,8,16,.56),0 3px 10px rgba(0,0,0,.25);
+  background:
+    linear-gradient(145deg,rgba(148,211,231,.14),transparent 23%),
+    linear-gradient(138deg,rgba(24,63,83,.93),rgba(3,17,32,.98) 72%);
+  box-shadow: inset 0 1px 0 rgba(197,247,255,.08),inset 0 -7px 11px rgba(2,9,19,.42),0 3px 10px rgba(0,0,0,.22);
 }
 .screen[data-sf-visual-v447="fleet-industrial"] .loadoutSlot::after {
   inset: 4px;
-  border: 1px solid rgba(100,207,237,.13);
+  border: 1px solid rgba(100,207,237,.16);
   border-radius: 2px 9px 2px 9px;
 }
 .screen[data-sf-visual-v447="fleet-industrial"] .loadoutSlot[data-equipped="true"] { border-color: color-mix(in srgb,var(--slot-tone) 67%,rgba(128,191,213,.5)); }
@@ -764,7 +744,7 @@
   width: 100%;
   max-height: 238px;
   object-fit: contain;
-  filter: drop-shadow(0 13px 16px rgba(0,0,0,.59)) drop-shadow(0 0 15px rgba(48,179,208,.22));
+  filter: drop-shadow(0 13px 16px rgba(0,0,0,.62)) drop-shadow(0 0 18px rgba(50,187,224,.28));
 }
 .screen[data-sf-visual-v447="fleet-industrial"] .heroCaption { bottom: 4px; }
 .screen[data-sf-visual-v447="fleet-industrial"] .heroCaption strong { display: none; }
@@ -772,6 +752,19 @@
   color: #a6dae7;
   font: 700 10px/1.2 var(--sf-product-data-font,ui-monospace,monospace);
   letter-spacing: .08em;
+}
+/* Accessible button feedback: localized to user action, no permanent GPU-heavy animation. */
+@media (hover: hover) and (pointer: fine) {
+  .screen[data-sf-visual-v447="fleet-industrial"] .loadoutSlot:hover,
+  .screen[data-sf-visual-v447="fleet-industrial"] .fleetRail > button:hover {
+    border-color: rgba(144,231,248,.78);
+    box-shadow: inset 0 1px 0 rgba(206,246,255,.15),0 0 13px rgba(56,190,226,.15);
+  }
+}
+.screen[data-sf-visual-v447="fleet-industrial"] .loadoutSlot:focus-visible,
+.screen[data-sf-visual-v447="fleet-industrial"] .fleetRail > button:focus-visible {
+  outline: 2px solid #e2faff;
+  outline-offset: 2px;
 }
 /* Tabs and panels: angular corner details, restrained emphasis, readable Vietnamese. */
 .screen[data-sf-visual-v447="fleet-industrial"] .tabs {
@@ -782,7 +775,7 @@
   overflow: hidden;
   border: 1px solid rgba(119,185,217,.34);
   border-radius: 3px 13px 3px 13px;
-  background: rgba(4,18,33,.97);
+  background: linear-gradient(180deg,rgba(10,37,53,.97),rgba(2,15,29,.98));
 }
 .screen[data-sf-visual-v447="fleet-industrial"] .tabs button {
   min-height: 50px;
@@ -792,16 +785,18 @@
 }
 .screen[data-sf-visual-v447="fleet-industrial"] .tabs .activeTab {
   color: #eaffff;
-  background: linear-gradient(180deg,rgba(30,88,114,.72),rgba(4,29,48,.88));
-  box-shadow: inset 0 -3px 0 #6ce6ff;
+  background: linear-gradient(180deg,rgba(36,111,139,.59),rgba(6,42,62,.91));
+  box-shadow: inset 0 1px 0 rgba(190,246,255,.11),inset 0 -3px 0 #6ce6ff;
 }
 .screen[data-sf-visual-v447="fleet-industrial"] .pilotPanel,
 .screen[data-sf-visual-v447="fleet-industrial"] .fleetPanel,
 .screen[data-sf-visual-v447="fleet-industrial"] .infoPanel {
   border: 1px solid rgba(117,180,210,.33);
   border-radius: 4px 20px 4px 20px;
-  background: linear-gradient(146deg,rgba(9,38,54,.90),rgba(3,14,26,.97));
-  box-shadow: inset 0 1px 0 rgba(212,251,255,.06),0 9px 18px rgba(0,0,0,.16);
+  background:
+    linear-gradient(115deg,rgba(73,170,205,.11),transparent 32%),
+    linear-gradient(147deg,rgba(12,46,64,.96),rgba(3,17,30,.98));
+  box-shadow: inset 0 1px 0 rgba(212,251,255,.09),0 9px 18px rgba(0,0,0,.15);
 }
 .screen[data-sf-visual-v447="fleet-industrial"] .pilotPanel {
   display: grid;
@@ -814,9 +809,10 @@
   width: 66px;
   height: 66px;
   overflow: hidden;
-  border: 1px solid rgba(86,211,245,.56);
+  border: 1px solid color-mix(in srgb,var(--pilot-tone,#67dff7) 61%,#7eefff);
   border-radius: 4px 12px 4px 12px;
-  background: rgba(2,12,28,.8);
+  background: linear-gradient(160deg,rgba(33,75,95,.82),rgba(2,12,28,.96));
+  box-shadow: 0 0 0 2px rgba(18,70,91,.30),0 0 12px rgba(48,194,224,.11);
 }
 .screen[data-sf-visual-v447="fleet-industrial"] .pilotCopy h2 { font-size: clamp(17px,3.7vw,22px); }
 .screen[data-sf-visual-v447="fleet-industrial"] .pilotCopy p { font-size: 12px; line-height: 1.4; }
@@ -825,29 +821,132 @@
   width: 100%;
   min-height: 44px;
   padding: 6px 4px;
-  border: 1px solid rgba(100,206,239,.59);
+  border: 1px solid rgba(100,206,239,.53);
   border-radius: 3px 10px 3px 10px;
   color: #e5f9ff;
-  background: rgba(13,65,87,.68);
+  background: linear-gradient(135deg,rgba(34,104,133,.58),rgba(7,41,63,.88));
   font-size: 11px;
 }
 .screen[data-sf-visual-v447="fleet-industrial"] .fleetPanel { padding: 14px; }
-.screen[data-sf-visual-v447="fleet-industrial"] .fleetRail { grid-auto-columns: minmax(125px,29%); }
+.screen[data-sf-visual-v447="fleet-industrial"] .fleetRail { grid-auto-columns: minmax(135px,29%); }
 .screen[data-sf-visual-v447="fleet-industrial"] .fleetRail > button {
   min-height: 129px;
   border: 1px solid rgba(113,178,207,.37);
   border-radius: 4px 13px 4px 13px;
-  background: linear-gradient(145deg,rgba(3,17,34,.96),rgba(5,29,47,.92));
+  background: linear-gradient(145deg,rgba(15,51,71,.92),rgba(3,19,36,.98));
 }
-.screen[data-sf-visual-v447="fleet-industrial"] .fleetRail > button.fleetSelected { border-color: #85eaff; box-shadow: 0 0 12px rgba(72,210,241,.17); }
-.screen[data-sf-visual-v447="fleet-industrial"] .fleetPreview { height: 79px; }
+.screen[data-sf-visual-v447="fleet-industrial"] .fleetRail > button.fleetSelected { border-color: #85eaff; box-shadow: inset 0 2px 0 rgba(134,237,255,.16),0 0 13px rgba(72,210,241,.16); }
+.screen[data-sf-visual-v447="fleet-industrial"] .fleetPreview {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border-radius: 3px 10px 3px 10px;
+  background: radial-gradient(circle at 50% 45%,rgba(37,141,185,.18),rgba(2,13,25,.1) 67%);
+}
+/* The ship art is 640x640 with transparent edges. Replace grid-intrinsic sizing
+   with a positioned contain image so card previews cannot crop wings/tail. */
+.screen[data-sf-visual-v447="fleet-industrial"] .fleetPreview > img,
+.screen[data-sf-visual-v447="fleet-industrial"] .fleetPreview > [data-sf-reliable-image] {
+  position: absolute;
+  display: block;
+  inset: 5%;
+  width: 90%;
+  height: 90%;
+  min-width: 0;
+  min-height: 0;
+  max-width: 90%;
+  max-height: 90%;
+  object-fit: contain;
+  object-position: center;
+  transform: none;
+}
+/* A square selector preview preserves the entire aircraft in the modal. */
+.screen[data-sf-visual-v447="fleet-industrial"] .selectorGrid { align-items: start; }
+.screen[data-sf-visual-v447="fleet-industrial"] .selectorItem {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  gap: 6px;
+  padding: 8px;
+}
+.screen[data-sf-visual-v447="fleet-industrial"] .selectorPreview {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  flex: 0 0 auto;
+  border-radius: 5px 11px 5px 11px;
+  background: radial-gradient(circle,rgba(27,94,123,.21),rgba(3,17,31,.39) 68%);
+}
+.screen[data-sf-visual-v447="fleet-industrial"] .selectorPreview > img,
+.screen[data-sf-visual-v447="fleet-industrial"] .selectorPreview > [data-sf-reliable-image] {
+  position: absolute;
+  display: block;
+  inset: 5%;
+  width: 90%;
+  height: 90%;
+  min-width: 0;
+  min-height: 0;
+  max-width: 90%;
+  max-height: 90%;
+  object-fit: contain;
+  object-position: center;
+  transform: none;
+}
+.screen[data-sf-visual-v447="fleet-industrial"] .selectorItem .selectorCopy {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: 4px;
+}
+.screen[data-sf-visual-v447="fleet-industrial"] .selectorItem .selectorCopy strong {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.18;
+}
+.screen[data-sf-visual-v447="fleet-industrial"] .selectorItem em { margin-top: auto; }
+.screen[data-sf-visual-v447="fleet-industrial"] .appearancePreview {
+  position: relative;
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+}
+.screen[data-sf-visual-v447="fleet-industrial"] .appearancePreview > img,
+.screen[data-sf-visual-v447="fleet-industrial"] .appearancePreview > [data-sf-reliable-image] {
+  position: absolute;
+  display: block;
+  inset: 5%;
+  width: 90%;
+  height: 90%;
+  min-width: 0;
+  min-height: 0;
+  max-width: 90%;
+  max-height: 90%;
+  object-fit: contain;
+  object-position: center;
+  transform: none;
+}
 .screen[data-sf-visual-v447="fleet-industrial"] .statsBar {
   display: grid;
   grid-template-columns: repeat(4,minmax(0,1fr));
   overflow: hidden;
   border: 1px solid rgba(128,183,207,.31);
   border-radius: 4px 16px 4px 16px;
-  background: linear-gradient(135deg,rgba(12,37,51,.94),rgba(2,14,26,.96));
+  background: linear-gradient(145deg,rgba(19,53,71,.94),rgba(3,18,32,.98));
 }
 .screen[data-sf-visual-v447="fleet-industrial"] .actionBar {
   position: static;
@@ -862,6 +961,8 @@
   background: transparent;
   box-shadow: none;
   backdrop-filter: none;
+  --sf-hq-cta-art-x: clamp(4px,1.4vw,9px);
+  --sf-hq-cta-art-y: clamp(5px,.85dvh,9px);
 }
 .screen[data-sf-visual-v447="fleet-industrial"] .actionBar > button {
   display: flex;
@@ -873,6 +974,11 @@
   padding: 8px 10px;
 
   border-radius: 0;
+}
+.screen[data-sf-visual-v447="fleet-industrial"] .actionBar .secondaryAction > span,
+.screen[data-sf-visual-v447="fleet-industrial"] .actionBar .secondaryAction > strong,
+.screen[data-sf-visual-v447="fleet-industrial"] .actionBar .primaryAction > span {
+  transform: translate(var(--sf-hq-cta-art-x),var(--sf-hq-cta-art-y));
 }
 .screen[data-sf-visual-v447="fleet-industrial"] .actionBar .primaryAction {
   border: 0;
@@ -902,12 +1008,11 @@
 }
 @media (max-width: 430px) and (orientation: portrait) {
   .screen[data-sf-visual-v447="fleet-industrial"] .header {
-    grid-template-columns: 41px minmax(0,1fr) auto;
+    grid-template-columns: 41px minmax(0,1fr);
     gap: 6px;
   }
   .screen[data-sf-visual-v447="fleet-industrial"] .titleLockup h1 { font-size: clamp(17px,4.65vw,21px); }
   .screen[data-sf-visual-v447="fleet-industrial"] .titleLockup small { font-size: 9px; letter-spacing: .08em; }
-  .screen[data-sf-visual-v447="fleet-industrial"] .currencyChip { min-width: 55px; padding: 4px; }
   .screen[data-sf-visual-v447="fleet-industrial"] .shipSelector {
     grid-template-columns: 39px minmax(0,1fr) 88px 39px;
     gap: 4px 5px;
@@ -927,7 +1032,7 @@
   .screen[data-sf-visual-v447="fleet-industrial"] .shipImage { max-height: 207px; }
   .screen[data-sf-visual-v447="fleet-industrial"] .pilotPanel { grid-template-columns: 60px minmax(0,1fr) 70px; gap: 8px; }
   .screen[data-sf-visual-v447="fleet-industrial"] .pilotPortraitShell { width: 60px; height: 60px; }
-  .screen[data-sf-visual-v447="fleet-industrial"] .fleetRail { grid-auto-columns: minmax(112px,42%); }
+  .screen[data-sf-visual-v447="fleet-industrial"] .fleetRail { grid-auto-columns: minmax(136px,42%); }
 }
 @media (orientation: landscape) and (max-height: 620px) {
   .screen[data-sf-visual-v447="fleet-industrial"] .content { width: min(100%,950px); }

@@ -41,7 +41,12 @@ test('V449: profile and economy chips are lighter glass while remaining readable
   const money=value('.currencyChip','background');
   assertGlass(profile,.84);
   assertGlass(money,.84);
-  assert.match(value('.profileBtn','flex'),/40vw/);
+  // V4.4.11 intentionally replaces the obsolete 40vw side-by-side header.
+  // Retain the transparency contract while testing the approved two-tier layout.
+  assert.equal(value('.profileBtn','width'),'100%');
+  assert.equal(value('.topNav','display'),'grid');
+  assert.match(value('.currencyBar','grid-template-columns'),/repeat\(5,minmax\(0,1fr\)\)/);
+  assert.equal((jsx.match(/className=\{styles.currencyLabel\}/g)||[]).length,5);
 });
 
 test('V449: side buttons use translucent clipped underlay, never opaque navy blocks',()=>{

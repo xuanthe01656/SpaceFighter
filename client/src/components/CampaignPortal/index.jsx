@@ -145,41 +145,55 @@ export default function CampaignPortal({ gsRef, setScreen, lang, setLang, curren
       data-sf-portal-layout-v446="flight-hub" data-sf-visual-v447="aurora-tactical">
 
       {/* TOP NAVIGATION & CURRENCY BAR */}
-      <div className={styles.topNav}>
-        <motion.button variants={itemVariants} className={styles.profileBtn} onClick={() => setShowProfile(true)}>
+      <div className={styles.topNav} data-sf-portal-header-v4411="two-tier">
+        <motion.button type="button" variants={itemVariants} className={styles.profileBtn} onClick={() => setShowProfile(true)}>
           <div className={styles.profileAvatarWrap}>
-             {playerAvatar ? (
-               <img src={playerAvatar} alt="avatar" className={styles.profileAvatar} referrerPolicy="no-referrer" />
-             ) : (
-               <div className={styles.avatarPlaceholder}><Icons.User /></div>
-             )}
+            {playerAvatar ? (
+              <img src={playerAvatar} alt="" className={styles.profileAvatar} referrerPolicy="no-referrer" />
+            ) : (
+              <div className={styles.avatarPlaceholder}><Icons.User /></div>
+            )}
           </div>
           <div className={styles.profileInfo}>
-             <span className={styles.profileName}>{playerName}</span>
-             <div className={styles.levelRow}>
-                <span className={styles.profileLevel}>Lv.{expData.level}</span>
-                <div className={styles.miniExpBarBg}>
-                  <div className={styles.miniExpBarFill} style={{ width: `${expData.percent}%` }}></div>
-                </div>
-             </div>
+            <span className={styles.profileName}>{playerName}</span>
+            <div className={styles.levelRow}>
+              <span className={styles.profileLevel}>Lv.{expData.level}</span>
+              <div className={styles.miniExpBarBg}>
+                <div className={styles.miniExpBarFill} style={{ width: `${expData.percent}%` }} />
+              </div>
+            </div>
           </div>
+          <span className={styles.headerAccountStatus} aria-label={currentUser ? (lang === 'vi' ? 'Đã đăng nhập' : 'Signed in') : (lang === 'vi' ? 'Chơi khách' : 'Guest')}>
+            <span className={styles.headerAccountDot} aria-hidden="true" />
+            {currentUser ? (lang === 'vi' ? 'TÀI KHOẢN' : 'ACCOUNT') : (lang === 'vi' ? 'KHÁCH' : 'GUEST')}
+          </span>
         </motion.button>
 
-        <motion.div variants={itemVariants} className={styles.currencyBar}>
-          <div className={`${styles.currencyChip} ${styles.chipEnergy}`}>
-             <div className={styles.currencyIcon}><Icons.Energy /></div><span className={styles.currencyAmt}>{formatCompactNumber(energy)}</span>
+        <motion.div variants={itemVariants} className={styles.currencyBar} aria-label={lang === 'vi' ? 'Tài nguyên người chơi' : 'Player resources'}>
+          <div className={`${styles.currencyChip} ${styles.chipEnergy}`} title={lang === 'vi' ? 'Năng lượng' : 'Energy'}>
+            <div className={styles.currencyIcon}><Icons.Energy /></div>
+            <span className={styles.currencyAmt}>{formatCompactNumber(energy)}</span>
+            <small className={styles.currencyLabel}>{lang === 'vi' ? 'N.LƯỢNG' : 'ENERGY'}</small>
           </div>
-          <div className={`${styles.currencyChip} ${styles.chipCoin}`}>
-             <div className={styles.currencyIcon}><Icons.Coin /></div><span className={styles.currencyAmt}>{formatCompactNumber(coins)}</span>
+          <div className={`${styles.currencyChip} ${styles.chipCoin}`} title={lang === 'vi' ? 'Xu' : 'Coins'}>
+            <div className={styles.currencyIcon}><Icons.Coin /></div>
+            <span className={styles.currencyAmt}>{formatCompactNumber(coins)}</span>
+            <small className={styles.currencyLabel}>{lang === 'vi' ? 'XU' : 'COINS'}</small>
           </div>
-          <div className={`${styles.currencyChip} ${styles.chipGem}`}>
-             <div className={styles.currencyIcon}><Icons.Gem /></div><span className={styles.currencyAmt}>{formatCompactNumber(diamonds)}</span>
+          <div className={`${styles.currencyChip} ${styles.chipGem}`} title={lang === 'vi' ? 'Kim cương' : 'Gems'}>
+            <div className={styles.currencyIcon}><Icons.Gem /></div>
+            <span className={styles.currencyAmt}>{formatCompactNumber(diamonds)}</span>
+            <small className={styles.currencyLabel}>{lang === 'vi' ? 'K.CƯƠNG' : 'GEMS'}</small>
           </div>
-          <div className={`${styles.currencyChip} ${styles.chipBlueprint}`}>
-              <div className={styles.currencyIcon}><Icons.Blueprint /></div><span className={styles.currencyAmt}>{formatCompactNumber(blueprints)}</span>
+          <div className={`${styles.currencyChip} ${styles.chipBlueprint}`} title={lang === 'vi' ? 'Bản vẽ' : 'Blueprints'}>
+            <div className={styles.currencyIcon}><Icons.Blueprint /></div>
+            <span className={styles.currencyAmt}>{formatCompactNumber(blueprints)}</span>
+            <small className={styles.currencyLabel}>{lang === 'vi' ? 'BẢN VẼ' : 'BLUEPRINT'}</small>
           </div>
-          <div className={`${styles.currencyChip} ${styles.chipGear}`}>
-            <div className={styles.currencyIcon}><Icons.Gear /></div><span className={styles.currencyAmt}>{formatCompactNumber(gear)}</span>
+          <div className={`${styles.currencyChip} ${styles.chipGear}`} title={lang === 'vi' ? 'Bánh răng' : 'Gears'}>
+            <div className={styles.currencyIcon}><Icons.Gear /></div>
+            <span className={styles.currencyAmt}>{formatCompactNumber(gear)}</span>
+            <small className={styles.currencyLabel}>{lang === 'vi' ? 'BÁNH RĂNG' : 'GEARS'}</small>
           </div>
         </motion.div>
       </div>
