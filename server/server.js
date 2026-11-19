@@ -160,6 +160,27 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
           outcomeDigest:r.body?.outcomeDigest,statusCode,outcome,duplicate:reply?.duplicate===true,latencyMs:performance.now()-started}));}catch(_){/* observability only */}}}
     })(req,res,next);
   });
+  // Dungeon/C15 Foundation V1: emulator-only admission QA, default OFF.
+  // Campaign C15 remains unchanged. The Dungeon simulator/settlement is NOT
+  // implemented; never accept a client outcome, score, crate or reward claim.
+  const c15DungeonV1Ready=options.c15DungeonV1Enabled===true
+    &&options.c15DungeonV1Service?.enabled===true
+    &&options.c15DungeonV1Service?.emulatorOnly===true;
+  const withC15DungeonV1=fn=>async(req,res,next)=>{
+    if(!c15DungeonV1Ready)return res.status(503).json({ok:false,code:'C15_DUNGEON_V1_DISABLED'});
+    return withAuth(fn)(req,res,next);
+  };
+  app.get('/api/v1/c15/dungeon/contract',withC15DungeonV1((req,user)=>
+    options.c15DungeonV1Service.preview(user.uid,req.get('x-game-session'),req.query.dungeonId)));
+  app.post('/api/v1/c15/dungeon/admission',withC15DungeonV1((req,user)=>
+    options.c15DungeonV1Service.admitEmulator(user.uid,req.get('x-game-session'),req.body)));
+  // Deliberate permanent locks in Foundation V1, including when QA admission
+  // is enabled. A valid C15 Campaign outcome MUST NOT settle a Dungeon.
+  for(const endpoint of ['/api/v1/c15/dungeon/battle/chunk',
+    '/api/v1/c15/dungeon/battle/finalize', '/api/v1/c15/dungeon/settlement/claim']){
+    app.post(endpoint,(_req,res)=>res.status(423).json({ok:false,
+      code:'C15_DUNGEON_SERVER_REPLAY_REQUIRED'}));
+  }
   // C7-A: isolated, default-OFF, allowlisted QA replay. NEVER legacy battle.start/finish.
   // No energy, rewards, missions, progress or economy mutation in these routes.
   const qaReady=options.qaBattleEnabled===true && Boolean(options.qaBattleService);
@@ -242,7 +263,7 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
 async function start() {
   const port=Number(process.env.PORT||3000);
   if(!Number.isInteger(port)||port<1||port>65535) throw new Error('Invalid PORT');
-  let service=null,auth=null,admin=null,accountDeletionService=null,qaBattleService=null,qaVerifierService=null,candidateService=null,c15Rc1bService=null,c15Rc3SettlementService=null,c15Rc4ReleaseGate=null,c15ResourceCatalog=null;
+  let service=null,auth=null,admin=null,accountDeletionService=null,qaBattleService=null,qaVerifierService=null,candidateService=null,c15Rc1bService=null,c15Rc3SettlementService=null,c15Rc4ReleaseGate=null,c15ResourceCatalog=null,c15DungeonV1Service=null;
   if(process.env.GAME_API_ENABLED==='true') {
     admin=require('firebase-admin');
     if(!admin.apps.length) {
@@ -315,6 +336,16 @@ async function start() {
         console.error('C15 RC3 staging settlement disabled: invalid staged configuration');
       }
     }
+    // Never initialize Dungeon admission against real Firestore. The module
+    // checks demo project ID, loopback emulator host and explicit QA approval.
+    if(process.env.GAME_C15_DUNGEON_V1_ENABLED==='true'){
+      try{
+        const {createC15DungeonFoundationV1}=require('./lib/c15DungeonFoundationV1.cjs');
+        c15DungeonV1Service=await createC15DungeonFoundationV1({db:admin.firestore(),env:process.env});
+      }catch(_error){
+        console.error('C15 Dungeon V1 emulator-only QA disabled: invalid configuration');
+      }
+    }
     if(process.env.GAME_C15_RC4_RELEASE_GATE_ENABLED==='true'){
       try{
         const {parseC15Rc4ReleaseGateConfig,createC15Rc4ReleaseGate}=require('./lib/c15Rc4ReleaseGateV1.cjs');
@@ -337,6 +368,7 @@ async function start() {
     candidatePerfEnabled:process.env.GAME_C12_PERF_LOG_ENABLED==='true',
     c15Rc1bService,c15Rc1bEnabled:Boolean(c15Rc1bService),c15ResourceCatalog,
     c15Rc3SettlementService,c15Rc3SettlementEnabled:Boolean(c15Rc3SettlementService),c15Rc4ReleaseGate,
+    c15DungeonV1Service,c15DungeonV1Enabled:Boolean(c15DungeonV1Service?.enabled),
     allowLocalOrigin:process.env.NODE_ENV!=='production'});
   app.listen(port,'0.0.0.0',()=>console.log(`Space Fighter Phase 1 listening on ${port}; API ${service?'enabled':'disabled'}`));
 }
