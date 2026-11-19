@@ -391,7 +391,7 @@ function executeCommand(document, type, input, { now = Date.now(), rng=random, u
       if (item.kind==='gear') delete c.items[item.itemId];
     }
     if (type==='inventory.salvage') { const amount=list.reduce((a,b)=>a+Math.min(10,b.rarity*2),0); addReward(state,{type:'coins',amount}); extra.earnedCoins=amount; }
-  } else if (type === 'inventory.upgrade') {
+  } else if (type === 'inventory.upgrade' || type === 'inventory.upgrade.v460') {
     const kind = input?.kind, itemId=id(input?.itemId,'itemId');
     if (!['gear','aircraft'].includes(kind)) fail('INVALID_INPUT','Unsupported upgrade type');
     const item=getItem(c,kind,itemId);
@@ -400,42 +400,54 @@ function executeCommand(document, type, input, { now = Date.now(), rng=random, u
       ? ({1:30,2:50,3:70,4:100}[config.AIRCRAFTS.find(a=>a.id===itemId)?.tier||1] || 30)
       : ({1:20,2:40,3:60,4:80,5:100}[item.rarity||1] || 20);
     if (level>=maxLevel) fail('MAX_LEVEL','Maximum level reached',409);
-    const coinCost=level*150,gemCost=Math.ceil(coinCost/100),bpCost=Math.ceil(level*1.5);
-    const cur = state.coins>=coinCost?'coins':'diamonds';
-    charge(state,cur,cur==='coins'?coinCost:gemCost);
+    // V4.6.0 RC1: upgrades must never silently substitute premium currency.
+    // A v460 client sends the new versioned command; legacy clients also pay coins only.
+    if (input?.currency !== undefined && input.currency !== 'coins') fail('INVALID_INPUT','Unsupported upgrade currency');
+    const coinCost=level*150,bpCost=Math.ceil(level*1.5);
+    charge(state,'coins',coinCost);
     charge(c.materials,'blueprints',bpCost);
-    earnCoinMetric(state,coinCost,cur);
+    earnCoinMetric(state,coinCost,'coins');
     item.level=level+1;
-  } else if (type === 'inventory.starup' || type === 'pilot.starup') {
-    if (type==='pilot.starup') {
+    extra={ policyVersion:'V460_RC1', spent:{coins:coinCost,blueprints:bpCost}, level:item.level };
+  } else if (['inventory.starup','pilot.starup','inventory.starup.v460','pilot.starup.v460'].includes(type)) {
+    if (type==='pilot.starup' || type==='pilot.starup.v460') {
       const pilotId=id(input?.pilotId,'pilotId'),pilot=getItem(c,'pilot',pilotId);
       const stars=int(pilot.stars||1,1,5,'stars');
-      const options={1:[500,90],2:[1000,70],3:[2000,50],4:[5000,30]};
-      if (!options[stars]) fail('MAX_LEVEL','Maximum stars reached',409);
-      charge(state,'coins',options[stars][0]); earnCoinMetric(state,options[stars][0],'coins');
-      extra.success=fixedRand(rng,100)<options[stars][1];
-      if (extra.success) pilot.stars=stars+1;
+      const coinCosts={1:500,2:1000,3:2000,4:5000};
+      const coinCost=coinCosts[stars];
+      if (!coinCost) fail('MAX_LEVEL','Maximum stars reached',409);
+      if (input?.currency !== undefined && input.currency !== 'coins') fail('INVALID_INPUT','Unsupported upgrade currency');
+      charge(state,'coins',coinCost); earnCoinMetric(state,coinCost,'coins');
+      // Deterministic progression: a valid purchase never loses coins to RNG.
+      pilot.stars=stars+1;
+      extra={ success:true, policyVersion:'V460_RC1', spent:{coins:coinCost}, stars:pilot.stars };
     } else {
       const itemId=id(input?.itemId,'itemId'),kind=input?.kind;
       if (!['gear','aircraft'].includes(kind)) fail('INVALID_INPUT','Unsupported starup type');
       const item=getItem(c,kind,itemId);
-      const rarity=int(kind==='gear'?(item.rarity||1):(item.stars||1),1,5,'stars');
+      // Aircraft ownership is keyed by ship ID: there are no duplicate aircraft
+      // objects or fragment contract to consume. Never destroy unrelated gear.
+      if (kind==='aircraft') fail('AIRCRAFT_STAR_MATERIAL_UNAVAILABLE','Aircraft star materials are not configured',409);
+      const rarity=int(item.rarity||1,1,5,'stars');
       if (rarity>=5) fail('MAX_LEVEL','Maximum stars reached',409);
       const sacr = input?.sacrifices;
       if (!Array.isArray(sacr) || sacr.length<1 || sacr.length>10 || new Set(sacr).size!==sacr.length || sacr.includes(itemId)) fail('INVALID_INPUT','Invalid sacrifices');
       for (const sid of sacr) {
         const x=getItem(c,'gear',sid);
-        if (x.isLocked || c.loadout[x.type]===sid || x.baseId !== item.baseId) fail('INVALID_INPUT','Sacrifices must be unequipped/unlocked duplicates',409);
+        if (sid==='item_start_gun' || x.type !== item.type || x.isLocked ||
+            c.loadout[x.type]===sid || !item.baseId || x.baseId !== item.baseId) {
+          fail('INVALID_INPUT','Sacrifices must be unequipped/unlocked identical gear',409);
+        }
       }
-      const costs={1:[1000,10,1,100],2:[3000,30,2,70],3:[8000,80,3,50],4:[20000,200,4,30]};
+      const costs={1:[1000,1],2:[3000,2],3:[8000,3],4:[20000,4]};
       const rule=costs[rarity];
-      if (!rule || sacr.length!==rule[2]) fail('INVALID_INPUT','Wrong sacrifice count');
-      const coinCost=rule[0],gemCost=rule[1];
-      const cur=state.coins>=coinCost?'coins':'diamonds';
-      charge(state,cur,cur==='coins'?coinCost:gemCost); earnCoinMetric(state,coinCost,cur);
+      if (!rule || sacr.length!==rule[1]) fail('INVALID_INPUT','Wrong sacrifice count');
+      if (input?.currency !== undefined && input.currency !== 'coins') fail('INVALID_INPUT','Unsupported upgrade currency');
+      const coinCost=rule[0];
+      charge(state,'coins',coinCost); earnCoinMetric(state,coinCost,'coins');
       for (const sid of sacr) delete c.items[sid];
-      extra.success=fixedRand(rng,100)<rule[3];
-      if (extra.success) { if (kind==='gear') item.rarity=rarity+1; else item.stars=rarity+1; }
+      item.rarity=rarity+1;
+      extra={ success:true, policyVersion:'V460_RC1', spent:{coins:coinCost,sacrifices:sacr.length}, stars:item.rarity };
     }
   } else if (type === 'battle.start') {
     const mode = input?.mode;
