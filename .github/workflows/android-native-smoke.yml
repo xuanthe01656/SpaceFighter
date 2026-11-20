@@ -104,6 +104,7 @@ jobs:
       VITE_SF_GUEST_ABILITIES_QA: ${{ github.event_name == 'workflow_dispatch' && (inputs.guest_combat_v2_qa == true || inputs.unified_campaign_dungeon_qa == true) && 'true' || 'false' }}
       VITE_SF_GUEST_COMBAT_V2_QA: ${{ github.event_name == 'workflow_dispatch' && (inputs.guest_combat_v2_qa == true || inputs.unified_campaign_dungeon_qa == true) && 'true' || 'false' }}
       VITE_SF_DUNGEON_QA: ${{ github.event_name == 'workflow_dispatch' && (inputs.guest_dungeon_v39_qa == true || inputs.unified_campaign_dungeon_qa == true) && 'true' || 'false' }}
+      VITE_SF_DUNGEON_V2C11_APK_TRACE: ${{ github.event_name == 'workflow_dispatch' && inputs.guest_dungeon_v39_qa == true && 'true' || 'false' }}
       VITE_SF_UNIFIED_CAMPAIGN_DUNGEON_QA: ${{ github.event_name == 'workflow_dispatch' && inputs.unified_campaign_dungeon_qa == true && 'true' || 'false' }}
       VITE_SF_HUD_ASSETS_V2: 'true'
       VITE_SF_DUNGEON_QA_REWARDS: 'false'
