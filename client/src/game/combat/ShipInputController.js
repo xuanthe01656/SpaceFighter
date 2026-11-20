@@ -32,7 +32,8 @@ export function keyboardVector(keys) {
 
 export function createShipInputController({ canvas, scene, engine, playerRoot, tiltNode,
   halfHeight = 15, aspect, speedMultiplier = 1, pointerSpeedMultiplier = 1,
-  enabled = () => true, inset = 1.8, keyboardUnitsPerFrame = 0.30 }) {
+  enabled = () => true, inset = 1.8, keyboardUnitsPerFrame = 0.30,
+  onPointerTrace = null }) {
   if (!canvas || !scene || !playerRoot || typeof aspect !== 'function') {
     throw new Error('ShipInputController: canvas, scene, playerRoot and aspect are required');
   }
@@ -46,6 +47,12 @@ export function createShipInputController({ canvas, scene, engine, playerRoot, t
   let lastX = 0, lastY = 0, disposed = false;
   const heldKeys = new Set();
   const usable = () => !disposed && enabled();
+  // QA hook sees only pointer events accepted by this controller. Exceptions
+  // from optional instrumentation may never alter normal combat movement.
+  const emitTrace = event => {
+    if (typeof onPointerTrace !== 'function') return;
+    try { onPointerTrace(Object.freeze(event)); } catch (_) { /* QA only */ }
+  };
   const clampPosition = () => {
     const limitX = Math.max(0, halfHeight * aspect() - inset);
     const limitZ = Math.max(0, halfHeight - inset);
@@ -68,6 +75,9 @@ export function createShipInputController({ canvas, scene, engine, playerRoot, t
     pointerId = e.pointerId;
     lastX = e.clientX;
     lastY = e.clientY;
+    emitTrace({kind:'down',pointerId,atMs:Number(e.timeStamp),
+      clientX:e.clientX,clientY:e.clientY,
+      position:{x:playerRoot.position.x,z:playerRoot.position.z}});
     try { canvas.setPointerCapture?.(pointerId); } catch (_) { /* capture can be unsupported */ }
     if (e.cancelable) e.preventDefault();
     try { canvas.focus?.({ preventScroll: true }); } catch (_) { canvas.focus?.(); }
@@ -79,15 +89,25 @@ export function createShipInputController({ canvas, scene, engine, playerRoot, t
     // Applying aircraft speed here made heavy ships fall behind the finger and
     // fast ships overshoot it. Ship speed still affects keyboard movement and
     // remains available to the deterministic combat/rating layers.
-    const { x, z } = worldDragDelta(e.clientX - lastX, e.clientY - lastY,
-      rect.width, rect.height, halfHeight, aspect(), pointerSpeedMultiplier);
+    const deltaX=e.clientX-lastX,deltaY=e.clientY-lastY;
+    const currentAspect=aspect();
+    const { x, z } = worldDragDelta(deltaX,deltaY,
+      rect.width, rect.height, halfHeight, currentAspect, pointerSpeedMultiplier);
     applyDelta(x, z);
+    emitTrace({kind:'move',pointerId,atMs:Number(e.timeStamp),
+      clientX:e.clientX,clientY:e.clientY,
+      position:{x:playerRoot.position.x,z:playerRoot.position.z},
+      viewport:{canvasWidth:rect.width,canvasHeight:rect.height,
+        aspect:currentAspect,halfHeight,inset,pointerSpeedMultiplier},
+      delta:{deltaX,deltaY}});
     lastX = e.clientX;
     lastY = e.clientY;
     if (e.cancelable) e.preventDefault();
   };
   const up = e => {
     if (e.pointerId !== pointerId) return;
+    emitTrace({kind:'up',pointerId,atMs:Number(e.timeStamp),
+      position:{x:playerRoot.position.x,z:playerRoot.position.z}});
     pointerId = null;
     try { if (canvas.hasPointerCapture?.(e.pointerId)) canvas.releasePointerCapture(e.pointerId); } catch (_) {}
   };

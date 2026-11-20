@@ -16,6 +16,7 @@ import { resolveAssetVisual } from '../../game/assets/AssetRegistry.js';
 import { createShipEngineFx } from '../../game/rendering/ShipEngineFx';
 import { createShipInputController } from '../../game/combat/ShipInputController';
 import { dungeonSceneStableSeedV2B1 as stableSeed } from '../../game/dungeon/DungeonSeedTouchContractV2B1.js';
+import { createDungeonDeviceTouchTraceV2B2, isDungeonV2B2LocalQaEnabledV2B2 } from '../../game/dungeon/DungeonDeviceTouchTraceV2B2.js';
 import { describeMainSalvo, describeWingSalvo, describeDroneSalvo, pickWeaponTarget, enemySpeedFactor, shieldDamageFactor, repairAmount, projectileHitsPoint } from '../../game/combat/PlayerWeapons';
 import { createProjectileEmitter } from '../../game/combat/ProjectileEmitter';
 import { createPlayerDamageGateV25, createPlayerDamageOutcomeV25 } from '../../game/combat/PlayerDamagePipelineV25.js';
@@ -283,11 +284,24 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             });
     }
     if (dungeonParityV38) assertCampaignGameplayFoundationLockRC1();
-    const dungeonSeedV38 = stableSeed(
+    const dungeonV2B2QaTicket = data.dungeonC15V2B2QaTicket;
+    const dungeonV2B2LocalQa = typeof data.onDungeonC15V2B2QaTrace === 'function'
+        && isDungeonV2B2LocalQaEnabledV2B2({
+            env: import.meta.env, qaRun: dungeonQaRunV391,
+            ticket: dungeonV2B2QaTicket, dungeonId,
+            profileId: gsRef.current?.campaignData?.profileId,
+            activeBattleId: gsRef.current?.activeBattleId,
+        });
+    const dungeonSceneLegacySeedV38 = stableSeed(
         dungeonId,
         gsRef.current?.campaignData?.profileId || 'guest',
         dungeonQaRunV391?.seedKey || gsRef.current?.activeBattleId || 'local',
     );
+    // QA ONLY: use server-read admission seed when an explicit Vite DEV gate
+    // and a matching battle ticket are supplied. Client cannot verify MAC.
+    // Default Dungeon seed and gameplay remain identical when gate is OFF.
+    const dungeonSeedV38 = dungeonV2B2LocalQa
+        ? dungeonV2B2QaTicket.sceneSeed : dungeonSceneLegacySeedV38;
     const qaStartRoomIndexV391 = dungeonParityV38 && Number.isInteger(dungeonQaRunV391?.directRoomIndex)
         ? dungeonQaRunV391.directRoomIndex
         : 0;
@@ -820,11 +834,20 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     // ══════════════════════════════════════════════════════════════════════════
 
     const boundX = () => ZOOM * getAspect() - 1.8;
+    const dungeonV2B2TouchTrace = dungeonV2B2LocalQa
+        ? createDungeonDeviceTouchTraceV2B2({ticket: dungeonV2B2QaTicket}) : null;
     const shipInput = createShipInputController({
         canvas: engine.getRenderingCanvas(), scene, engine, playerRoot, tiltNode: playerPlane,
         halfHeight: ZOOM, aspect: getAspect,
         speedMultiplier: battleSpeedMultiplier(stats), pointerSpeedMultiplier: 1,
         enabled: () => !gameOver,
+        onPointerTrace: dungeonV2B2TouchTrace ? event => {
+            if (!dungeonV2B2TouchTrace.capture(event)) return;
+            if (event.kind === 'up') {
+                // Local QA callback only: no network, no rewards, no trusted outcome.
+                data.onDungeonC15V2B2QaTrace(dungeonV2B2TouchTrace.snapshot());
+            }
+        } : null,
     });
 
     // ══════════════════════════════════════════════════════════════════════════
