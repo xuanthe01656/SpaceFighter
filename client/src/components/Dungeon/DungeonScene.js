@@ -15,6 +15,7 @@ import { createGuestAbilityVisualFeedbackV2 } from '../../game/rendering/GuestAb
 import { resolveAssetVisual } from '../../game/assets/AssetRegistry.js';
 import { createShipEngineFx } from '../../game/rendering/ShipEngineFx';
 import { createShipInputController } from '../../game/combat/ShipInputController';
+import { dungeonSceneStableSeedV2B1 as stableSeed } from '../../game/dungeon/DungeonSeedTouchContractV2B1.js';
 import { describeMainSalvo, describeWingSalvo, describeDroneSalvo, pickWeaponTarget, enemySpeedFactor, shieldDamageFactor, repairAmount, projectileHitsPoint } from '../../game/combat/PlayerWeapons';
 import { createProjectileEmitter } from '../../game/combat/ProjectileEmitter';
 import { createPlayerDamageGateV25, createPlayerDamageOutcomeV25 } from '../../game/combat/PlayerDamagePipelineV25.js';
@@ -152,14 +153,6 @@ import {
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-const stableSeed = (...parts) => {
-    let hash = 2166136261;
-    for (const char of parts.join('|')) {
-        hash ^= char.charCodeAt(0);
-        hash = Math.imul(hash, 16777619);
-    }
-    return hash >>> 0 || 1;
-};
 
 const makeMat = (scene, emissive, disableLighting = true) => {
     const m = new BABYLON.StandardMaterial(`mat_${Math.random()}`, scene);
