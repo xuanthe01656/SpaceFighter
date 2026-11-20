@@ -31,6 +31,8 @@ public class MainActivity extends BridgeActivity implements ModifiedMainActivity
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(SpaceFighterAssetStorePlugin.class);
+        // QA file sharing uses Android FileProvider; never registered in release APKs.
+        if (BuildConfig.DEBUG) registerPlugin(SpaceFighterQaTraceExportPlugin.class);
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         applyGameDisplayPolicy();

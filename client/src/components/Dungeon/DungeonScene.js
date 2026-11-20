@@ -18,6 +18,7 @@ import { createShipInputController } from '../../game/combat/ShipInputController
 import { dungeonSceneStableSeedV2B1 as stableSeed } from '../../game/dungeon/DungeonSeedTouchContractV2B1.js';
 import { createDungeonDeviceTouchTraceV2B2, isDungeonV2B2LocalQaEnabledV2B2 } from '../../game/dungeon/DungeonDeviceTouchTraceV2B2.js';
 import { createDungeonApkCombatTraceV2C11, isDungeonV2C11ApkTraceEnabled } from '../../game/dungeon/DungeonApkCombatTraceV2C11.js';
+import { mountDungeonApkTraceScreenExportV2C13 } from '../../game/dungeon/DungeonApkTraceScreenExportV2C13.js';
 import { describeMainSalvo, describeWingSalvo, describeDroneSalvo, pickWeaponTarget, enemySpeedFactor, shieldDamageFactor, repairAmount, projectileHitsPoint } from '../../game/combat/PlayerWeapons';
 import { createProjectileEmitter } from '../../game/combat/ProjectileEmitter';
 import { createPlayerDamageGateV25, createPlayerDamageOutcomeV25 } from '../../game/combat/PlayerDamagePipelineV25.js';
@@ -317,6 +318,12 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         // Only QA builds have this manual export accessor. No network or disk IO.
         globalThis.__SF_DUNGEON_C15_V2C11_APK_TRACE__ =
             () => dungeonV2C11Trace.snapshot();
+        // V2C.13: show on-device JSON export only inside the active, doubly gated
+        // V2C.11 Taurus QA recorder; normal/release scenes never mount this UI.
+        const destroyV2C13QaExport = mountDungeonApkTraceScreenExportV2C13({
+            getSnapshot: () => dungeonV2C11Trace.snapshot(),
+        });
+        scene.onDisposeObservable.add(destroyV2C13QaExport);
         scene.onDisposeObservable.add(() => {
             dungeonV2C11Trace.finish();
             try { data.onDungeonC15V2C11QaTrace?.(dungeonV2C11Trace.snapshot()); }
