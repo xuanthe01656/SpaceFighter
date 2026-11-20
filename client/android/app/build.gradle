@@ -46,6 +46,9 @@ apply plugin: 'kotlin-android'
 
 android {
     namespace = "com.theIT.spacefighter4"
+    buildFeatures {
+        buildConfig = true
+    }
     compileSdk = rootProject.ext.compileSdkVersion
 
     defaultConfig {
