@@ -17,6 +17,7 @@ import { createShipEngineFx } from '../../game/rendering/ShipEngineFx';
 import { createShipInputController } from '../../game/combat/ShipInputController';
 import { dungeonSceneStableSeedV2B1 as stableSeed } from '../../game/dungeon/DungeonSeedTouchContractV2B1.js';
 import { createDungeonDeviceTouchTraceV2B2, isDungeonV2B2LocalQaEnabledV2B2 } from '../../game/dungeon/DungeonDeviceTouchTraceV2B2.js';
+import { createDungeonApkCombatTraceV2C11, isDungeonV2C11ApkTraceEnabled } from '../../game/dungeon/DungeonApkCombatTraceV2C11.js';
 import { describeMainSalvo, describeWingSalvo, describeDroneSalvo, pickWeaponTarget, enemySpeedFactor, shieldDamageFactor, repairAmount, projectileHitsPoint } from '../../game/combat/PlayerWeapons';
 import { createProjectileEmitter } from '../../game/combat/ProjectileEmitter';
 import { createPlayerDamageGateV25, createPlayerDamageOutcomeV25 } from '../../game/combat/PlayerDamagePipelineV25.js';
@@ -302,6 +303,31 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     // Default Dungeon seed and gameplay remain identical when gate is OFF.
     const dungeonSeedV38 = dungeonV2B2LocalQa
         ? dungeonV2B2QaTicket.sceneSeed : dungeonSceneLegacySeedV38;
+    // V2C.11: passive APK/WebView QA evidence. The compile-time flag and
+    // explicit Dungeon QA run are both mandatory; production default is OFF.
+    // Do not export profile/UID, ticket/MAC, account or economic data.
+    const dungeonV2C11Trace = isDungeonV2C11ApkTraceEnabled({
+        env: import.meta.env, qaRun: dungeonQaRunV391, dungeonId,
+    }) ? createDungeonApkCombatTraceV2C11({
+        sceneSeed: dungeonSeedV38,
+        seedSource: dungeonV2B2LocalQa
+            ? 'server-ticket-local-unverified' : 'local-client-seed',
+    }) : null;
+    if (dungeonV2C11Trace) {
+        // Only QA builds have this manual export accessor. No network or disk IO.
+        globalThis.__SF_DUNGEON_C15_V2C11_APK_TRACE__ =
+            () => dungeonV2C11Trace.snapshot();
+        scene.onDisposeObservable.add(() => {
+            dungeonV2C11Trace.finish();
+            try { data.onDungeonC15V2C11QaTrace?.(dungeonV2C11Trace.snapshot()); }
+            catch (ignored) { /* never break game disposal for QA diagnostics */ }
+        });
+    }
+    const recordDungeonV2C11 = event => {
+        if (!dungeonV2C11Trace) return;
+        try { dungeonV2C11Trace.captureEvent(event); }
+        catch (ignored) { /* QA observation must never affect combat */ }
+    };
     const qaStartRoomIndexV391 = dungeonParityV38 && Number.isInteger(dungeonQaRunV391?.directRoomIndex)
         ? dungeonQaRunV391.directRoomIndex
         : 0;
@@ -1840,6 +1866,12 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             damageAuthority: 'dungeon-logical-projectile-v392',
         };
         enemyBullets.push(b);
+        if (dungeonV2C11Trace && currentRoomV38?.id === 'taurus_entry') {
+            recordDungeonV2C11({kind: 'enemy_fire', simTick: tick,
+                id: options.sourceRuntimeId || 'legacy',
+                position: {x: b.position.x, z: b.position.z},
+                velocity: {x: b._velX, z: b._velZ}});
+        }
         dungeonQaReadinessV400.recordProjectile(sourceRole, {
             enemyId: options.sourceRuntimeId || null,
         });
@@ -2356,6 +2388,11 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         enemy.miniHp.background = ratio < .4 ? '#ff8800'
           : enemy.type === 'heavy' ? '#ff8a66' : enemy.type === 'elite' ? '#ffdd55' : '#66ddff';
         if (enemy.hp > 0) return false;
+        if (dungeonV2C11Trace && currentRoomV38?.id === 'taurus_entry') {
+            recordDungeonV2C11({kind:'enemy_death',simTick:tick,
+                id: enemy.runtimeId,position:{x:enemy.mesh.position.x,
+                    z:enemy.mesh.position.z}});
+        }
         const gain = enemy.type === 'scout' ? 10 : enemy.type === 'heavy' ? 30 : 60;
         updateScore(gain);
         if (!isCloud) recordGuestEventKill(gsRef.current.campaignData, EVENT_CONFIG, getRealTime?.() ?? Date.now());
@@ -2954,6 +2991,10 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                target,
            );
            shots.fire(salvo);
+           if (dungeonV2C11Trace && currentRoomV38?.id === 'taurus_entry'
+               && salvo.length) recordDungeonV2C11({kind:'player_salvo_plan',
+               simTick:tick,id:'main',count:Math.min(32,salvo.length),
+               position:{x:playerRoot.position.x,z:playerRoot.position.z}});
            if(salvo.length && shouldEchoShot(stats, passives, Date.now())) {
              const extra=salvo[0];
              shots.fire(Array.from({length:stats.echoCount},(_,i)=>({...extra,x:extra.x+(i%2===0?-.28:.28),delayMs:0})));
@@ -3548,6 +3589,23 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                 if (destroyed) break;
             }
             if (destroyed) continue;
+        }
+        // V2C.11 samples the actual scene only after a successful combat pass.
+        // Its Babylon frame clock is NOT the 60 Hz authoritative replay clock.
+        if (dungeonV2C11Trace && currentRoomV38?.id === 'taurus_entry') {
+            try {
+                dungeonV2C11Trace.captureFrame({simTick:tick,
+                    dtMs:frameDeltaMsV410,roomId:currentRoomV38.id,
+                    player:{x:playerRoot.position.x,z:playerRoot.position.z},
+                    playerHp:stats.hp,playerShieldHp:passives.shieldHp || 0,
+                    enemies:enemies.filter(e=>!e.mesh?.isDisposed?.()).map(e=>({
+                        id:e.runtimeId,position:{x:e.mesh.position.x,z:e.mesh.position.z},
+                        hp:Math.max(0,e.hp),maxHp:e.maxHp,
+                    })),
+                    projectiles:{player:playerBullets.length,hostile:enemyBullets.length},
+                    bossActive,bossHp:Math.max(0,bossHp),
+                });
+            } catch (ignored) { /* QA instrumentation must not break rendering */ }
         }
         // Mark only a completed simulation pass. A frame that throws before
         // this line must never be reported as healthy gameplay progress.
