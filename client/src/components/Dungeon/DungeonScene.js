@@ -18,6 +18,7 @@ import { createShipInputController } from '../../game/combat/ShipInputController
 import { dungeonSceneStableSeedV2B1 as stableSeed } from '../../game/dungeon/DungeonSeedTouchContractV2B1.js';
 import { createDungeonDeviceTouchTraceV2B2, isDungeonV2B2LocalQaEnabledV2B2 } from '../../game/dungeon/DungeonDeviceTouchTraceV2B2.js';
 import { createDungeonApkCombatTraceV2C11, isDungeonV2C11ApkTraceEnabled } from '../../game/dungeon/DungeonApkCombatTraceV2C11.js';
+import { createDungeonApkInputJournalV2C14B } from '../../game/dungeon/DungeonApkInputJournalV2C14B.js';
 import { mountDungeonApkTraceScreenExportV2C13 } from '../../game/dungeon/DungeonApkTraceScreenExportV2C13.js';
 import { describeMainSalvo, describeWingSalvo, describeDroneSalvo, pickWeaponTarget, enemySpeedFactor, shieldDamageFactor, repairAmount, projectileHitsPoint } from '../../game/combat/PlayerWeapons';
 import { createProjectileEmitter } from '../../game/combat/ProjectileEmitter';
@@ -314,6 +315,13 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         seedSource: dungeonV2B2LocalQa
             ? 'server-ticket-local-unverified' : 'local-client-seed',
     }) : null;
+    // Separate passive pointer QA observer; never changes input or settlement.
+    const dungeonV2C14BJournal = dungeonV2C11Trace
+        ? createDungeonApkInputJournalV2C14B({
+            sceneSeed: dungeonSeedV38,
+            seedSource: dungeonV2B2LocalQa
+                ? 'server-ticket-local-unverified' : 'local-client-seed',
+        }) : null;
     if (dungeonV2C11Trace) {
         // Only QA builds have this manual export accessor. No network or disk IO.
         globalThis.__SF_DUNGEON_C15_V2C11_APK_TRACE__ =
@@ -322,10 +330,12 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         // V2C.11 Taurus QA recorder; normal/release scenes never mount this UI.
         const destroyV2C13QaExport = mountDungeonApkTraceScreenExportV2C13({
             getSnapshot: () => dungeonV2C11Trace.snapshot(),
+            getInputJournal: () => dungeonV2C14BJournal.snapshot(),
         });
         scene.onDisposeObservable.add(destroyV2C13QaExport);
         scene.onDisposeObservable.add(() => {
             dungeonV2C11Trace.finish();
+            dungeonV2C14BJournal.finish();
             try { data.onDungeonC15V2C11QaTrace?.(dungeonV2C11Trace.snapshot()); }
             catch (ignored) { /* never break game disposal for QA diagnostics */ }
         });
@@ -874,11 +884,16 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         halfHeight: ZOOM, aspect: getAspect,
         speedMultiplier: battleSpeedMultiplier(stats), pointerSpeedMultiplier: 1,
         enabled: () => !gameOver,
-        onPointerTrace: dungeonV2B2TouchTrace ? event => {
-            if (!dungeonV2B2TouchTrace.capture(event)) return;
-            if (event.kind === 'up') {
-                // Local QA callback only: no network, no rewards, no trusted outcome.
-                data.onDungeonC15V2B2QaTrace(dungeonV2B2TouchTrace.snapshot());
+        onPointerTrace: (dungeonV2B2TouchTrace || dungeonV2C14BJournal) ? event => {
+            // V2C.14-B records only events accepted by ShipInputController.
+            // QA instrumentation must never modify game movement or outcomes.
+            try { dungeonV2C14BJournal?.capturePointer(event); }
+            catch (ignored) { /* QA only */ }
+            if (dungeonV2B2TouchTrace) {
+                if (!dungeonV2B2TouchTrace.capture(event)) return;
+                if (event.kind === 'up') {
+                    data.onDungeonC15V2B2QaTrace(dungeonV2B2TouchTrace.snapshot());
+                }
             }
         } : null,
     });
@@ -3601,7 +3616,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         // Its Babylon frame clock is NOT the 60 Hz authoritative replay clock.
         if (dungeonV2C11Trace && currentRoomV38?.id === 'taurus_entry') {
             try {
-                dungeonV2C11Trace.captureFrame({simTick:tick,
+                const acceptedV2C11Frame = dungeonV2C11Trace.captureFrame({simTick:tick,
                     dtMs:frameDeltaMsV410,roomId:currentRoomV38.id,
                     player:{x:playerRoot.position.x,z:playerRoot.position.z},
                     playerHp:stats.hp,playerShieldHp:passives.shieldHp || 0,
@@ -3611,6 +3626,10 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                     })),
                     projectiles:{player:playerBullets.length,hostile:enemyBullets.length},
                     bossActive,bossHp:Math.max(0,bossHp),
+                });
+                if (acceptedV2C11Frame) dungeonV2C14BJournal?.captureFrameMarker({
+                    frameSeq: dungeonV2C11Trace.frameCount, simTick: tick,
+                    player: {x: playerRoot.position.x, z: playerRoot.position.z},
                 });
             } catch (ignored) { /* QA instrumentation must not break rendering */ }
         }

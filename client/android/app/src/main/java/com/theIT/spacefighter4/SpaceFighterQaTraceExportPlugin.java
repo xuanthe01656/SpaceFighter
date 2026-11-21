@@ -23,7 +23,9 @@ import org.json.JSONObject;
 public class SpaceFighterQaTraceExportPlugin extends Plugin {
     private static final int MAX_JSON_BYTES = 4 * 1024 * 1024;
     private static final String EXPECTED_VERSION = "c15-dungeon-apk-trace-v2c11";
+    private static final String INPUT_BUNDLE_VERSION = "c15-dungeon-apk-input-bundle-v2c14b";
     private static final String NAME_REGEX = "^dungeon_taurus_v2c11_[0-9]{8}_[0-9]{6}\\.json$";
+    private static final String INPUT_NAME_REGEX = "^dungeon_taurus_v2c14b_[0-9]{8}_[0-9]{6}\\.json$";
 
     @PluginMethod
     public void shareJson(PluginCall call) {
@@ -34,7 +36,7 @@ public class SpaceFighterQaTraceExportPlugin extends Plugin {
         try {
             String name = call.getString("fileName");
             String json = call.getString("json");
-            if (name == null || !name.matches(NAME_REGEX) || json == null) {
+            if (name == null || !(name.matches(NAME_REGEX) || name.matches(INPUT_NAME_REGEX)) || json == null) {
                 call.reject("INVALID_QA_FILENAME_OR_JSON");
                 return;
             }
@@ -44,15 +46,47 @@ public class SpaceFighterQaTraceExportPlugin extends Plugin {
                 return;
             }
             JSONObject payload = new JSONObject(json);
-            if (!EXPECTED_VERSION.equals(payload.optString("version"))
-                    || !"qa-babylon-observer-untrusted".equals(payload.optString("source"))
-                    || !"dung_taurus".equals(payload.optString("dungeonId"))
-                    || !"taurus_entry".equals(payload.optString("roomId"))
-                    || payload.optBoolean("safeForSettlement", true)
-                    || payload.optBoolean("rewardSettlementEnabled", true)
-                    || payload.optBoolean("cloudRewards", true)
-                    || payload.optBoolean("liveApkParityVerified", true)
-                    || payload.optJSONArray("frames") == null) {
+            boolean isTrace = name.matches(NAME_REGEX);
+            boolean safeCommon = "dung_taurus".equals(payload.optString("dungeonId"))
+                    && "taurus_entry".equals(payload.optString("roomId"))
+                    && !payload.optBoolean("safeForSettlement", true)
+                    && !payload.optBoolean("rewardSettlementEnabled", true)
+                    && !payload.optBoolean("cloudRewards", true)
+                    && !payload.optBoolean("liveApkParityVerified", true);
+            boolean valid;
+            if (isTrace) {
+                valid = EXPECTED_VERSION.equals(payload.optString("version"))
+                        && "qa-babylon-observer-untrusted".equals(payload.optString("source"))
+                        && payload.optJSONArray("frames") != null;
+            } else {
+                JSONObject trace = payload.optJSONObject("trace");
+                JSONObject input = payload.optJSONObject("inputJournal");
+                valid = INPUT_BUNDLE_VERSION.equals(payload.optString("version"))
+                        && "qa-local-apk-input-bundle-untrusted".equals(payload.optString("source"))
+                        && payload.optBoolean("qaOnly", false)
+                        && !payload.optBoolean("serverReportLinked", true)
+                        && "fnv1a32-accidental-corruption-only".equals(payload.optString("checksumAlgorithm"))
+                        && trace != null && input != null
+                        && EXPECTED_VERSION.equals(trace.optString("version"))
+                        && "qa-babylon-observer-untrusted".equals(trace.optString("source"))
+                        && !trace.optBoolean("safeForSettlement", true)
+                        && !trace.optBoolean("rewardSettlementEnabled", true)
+                        && !trace.optBoolean("cloudRewards", true)
+                        && !trace.optBoolean("liveApkParityVerified", true)
+                        && trace.optJSONArray("frames") != null
+                        && "c15-dungeon-apk-accepted-input-v2c14b".equals(input.optString("version"))
+                        && "accepted-ship-input-controller-untrusted".equals(input.optString("source"))
+                        && !input.optBoolean("serverTicketVerified", true)
+                        && !input.optBoolean("serverReadLoadoutVerified", true)
+                        && !input.optBoolean("independentReplayVerified", true)
+                        && !input.optBoolean("fullTickJournalVerified", true)
+                        && !input.optBoolean("safeForSettlement", true)
+                        && !input.optBoolean("rewardSettlementEnabled", true)
+                        && !input.optBoolean("cloudRewards", true)
+                        && input.optJSONArray("pointerEvents") != null
+                        && input.optJSONArray("frameMarkers") != null;
+            }
+            if (!safeCommon || !valid) {
                 call.reject("NON_QA_OR_UNSAFE_TRACE");
                 return;
             }

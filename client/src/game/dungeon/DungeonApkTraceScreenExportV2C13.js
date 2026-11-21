@@ -4,6 +4,8 @@
  * Active only when V2C.11's doubly-gated Taurus recorder was instantiated.
  */
 
+import { prepareDungeonApkInputBundleJsonV2C14B } from './DungeonApkInputBundleV2C14B.js';
+
 export const DUNGEON_APK_SCREEN_EXPORT_V2C13 = 'c15-dungeon-qa-screen-export-v2c13';
 const V2C11_VERSION = 'c15-dungeon-apk-trace-v2c11';
 const FIELDS = Object.freeze([
@@ -51,7 +53,7 @@ export function prepareDungeonApkTraceJsonV2C13(trace, date = new Date()) {
 
 export async function shareDungeonQaJsonV2C13(prepared, dependencies = {}) {
   if (!prepared || typeof prepared.fileName !== 'string'
-      || !/^dungeon_taurus_v2c11_[0-9]{8}_[0-9]{6}\.json$/.test(prepared.fileName)
+      || !/^dungeon_taurus_v2c(?:11|14b)_[0-9]{8}_[0-9]{6}\.json$/.test(prepared.fileName)
       || typeof prepared.json !== 'string') {
     throw new Error('INVALID_QA_EXPORT');
   }
@@ -102,7 +104,7 @@ function makeButton(doc, text, onClick) {
 }
 
 /** Returns a cleanup callback. No DOM or global UI exists in normal builds. */
-export function mountDungeonApkTraceScreenExportV2C13({ getSnapshot, document: doc = globalThis.document } = {}) {
+export function mountDungeonApkTraceScreenExportV2C13({ getSnapshot, getInputJournal, document: doc = globalThis.document } = {}) {
   if (typeof getSnapshot !== 'function' || !doc?.body?.appendChild) {
     return () => {};
   }
@@ -197,6 +199,29 @@ export function mountDungeonApkTraceScreenExportV2C13({ getSnapshot, document: d
     return prepared.json;
   }
 
+  if (typeof getInputJournal === 'function') {
+    actions.appendChild(makeButton(doc, 'Xem INPUT V2C.14-B', () => {
+      try {
+        const evidence = getSnapshot();
+        const input = getInputJournal();
+        prepared = prepareDungeonApkInputBundleJsonV2C14B(evidence, input);
+        content.value = prepared.json;
+        summary.textContent = `V2C.14-B · Frames: ${prepared.frameCount} | `
+          + `Accepted pointer events: ${prepared.eventCount} | `
+          + `Overflow: ${input.pointerOverflow || input.frameOverflow} | `
+          + `Input lỗi: ${input.captureError ?? 'null'}\nFile: ${prepared.fileName}`;
+        status.textContent = prepared.isCompleteShortTrace
+          ? 'Đã ghi input QA. CHƯA XÁC MINH ticket / server loadout / 60Hz parity.'
+          : 'Dữ liệu input chưa hoàn chỉnh (hoặc chưa kết thúc gesture). Chỉ dùng chẩn đoán; KHÔNG phải parity PASS.';
+      } catch (error) {
+        prepared = null;
+        content.value = '';
+        summary.textContent = '';
+        status.textContent = `Không thể đóng gói INPUT: ${error?.message || 'UNKNOWN'}`;
+      }
+    }));
+    actions.appendChild(makeButton(doc, 'Xem TRACE V2C.11', openPanel));
+  }
   actions.appendChild(makeButton(doc, 'Chia sẻ file .json', async () => {
     try {
       if (!prepared) throw new Error('NO_TRACE_READY');
