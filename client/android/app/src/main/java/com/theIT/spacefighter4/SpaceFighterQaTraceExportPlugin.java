@@ -30,6 +30,9 @@ public class SpaceFighterQaTraceExportPlugin extends Plugin {
     private static final String C2E_WITNESS_VERSION = "c15-dungeon-c2e-combat-witness-v1";
     private static final String C2E_NAME_REGEX = "^dungeon_taurus_c2e_[0-9]{8}_[0-9]{6}\\.json$";
     private static final String C2C_NAME_REGEX = "^dungeon_taurus_c2c_[0-9]{8}_[0-9]{6}\\.json$";
+    private static final String C2JK_NAME_REGEX = "^dungeon_taurus_c2jk_[0-9]{8}_[0-9]{6}\\.json$";
+    private static final String C2JK_VERSION = "c15-c2jk-live-fixed-ballistic-journal-v1";
+    private static final String C2JK_CORE_VERSION = "c15-c2jk-shared-hostile-ballistic-fixed30-v1";
 
     // C2B: the native plugin is only registered for BuildConfig.DEBUG in MainActivity.
     // This check is QA UX gating, not remote attestation or API authorization.
@@ -54,7 +57,7 @@ public class SpaceFighterQaTraceExportPlugin extends Plugin {
         try {
             String name = call.getString("fileName");
             String json = call.getString("json");
-            if (name == null || !(name.matches(NAME_REGEX) || name.matches(INPUT_NAME_REGEX) || name.matches(C2C_NAME_REGEX) || name.matches(C2E_NAME_REGEX)) || json == null) {
+            if (name == null || !(name.matches(NAME_REGEX) || name.matches(INPUT_NAME_REGEX) || name.matches(C2C_NAME_REGEX) || name.matches(C2E_NAME_REGEX) || name.matches(C2JK_NAME_REGEX)) || json == null) {
                 call.reject("INVALID_QA_FILENAME_OR_JSON");
                 return;
             }
@@ -67,12 +70,13 @@ public class SpaceFighterQaTraceExportPlugin extends Plugin {
             boolean isTrace = name.matches(NAME_REGEX);
             boolean isC2C = name.matches(C2C_NAME_REGEX);
             boolean isC2E = name.matches(C2E_NAME_REGEX);
+            boolean isC2JK = name.matches(C2JK_NAME_REGEX);
             boolean safeCommon = "dung_taurus".equals(payload.optString("dungeonId"))
                     && "taurus_entry".equals(payload.optString("roomId"))
                     && !payload.optBoolean("safeForSettlement", true)
                     && !payload.optBoolean("rewardSettlementEnabled", true)
                     && !payload.optBoolean("cloudRewards", true)
-                    && !payload.optBoolean("liveApkParityVerified", !(isC2C || isC2E));
+                    && !payload.optBoolean("liveApkParityVerified", !(isC2C || isC2E || isC2JK));
             boolean valid;
             if (isTrace) {
                 valid = EXPECTED_VERSION.equals(payload.optString("version"))
@@ -105,6 +109,32 @@ public class SpaceFighterQaTraceExportPlugin extends Plugin {
                         && !grid.optBoolean("cloudRewards", true)
                         && grid.optJSONArray("pointerEvents") != null
                         && grid.optJSONArray("ticks") != null;
+            } else if (isC2JK) {
+                JSONObject grid = payload.optJSONObject("grid");
+                valid = C2JK_VERSION.equals(payload.optString("version"))
+                        && C2JK_CORE_VERSION.equals(payload.optString("coreVersion"))
+                        && "live-taurus-fixed30-hostile-projectiles-untrusted".equals(payload.optString("source"))
+                        && payload.optBoolean("qaOnly", false)
+                        && payload.isNull("battleId")
+                        && "local-client-seed".equals(payload.optString("seedSource"))
+                        && "30".equals(payload.optString("tickHz"))
+                        && "client-fixed-ballistics-not-full-combat".equals(payload.optString("tickBasis"))
+                        && payload.isNull("captureError")
+                        && payload.optBoolean("clientFixedBallisticStepObserved", false)
+                        && !payload.optBoolean("independentEnemyAiVerified", true)
+                        && !payload.optBoolean("independentDamageVerified", true)
+                        && !payload.optBoolean("fullCombatReplayVerified", true)
+                        && "NOT_VERIFIED".equals(payload.optString("trueApkServerParity"))
+                        && "fnv1a32-accidental-corruption-only".equals(payload.optString("checksumAlgorithm"))
+                        && payload.optJSONArray("shots") != null
+                        && payload.optJSONArray("ticks") != null
+                        && grid != null
+                        && C2C_GRID_VERSION.equals(grid.optString("version"))
+                        && grid.optJSONArray("pointerEvents") != null
+                        && grid.optJSONArray("ticks") != null
+                        && !grid.optBoolean("safeForSettlement", true)
+                        && !grid.optBoolean("rewardSettlementEnabled", true)
+                        && !grid.optBoolean("cloudRewards", true);
             } else {
                 JSONObject trace = payload.optJSONObject("trace");
                 JSONObject input = payload.optJSONObject("inputJournal");

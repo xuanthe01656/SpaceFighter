@@ -1,4 +1,4 @@
-name: C15 Dungeon C2F+C2G - Extended Combat Witness QA APK (No Deploy)
+name: C15 Dungeon C2J+C2K - Shared 30Hz Hostile Ballistics QA APK (No Deploy)
 
 # Deliberately independent from the existing android-native-smoke workflow.
 # An explicit manual run is required, and this job has read-only permissions.
@@ -34,6 +34,8 @@ jobs:
       VITE_SF_DUNGEON_C2B_APK_QA: 'true'
       VITE_SF_DUNGEON_QA_REWARDS: 'false'
       VITE_SF_DUNGEON_PARITY_V38: 'true'
+      # Guest Taurus only; no signed-ticket or production combat takeover.
+      VITE_SF_DUNGEON_C2JK_SHARED_FIXED30: 'true'
       VITE_SF_BUILD_CHANNEL: staging-qa
 
     steps:
@@ -141,6 +143,40 @@ jobs:
           done
           tail -n 12 "$RUNNER_TEMP/c15-c2fg-new-tests.log"
           echo 'C2F_C2G_EXTENDED_CAPTURE_TIMELINE_TESTS_12_12=PASS'
+
+      - name: Run 25 C2H+C2I offline ballistics and signed ticket QA tests
+        run: |
+          set -euo pipefail
+          node --test --test-reporter=tap \
+            server/tests/c15DungeonC2HBallisticReplayV1.test.cjs \
+            server/tests/c15DungeonC2HISameSessionQaV1.test.cjs \
+            server/tests/c15DungeonC2HIHttpGate.test.cjs \
+            > "$RUNNER_TEMP/c15-c2hi-25-tests.log" 2>&1 || {
+              tail -n 120 "$RUNNER_TEMP/c15-c2hi-25-tests.log"
+              exit 1
+            }
+          for entry in 'tests 25' 'pass 25' 'fail 0' 'skipped 0' 'cancelled 0'; do
+            grep -qx "# $entry" "$RUNNER_TEMP/c15-c2hi-25-tests.log"
+          done
+          echo 'C2HI_EXISTING_SERVER_SUBSET_25_25=PASS'
+
+      - name: Run 30 C2J+C2K shared live 30Hz projectile, native export and replay tests
+        run: |
+          set -euo pipefail
+          node --test --test-reporter=tap \
+            client/tests/dungeonC2JKFixedBallisticsV1.test.mjs \
+            server/tests/c15DungeonC2JKFixedReplayV1.test.cjs \
+            > "$RUNNER_TEMP/c15-c2jk-30-tests.log" 2>&1 || {
+              tail -n 120 "$RUNNER_TEMP/c15-c2jk-30-tests.log"
+              exit 1
+            }
+          for entry in 'tests 30' 'pass 30' 'fail 0' 'skipped 0' 'cancelled 0'; do
+            grep -qx "# $entry" "$RUNNER_TEMP/c15-c2jk-30-tests.log"
+          done
+          node --check client/src/components/Dungeon/DungeonScene.js
+          node --check client/src/game/dungeon/DungeonC2JKFixedBallisticCoreV1.js
+          node --check server/lib/c15DungeonC2JKFixedReplayV1.cjs
+          echo 'C2JK_SHARED_HOSTILE_BALLISTICS_30_30=PASS'
 
       - name: Restore and verify existing registered Android QA signing key
         env:
@@ -253,7 +289,7 @@ jobs:
       - name: Upload one APK only with minimal retention
         uses: actions/upload-artifact@v4
         with:
-          name: sf-c15-dungeon-c2fg-qa-debug-apk-no-rewards
+          name: sf-c15-dungeon-c2jk-qa-debug-apk-no-rewards
           path: client/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 1

@@ -22,6 +22,8 @@ import { createDungeonApkCombatTraceV2C11, isDungeonV2C11ApkTraceEnabled } from 
 import { createDungeonApkInputJournalV2C14B } from '../../game/dungeon/DungeonApkInputJournalV2C14B.js';
 import { createDungeonC2CInputGridV1 } from '../../game/dungeon/DungeonC2CInputGridV1.js';
 import { createDungeonC2ECombatWitnessV1 } from '../../game/dungeon/DungeonC2ECombatWitnessV1.js';
+import { isC2JKSupportedStraightShot } from '../../game/dungeon/DungeonC2JKFixedBallisticCoreV1.js';
+import { createC2JKFixedBallisticJournal } from '../../game/dungeon/DungeonC2JKFixedBallisticJournalV1.js';
 import { createDungeonApkInputCheckpointV2C14B1 } from '../../game/dungeon/DungeonApkInputCheckpointV2C14B1.js';
 import { mountDungeonApkTraceScreenExportV2C13 } from '../../game/dungeon/DungeonApkTraceScreenExportV2C13.js';
 import { describeMainSalvo, describeWingSalvo, describeDroneSalvo, pickWeaponTarget, enemySpeedFactor, shieldDamageFactor, repairAmount, projectileHitsPoint } from '../../game/combat/PlayerWeapons';
@@ -352,6 +354,16 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         getGrid:() => dungeonC2CGrid.exportCombatEvidence(),
         getTick:() => dungeonC2CGrid.tickCount,
     }) : null;
+    // C2JK is an explicit native Guest Taurus QA path. The shared 30Hz kernel
+    // DRIVES real hostile projectile meshes/collisions below (not a shadow
+    // simulation); production, boss and signed staging combat stay unchanged.
+    const dungeonC2JK = dungeonC2CGrid && dungeonQaRunV391?.enabled === true &&
+        dungeonId === 'dung_taurus' && !dungeonC2BLocalQa && !dungeonV2B2LocalQa &&
+        import.meta.env?.VITE_SF_DUNGEON_C2JK_SHARED_FIXED30 === 'true'
+        ? createC2JKFixedBallisticJournal({
+            sceneSeed:dungeonSeedV38,seedSource:'local-client-seed',
+            getGrid:()=>dungeonC2CGrid.exportCombatEvidence(),
+        }) : null;
     const recordC2E = event => {
         if (!dungeonC2EWitness || currentRoomV38?.id !== 'taurus_entry') return;
         try { dungeonC2EWitness.capture(event); } catch (_ignored) { /* passive only */ }
@@ -373,6 +385,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             getInputCheckpoint: () => dungeonV2C14B1Checkpoint?.snapshotPair() ?? null,
             getC2CGrid: () => dungeonC2CGrid?.exportEvidence() ?? null,
             getC2EWitness: () => dungeonC2EWitness?.snapshot() ?? null,
+            getC2JKBallistic: () => dungeonC2JK?.snapshot() ?? null,
             onSubmitC2EStaging: dungeonC2BLocalQa ? data.onC2EStagingQaAudit : null,
             onSubmitC2CStaging: dungeonC2BLocalQa ? data.onC2CStagingQaAudit : null,
         });
@@ -1948,6 +1961,18 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             damageAuthority: 'dungeon-logical-projectile-v392',
         };
         enemyBullets.push(b);
+        if (dungeonC2JK && currentRoomV38?.id === 'taurus_entry') {
+            if (!options.sourceRuntimeId || !isC2JKSupportedStraightShot(plan)) {
+                dungeonC2JK.invalidate('C2JK_UNSUPPORTED_HOSTILE_SHOT');
+            } else {
+                b._c2jkRegistered = dungeonC2JK.registerShot({
+                    id:hitId,sourceId:options.sourceRuntimeId,
+                    origin:{x:b.position.x,z:b.position.z},
+                    velocity:{x:b._velX,z:b._velZ},
+                    hitRadius,ttlTicks:Math.ceil((plan.lifetimeMs || 4400)*30/1000),
+                });
+            }
+        }
         if (options.sourceRuntimeId) recordC2E({kind:'enemy_fire',
             enemyId:options.sourceRuntimeId,bulletId:hitId,amount:b._damage,
             origin:{x:b.position.x,z:b.position.z},
@@ -3467,8 +3492,54 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             }
         }
 
-        // K. Đạn địch → người chơi
-        for (let i = enemyBullets.length - 1; i >= 0; i--) {
+        // K. Đạn địch → người chơi. In the explicitly gated Guest Taurus QA
+        // path, the *actual mesh and damagePlayer contact* use C2JK's shared
+        // deterministic 30Hz projectile kernel. Unreviewed shots fail the QA
+        // receipt and fall back to legacy motion, preserving playability.
+        let c2jkAdvanced = false;
+        if (dungeonC2JK && currentRoomV38?.id === 'taurus_entry' && !dungeonC2JK.error) {
+            if (enemyBullets.some(eb => !eb.isDisposed() && eb._c2jkRegistered !== true))
+                dungeonC2JK.invalidate('C2JK_UNREGISTERED_PROJECTILE');
+            if (!dungeonC2JK.error) {
+                const advancedC2JK = dungeonC2JK.stepFrame(frameDeltaMsV410,
+                    {x:playerRoot.position.x,z:playerRoot.position.z});
+                if (!advancedC2JK.error) {
+                    c2jkAdvanced = true;
+                    const bulletsById = new Map(enemyBullets.map(eb=>[eb._damageHitId,eb]));
+                    for (const step of advancedC2JK.frames) {
+                        for (const state of step.activeShots) {
+                            const eb = bulletsById.get(state.id);
+                            if (!eb || eb.isDisposed()) continue;
+                            eb.position.x = state.x; eb.position.z = state.z;
+                            hostileProjectileVisualsV38.update(eb,eb._velX,eb._velZ,
+                                now,eb._createdAtMs,eb._shotPlan?.visual?.pulse || 0);
+                        }
+                        for (const id of step.contacts) {
+                            const eb = bulletsById.get(id);
+                            if (!eb || eb.isDisposed()) continue;
+                            damagePlayer({rawDamage:eb._damage || 70,source:'projectile',
+                                damageType:eb._damageType || 'energy',hitId:eb._damageHitId,
+                                priority:eb._priority || 'normal'});
+                            if (eb._c2eSourceRuntimeId) recordC2E({kind:'projectile_contact',
+                                enemyId:eb._c2eSourceRuntimeId,bulletId:id,hp:stats.hp});
+                            safeDis(eb);
+                            const index=enemyBullets.indexOf(eb);
+                            if(index>=0)enemyBullets.splice(index,1);
+                            bulletsById.delete(id);
+                        }
+                        for (const id of step.expired) {
+                            const eb = bulletsById.get(id);
+                            if (!eb) continue;
+                            safeDis(eb);
+                            const index=enemyBullets.indexOf(eb);
+                            if(index>=0)enemyBullets.splice(index,1);
+                            bulletsById.delete(id);
+                        }
+                    }
+                }
+            }
+        }
+        if (!c2jkAdvanced) for (let i = enemyBullets.length - 1; i >= 0; i--) {
             const eb = enemyBullets[i];
             if (eb.isDisposed()) { enemyBullets.splice(i, 1); continue; }
             const previousProjectilePositionV392 = { x: eb.position.x, z: eb.position.z };

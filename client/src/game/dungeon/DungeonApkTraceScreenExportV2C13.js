@@ -8,6 +8,7 @@ import { prepareDungeonApkInputBundleJsonV2C14B } from './DungeonApkInputBundleV
 import { isDungeonApkInputCheckpointPairV2C14B1 } from './DungeonApkInputCheckpointV2C14B1.js';
 import { prepareDungeonC2CInputGridJsonV1 } from './DungeonC2CInputGridV1.js';
 import { prepareDungeonC2ECombatWitnessJsonV1 } from './DungeonC2ECombatWitnessV1.js';
+import { prepareC2JKFixedBallisticJson } from './DungeonC2JKFixedBallisticJournalV1.js';
 
 export const DUNGEON_APK_SCREEN_EXPORT_V2C13 = 'c15-dungeon-qa-screen-export-v2c13';
 const V2C11_VERSION = 'c15-dungeon-apk-trace-v2c11';
@@ -56,7 +57,7 @@ export function prepareDungeonApkTraceJsonV2C13(trace, date = new Date()) {
 
 export async function shareDungeonQaJsonV2C13(prepared, dependencies = {}) {
   if (!prepared || typeof prepared.fileName !== 'string'
-      || !/^dungeon_taurus_(?:v2c(?:11|14b)|c2c|c2e)_[0-9]{8}_[0-9]{6}\.json$/.test(prepared.fileName)
+      || !/^dungeon_taurus_(?:v2c(?:11|14b)|c2c|c2e|c2jk)_[0-9]{8}_[0-9]{6}\.json$/.test(prepared.fileName)
       || typeof prepared.json !== 'string') {
     throw new Error('INVALID_QA_EXPORT');
   }
@@ -108,7 +109,7 @@ function makeButton(doc, text, onClick) {
 
 /** Returns a cleanup callback. No DOM or global UI exists in normal builds. */
 export function mountDungeonApkTraceScreenExportV2C13({ getSnapshot, getInputJournal, getInputCheckpoint,
-  getC2CGrid, onSubmitC2CStaging, getC2EWitness, onSubmitC2EStaging,
+  getC2CGrid, onSubmitC2CStaging, getC2EWitness, onSubmitC2EStaging, getC2JKBallistic,
   document: doc = globalThis.document } = {}) {
   if (typeof getSnapshot !== 'function' || !doc?.body?.appendChild) {
     return () => {};
@@ -310,6 +311,22 @@ File: ${prepared.fileName}`;
         }catch(error){status.textContent=`C2E STAGING FAIL-CLOSED: ${error?.code || error?.message || 'UNKNOWN'}`;}
       }));
     }
+  }
+  if (typeof getC2JKBallistic === 'function') {
+    actions.appendChild(makeButton(doc, 'Xem C2JK SHARED 30Hz (dan dich)', () => {
+      try {
+        const record = getC2JKBallistic();
+        prepared = prepareC2JKFixedBallisticJson(record);
+        content.value = prepared.json;
+        summary.textContent = `C2JK: ${prepared.tickCount} fixed ticks | `
+          + `${prepared.shotCount} shots | Error: ${record.captureError ?? 'null'}\nFile: ${prepared.fileName}`;
+        status.textContent = 'C2JK client projectile simulation uses a shared pure 30Hz core. '
+          + 'This is NOT deterministic AI, weapon damage, ticket or full combat parity. REWARDS LOCKED.';
+      } catch (error) {
+        prepared=null;content.value='';
+        status.textContent=`C2JK QA FAIL-CLOSED: ${error?.message || 'UNKNOWN'}`;
+      }
+    }));
   }
   actions.appendChild(makeButton(doc, 'Chia sẻ file .json', async () => {
     try {
