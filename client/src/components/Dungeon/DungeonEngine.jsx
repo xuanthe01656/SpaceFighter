@@ -11,7 +11,7 @@ import { createDungeonRuntimeMonitorV450, DUNGEON_RUNTIME_LIMITS_V450 } from '..
 import DungeonHudV396, { EMPTY_DUNGEON_HUD_STATE_V396 } from '../../ui-system/DungeonHudV396.jsx';
 import DungeonQaEvidencePanelV400 from '../../ui-system/DungeonQaEvidencePanelV400.jsx';
 import DungeonShipSkillButtonV410 from '../../ui-system/DungeonShipSkillButtonV410.jsx';
-import {issueDungeonC2BTicket,auditDungeonC2DInputGrid} from '../../services/gameApi.js';
+import {issueDungeonC2BTicket,auditDungeonC2DInputGrid,auditDungeonC2ECausal} from '../../services/gameApi.js';
 import {isDungeonC2BOptIn,validateDungeonC2BTicket} from '../../game/dungeon/DungeonC2BStagingQaContract.js';
 import {assertDungeonC2BDebugApkGate} from '../../game/dungeon/DungeonC2BDebugGate.js';
 
@@ -177,6 +177,14 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
         await assertDungeonC2BDebugApkGate();
         validateDungeonC2BTicket({ticket:c2bBoot.ticket,qaRun:c2bQaRun,nowMs:Date.now()});
         return auditDungeonC2DInputGrid(uid,{ticket:c2bBoot.ticket,record});
+      } : null,
+      onC2EStagingQaAudit: c2bOptIn ? async record => {
+        const uid=auth.currentUser?.uid;
+        if(!uid||!c2bBoot.ticket||record?.battleId!==c2bBoot.ticket.battleId)
+          throw new Error('C2E_QA_SESSION_NOT_READY');
+        await assertDungeonC2BDebugApkGate();
+        validateDungeonC2BTicket({ticket:c2bBoot.ticket,qaRun:c2bQaRun,nowMs:Date.now()});
+        return auditDungeonC2ECausal(uid,{ticket:c2bBoot.ticket,record});
       } : null,
       // QA runs suppress guest progress mutation as well as Cloud settlement.
       isCloud: Boolean(auth.currentUser) || Boolean(dungeonQaRun),

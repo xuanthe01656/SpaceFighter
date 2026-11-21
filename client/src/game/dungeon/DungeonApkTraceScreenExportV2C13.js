@@ -7,6 +7,7 @@
 import { prepareDungeonApkInputBundleJsonV2C14B } from './DungeonApkInputBundleV2C14B.js';
 import { isDungeonApkInputCheckpointPairV2C14B1 } from './DungeonApkInputCheckpointV2C14B1.js';
 import { prepareDungeonC2CInputGridJsonV1 } from './DungeonC2CInputGridV1.js';
+import { prepareDungeonC2ECombatWitnessJsonV1 } from './DungeonC2ECombatWitnessV1.js';
 
 export const DUNGEON_APK_SCREEN_EXPORT_V2C13 = 'c15-dungeon-qa-screen-export-v2c13';
 const V2C11_VERSION = 'c15-dungeon-apk-trace-v2c11';
@@ -55,7 +56,7 @@ export function prepareDungeonApkTraceJsonV2C13(trace, date = new Date()) {
 
 export async function shareDungeonQaJsonV2C13(prepared, dependencies = {}) {
   if (!prepared || typeof prepared.fileName !== 'string'
-      || !/^dungeon_taurus_(?:v2c(?:11|14b)|c2c)_[0-9]{8}_[0-9]{6}\.json$/.test(prepared.fileName)
+      || !/^dungeon_taurus_(?:v2c(?:11|14b)|c2c|c2e)_[0-9]{8}_[0-9]{6}\.json$/.test(prepared.fileName)
       || typeof prepared.json !== 'string') {
     throw new Error('INVALID_QA_EXPORT');
   }
@@ -107,7 +108,8 @@ function makeButton(doc, text, onClick) {
 
 /** Returns a cleanup callback. No DOM or global UI exists in normal builds. */
 export function mountDungeonApkTraceScreenExportV2C13({ getSnapshot, getInputJournal, getInputCheckpoint,
-  getC2CGrid, onSubmitC2CStaging, document: doc = globalThis.document } = {}) {
+  getC2CGrid, onSubmitC2CStaging, getC2EWitness, onSubmitC2EStaging,
+  document: doc = globalThis.document } = {}) {
   if (typeof getSnapshot !== 'function' || !doc?.body?.appendChild) {
     return () => {};
   }
@@ -273,6 +275,38 @@ File: ${prepared.fileName}`;
         } catch (error) {
           status.textContent = `C2D STAGING FAIL-CLOSED: ${error?.code || error?.message || 'UNKNOWN'}`;
         }
+      }));
+    }
+  }
+  if (typeof getC2EWitness === 'function') {
+    actions.appendChild(makeButton(doc, 'Xem C2E COMBAT', () => {
+      try {
+        const record=getC2EWitness();
+        prepared=prepareDungeonC2ECombatWitnessJsonV1(record);
+        content.value=prepared.json;
+        summary.textContent=`C2E causal · Ticks: ${prepared.gridTicks} | `
+          + `Combat events: ${prepared.combatEvents} | `
+          + `Error: ${record.captureError ?? 'null'}\nFile: ${prepared.fileName}`;
+        status.textContent='Su kien combat that, nhung chua tai mo phong AI/dan/sat thuong. REWARDS LOCKED.';
+      } catch(error){
+        prepared=null;content.value='';
+        status.textContent=`C2E EXPORT FAIL: ${error?.message || 'UNKNOWN'}`;
+      }
+    }));
+    if (typeof onSubmitC2EStaging === 'function') {
+      actions.appendChild(makeButton(doc, 'GUI C2E CAUSAL QA STAGING', async () => {
+        try {
+          const record=getC2EWitness();
+          prepareDungeonC2ECombatWitnessJsonV1(record);
+          status.textContent='Dang kiem toan C2E subset tai staging...';
+          const result=await onSubmitC2EStaging(record);
+          if(result?.fullCombatReplayVerified!==false||
+            result?.trueApkServerParity!=='NOT_VERIFIED'||
+            result?.rewardSettlementEnabled!==false)
+            throw new Error('C2E_UNSUPPORTED_SERVER_AUTHORITY');
+          status.textContent=`C2E ${result.status} | Spawns: ${result.observedSpawnPrefix} | `
+            + 'FULL REPLAY NOT VERIFIED; REWARDS LOCKED';
+        }catch(error){status.textContent=`C2E STAGING FAIL-CLOSED: ${error?.code || error?.message || 'UNKNOWN'}`;}
       }));
     }
   }

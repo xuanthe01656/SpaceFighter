@@ -1,4 +1,4 @@
-name: C15 Dungeon C2B-C2D - Manual Android QA APK (No Deploy)
+name: C15 Dungeon C2E - Manual Android QA APK (No Deploy)
 
 # Deliberately independent from the existing android-native-smoke workflow.
 # An explicit manual run is required, and this job has read-only permissions.
@@ -69,7 +69,7 @@ jobs:
       - name: Run 175 Dungeon input and ticket regression tests
         run: |
           set -euo pipefail
-          node --test \
+          node --test --test-reporter=tap \
             client/tests/dungeonApkTraceScreenExportV2C13.test.mjs \
             client/tests/dungeonApkInputJournalV2C14B.test.mjs \
             client/tests/dungeonApkInputCheckpointV2C14B1.test.mjs \
@@ -92,7 +92,7 @@ jobs:
       - name: Run 20 C2C-C2D input-grid and staging gate tests
         run: |
           set -euo pipefail
-          node --test \
+          node --test --test-reporter=tap \
             client/tests/dungeonC2CInputGridV1.test.mjs \
             server/tests/c15DungeonC2DInputAuditV1.test.cjs \
             server/tests/c15DungeonC2DHttpGate.test.cjs > "$RUNNER_TEMP/c15-c2c2d-20-tests.log" 2>&1 || {
@@ -106,6 +106,25 @@ jobs:
           grep -qx '# cancelled 0' "$RUNNER_TEMP/c15-c2c2d-20-tests.log"
           tail -n 12 "$RUNNER_TEMP/c15-c2c2d-20-tests.log"
           echo 'C2C_C2D_INPUT_SUBSET_TESTS_20_20=PASS'
+
+      - name: Run 26 C2E causal witness and staging gate tests
+        run: |
+          set -euo pipefail
+          node --test --test-reporter=tap \
+            client/tests/dungeonC2ECombatWitnessV1.test.mjs \
+            server/tests/c15DungeonC2ECausalAuditV1.test.cjs \
+            server/tests/c15DungeonC2EHttpGate.test.cjs \
+            > "$RUNNER_TEMP/c15-c2e-26-tests.log" 2>&1 || {
+              tail -n 120 "$RUNNER_TEMP/c15-c2e-26-tests.log"
+              exit 1
+            }
+          for entry in 'tests 26' 'pass 26' 'fail 0' 'skipped 0' 'cancelled 0' 'todo 0'; do
+            grep -qx "# $entry" "$RUNNER_TEMP/c15-c2e-26-tests.log"
+          done
+          tail -n 12 "$RUNNER_TEMP/c15-c2e-26-tests.log"
+          node --check server/lib/c15DungeonC2ECausalAuditV1.cjs
+          node --check client/src/game/dungeon/DungeonC2ECombatWitnessV1.js
+          echo 'C2E_CAUSAL_SUBSET_TESTS_26_26=PASS'
 
       - name: Restore and verify existing registered Android QA signing key
         env:
@@ -218,7 +237,7 @@ jobs:
       - name: Upload one APK only with minimal retention
         uses: actions/upload-artifact@v4
         with:
-          name: sf-c15-dungeon-c2c2d-qa-debug-apk-no-rewards
+          name: sf-c15-dungeon-c2e-qa-debug-apk-no-rewards
           path: client/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 1

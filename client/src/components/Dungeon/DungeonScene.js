@@ -21,6 +21,7 @@ import { createDungeonDeviceTouchTraceV2B2, isDungeonV2B2LocalQaEnabledV2B2 } fr
 import { createDungeonApkCombatTraceV2C11, isDungeonV2C11ApkTraceEnabled } from '../../game/dungeon/DungeonApkCombatTraceV2C11.js';
 import { createDungeonApkInputJournalV2C14B } from '../../game/dungeon/DungeonApkInputJournalV2C14B.js';
 import { createDungeonC2CInputGridV1 } from '../../game/dungeon/DungeonC2CInputGridV1.js';
+import { createDungeonC2ECombatWitnessV1 } from '../../game/dungeon/DungeonC2ECombatWitnessV1.js';
 import { createDungeonApkInputCheckpointV2C14B1 } from '../../game/dungeon/DungeonApkInputCheckpointV2C14B1.js';
 import { mountDungeonApkTraceScreenExportV2C13 } from '../../game/dungeon/DungeonApkTraceScreenExportV2C13.js';
 import { describeMainSalvo, describeWingSalvo, describeDroneSalvo, pickWeaponTarget, enemySpeedFactor, shieldDamageFactor, repairAmount, projectileHitsPoint } from '../../game/combat/PlayerWeapons';
@@ -342,6 +343,18 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             battleId:dungeonC2BLocalQa ? dungeonC2BQaTicket.battleId : null,
             initialPlayer:{x:0,z:BATTLE_WORLD_HALF_HEIGHT-2.5},
         }) : null;
+    // C2E passive witness of real DungeonScene combat events. It neither
+    // changes the simulation clock nor grants any battle/reward authority.
+    const dungeonC2EWitness = dungeonC2CGrid ? createDungeonC2ECombatWitnessV1({
+        sceneSeed:dungeonSeedV38,
+        seedSource:dungeonC2BLocalQa ? 'server-ticket-local-unverified' : 'local-client-seed',
+        battleId:dungeonC2BLocalQa ? dungeonC2BQaTicket.battleId : null,
+        getGrid:() => dungeonC2CGrid.exportEvidence(),
+    }) : null;
+    const recordC2E = event => {
+        if (!dungeonC2EWitness || currentRoomV38?.id !== 'taurus_entry') return;
+        try { dungeonC2EWitness.capture(event); } catch (_ignored) { /* passive only */ }
+    };
     const dungeonV2C14B1Checkpoint = dungeonV2C14BJournal
         ? createDungeonApkInputCheckpointV2C14B1({
             getTrace: () => dungeonV2C11Trace.snapshot(),
@@ -358,6 +371,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             getInputJournal: () => dungeonV2C14BJournal.snapshot(),
             getInputCheckpoint: () => dungeonV2C14B1Checkpoint?.snapshotPair() ?? null,
             getC2CGrid: () => dungeonC2CGrid?.exportEvidence() ?? null,
+            getC2EWitness: () => dungeonC2EWitness?.snapshot() ?? null,
+            onSubmitC2EStaging: dungeonC2BLocalQa ? data.onC2EStagingQaAudit : null,
             onSubmitC2CStaging: dungeonC2BLocalQa ? data.onC2CStagingQaAudit : null,
         });
         scene.onDisposeObservable.add(destroyV2C13QaExport);
@@ -365,6 +380,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             dungeonV2C11Trace.finish();
             dungeonV2C14BJournal.finish();
             dungeonC2CGrid?.finish();
+            dungeonC2EWitness?.finish();
             try { data.onDungeonC15V2C11QaTrace?.(dungeonV2C11Trace.snapshot()); }
             catch (ignored) { /* never break game disposal for QA diagnostics */ }
         });
@@ -1513,6 +1529,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             enemyId: e.runtimeId, nowMs: Date.now(),
             reason: killedByDamage ? 'killed' : 'despawn',
         });
+        if (!killedByDamage) recordC2E({kind:'enemy_despawn',enemyId:e.runtimeId});
         if (killedByDamage) deathVisuals.capture(e.visual);
         else e.visual?.dispose();
         safeDisGui(e.miniHp);
@@ -1757,6 +1774,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             });
             publishDungeonQaV400(nowMs, true);
             currentWave = event.roomIndex + 1;
+            if (event.room?.id === 'taurus_entry') dungeonC2EWitness?.capture({kind:'room_start'});
             currentRoomInitialEnemyCountV39 = event.roomPlan?.entries?.length || 0;
             currentRoomInitialBreakableCountV39 = event.room.breakables?.length || 0;
             currentRoomCompleteV396 = false;
@@ -1784,10 +1802,14 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         }
         if (event.type === 'spawn_enemy') {
             const spawnedEnemyV400 = spawnEnemy(event.entry, currentRoomV38);
-            if (spawnedEnemyV400) dungeonQaReadinessV400.recordSpawn(
-                spawnedEnemyV400.spec?.roleId || 'unknown',
-                { enemyId: spawnedEnemyV400.runtimeId, nowMs },
-            );
+            if (spawnedEnemyV400) {
+                dungeonQaReadinessV400.recordSpawn(
+                    spawnedEnemyV400.spec?.roleId || 'unknown',
+                    { enemyId: spawnedEnemyV400.runtimeId, nowMs },
+                );
+                recordC2E({kind:'enemy_spawn',enemyId:spawnedEnemyV400.runtimeId,
+                    roleId:spawnedEnemyV400.spec?.roleId, hp:spawnedEnemyV400.maxHp});
+            }
             waveSpawned += 1;
             updateDungeonObjectiveHudV39();
             return;
@@ -1916,6 +1938,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         b._createdAtMs = Number(plan?.createdAtMs) || Date.now();
         b._expiresAtMs = Number(plan?.expiresAtMs) || (b._createdAtMs + (priority === 'boss' ? 5600 : 4400));
         b._sourceRole = sourceRole;
+        b._c2eSourceRuntimeId = options.sourceRuntimeId || null;
         b._priority = priority;
         b._hitRadius = hitRadius;
         b.metadata = {
@@ -1924,6 +1947,10 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             damageAuthority: 'dungeon-logical-projectile-v392',
         };
         enemyBullets.push(b);
+        if (options.sourceRuntimeId) recordC2E({kind:'enemy_fire',
+            enemyId:options.sourceRuntimeId,bulletId:hitId,amount:b._damage,
+            origin:{x:b.position.x,z:b.position.z},
+            velocity:{x:b._velX,z:b._velZ}});
         if (dungeonV2C11Trace && currentRoomV38?.id === 'taurus_entry') {
             recordDungeonV2C11({kind: 'enemy_fire', simTick: tick,
                 id: options.sourceRuntimeId || 'legacy',
@@ -2439,13 +2466,18 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         }
         // One QA-only scale for main, wing, drone, passive reflection and splash.
         // Keep production damage and objective/hazard damage unchanged.
-        enemy.hp -= scaleDungeonQaOutgoingDamageV403(resolvedDamageV410, qaOutgoingDamageScaleV403);
+        const c2eHpBefore=enemy.hp;
+        const c2eApplied=scaleDungeonQaOutgoingDamageV403(resolvedDamageV410, qaOutgoingDamageScaleV403);
+        enemy.hp -= c2eApplied;
+        recordC2E({kind:'enemy_hit',enemyId:enemy.runtimeId,
+            amount:Math.min(c2eHpBefore,Math.max(0,c2eApplied)),hp:Math.max(0,enemy.hp)});
         enemy.visual?.setState('hit');
         const ratio = clamp(enemy.hp / enemy.maxHp, 0, 1);
         enemy.miniHp.width = `${(ratio * 100).toFixed(0)}%`;
         enemy.miniHp.background = ratio < .4 ? '#ff8800'
           : enemy.type === 'heavy' ? '#ff8a66' : enemy.type === 'elite' ? '#ffdd55' : '#66ddff';
         if (enemy.hp > 0) return false;
+        recordC2E({kind:'enemy_death',enemyId:enemy.runtimeId});
         if (dungeonV2C11Trace && currentRoomV38?.id === 'taurus_entry') {
             recordDungeonV2C11({kind:'enemy_death',simTick:tick,
                 id: enemy.runtimeId,position:{x:enemy.mesh.position.x,
@@ -3480,6 +3512,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                     hitId: eb._damageHitId,
                     priority: eb._priority || 'normal',
                 });
+                if (eb._c2eSourceRuntimeId) recordC2E({kind:'projectile_contact',
+                    enemyId:eb._c2eSourceRuntimeId,bulletId:eb._damageHitId,hp:stats.hp});
                 safeDis(eb);
                 enemyBullets.splice(i, 1);
                 continue;

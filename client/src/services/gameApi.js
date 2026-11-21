@@ -146,3 +146,7 @@ export const issueDungeonC2BTicket=(uid,body)=>callApi(
 // C2C/C2D staging input-subset preflight; manual QA only, no settlement.
 export const auditDungeonC2DInputGrid=(uid,body)=>callApi(
   '/c15/dungeon/qa-c2c2d/input-audit',body,{expectedUid:uid});
+
+// C2E: manual, authenticated staging-only combat CAUSAL SUBSET audit. Not settlement.
+export const auditDungeonC2ECausal=(uid,body)=>callApi(
+  '/c15/dungeon/qa-c2e/causal-audit',body,{expectedUid:uid});

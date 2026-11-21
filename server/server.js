@@ -23,6 +23,7 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
   // Larger bounded body only for explicit C2C QA input audit. Never relax
   // the normal game API 16kb request limit or allow reward operations.
   app.use('/api/v1/c15/dungeon/qa-c2c2d/input-audit',express.json({limit:'96kb'}));
+  app.use('/api/v1/c15/dungeon/qa-c2e/causal-audit',express.json({limit:'256kb'}));
   app.use(express.json({limit:'16kb'}));
   app.get('/ping',(_req,res)=>res.status(200).type('text/plain').send('pong'));
   app.get('/health',(_req,res)=>res.status(200).json({ok:true,service:'space-fighter',phase:1,apiReady:Boolean(options.service)}));
@@ -150,6 +151,18 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
   app.post('/api/v1/c15/dungeon/qa-c2c2d/input-audit',(req,res,next)=>{
     if(!c2dReady)return res.status(503).json({ok:false,code:'C15_DUNGEON_C2C2D_DISABLED'});
     return withAuth((r,user)=>options.c15DungeonC2DAuditService.audit({
+      uid:user.uid,sessionId:r.get('x-game-session'),
+      ticket:r.body?.ticket,record:r.body?.record}))(req,res,next);
+  });
+  // C2E: signed C2B + approved C2D input + independently rebuilt spawn plan.
+  // Observed combat causality ONLY; never victory, rewards or full AI replay.
+  const c2eReady=c2dReady&&options.c15DungeonC2EEnabled===true&&
+    options.c15DungeonC2EService?.enabled===true&&
+    options.c15DungeonC2EService?.stagingOnly===true&&
+    options.c15DungeonC2EService?.rewardSettlementEnabled===false;
+  app.post('/api/v1/c15/dungeon/qa-c2e/causal-audit',(req,res,next)=>{
+    if(!c2eReady)return res.status(503).json({ok:false,code:'C15_DUNGEON_C2E_DISABLED'});
+    return withAuth((r,user)=>options.c15DungeonC2EService.audit({
       uid:user.uid,sessionId:r.get('x-game-session'),
       ticket:r.body?.ticket,record:r.body?.record}))(req,res,next);
   });
@@ -290,7 +303,7 @@ async function start() {
   const port=Number(process.env.PORT||3000);
   if(!Number.isInteger(port)||port<1||port>65535) throw new Error('Invalid PORT');
   let service=null,auth=null,admin=null,accountDeletionService=null,qaBattleService=null,qaVerifierService=null,candidateService=null,c15Rc1bService=null,c15Rc3SettlementService=null,c15Rc4ReleaseGate=null,c15ResourceCatalog=null,c15DungeonV1Service=null,c15DungeonC2BService=null,
-    c15DungeonC2DAuditService=null;
+    c15DungeonC2DAuditService=null,c15DungeonC2EService=null;
   if(process.env.GAME_API_ENABLED==='true') {
     admin=require('firebase-admin');
     if(!admin.apps.length) {
@@ -394,6 +407,16 @@ async function start() {
         console.error('Dungeon C2C/C2D staging audit disabled: invalid approved configuration');
       }
     }
+    if(process.env.GAME_C15_DUNGEON_C2E_ENABLED==='true'){
+      try{
+        if(!c15DungeonC2BService?.enabled||!c15DungeonC2DAuditService?.enabled)
+          throw new TypeError('C2B+C2D prerequisite services required');
+        const {createC15DungeonC2ECausalAuditV1}=require('./lib/c15DungeonC2ECausalAuditV1.cjs');
+        c15DungeonC2EService=createC15DungeonC2ECausalAuditV1({
+          env:process.env,c2bService:c15DungeonC2BService,
+          c2dService:c15DungeonC2DAuditService});
+      }catch(_error){console.error('Dungeon C2E staging causal audit disabled: invalid approved configuration');}
+    }
     if(process.env.GAME_C15_RC4_RELEASE_GATE_ENABLED==='true'){
       try{
         const {parseC15Rc4ReleaseGateConfig,createC15Rc4ReleaseGate}=require('./lib/c15Rc4ReleaseGateV1.cjs');
@@ -419,6 +442,7 @@ async function start() {
     c15DungeonV1Service,c15DungeonV1Enabled:Boolean(c15DungeonV1Service?.enabled),
     c15DungeonC2BService,c15DungeonC2BEnabled:Boolean(c15DungeonC2BService?.enabled),
     c15DungeonC2DAuditService,c15DungeonC2DAuditEnabled:Boolean(c15DungeonC2DAuditService?.enabled),
+    c15DungeonC2EService,c15DungeonC2EEnabled:Boolean(c15DungeonC2EService?.enabled),
     allowLocalOrigin:process.env.NODE_ENV!=='production'});
   app.listen(port,'0.0.0.0',()=>console.log(`Space Fighter Phase 1 listening on ${port}; API ${service?'enabled':'disabled'}`));
 }
