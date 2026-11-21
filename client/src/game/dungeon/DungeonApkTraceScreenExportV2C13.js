@@ -5,6 +5,7 @@
  */
 
 import { prepareDungeonApkInputBundleJsonV2C14B } from './DungeonApkInputBundleV2C14B.js';
+import { isDungeonApkInputCheckpointPairV2C14B1 } from './DungeonApkInputCheckpointV2C14B1.js';
 
 export const DUNGEON_APK_SCREEN_EXPORT_V2C13 = 'c15-dungeon-qa-screen-export-v2c13';
 const V2C11_VERSION = 'c15-dungeon-apk-trace-v2c11';
@@ -104,7 +105,7 @@ function makeButton(doc, text, onClick) {
 }
 
 /** Returns a cleanup callback. No DOM or global UI exists in normal builds. */
-export function mountDungeonApkTraceScreenExportV2C13({ getSnapshot, getInputJournal, document: doc = globalThis.document } = {}) {
+export function mountDungeonApkTraceScreenExportV2C13({ getSnapshot, getInputJournal, getInputCheckpoint, document: doc = globalThis.document } = {}) {
   if (typeof getSnapshot !== 'function' || !doc?.body?.appendChild) {
     return () => {};
   }
@@ -202,17 +203,28 @@ export function mountDungeonApkTraceScreenExportV2C13({ getSnapshot, getInputJou
   if (typeof getInputJournal === 'function') {
     actions.appendChild(makeButton(doc, 'Xem INPUT V2C.14-B', () => {
       try {
-        const evidence = getSnapshot();
-        const input = getInputJournal();
+        const checkpoint = typeof getInputCheckpoint === 'function'
+          ? getInputCheckpoint() : null;
+        const savedPair = isDungeonApkInputCheckpointPairV2C14B1(checkpoint)
+          ? checkpoint : null;
+        // V2C.14-B.1: export the first valid, unmodified post-pointerup
+        // checkpoint; never use a later FRAME_CAP live trace as a substitute.
+        // If no valid checkpoint exists, show the original live diagnostic.
+        const evidence = savedPair ? savedPair.trace : getSnapshot();
+        const input = savedPair ? savedPair.inputJournal : getInputJournal();
         prepared = prepareDungeonApkInputBundleJsonV2C14B(evidence, input);
         content.value = prepared.json;
         summary.textContent = `V2C.14-B · Frames: ${prepared.frameCount} | `
           + `Accepted pointer events: ${prepared.eventCount} | `
           + `Overflow: ${input.pointerOverflow || input.frameOverflow} | `
-          + `Input lỗi: ${input.captureError ?? 'null'}\nFile: ${prepared.fileName}`;
+          + `Input lỗi: ${input.captureError ?? 'null'}`
+          + `${savedPair ? ' | CHECKPOINT sau pointerup (đoạn QA, không phải cả trận)' : ' | LIVE (không có checkpoint hợp lệ)'}`
+          + `\nFile: ${prepared.fileName}`;
         status.textContent = prepared.isCompleteShortTrace
-          ? 'Đã ghi input QA. CHƯA XÁC MINH ticket / server loadout / 60Hz parity.'
-          : 'Dữ liệu input chưa hoàn chỉnh (hoặc chưa kết thúc gesture). Chỉ dùng chẩn đoán; KHÔNG phải parity PASS.';
+          ? (savedPair
+            ? 'Snapshot INPUT QA đã lưu trước FRAME_CAP. Đây chỉ là đoạn QA cục bộ, CHƯA CÓ ticket/loadout/parity server.'
+            : 'Đã ghi input QA. CHƯA XÁC MINH ticket / server loadout / 60Hz parity.')
+          : 'Dữ liệu input chưa hoàn chỉnh (hoặc đã quá giới hạn). Chỉ dùng chẩn đoán; KHÔNG phải parity PASS.';
       } catch (error) {
         prepared = null;
         content.value = '';

@@ -19,6 +19,7 @@ import { dungeonSceneStableSeedV2B1 as stableSeed } from '../../game/dungeon/Dun
 import { createDungeonDeviceTouchTraceV2B2, isDungeonV2B2LocalQaEnabledV2B2 } from '../../game/dungeon/DungeonDeviceTouchTraceV2B2.js';
 import { createDungeonApkCombatTraceV2C11, isDungeonV2C11ApkTraceEnabled } from '../../game/dungeon/DungeonApkCombatTraceV2C11.js';
 import { createDungeonApkInputJournalV2C14B } from '../../game/dungeon/DungeonApkInputJournalV2C14B.js';
+import { createDungeonApkInputCheckpointV2C14B1 } from '../../game/dungeon/DungeonApkInputCheckpointV2C14B1.js';
 import { mountDungeonApkTraceScreenExportV2C13 } from '../../game/dungeon/DungeonApkTraceScreenExportV2C13.js';
 import { describeMainSalvo, describeWingSalvo, describeDroneSalvo, pickWeaponTarget, enemySpeedFactor, shieldDamageFactor, repairAmount, projectileHitsPoint } from '../../game/combat/PlayerWeapons';
 import { createProjectileEmitter } from '../../game/combat/ProjectileEmitter';
@@ -322,6 +323,11 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             seedSource: dungeonV2B2LocalQa
                 ? 'server-ticket-local-unverified' : 'local-client-seed',
         }) : null;
+    const dungeonV2C14B1Checkpoint = dungeonV2C14BJournal
+        ? createDungeonApkInputCheckpointV2C14B1({
+            getTrace: () => dungeonV2C11Trace.snapshot(),
+            getInputJournal: () => dungeonV2C14BJournal.snapshot(),
+        }) : null;
     if (dungeonV2C11Trace) {
         // Only QA builds have this manual export accessor. No network or disk IO.
         globalThis.__SF_DUNGEON_C15_V2C11_APK_TRACE__ =
@@ -331,6 +337,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         const destroyV2C13QaExport = mountDungeonApkTraceScreenExportV2C13({
             getSnapshot: () => dungeonV2C11Trace.snapshot(),
             getInputJournal: () => dungeonV2C14BJournal.snapshot(),
+            getInputCheckpoint: () => dungeonV2C14B1Checkpoint?.snapshotPair() ?? null,
         });
         scene.onDisposeObservable.add(destroyV2C13QaExport);
         scene.onDisposeObservable.add(() => {
@@ -887,8 +894,14 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         onPointerTrace: (dungeonV2B2TouchTrace || dungeonV2C14BJournal) ? event => {
             // V2C.14-B records only events accepted by ShipInputController.
             // QA instrumentation must never modify game movement or outcomes.
-            try { dungeonV2C14BJournal?.capturePointer(event); }
-            catch (ignored) { /* QA only */ }
+            try {
+                const captured = dungeonV2C14BJournal?.capturePointer(event);
+                // Freeze a genuine, same-moment TRACE + INPUT prefix after
+                // an accepted pointerup; never fix or relabel later overflow.
+                if (captured && event.kind === 'up') {
+                    dungeonV2C14B1Checkpoint?.onAcceptedPointerUp();
+                }
+            } catch (ignored) { /* QA only */ }
             if (dungeonV2B2TouchTrace) {
                 if (!dungeonV2B2TouchTrace.capture(event)) return;
                 if (event.kind === 'up') {
@@ -3627,10 +3640,15 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                     projectiles:{player:playerBullets.length,hostile:enemyBullets.length},
                     bossActive,bossHp:Math.max(0,bossHp),
                 });
-                if (acceptedV2C11Frame) dungeonV2C14BJournal?.captureFrameMarker({
-                    frameSeq: dungeonV2C11Trace.frameCount, simTick: tick,
-                    player: {x: playerRoot.position.x, z: playerRoot.position.z},
-                });
+                if (acceptedV2C11Frame) {
+                    const markerAccepted = dungeonV2C14BJournal?.captureFrameMarker({
+                        frameSeq: dungeonV2C11Trace.frameCount, simTick: tick,
+                        player: {x: playerRoot.position.x, z: playerRoot.position.z},
+                    });
+                    // A very early pointerup completes once the 120-frame
+                    // minimum is reached; both live recorders must still agree.
+                    if (markerAccepted) dungeonV2C14B1Checkpoint?.afterAcceptedFrameMarker();
+                }
             } catch (ignored) { /* QA instrumentation must not break rendering */ }
         }
         // Mark only a completed simulation pass. A frame that throws before
