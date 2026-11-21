@@ -23,8 +23,9 @@ function fixture(count=90){
   for(let i=0;i<count;i++){
     const step=recorder.stepFrame(1000/30,{x:0,z:12.5});
     assert.equal(step.error,null);
-    grid.captureFrame({deltaMs:1000/30,player:{x:0,z:12.5},
+    const gridCaptured=grid.captureFrame({deltaMs:1000/30,player:{x:0,z:12.5},
       playerHp:100,shieldHp:0,enemyCount:0});
+    assert.equal(recorder.afterGridFrame(gridCaptured),true);
   }
   return {grid,recorder,record:recorder.snapshot()};
 }
@@ -126,4 +127,92 @@ test('C2JK native export whitelist requires QA-only shared-core schema',()=>{
   assert.match(java,/payload\.optBoolean\("clientFixedBallisticStepObserved", false\)/);
   assert.match(java,/!payload\.optBoolean\("fullCombatReplayVerified", true\)/);
   assert.match(java,/payload\.isNull\("battleId"\)/);
+});
+
+// C2JL: the user APK produced 261 real ballistic ticks with only 136 cached
+// C2F GRID ticks. Never silently approve this as an exact same-window replay.
+test('C2JL the 261-ballistic / 136-grid stale window is rejected at export',()=>{
+  const {record}=fixture(261);
+  const stale=structuredClone(record);
+  stale.grid.ticks=stale.grid.ticks.slice(0,136);
+  assert.equal(stale.ticks.length,261);
+  assert.equal(stale.grid.ticks.length,136);
+  assert.throws(()=>prepareC2JKFixedBallisticJson(stale),/C2JK_UNSAFE_EXPORT/);
+});
+test('C2JL live recorder rejects a frozen legacy C2F grid before JSON export',()=>{
+  const grid=initial();
+  let chosenGrid;
+  const recorder=createC2JKFixedBallisticJournal({sceneSeed:321,
+    seedSource:'local-client-seed',getGrid:()=>chosenGrid||grid.snapshot()});
+  grid.capturePointer({kind:'down',pointerId:1,atMs:10,
+    position:{x:0,z:12.5},clientX:10,clientY:20});
+  grid.capturePointer({kind:'up',pointerId:1,atMs:11,position:{x:0,z:12.5}});
+  for(let i=0;i<261;i++){
+    recorder.stepFrame(1000/30,{x:0,z:12.5});
+    const ok=grid.captureFrame({deltaMs:1000/30,player:{x:0,z:12.5},
+      playerHp:100,shieldHp:0,enemyCount:0});
+    if(i===135)chosenGrid=grid.snapshot();
+    if(i<269)assert.equal(recorder.afterGridFrame(ok),true);
+  }
+  assert.equal(chosenGrid.ticks.length,136);
+  assert.throws(()=>recorder.snapshot(),/C2JL_LIVE_GRID_UNPAIRED/);
+});
+test('C2JL seals 270 exact matching GRID ticks automatically after render observation',()=>{
+  const {record,recorder}=fixture(270);
+  assert.equal(recorder.sealed,true);
+  assert.equal(record.grid.ticks.length,270);
+  assert.equal(record.ticks.length,270);
+  assert.equal(recorder.error,null);
+});
+test('C2JL preserved paired snapshot survives extended gameplay and GRID overflow',()=>{
+  const {grid,recorder,record}=fixture(270);
+  for(let i=0;i<110;i++){
+    assert.equal(recorder.stepFrame(1000/30,{x:0,z:12.5}).error,null);
+    recorder.afterGridFrame(grid.captureFrame({deltaMs:1000/30,
+      player:{x:0,z:12.5},playerHp:100,shieldHp:0,enemyCount:0}));
+  }
+  assert.equal(recorder.error,null);
+  assert.equal(recorder.snapshot().checksum,record.checksum);
+  assert.equal(recorder.snapshot().grid.ticks.length,270);
+  assert.equal(recorder.recordedTicks,270);
+});
+test('C2JL live projectiles continue after 270-tick evidence seal',()=>{
+  const {recorder,record}=fixture(270);
+  assert.equal(recorder.registerShot({id:'postseal-1',sourceId:'enemy-1',
+    origin:{x:0,z:-1},velocity:{x:0,z:.5},hitRadius:.5,ttlTicks:20}),true);
+  const advanced=recorder.stepFrame(1000/30,{x:0,z:12.5});
+  assert.equal(advanced.error,null);
+  assert.equal(advanced.frames.length,1);
+  assert.equal(advanced.frames[0].activeShots.some(s=>s.id==='postseal-1'),true);
+  assert.equal(recorder.snapshot().checksum,record.checksum);
+});
+test('C2JL failed grid observation makes QA fail closed without crashing gameplay',()=>{
+  const grid=initial();
+  const recorder=createC2JKFixedBallisticJournal({sceneSeed:321,
+    seedSource:'local-client-seed',getGrid:()=>grid.snapshot()});
+  assert.equal(recorder.afterGridFrame(false),false);
+  assert.equal(recorder.error,'C2JL_GRID_CAPTURE_FAILED');
+  assert.equal(recorder.stepFrame(1000/30,{x:0,z:12.5}).error,'C2JL_GRID_CAPTURE_FAILED');
+});
+test('C2JL incomplete pointer gesture at seal is not accepted as QA',()=>{
+  const grid=initial();
+  const recorder=createC2JKFixedBallisticJournal({sceneSeed:321,
+    seedSource:'local-client-seed',getGrid:()=>grid.snapshot()});
+  grid.capturePointer({kind:'down',pointerId:1,atMs:10,
+    position:{x:0,z:12.5},clientX:10,clientY:20});
+  let last;
+  for(let i=0;i<270;i++){
+    recorder.stepFrame(1000/30,{x:0,z:12.5});
+    last=recorder.afterGridFrame(grid.captureFrame({deltaMs:1000/30,
+      player:{x:0,z:12.5},playerHp:100,shieldHp:0,enemyCount:0}));
+  }
+  assert.equal(last,false);
+  assert.equal(recorder.error,'C2JL_LIVE_GRID_UNPAIRED');
+});
+test('C2JL scene pairs live GRID and seals after corresponding observer frame',()=>{
+  const scene=fs.readFileSync(new URL('../src/components/Dungeon/DungeonScene.js',import.meta.url),'utf8');
+  assert.match(scene,/getGrid:\(\)=>dungeonC2CGrid\.snapshot\(\)/);
+  assert.match(scene,/dungeonC2JK\?\.afterGridFrame\(gridCapturedC2JL\)/);
+  assert.match(scene,/dungeonC2JK\?\.invalidate\('C2JL_GRID_CAPTURE_EXCEPTION'\)/);
+  assert.match(scene,/getGrid:\(\)\s*=>\s*dungeonC2CGrid\.exportCombatEvidence\(\)/);
 });

@@ -362,7 +362,9 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         import.meta.env?.VITE_SF_DUNGEON_C2JK_SHARED_FIXED30 === 'true'
         ? createC2JKFixedBallisticJournal({
             sceneSeed:dungeonSeedV38,seedSource:'local-client-seed',
-            getGrid:()=>dungeonC2CGrid.exportCombatEvidence(),
+            // C2JL: C2F's completed-gesture checkpoint may be old even while
+            // the projectile clock continues. C2JK must pair with a LIVE grid.
+            getGrid:()=>dungeonC2CGrid.snapshot(),
         }) : null;
     const recordC2E = event => {
         if (!dungeonC2EWitness || currentRoomV38?.id !== 'taurus_entry') return;
@@ -3783,12 +3785,21 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         // A separate 30Hz observation grid, not a simulation replay. Only
         // sample AFTER a completed combat pass; never feed values into combat.
         if (dungeonC2CGrid && currentRoomV38?.id === 'taurus_entry') {
-            try { dungeonC2CGrid.captureFrame({
-                deltaMs:frameDeltaMsV410,
-                player:{x:playerRoot.position.x,z:playerRoot.position.z},
-                playerHp:stats.hp,shieldHp:passives.shieldHp || 0,
-                enemyCount:enemies.length,
-            }); } catch (_ignored) { /* QA observation cannot affect combat */ }
+            try {
+                const gridCapturedC2JL = dungeonC2CGrid.captureFrame({
+                    deltaMs:frameDeltaMsV410,
+                    player:{x:playerRoot.position.x,z:playerRoot.position.z},
+                    playerHp:stats.hp,shieldHp:passives.shieldHp || 0,
+                    enemyCount:enemies.length,
+                });
+                // Seal C2JK only AFTER the matching GRID observation, so
+                // extended play cannot replace the valid 270-tick pair with
+                // a stale C2F snapshot or a later overflowed GRID.
+                dungeonC2JK?.afterGridFrame(gridCapturedC2JL);
+            } catch (_ignored) {
+                dungeonC2JK?.invalidate('C2JL_GRID_CAPTURE_EXCEPTION');
+                // QA observation must never break real combat/rendering.
+            }
         }
         // Mark only a completed simulation pass. A frame that throws before
         // this line must never be reported as healthy gameplay progress.

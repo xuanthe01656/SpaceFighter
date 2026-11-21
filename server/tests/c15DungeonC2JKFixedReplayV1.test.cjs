@@ -104,3 +104,14 @@ test('C2K does not claim independent AI or damage authority',async()=>{
   assert.equal(r.independentDamageVerified,false);
   assert.equal(r.serverSignedSameSessionVerified,false);
 });
+
+test('C2JL C2JK auditor rejects 261 projectile ticks paired to 136 stale GRID rows',async()=>{
+  const {record,core}=await fixture(261);
+  const bad=tweak(record,x=>{x.grid.ticks=x.grid.ticks.slice(0,136);},core);
+  await assert.rejects(auditC2JKFixedReplayV1(bad),/C2JK_C2C_GRID_UNPAIRED/);
+});
+test('C2JL no attacker-supplied shorter grid can pass even with recomputed FNV',async()=>{
+  const {record,core}=await fixture(270);
+  const bad=tweak(record,x=>{x.grid.ticks.splice(269);},core);
+  await assert.rejects(auditC2JKFixedReplayV1(bad),/C2JK_C2C_GRID_UNPAIRED/);
+});

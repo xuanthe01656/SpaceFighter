@@ -20,12 +20,17 @@ export function createC2JKFixedBallisticJournal({sceneSeed,seedSource,
   let active=[],fatal=null,sealed=null;
   const activeIds=new Set();
   function registerShot({id,sourceId,origin,velocity,hitRadius,ttlTicks}={}) {
-    if(fatal||sealed)return false;
+    if(fatal)return false;
     try {
-      if(shotEntries.length>=128||activeIds.has(id))bad('C2JK_SHOT_LIMIT_OR_REUSE');
+      if(activeIds.size>=128||activeIds.has(id)||
+        (!sealed&&clock.tick<C2JK_MAX_TICKS&&shotEntries.length>=128))
+        bad('C2JK_SHOT_LIMIT_OR_REUSE');
       const shot=createC2JKShot({id,sourceId,spawnTick:clock.tick,
         origin,velocity,hitRadius,ttlTicks});
-      shotEntries.push({id:shot.id,sourceId:shot.sourceId,spawnTick:shot.spawnTick,
+      // The QA evidence is frozen after tick 270, but real ballistics
+      // continue under the shared kernel throughout the rest of gameplay.
+      if(!sealed&&clock.tick<C2JK_MAX_TICKS)shotEntries.push({
+        id:shot.id,sourceId:shot.sourceId,spawnTick:shot.spawnTick,
         origin:{x:shot.x,z:shot.z},velocity:{x:shot.vx,z:shot.vz},
         hitRadius:shot.hitRadius,ttlTicks:shot.ttlTicks});
       activeIds.add(id);active.push(shot);
@@ -54,6 +59,13 @@ export function createC2JKFixedBallisticJournal({sceneSeed,seedSource,
   }
   function makeSnapshot(){
     const grid=getGrid();
+    // C2JL: reject stale C2F completed-gesture checkpoints. Exact GRID
+    // coverage, closed input gestures and a healthy observer are mandatory.
+    if(!fatal&&(!grid||!Array.isArray(grid.ticks)||grid.ticks.length!==ticks.length||
+       grid.captureError!==null||grid.overflow!==false||
+       grid.startedGestures<1||grid.completedGestures!==grid.startedGestures||
+       grid.pointerActive!==false))
+      bad('C2JL_LIVE_GRID_UNPAIRED');
     const body={version:C2JK_JOURNAL_VERSION,coreVersion:C2JK_CORE_VERSION,
       source:'live-taurus-fixed30-hostile-projectiles-untrusted',dungeonId:'dung_taurus',
       roomId:'taurus_entry',sceneSeed,seedSource,battleId,
@@ -67,15 +79,22 @@ export function createC2JKFixedBallisticJournal({sceneSeed,seedSource,
       checksumAlgorithm:'fnv1a32-accidental-corruption-only'};
     return {...body,checksum:c2jkHash(body)};
   }
-  function snapshot(){
-    // The observer samples AFTER the actual Babylon combat pass. Sealing in K
-    // would store 269 GRID ticks for a 270-tick projectile trace.
-    if(!sealed && ticks.length>=C2JK_MAX_TICKS)sealed=makeSnapshot();
-    return sealed||makeSnapshot();
-  }
   const invalidate=message=>{fatal||=String(message||'C2JK_UNSUPPORTED_SHOT');return false;};
-  return Object.freeze({registerShot,stepFrame,snapshot,invalidate,
+  // DungeonScene calls this AFTER C2C.captureFrame() for the same render.
+  // Seal once at tick 270; any play after that cannot alter the QA evidence.
+  function afterGridFrame(captured){
+    if(sealed)return true;
+    if(captured!==true)return invalidate('C2JL_GRID_CAPTURE_FAILED');
+    if(ticks.length>=C2JK_MAX_TICKS){
+      try{sealed=makeSnapshot();}
+      catch(err){return invalidate(err?.message||'C2JL_SEAL_ERROR');}
+    }
+    return true;
+  }
+  const snapshot=()=>sealed||makeSnapshot();
+  return Object.freeze({registerShot,stepFrame,afterGridFrame,snapshot,invalidate,
     get tick(){return clock.tick;},get error(){return fatal;},
+    get sealed(){return sealed!==null;},
     get shotCount(){return shotEntries.length;},get recordedTicks(){return ticks.length;}});
 }
 
@@ -86,6 +105,11 @@ export function prepareC2JKFixedBallisticJson(record,date=new Date()){
     record.trueApkServerParity!=='NOT_VERIFIED'||record.captureError!==null||
     !Array.isArray(record.ticks)||record.ticks.length<60||
     !Array.isArray(record.shots)||!record.grid||
+    record.grid.ticks?.length!==record.ticks.length||
+    record.grid.captureError!==null||record.grid.overflow!==false||
+    record.grid.pointerActive!==false||
+    record.grid.completedGestures<1||
+    record.grid.completedGestures!==record.grid.startedGestures||
     !(date instanceof Date)||!Number.isFinite(date.getTime()))bad('C2JK_UNSAFE_EXPORT');
   const compact=JSON.stringify(record)+'\n';
   if(new TextEncoder().encode(compact).length>256*1024)bad('C2JK_EXPORT_TOO_LARGE');
