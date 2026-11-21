@@ -7,6 +7,8 @@
  * The explicit cap bounds debug APK memory; overflow fails closed.
  */
 export const DUNGEON_C2JP_GRID_VERSION = 'c15-dungeon-c2jp-input-grid-v1';
+// Separate wire format: an observed Taurus-room boundary, NOT a full 270-tick capture.
+export const DUNGEON_C2JQ_EXIT_GRID_VERSION = 'c15-dungeon-c2jq-room-exit-grid-v1';
 export const DUNGEON_C2JP_GRID_LIMITS = Object.freeze({ticks:270,pointers:4096,frameDeltaMs:100});
 const SOURCE='accepted-controller-plus-babylon-observer-high-rate-untrusted';
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
@@ -32,6 +34,7 @@ export function createDungeonC2JPInputGridV1({sceneSeed,seedSource,battleId=null
   const pointerEvents=[],ticks=[];
   let active=null,lastAt=-1,startedGestures=0,completedGestures=0;
   let acc=0,frameSeq=0,overflow=false,error=null,finished=false;
+  let roomExit=null,windowPointerCount=null;
   let acceptedPosition=point(initialPlayer);
   const fail=reason=>{error ||= reason;return false;};
 
@@ -93,21 +96,56 @@ export function createDungeonC2JPInputGridV1({sceneSeed,seedSource,battleId=null
     return true;
   }
 
+  // End evidence as the director transitions OUT of Taurus entry. Any
+  // pointer events tagged to tick N+1 have NO matching observed simulation
+  // tick. They are OUTSIDE the captured window, never replayed or fabricated.
+  // The original accepted buffer remains untouched; only the sealed subset
+  // is exported. This is a client-reported, untrusted room boundary.
+  function sealAtRoomExit(){
+    if(finished||overflow||error||ticks.length<60||
+      ticks.length>=DUNGEON_C2JP_GRID_LIMITS.ticks)return false;
+    const keep=pointerEvents.findIndex(e=>e.tick>ticks.length);
+    const included=keep<0?pointerEvents.length:keep;
+    let id=null,starts=0,ends=0;
+    for(let i=0;i<included;i++){
+      const e=pointerEvents[i];
+      if(e.kind==='down'){if(id!==null)return fail('C2JQ_EXIT_INPUT_INVALID');id=e.pointerId;starts++;}
+      else if(e.kind==='up'){if(id!==e.pointerId)return fail('C2JQ_EXIT_INPUT_INVALID');id=null;ends++;}
+      else if(id!==e.pointerId)return fail('C2JQ_EXIT_INPUT_INVALID');
+    }
+    if(starts<1 || ends<starts-1)return false;
+    windowPointerCount=included;
+    roomExit=freeze({kind:'next_room_started',finalTick:ticks.length,
+      excludedUnsampledPointerEvents:pointerEvents.length-included});
+    finished=true;
+    return true;
+  }
   function snapshot(){
-    const body={version:DUNGEON_C2JP_GRID_VERSION,source:SOURCE,
+    const included=windowPointerCount===null?pointerEvents:pointerEvents.slice(0,windowPointerCount);
+    let starts=startedGestures,ends=completedGestures,pointerIsActive=active!==null;
+    if(roomExit){
+      starts=0;ends=0;let id=null;
+      for(const e of included){
+        if(e.kind==='down'){starts++;id=e.pointerId;}
+        else if(e.kind==='up'){ends++;id=null;}
+      }
+      pointerIsActive=id!==null;
+    }
+    const body={version:roomExit?DUNGEON_C2JQ_EXIT_GRID_VERSION:DUNGEON_C2JP_GRID_VERSION,source:SOURCE,
       dungeonId:'dung_taurus',roomId:'taurus_entry',battleId,
       sceneSeed,seedSource,tickHz:30,
       tickBasis:'accumulated-babylon-delta-not-fixed-combat-simulation',
-      initialPlayer:point(initialPlayer),pointerEvents:clone(pointerEvents),ticks:clone(ticks),
-      startedGestures,completedGestures,pointerActive:active!==null,
+      initialPlayer:point(initialPlayer),pointerEvents:clone(included),ticks:clone(ticks),
+      startedGestures:starts,completedGestures:ends,pointerActive:pointerIsActive,
       overflow,captureError:error,finished,qaOnly:true,
       fixedTickSimulationVerified:false,independentCombatReplayVerified:false,
       safeForSettlement:false,rewardSettlementEnabled:false,cloudRewards:false,
-      checksumAlgorithm:'fnv1a32-accidental-corruption-only'};
+      checksumAlgorithm:'fnv1a32-accidental-corruption-only',
+      ...(roomExit?{roomExit}: {})};
     return freeze({...body,checksum:hash(JSON.stringify(body))});
   }
   function finish(){finished=true;return snapshot();}
-  return Object.freeze({capturePointer,captureFrame,snapshot,finish,
+  return Object.freeze({capturePointer,captureFrame,snapshot,finish,sealAtRoomExit,
     get tickCount(){return ticks.length;},
     get acceptedPointerCount(){return pointerEvents.length;}});
 }

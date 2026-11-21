@@ -960,7 +960,9 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             try {
                 const captured = dungeonV2C14BJournal?.capturePointer(event);
                 dungeonC2CGrid?.capturePointer(event);
-                dungeonC2JPGrid?.capturePointer(event);
+                if (currentRoomV38?.id === 'taurus_entry') {
+                    dungeonC2JPGrid?.capturePointer(event);
+                }
                 // Freeze a genuine, same-moment TRACE + INPUT prefix after
                 // an accepted pointerup; never fix or relabel later overflow.
                 if (captured && event.kind === 'up') {
@@ -1790,6 +1792,18 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     const handleDungeonDirectorEventV38 = (event, nowMs) => {
         if (!event) return;
         if (event.type === 'room_started') {
+            // C2JQ: first Taurus room can finish naturally before 270 ticks.
+            // Seal only the observed prefix BEFORE switching rooms. Never
+            // attach movement from later rooms to the Taurus 30Hz window.
+            if (dungeonC2JPGrid && dungeonC2JK &&
+                currentRoomV38?.id === 'taurus_entry' &&
+                event.room?.id !== 'taurus_entry' && !dungeonC2JK.sealed) {
+                if (dungeonC2JPGrid.sealAtRoomExit()) {
+                    dungeonC2JK.sealAtRoomExit();
+                } else {
+                    dungeonC2JK.invalidate('C2JQ_ROOM_EXIT_UNVERIFIED');
+                }
+            }
             clearDungeonRoomObjectsV38();
             clearDungeonHostileProjectilesV38();
             disposeDungeonBossTelegraphsV38();

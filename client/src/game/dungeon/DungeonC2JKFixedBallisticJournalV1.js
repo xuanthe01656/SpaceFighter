@@ -1,4 +1,4 @@
-import { DUNGEON_C2JP_GRID_VERSION } from './DungeonC2JPInputGridV1.js';
+import { DUNGEON_C2JP_GRID_VERSION, DUNGEON_C2JQ_EXIT_GRID_VERSION } from './DungeonC2JPInputGridV1.js';
 import { C2JK_CORE_VERSION, C2JK_MAX_TICKS, createC2JKFixedClock,
   createC2JKShot, stepC2JKShots, c2jkHash } from './DungeonC2JKFixedBallisticCoreV1.js';
 
@@ -68,13 +68,34 @@ export function createC2JKFixedBallisticJournal({sceneSeed,seedSource,
       grid.pointerActive===true && grid.startedGestures>=1 &&
       grid.completedGestures===grid.startedGestures-1;
   }
+  function validC2JQRoomExit(grid){
+    return grid?.version===DUNGEON_C2JQ_EXIT_GRID_VERSION &&
+      ticks.length>=60 && ticks.length<C2JK_MAX_TICKS &&
+      grid?.roomExit?.kind==='next_room_started' &&
+      grid?.roomExit?.finalTick===ticks.length &&
+      Number.isSafeInteger(grid.roomExit?.excludedUnsampledPointerEvents) &&
+      grid.roomExit.excludedUnsampledPointerEvents>=0 &&
+      grid.roomExit.excludedUnsampledPointerEvents<=4096 &&
+      grid.finished===true;
+  }
+  function openC2JQAtRoomExit(grid){
+    return validC2JQRoomExit(grid) && grid.pointerActive===true &&
+      grid.startedGestures>=1 &&
+      grid.completedGestures===grid.startedGestures-1;
+  }
   function pairedGrid(grid,allowOpen=false){
-    return !!grid && Array.isArray(grid.ticks) &&
-      grid.ticks.length===ticks.length && grid.captureError===null &&
-      grid.overflow===false && grid.startedGestures>=1 &&
-      ((grid.pointerActive===false &&
+    if(!grid||!Array.isArray(grid.ticks)||!Array.isArray(grid.pointerEvents)||
+      grid.ticks.length!==ticks.length||grid.captureError!==null||
+      grid.overflow!==false||grid.startedGestures<1)return false;
+    // A client cannot claim a 30Hz replay of unsampled MOVE events at N+1.
+    // Legacy one genuine terminal UP at N+1 is the only permitted exception.
+    const trailing=grid.pointerEvents.filter(e=>e.tick>ticks.length);
+    if(trailing.length>1 || (trailing.length===1 &&
+      (trailing[0].tick!==ticks.length+1 || trailing[0].kind!=='up')))return false;
+    if(grid.version===DUNGEON_C2JQ_EXIT_GRID_VERSION && trailing.length)return false;
+    return ((grid.pointerActive===false &&
         grid.completedGestures===grid.startedGestures) ||
-       (allowOpen && openC2JPAt270(grid)));
+       (allowOpen && (openC2JPAt270(grid)||openC2JQAtRoomExit(grid))));
   }
   function makeSnapshot(){
     const grid=getGrid();
@@ -140,12 +161,30 @@ export function createC2JKFixedBallisticJournal({sceneSeed,seedSource,
     }catch(err){return invalidate(err?.message||'C2JN_SEAL_FAILURE');}
     return true;
   }
+  // The room director, not a timer or synthetic pointer-up, ends an early
+  // Taurus-only observation window. This remains an untrusted QA subset.
+  function sealAtRoomExit(){
+    if(sealed)return true;
+    if(fatal)return false;
+    const grid=getGrid();
+    if(!validC2JQRoomExit(grid) ||
+      !pairedGrid(grid,true))return invalidate('C2JQ_ROOM_EXIT_NOT_PAIRED');
+    try{
+      sealed=makeSnapshot();
+      sealReason=grid.pointerActive
+        ? 'C2JQ_ROOM_EXIT_OPEN_GESTURE_SUBSET'
+        : 'C2JQ_ROOM_EXIT_CLOSED_GESTURE_SUBSET';
+      return true;
+    }catch(err){return invalidate(err?.message||'C2JQ_ROOM_EXIT_SEAL_FAILED');}
+  }
   const snapshot=()=>sealed||makeSnapshot();
   function diagnostics(){
     let grid=null,gridError=null;
     try{grid=getGrid();}catch(err){gridError='C2JN_GRID_SNAPSHOT_ERROR';}
     const n=ticks.length,gridN=Array.isArray(grid?.ticks)?grid.ticks.length:0;
     const activePointer=grid?.pointerActive===true;
+    const unsampledPointerEvents=Array.isArray(grid?.pointerEvents)
+      ? grid.pointerEvents.filter(e=>e.tick>n && e.kind!=='up').length : 0;
     let reason='C2JN_READY';
     if(fatal)reason=fatal;
     else if(sealed)reason=sealReason;
@@ -153,6 +192,7 @@ export function createC2JKFixedBallisticJournal({sceneSeed,seedSource,
     else if(n<60)reason='C2JN_NEED_AT_LEAST_60_TICKS';
     else if(grid?.captureError||grid?.overflow)reason='C2JN_GRID_CAPTURE_INVALID';
     else if(n!==gridN)reason='C2JN_GRID_TICK_COUNT_MISMATCH';
+    else if(unsampledPointerEvents>0)reason='C2JQ_UNSAMPLED_POINTER_EVENTS_AFTER_GRID_STOP';
     else if(!(grid?.completedGestures>0))reason='C2JN_NEED_TOUCH_RELEASE';
     else if(activePointer||grid?.completedGestures!==grid?.startedGestures)
       reason='C2JN_WAIT_TOUCH_RELEASE';
@@ -162,10 +202,11 @@ export function createC2JKFixedBallisticJournal({sceneSeed,seedSource,
       completedGestures:Number.isInteger(grid?.completedGestures)?grid.completedGestures:0,
       pointerActive:activePointer,gridOverflow:grid?.overflow===true,
       safePrefixTicks:lastSafeTick,exportTicks:sealed?.ticks?.length??0,
+      unsampledPointerEvents,
       sealed:sealed!==null,shotCount:shotEntries.length,
       captureError:fatal,gridCaptureError:grid?.captureError||gridError||null});
   }
-  return Object.freeze({registerShot,stepFrame,afterGridFrame,snapshot,invalidate,
+  return Object.freeze({registerShot,stepFrame,afterGridFrame,sealAtRoomExit,snapshot,invalidate,
     diagnostics,
     get tick(){return clock.tick;},get error(){return fatal;},
     get sealed(){return sealed!==null;},
@@ -180,6 +221,20 @@ export function prepareC2JKFixedBallisticJson(record,date=new Date()){
     !Array.isArray(record.ticks)||record.ticks.length<60||
     !Array.isArray(record.shots)||!record.grid||
     record.grid.ticks?.length!==record.ticks.length||
+    !Array.isArray(record.grid.pointerEvents)||
+    record.grid.pointerEvents.some(e=>e.tick>record.ticks.length &&
+      !(record.grid.version!==DUNGEON_C2JQ_EXIT_GRID_VERSION &&
+        e.kind==='up' && e.tick===record.ticks.length+1 &&
+        record.grid.pointerEvents.at(-1)===e &&
+        record.grid.pointerEvents.filter(v=>v.tick>record.ticks.length).length===1))||
+    (record.grid.version===DUNGEON_C2JQ_EXIT_GRID_VERSION &&
+      !(record.ticks.length>=60 && record.ticks.length<C2JK_MAX_TICKS &&
+        record.grid.finished===true &&
+        record.grid.roomExit?.kind==='next_room_started' &&
+        record.grid.roomExit?.finalTick===record.ticks.length &&
+        Number.isSafeInteger(record.grid.roomExit?.excludedUnsampledPointerEvents) &&
+        record.grid.roomExit.excludedUnsampledPointerEvents>=0 &&
+        record.grid.roomExit.excludedUnsampledPointerEvents<=4096))||
     record.grid.captureError!==null||record.grid.overflow!==false||
     !record.grid?.version||
     !(
@@ -190,11 +245,24 @@ export function prepareC2JKFixedBallisticJson(record,date=new Date()){
        record.ticks.length===C2JK_MAX_TICKS &&
        record.grid.finished===true && record.grid.pointerActive===true &&
        record.grid.startedGestures>=1 &&
-       record.grid.completedGestures===record.grid.startedGestures-1)
+       record.grid.completedGestures===record.grid.startedGestures-1) ||
+      (record.grid.version===DUNGEON_C2JQ_EXIT_GRID_VERSION &&
+       record.ticks.length>=60 && record.ticks.length<C2JK_MAX_TICKS &&
+       record.grid.finished===true &&
+       record.grid.roomExit?.kind==='next_room_started' &&
+       record.grid.roomExit?.finalTick===record.ticks.length &&
+       Number.isSafeInteger(record.grid.roomExit?.excludedUnsampledPointerEvents) &&
+       record.grid.roomExit.excludedUnsampledPointerEvents>=0 &&
+       record.grid.startedGestures>=1 &&
+       ((record.grid.pointerActive===false &&
+         record.grid.completedGestures===record.grid.startedGestures) ||
+        (record.grid.pointerActive===true &&
+         record.grid.completedGestures===record.grid.startedGestures-1)))
     )||
     !(date instanceof Date)||!Number.isFinite(date.getTime()))bad('C2JK_UNSAFE_EXPORT');
   const compact=JSON.stringify(record)+'\n';
-  const maxBytes=record.grid.version===DUNGEON_C2JP_GRID_VERSION ? 2*1024*1024 : 256*1024;
+  const maxBytes=[DUNGEON_C2JP_GRID_VERSION,DUNGEON_C2JQ_EXIT_GRID_VERSION]
+    .includes(record.grid.version) ? 2*1024*1024 : 256*1024;
   if(new TextEncoder().encode(compact).length>maxBytes)bad('C2JK_EXPORT_TOO_LARGE');
   const stamp=date.toISOString().replace(/[-:]/g,'').replace('T','_').slice(0,15);
   return Object.freeze({fileName:`dungeon_taurus_c2jk_${stamp}.json`,json:compact,
@@ -209,7 +277,8 @@ export function prepareC2JNDiagnosticJson(diagnostics,reason,date=new Date()){
   if(!(date instanceof Date)||!Number.isFinite(date.getTime()))bad('C2JN_BAD_DATE');
   const fields=['reasonCode','ballisticTicks','gridTicks','pointerEvents',
     'startedGestures','completedGestures','pointerActive','gridOverflow',
-    'safePrefixTicks','exportTicks','sealed','shotCount','captureError','gridCaptureError'];
+    'safePrefixTicks','exportTicks','unsampledPointerEvents',
+    'sealed','shotCount','captureError','gridCaptureError'];
   const status={};
   for(const key of fields){
     const value=diagnostics?.[key];

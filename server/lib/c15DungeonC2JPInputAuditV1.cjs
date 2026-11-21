@@ -8,6 +8,7 @@ const {createHash}=require('node:crypto');
 const path=require('node:path');
 const {pathToFileURL}=require('node:url');
 const VERSION='c15-dungeon-c2jp-input-grid-v1';
+const EXIT_VERSION='c15-dungeon-c2jq-room-exit-grid-v1';
 const AUDIT_VERSION='c15-dungeon-c2jp-input-subset-audit-v1';
 const MAX_EVENTS=4096;
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
@@ -17,6 +18,8 @@ const KEYS=['version','source','dungeonId','roomId','battleId','sceneSeed','seed
   'completedGestures','pointerActive','overflow','captureError','finished',
   'qaOnly','fixedTickSimulationVerified','independentCombatReplayVerified',
   'safeForSettlement','rewardSettlementEnabled','cloudRewards','checksumAlgorithm','checksum'];
+const EXIT_KEYS=[...KEYS,'roomExit'];
+const ROOM_EXIT=['kind','finalTick','excludedUnsampledPointerEvents'];
 const DOWN=['seq','tick','kind','pointerId','atMs','position','clientX','clientY'];
 const MOVE=[...DOWN,'viewport','delta'];
 const UP=['seq','tick','kind','pointerId','atMs','position'];
@@ -49,7 +52,9 @@ const getProjector=()=>projectorPromise ||= import(pathToFileURL(path.resolve(__
   .then(m=>m.projectDungeonDirectTouchV2B1);
 
 async function auditDungeonC2JPInputGridV1(record){
-  if(!exact(record,KEYS)||record.version!==VERSION||
+  const isExit=record?.version===EXIT_VERSION;
+  if(!(isExit?exact(record,EXIT_KEYS):exact(record,KEYS))||
+    ![VERSION,EXIT_VERSION].includes(record.version)||
     record.source!=='accepted-controller-plus-babylon-observer-high-rate-untrusted'||
     record.dungeonId!=='dung_taurus'||record.roomId!=='taurus_entry'||
     !int(record.sceneSeed,1,0xffffffff)||
@@ -68,6 +73,12 @@ async function auditDungeonC2JPInputGridV1(record){
     record.cloudRewards!==false||
     record.checksumAlgorithm!=='fnv1a32-accidental-corruption-only'||
     !HEX8.test(record.checksum||''))fail('C2D_RECORD_UNTRUSTED_OR_UNSAFE');
+  if(isExit && (!exact(record.roomExit,ROOM_EXIT)||
+    record.roomExit.kind!=='next_room_started'||
+    record.roomExit.finalTick!==record.ticks.length||
+    !int(record.roomExit.excludedUnsampledPointerEvents,0,4096)||
+    record.ticks.length<60||record.ticks.length>=270||record.finished!==true))
+    fail('C2JQ_ROOM_EXIT_INVALID');
   const {checksum:expected,...body}=record;
   if(checksum(JSON.stringify(body))!==expected)fail('C2D_CHECKSUM_MISMATCH');
   if(record.overflow||record.captureError!==null)fail('C2D_RECORD_TRUNCATED_OR_INVALID');
@@ -122,6 +133,7 @@ async function auditDungeonC2JPInputGridV1(record){
   // accept unsampled movement, or weaken the paired gesture checks.
   let trailingPointerUpUnobserved=false;
   if(nextIndex<record.pointerEvents.length){
+    if(isExit)fail('C2JQ_UNSAMPLED_POINTER_IN_SEALED_WINDOW');
     const e=record.pointerEvents[nextIndex];
     if(nextIndex!==record.pointerEvents.length-1||!exact(e,UP)||e.kind!=='up'||
       e.tick!==record.ticks.length+1||e.seq!==nextSeq||
@@ -138,17 +150,21 @@ async function auditDungeonC2JPInputGridV1(record){
   // Only the new, explicitly QA-only C2JP contract accepts an OPEN pointer
   // at the 270-tick boundary. This is an observed subset, never a completed
   // gesture or a full session. The legacy C2D auditor remains unchanged.
-  const openAtSeal=record.ticks.length===270 && record.finished===true &&
-    active!==null && record.pointerActive===true && gestures>0 &&
+  const openAtSeal=(record.ticks.length===270 || isExit) &&
+    record.finished===true && active!==null &&
+    record.pointerActive===true && gestures>0 &&
     closed===gestures-1 && !trailingPointerUpUnobserved;
   const complete=record.ticks.length>=60 && gestures>0 && drift===0 &&
     ((closed===gestures && record.pointerActive===false)||openAtSeal);
   return freeze({version:AUDIT_VERSION,
-    status:complete?(openAtSeal?'C2JP_OPEN_GESTURE_SUBSET_REPROJECTED_UNTRUSTED':
+    status:complete?(openAtSeal?(isExit
+      ? 'C2JQ_TAURUS_ROOM_EXIT_OPEN_SUBSET_REPROJECTED_UNTRUSTED'
+      : 'C2JP_OPEN_GESTURE_SUBSET_REPROJECTED_UNTRUSTED'):
       'INPUT_SUBSET_REPROJECTED_UNTRUSTED'):'INPUT_SUBSET_INCOMPLETE_OR_OBSERVED_DRIFT',
     battleId:record.battleId,sceneSeed:record.sceneSeed,
     gridHz:30,replayedInputTicks:compared,acceptedPointerEvents:nextIndex,
     completedGestures:closed,openGestureSubsetOnly:openAtSeal,
+    taurusRoomExitSubsetOnly:isExit,
     inputGestureClosedAtSeal:!openAtSeal && active===null,
     observedPoseDivergenceTicks:drift,
     trailingPointerUpUnobserved,
@@ -163,7 +179,10 @@ async function auditDungeonC2JPInputGridV1(record){
       'Recomputed pointer delta projection and 30Hz Babylon-time observations only.',
       ...(trailingPointerUpUnobserved ?
         ['One final pointer-up occurred at tick N+1 after the last sampled tick; no tick was invented.'] : []),
-      ...(openAtSeal ? ['Open pointer at exactly tick 270: no pointer-up or completion was fabricated.'] : []),
+      ...(openAtSeal ? [isExit
+        ? 'Client-reported room transition BEFORE tick 270: OPEN, no synthetic pointer-up or tick; not independently authenticated.'
+        : 'Open pointer at exactly tick 270: no pointer-up or completion was fabricated.'] : []),
+      ...(isExit ? [`Reported unsampled trailing events excluded: ${record.roomExit.excludedUnsampledPointerEvents}.`] : []),
       'Client-supplied input, frame time, HP and enemy observations are not trusted.',
       'No independent simulation of enemy AI, projectiles, damage or victory.',
       'FNV-1a checksum detects accidental corruption only, not forgery.']});

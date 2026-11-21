@@ -227,6 +227,24 @@ jobs:
           node --check server/lib/c15DungeonC2JKFixedReplayV1.cjs
           echo 'C2JP_LOSSLESS_OPEN_GESTURE_TESTS_12_12=PASS'
 
+      - name: Run 8 C2JQ Taurus room-exit boundary and high-rate offline CLI tests
+        run: |
+          set -euo pipefail
+          node --test --test-reporter=tap \
+            client/tests/dungeonC2JQRoomExitBoundary.test.mjs \
+            > "$RUNNER_TEMP/c15-c2jq-8-tests.log" 2>&1 || {
+              tail -n 130 "$RUNNER_TEMP/c15-c2jq-8-tests.log" >&2
+              exit 1
+            }
+          for entry in 'tests 8' 'pass 8' 'fail 0' 'skipped 0' 'cancelled 0' 'todo 0'; do
+            grep -qx "# $entry" "$RUNNER_TEMP/c15-c2jq-8-tests.log" || {
+              echo "C2JQ_EXPECTED_TAP_SUMMARY_MISMATCH: $entry" >&2
+              exit 1
+            }
+          done
+          node --check server/tools/auditDungeonC2JKFixedReplayV1.cjs
+          echo 'C2JQ_ROOM_EXIT_AND_OFFLINE_AUDIT_8_8=PASS'
+
       - name: Restore and verify existing registered Android QA signing key
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}

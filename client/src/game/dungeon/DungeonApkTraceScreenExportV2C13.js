@@ -323,12 +323,17 @@ File: ${prepared.fileName}`;
           + `${prepared.shotCount} shots | Error: ${record.captureError ?? 'null'}\nFile: ${prepared.fileName}`;
         const qaReason=getC2JKDiagnostics?.()?.reasonCode || 'C2JN_READY';
         const openTouch=record.grid?.pointerActive===true;
+        const roomExit=record.grid?.version==='c15-dungeon-c2jq-room-exit-grid-v1';
         status.textContent = 'C2JK client projectile simulation uses a shared pure 30Hz core. '
           + `Paired prefix: ${prepared.tickCount}/270 tick; `
           + `${record.grid?.pointerEvents?.length ?? 0} touch events; ${qaReason}. `
-          + (openTouch
-            ? 'C2JP OPEN GESTURE SUBSET: ngon tay CHUA nha tai tick 270; khong gia pointer-up. '
-            : 'C2JP touch gesture closed at seal. ')
+          + (roomExit
+            ? `C2JQ ROOM EXIT: Taurus ket thuc tai tick ${record.ticks.length}; `
+              + `${record.grid.roomExit?.excludedUnsampledPointerEvents??0} su kien ngoai cua so, `
+              + (openTouch?'OPEN touch; khong tao pointer-up gia. ':'CLOSED touch. ')
+            : (openTouch
+              ? 'C2JP OPEN GESTURE SUBSET: ngon tay CHUA nha tai tick 270; khong gia pointer-up. '
+              : 'C2JP touch gesture closed at seal. '))
           + 'NOT full combat parity; REWARDS LOCKED.';
       } catch (error) {
         // Do NOT emit an invalid replay record, but always make a small,

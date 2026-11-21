@@ -27,6 +27,7 @@ public class SpaceFighterQaTraceExportPlugin extends Plugin {
     private static final String C2C_GRID_VERSION = "c15-dungeon-c2c-input-grid-v1";
     // C2JP only extends the nested GRID in Guest Taurus C2JK debug export.
     private static final String C2JP_GRID_VERSION = "c15-dungeon-c2jp-input-grid-v1";
+    private static final String C2JQ_GRID_VERSION = "c15-dungeon-c2jq-room-exit-grid-v1";
     private static final String NAME_REGEX = "^dungeon_taurus_v2c11_[0-9]{8}_[0-9]{6}\\.json$";
     private static final String INPUT_NAME_REGEX = "^dungeon_taurus_v2c14b_[0-9]{8}_[0-9]{6}\\.json$";
     private static final String C2E_WITNESS_VERSION = "c15-dungeon-c2e-combat-witness-v1";
@@ -148,7 +149,8 @@ public class SpaceFighterQaTraceExportPlugin extends Plugin {
                         && payload.optJSONArray("ticks") != null
                         && grid != null
                         && (C2C_GRID_VERSION.equals(grid.optString("version")) ||
-                            (C2JP_GRID_VERSION.equals(grid.optString("version"))
+                            ((C2JP_GRID_VERSION.equals(grid.optString("version")) ||
+                              C2JQ_GRID_VERSION.equals(grid.optString("version")))
                              && "accepted-controller-plus-babylon-observer-high-rate-untrusted"
                                  .equals(grid.optString("source"))
                              && grid.optJSONArray("pointerEvents") != null
