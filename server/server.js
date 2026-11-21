@@ -24,6 +24,8 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
   // the normal game API 16kb request limit or allow reward operations.
   app.use('/api/v1/c15/dungeon/qa-c2c2d/input-audit',express.json({limit:'96kb'}));
   app.use('/api/v1/c15/dungeon/qa-c2e/causal-audit',express.json({limit:'256kb'}));
+  // Separate C2HI QA endpoint; no change to 16kb normal API body limit.
+  app.use('/api/v1/c15/dungeon/qa-c2hi/same-session-ballistics',express.json({limit:'256kb'}));
   app.use(express.json({limit:'16kb'}));
   app.get('/ping',(_req,res)=>res.status(200).type('text/plain').send('pong'));
   app.get('/health',(_req,res)=>res.status(200).json({ok:true,service:'space-fighter',phase:1,apiReady:Boolean(options.service)}));
@@ -166,6 +168,19 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
       uid:user.uid,sessionId:r.get('x-game-session'),
       ticket:r.body?.ticket,record:r.body?.record}))(req,res,next);
   });
+  // C2H+C2I: server independently reprojects *witnessed* straight-line
+  // Taurus projectiles, then binds QA to the existing C2B/C2D/C2E ticket gate.
+  // This endpoint is OFF by default and NEVER grants rewards/settles a battle.
+  const c2hiReady=c2eReady&&options.c15DungeonC2HIEnabled===true&&
+    options.c15DungeonC2HIService?.enabled===true&&
+    options.c15DungeonC2HIService?.stagingOnly===true&&
+    options.c15DungeonC2HIService?.rewardSettlementEnabled===false;
+  app.post('/api/v1/c15/dungeon/qa-c2hi/same-session-ballistics',(req,res,next)=>{
+    if(!c2hiReady)return res.status(503).json({ok:false,code:'C15_DUNGEON_C2HI_DISABLED'});
+    return withAuth((r,user)=>options.c15DungeonC2HIService.audit({
+      uid:user.uid,sessionId:r.get('x-game-session'),
+      ticket:r.body?.ticket,record:r.body?.record}))(req,res,next);
+  });
   // C15-RC1B: local deterministic gameplay with background journal upload and
   // independent replay. This staging lane is allowlisted and NON-ECONOMIC.
   const c15Ready=options.c15Rc1bEnabled===true&&Boolean(options.c15Rc1bService?.enabled);
@@ -303,7 +318,7 @@ async function start() {
   const port=Number(process.env.PORT||3000);
   if(!Number.isInteger(port)||port<1||port>65535) throw new Error('Invalid PORT');
   let service=null,auth=null,admin=null,accountDeletionService=null,qaBattleService=null,qaVerifierService=null,candidateService=null,c15Rc1bService=null,c15Rc3SettlementService=null,c15Rc4ReleaseGate=null,c15ResourceCatalog=null,c15DungeonV1Service=null,c15DungeonC2BService=null,
-    c15DungeonC2DAuditService=null,c15DungeonC2EService=null;
+    c15DungeonC2DAuditService=null,c15DungeonC2EService=null,c15DungeonC2HIService=null;
   if(process.env.GAME_API_ENABLED==='true') {
     admin=require('firebase-admin');
     if(!admin.apps.length) {
@@ -417,6 +432,16 @@ async function start() {
           c2dService:c15DungeonC2DAuditService});
       }catch(_error){console.error('Dungeon C2E staging causal audit disabled: invalid approved configuration');}
     }
+    if(process.env.GAME_C15_DUNGEON_C2HI_ENABLED==='true'){
+      try{
+        if(!c15DungeonC2EService?.enabled)
+          throw new TypeError('C2E staging verified service required');
+        const {createC15DungeonC2HISameSessionQaV1}=
+          require('./lib/c15DungeonC2HISameSessionQaV1.cjs');
+        c15DungeonC2HIService=createC15DungeonC2HISameSessionQaV1({
+          env:process.env,c2eService:c15DungeonC2EService});
+      }catch(_error){console.error('Dungeon C2HI staging ballistics disabled: invalid approved configuration');}
+    }
     if(process.env.GAME_C15_RC4_RELEASE_GATE_ENABLED==='true'){
       try{
         const {parseC15Rc4ReleaseGateConfig,createC15Rc4ReleaseGate}=require('./lib/c15Rc4ReleaseGateV1.cjs');
@@ -443,6 +468,7 @@ async function start() {
     c15DungeonC2BService,c15DungeonC2BEnabled:Boolean(c15DungeonC2BService?.enabled),
     c15DungeonC2DAuditService,c15DungeonC2DAuditEnabled:Boolean(c15DungeonC2DAuditService?.enabled),
     c15DungeonC2EService,c15DungeonC2EEnabled:Boolean(c15DungeonC2EService?.enabled),
+    c15DungeonC2HIService,c15DungeonC2HIEnabled:Boolean(c15DungeonC2HIService?.enabled),
     allowLocalOrigin:process.env.NODE_ENV!=='production'});
   app.listen(port,'0.0.0.0',()=>console.log(`Space Fighter Phase 1 listening on ${port}; API ${service?'enabled':'disabled'}`));
 }
