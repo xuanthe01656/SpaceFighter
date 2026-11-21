@@ -24,8 +24,10 @@ public class SpaceFighterQaTraceExportPlugin extends Plugin {
     private static final int MAX_JSON_BYTES = 4 * 1024 * 1024;
     private static final String EXPECTED_VERSION = "c15-dungeon-apk-trace-v2c11";
     private static final String INPUT_BUNDLE_VERSION = "c15-dungeon-apk-input-bundle-v2c14b";
+    private static final String C2C_GRID_VERSION = "c15-dungeon-c2c-input-grid-v1";
     private static final String NAME_REGEX = "^dungeon_taurus_v2c11_[0-9]{8}_[0-9]{6}\\.json$";
     private static final String INPUT_NAME_REGEX = "^dungeon_taurus_v2c14b_[0-9]{8}_[0-9]{6}\\.json$";
+    private static final String C2C_NAME_REGEX = "^dungeon_taurus_c2c_[0-9]{8}_[0-9]{6}\\.json$";
 
     // C2B: the native plugin is only registered for BuildConfig.DEBUG in MainActivity.
     // This check is QA UX gating, not remote attestation or API authorization.
@@ -50,7 +52,7 @@ public class SpaceFighterQaTraceExportPlugin extends Plugin {
         try {
             String name = call.getString("fileName");
             String json = call.getString("json");
-            if (name == null || !(name.matches(NAME_REGEX) || name.matches(INPUT_NAME_REGEX)) || json == null) {
+            if (name == null || !(name.matches(NAME_REGEX) || name.matches(INPUT_NAME_REGEX) || name.matches(C2C_NAME_REGEX)) || json == null) {
                 call.reject("INVALID_QA_FILENAME_OR_JSON");
                 return;
             }
@@ -61,17 +63,29 @@ public class SpaceFighterQaTraceExportPlugin extends Plugin {
             }
             JSONObject payload = new JSONObject(json);
             boolean isTrace = name.matches(NAME_REGEX);
+            boolean isC2C = name.matches(C2C_NAME_REGEX);
             boolean safeCommon = "dung_taurus".equals(payload.optString("dungeonId"))
                     && "taurus_entry".equals(payload.optString("roomId"))
                     && !payload.optBoolean("safeForSettlement", true)
                     && !payload.optBoolean("rewardSettlementEnabled", true)
                     && !payload.optBoolean("cloudRewards", true)
-                    && !payload.optBoolean("liveApkParityVerified", true);
+                    && !payload.optBoolean("liveApkParityVerified", !isC2C);
             boolean valid;
             if (isTrace) {
                 valid = EXPECTED_VERSION.equals(payload.optString("version"))
                         && "qa-babylon-observer-untrusted".equals(payload.optString("source"))
                         && payload.optJSONArray("frames") != null;
+            } else if (isC2C) {
+                valid = C2C_GRID_VERSION.equals(payload.optString("version"))
+                        && "accepted-controller-plus-babylon-observer-untrusted".equals(payload.optString("source"))
+                        && payload.optBoolean("qaOnly", false)
+                        && "30".equals(payload.optString("tickHz"))
+                        && "accumulated-babylon-delta-not-fixed-combat-simulation".equals(payload.optString("tickBasis"))
+                        && !payload.optBoolean("fixedTickSimulationVerified", true)
+                        && !payload.optBoolean("independentCombatReplayVerified", true)
+                        && "fnv1a32-accidental-corruption-only".equals(payload.optString("checksumAlgorithm"))
+                        && payload.optJSONArray("pointerEvents") != null
+                        && payload.optJSONArray("ticks") != null;
             } else {
                 JSONObject trace = payload.optJSONObject("trace");
                 JSONObject input = payload.optJSONObject("inputJournal");

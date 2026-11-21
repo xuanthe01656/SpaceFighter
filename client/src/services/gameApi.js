@@ -142,3 +142,7 @@ export async function fetchC15ResourceManifest(){
 // automatically; no economy, replay or settlement route is exposed.
 export const issueDungeonC2BTicket=(uid,body)=>callApi(
   '/c15/dungeon/qa-c2b/ticket',body,{expectedUid:uid});
+
+// C2C/C2D staging input-subset preflight; manual QA only, no settlement.
+export const auditDungeonC2DInputGrid=(uid,body)=>callApi(
+  '/c15/dungeon/qa-c2c2d/input-audit',body,{expectedUid:uid});

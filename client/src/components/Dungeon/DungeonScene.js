@@ -20,6 +20,7 @@ import {isDungeonC2BSeedAllowed} from '../../game/dungeon/DungeonC2BStagingQaCon
 import { createDungeonDeviceTouchTraceV2B2, isDungeonV2B2LocalQaEnabledV2B2 } from '../../game/dungeon/DungeonDeviceTouchTraceV2B2.js';
 import { createDungeonApkCombatTraceV2C11, isDungeonV2C11ApkTraceEnabled } from '../../game/dungeon/DungeonApkCombatTraceV2C11.js';
 import { createDungeonApkInputJournalV2C14B } from '../../game/dungeon/DungeonApkInputJournalV2C14B.js';
+import { createDungeonC2CInputGridV1 } from '../../game/dungeon/DungeonC2CInputGridV1.js';
 import { createDungeonApkInputCheckpointV2C14B1 } from '../../game/dungeon/DungeonApkInputCheckpointV2C14B1.js';
 import { mountDungeonApkTraceScreenExportV2C13 } from '../../game/dungeon/DungeonApkTraceScreenExportV2C13.js';
 import { describeMainSalvo, describeWingSalvo, describeDroneSalvo, pickWeaponTarget, enemySpeedFactor, shieldDamageFactor, repairAmount, projectileHitsPoint } from '../../game/combat/PlayerWeapons';
@@ -332,6 +333,15 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             seedSource: (dungeonV2B2LocalQa || dungeonC2BLocalQa)
                 ? 'server-ticket-local-unverified' : 'local-client-seed',
         }) : null;
+    // C2C passive 30Hz input-grid observations; does NOT change Babylon combat.
+    const dungeonC2CGrid = dungeonV2C11Trace
+        ? createDungeonC2CInputGridV1({
+            sceneSeed:dungeonSeedV38,
+            seedSource:dungeonC2BLocalQa
+                ? 'server-ticket-local-unverified' : 'local-client-seed',
+            battleId:dungeonC2BLocalQa ? dungeonC2BQaTicket.battleId : null,
+            initialPlayer:{x:0,z:BATTLE_WORLD_HALF_HEIGHT-2.5},
+        }) : null;
     const dungeonV2C14B1Checkpoint = dungeonV2C14BJournal
         ? createDungeonApkInputCheckpointV2C14B1({
             getTrace: () => dungeonV2C11Trace.snapshot(),
@@ -347,11 +357,14 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             getSnapshot: () => dungeonV2C11Trace.snapshot(),
             getInputJournal: () => dungeonV2C14BJournal.snapshot(),
             getInputCheckpoint: () => dungeonV2C14B1Checkpoint?.snapshotPair() ?? null,
+            getC2CGrid: () => dungeonC2CGrid?.exportEvidence() ?? null,
+            onSubmitC2CStaging: dungeonC2BLocalQa ? data.onC2CStagingQaAudit : null,
         });
         scene.onDisposeObservable.add(destroyV2C13QaExport);
         scene.onDisposeObservable.add(() => {
             dungeonV2C11Trace.finish();
             dungeonV2C14BJournal.finish();
+            dungeonC2CGrid?.finish();
             try { data.onDungeonC15V2C11QaTrace?.(dungeonV2C11Trace.snapshot()); }
             catch (ignored) { /* never break game disposal for QA diagnostics */ }
         });
@@ -905,6 +918,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             // QA instrumentation must never modify game movement or outcomes.
             try {
                 const captured = dungeonV2C14BJournal?.capturePointer(event);
+                dungeonC2CGrid?.capturePointer(event);
                 // Freeze a genuine, same-moment TRACE + INPUT prefix after
                 // an accepted pointerup; never fix or relabel later overflow.
                 if (captured && event.kind === 'up') {
@@ -3659,6 +3673,16 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
                     if (markerAccepted) dungeonV2C14B1Checkpoint?.afterAcceptedFrameMarker();
                 }
             } catch (ignored) { /* QA instrumentation must not break rendering */ }
+        }
+        // A separate 30Hz observation grid, not a simulation replay. Only
+        // sample AFTER a completed combat pass; never feed values into combat.
+        if (dungeonC2CGrid && currentRoomV38?.id === 'taurus_entry') {
+            try { dungeonC2CGrid.captureFrame({
+                deltaMs:frameDeltaMsV410,
+                player:{x:playerRoot.position.x,z:playerRoot.position.z},
+                playerHp:stats.hp,shieldHp:passives.shieldHp || 0,
+                enemyCount:enemies.length,
+            }); } catch (_ignored) { /* QA observation cannot affect combat */ }
         }
         // Mark only a completed simulation pass. A frame that throws before
         // this line must never be reported as healthy gameplay progress.

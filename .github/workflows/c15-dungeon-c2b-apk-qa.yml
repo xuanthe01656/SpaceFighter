@@ -1,4 +1,4 @@
-name: C15 Dungeon C2B - Manual Android QA APK (No Deploy)
+name: C15 Dungeon C2B-C2D - Manual Android QA APK (No Deploy)
 
 # Deliberately independent from the existing android-native-smoke workflow.
 # An explicit manual run is required, and this job has read-only permissions.
@@ -88,6 +88,24 @@ jobs:
           grep -qx '# fail 0' "$RUNNER_TEMP/c15-c2b-175-tests.log"
           tail -n 12 "$RUNNER_TEMP/c15-c2b-175-tests.log"
           echo 'C2B_CI_SOURCE_REGRESSION_175_175=PASS'
+
+      - name: Run 20 C2C-C2D input-grid and staging gate tests
+        run: |
+          set -euo pipefail
+          node --test \
+            client/tests/dungeonC2CInputGridV1.test.mjs \
+            server/tests/c15DungeonC2DInputAuditV1.test.cjs \
+            server/tests/c15DungeonC2DHttpGate.test.cjs > "$RUNNER_TEMP/c15-c2c2d-20-tests.log" 2>&1 || {
+              tail -n 120 "$RUNNER_TEMP/c15-c2c2d-20-tests.log"
+              exit 1
+            }
+          grep -qx '# tests 20' "$RUNNER_TEMP/c15-c2c2d-20-tests.log"
+          grep -qx '# pass 20' "$RUNNER_TEMP/c15-c2c2d-20-tests.log"
+          grep -qx '# fail 0' "$RUNNER_TEMP/c15-c2c2d-20-tests.log"
+          grep -qx '# skipped 0' "$RUNNER_TEMP/c15-c2c2d-20-tests.log"
+          grep -qx '# cancelled 0' "$RUNNER_TEMP/c15-c2c2d-20-tests.log"
+          tail -n 12 "$RUNNER_TEMP/c15-c2c2d-20-tests.log"
+          echo 'C2C_C2D_INPUT_SUBSET_TESTS_20_20=PASS'
 
       - name: Restore and verify existing registered Android QA signing key
         env:
@@ -200,7 +218,7 @@ jobs:
       - name: Upload one APK only with minimal retention
         uses: actions/upload-artifact@v4
         with:
-          name: sf-c15-dungeon-c2b-qa-debug-apk-no-rewards
+          name: sf-c15-dungeon-c2c2d-qa-debug-apk-no-rewards
           path: client/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 1

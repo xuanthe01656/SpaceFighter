@@ -6,6 +6,7 @@
 
 import { prepareDungeonApkInputBundleJsonV2C14B } from './DungeonApkInputBundleV2C14B.js';
 import { isDungeonApkInputCheckpointPairV2C14B1 } from './DungeonApkInputCheckpointV2C14B1.js';
+import { prepareDungeonC2CInputGridJsonV1 } from './DungeonC2CInputGridV1.js';
 
 export const DUNGEON_APK_SCREEN_EXPORT_V2C13 = 'c15-dungeon-qa-screen-export-v2c13';
 const V2C11_VERSION = 'c15-dungeon-apk-trace-v2c11';
@@ -54,7 +55,7 @@ export function prepareDungeonApkTraceJsonV2C13(trace, date = new Date()) {
 
 export async function shareDungeonQaJsonV2C13(prepared, dependencies = {}) {
   if (!prepared || typeof prepared.fileName !== 'string'
-      || !/^dungeon_taurus_v2c(?:11|14b)_[0-9]{8}_[0-9]{6}\.json$/.test(prepared.fileName)
+      || !/^dungeon_taurus_(?:v2c(?:11|14b)|c2c)_[0-9]{8}_[0-9]{6}\.json$/.test(prepared.fileName)
       || typeof prepared.json !== 'string') {
     throw new Error('INVALID_QA_EXPORT');
   }
@@ -105,7 +106,8 @@ function makeButton(doc, text, onClick) {
 }
 
 /** Returns a cleanup callback. No DOM or global UI exists in normal builds. */
-export function mountDungeonApkTraceScreenExportV2C13({ getSnapshot, getInputJournal, getInputCheckpoint, document: doc = globalThis.document } = {}) {
+export function mountDungeonApkTraceScreenExportV2C13({ getSnapshot, getInputJournal, getInputCheckpoint,
+  getC2CGrid, onSubmitC2CStaging, document: doc = globalThis.document } = {}) {
   if (typeof getSnapshot !== 'function' || !doc?.body?.appendChild) {
     return () => {};
   }
@@ -233,6 +235,46 @@ export function mountDungeonApkTraceScreenExportV2C13({ getSnapshot, getInputJou
       }
     }));
     actions.appendChild(makeButton(doc, 'Xem TRACE V2C.11', openPanel));
+  }
+  if (typeof getC2CGrid === 'function') {
+    actions.appendChild(makeButton(doc, 'Xem GRID C2C 30Hz', () => {
+      try {
+        const record = getC2CGrid();
+        prepared = prepareDungeonC2CInputGridJsonV1(record);
+        content.value = prepared.json;
+        summary.textContent = `C2C 30Hz · Ticks: ${prepared.tickCount} | `
+          + `Accepted pointer: ${prepared.eventCount} | `
+          + `Capture error: ${record.captureError ?? 'null'} | `
+          + `Battle ID: ${record.battleId || 'Guest / no ticket'}
+File: ${prepared.fileName}`;
+        status.textContent = prepared.subsetCandidateReady
+          ? 'Input grid QA hoan tat. CHUA xac minh combat/attestation/rewards.'
+          : 'Input grid thieu gesture/ticks hoac gap loi. Khong chon PASS.';
+      } catch (error) {
+        prepared = null;
+        content.value = '';
+        status.textContent = `Loi GRID C2C: ${error?.message || 'UNKNOWN'}`;
+      }
+    }));
+    if (typeof onSubmitC2CStaging === 'function') {
+      actions.appendChild(makeButton(doc, 'GUI KIEM TOAN C2D STAGING', async () => {
+        try {
+          const record = getC2CGrid();
+          const exported = prepareDungeonC2CInputGridJsonV1(record);
+          if (!exported.subsetCandidateReady) throw new Error('C2C_INPUT_GRID_NOT_READY');
+          status.textContent = 'Dang gui input QA den staging (khong co rewards)...';
+          const result = await onSubmitC2CStaging(record);
+          if (result?.rewardSettlementEnabled !== false ||
+              result?.trueApkServerParity !== 'NOT_VERIFIED' ||
+              result?.fullCombatReplayVerified !== false)
+            throw new Error('C2D_SERVER_RESPONSE_ASSERTED_UNSUPPORTED_AUTHORITY');
+          status.textContent = `C2D: ${result.status} | Input ticks: ${result.replayedInputTicks} | `
+            + 'FULL COMBAT PARITY = NOT VERIFIED; REWARDS LOCKED.';
+        } catch (error) {
+          status.textContent = `C2D STAGING FAIL-CLOSED: ${error?.code || error?.message || 'UNKNOWN'}`;
+        }
+      }));
+    }
   }
   actions.appendChild(makeButton(doc, 'Chia sẻ file .json', async () => {
     try {
