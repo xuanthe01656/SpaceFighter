@@ -31,6 +31,8 @@ public class SpaceFighterQaTraceExportPlugin extends Plugin {
     private static final String C2E_NAME_REGEX = "^dungeon_taurus_c2e_[0-9]{8}_[0-9]{6}\\.json$";
     private static final String C2C_NAME_REGEX = "^dungeon_taurus_c2c_[0-9]{8}_[0-9]{6}\\.json$";
     private static final String C2JK_NAME_REGEX = "^dungeon_taurus_c2jk_[0-9]{8}_[0-9]{6}\\.json$";
+    private static final String C2JN_NAME_REGEX = "^dungeon_taurus_c2jn_diag_[0-9]{8}_[0-9]{6}\\.json$";
+    private static final String C2JN_VERSION = "c15-c2jn-qa-diagnostic-v1";
     private static final String C2JK_VERSION = "c15-c2jk-live-fixed-ballistic-journal-v1";
     private static final String C2JK_CORE_VERSION = "c15-c2jk-shared-hostile-ballistic-fixed30-v1";
 
@@ -57,7 +59,7 @@ public class SpaceFighterQaTraceExportPlugin extends Plugin {
         try {
             String name = call.getString("fileName");
             String json = call.getString("json");
-            if (name == null || !(name.matches(NAME_REGEX) || name.matches(INPUT_NAME_REGEX) || name.matches(C2C_NAME_REGEX) || name.matches(C2E_NAME_REGEX) || name.matches(C2JK_NAME_REGEX)) || json == null) {
+            if (name == null || !(name.matches(NAME_REGEX) || name.matches(INPUT_NAME_REGEX) || name.matches(C2C_NAME_REGEX) || name.matches(C2E_NAME_REGEX) || name.matches(C2JK_NAME_REGEX) || name.matches(C2JN_NAME_REGEX)) || json == null) {
                 call.reject("INVALID_QA_FILENAME_OR_JSON");
                 return;
             }
@@ -71,12 +73,13 @@ public class SpaceFighterQaTraceExportPlugin extends Plugin {
             boolean isC2C = name.matches(C2C_NAME_REGEX);
             boolean isC2E = name.matches(C2E_NAME_REGEX);
             boolean isC2JK = name.matches(C2JK_NAME_REGEX);
+            boolean isC2JN = name.matches(C2JN_NAME_REGEX);
             boolean safeCommon = "dung_taurus".equals(payload.optString("dungeonId"))
                     && "taurus_entry".equals(payload.optString("roomId"))
                     && !payload.optBoolean("safeForSettlement", true)
                     && !payload.optBoolean("rewardSettlementEnabled", true)
                     && !payload.optBoolean("cloudRewards", true)
-                    && !payload.optBoolean("liveApkParityVerified", !(isC2C || isC2E || isC2JK));
+                    && !payload.optBoolean("liveApkParityVerified", !(isC2C || isC2E || isC2JK || isC2JN));
             boolean valid;
             if (isTrace) {
                 valid = EXPECTED_VERSION.equals(payload.optString("version"))
@@ -109,6 +112,19 @@ public class SpaceFighterQaTraceExportPlugin extends Plugin {
                         && !grid.optBoolean("cloudRewards", true)
                         && grid.optJSONArray("pointerEvents") != null
                         && grid.optJSONArray("ticks") != null;
+            } else if (isC2JN) {
+                // A diagnostic is exportable even when a normal replay was
+                // rejected. It can NEVER be mistaken for a settlement receipt.
+                valid = C2JN_VERSION.equals(payload.optString("version"))
+                        && "guest-taurus-export-blocker-untrusted".equals(payload.optString("source"))
+                        && payload.optBoolean("qaOnly", false)
+                        && payload.optBoolean("diagnosticOnly", false)
+                        && !payload.optBoolean("recordValid", true)
+                        && !payload.optBoolean("fullCombatReplayVerified", true)
+                        && "NOT_VERIFIED".equals(payload.optString("trueApkServerParity"))
+                        && !payload.optBoolean("liveApkParityVerified", true)
+                        && payload.optString("reasonCode").matches("[A-Za-z0-9_:-]{1,96}")
+                        && payload.optJSONObject("status") != null;
             } else if (isC2JK) {
                 JSONObject grid = payload.optJSONObject("grid");
                 valid = C2JK_VERSION.equals(payload.optString("version"))

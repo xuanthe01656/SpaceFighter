@@ -388,6 +388,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             getC2CGrid: () => dungeonC2CGrid?.exportEvidence() ?? null,
             getC2EWitness: () => dungeonC2EWitness?.snapshot() ?? null,
             getC2JKBallistic: () => dungeonC2JK?.snapshot() ?? null,
+            getC2JKDiagnostics: () => dungeonC2JK?.diagnostics() ?? null,
             onSubmitC2EStaging: dungeonC2BLocalQa ? data.onC2EStagingQaAudit : null,
             onSubmitC2CStaging: dungeonC2BLocalQa ? data.onC2CStagingQaAudit : null,
         });

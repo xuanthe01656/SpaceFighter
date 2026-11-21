@@ -17,7 +17,8 @@ export function createC2JKFixedBallisticJournal({sceneSeed,seedSource,
     seedSource!=='local-client-seed'||battleId!==null||typeof getGrid!=='function')
     bad('C2JK_GUEST_QA_ONLY');
   const clock=createC2JKFixedClock(),shotEntries=[],ticks=[];
-  let active=[],fatal=null,sealed=null;
+  let active=[],fatal=null,sealed=null,lastSafe=null,lastSafeTick=0;
+  let sealReason='NOT_SEALED',lastProbeTick=0;
   const activeIds=new Set();
   function registerShot({id,sourceId,origin,velocity,hitRadius,ttlTicks}={}) {
     if(fatal)return false;
@@ -80,19 +81,82 @@ export function createC2JKFixedBallisticJournal({sceneSeed,seedSource,
     return {...body,checksum:c2jkHash(body)};
   }
   const invalidate=message=>{fatal||=String(message||'C2JK_UNSUPPORTED_SHOT');return false;};
+  // A 270-tick window is ideal. Continuous touch or a 256-event limit may
+  // invalidate that END frame; preserve the latest previously complete,
+  // paired, independently auditable prefix instead of losing ALL evidence.
+  // This never extends the window, invents pointer-up or changes live physics.
+  function safeGridForPrefix(grid){
+    return !fatal && grid && Array.isArray(grid.ticks) &&
+      ticks.length>=60 && ticks.length<=C2JK_MAX_TICKS &&
+      grid.ticks.length===ticks.length && grid.captureError===null &&
+      grid.overflow===false && grid.startedGestures>=1 &&
+      grid.completedGestures===grid.startedGestures &&
+      grid.pointerActive===false;
+  }
+  function trySavePrefix(){
+    if(ticks.length<60 || ticks.length%15!==0 || ticks.length===lastProbeTick)return;
+    lastProbeTick=ticks.length;
+    const grid=getGrid();
+    if(!safeGridForPrefix(grid))return;
+    lastSafe=makeSnapshot();
+    lastSafeTick=ticks.length;
+  }
+  function sealPrefix(reason){
+    if(!lastSafe)return false;
+    sealed=lastSafe;
+    sealReason=reason;
+    return true;
+  }
   // DungeonScene calls this AFTER C2C.captureFrame() for the same render.
-  // Seal once at tick 270; any play after that cannot alter the QA evidence.
+  // Once frozen, real projectiles continue under the shared deterministic core.
   function afterGridFrame(captured){
     if(sealed)return true;
-    if(captured!==true)return invalidate('C2JL_GRID_CAPTURE_FAILED');
-    if(ticks.length>=C2JK_MAX_TICKS){
-      try{sealed=makeSnapshot();}
-      catch(err){return invalidate(err?.message||'C2JL_SEAL_ERROR');}
+    if(captured!==true){
+      if(sealPrefix('C2JN_EARLY_SAFE_PREFIX_GRID_STOPPED'))return true;
+      return invalidate('C2JL_GRID_CAPTURE_FAILED');
     }
+    if(fatal)return false;
+    try{
+      trySavePrefix();
+      if(ticks.length>=C2JK_MAX_TICKS){
+        const grid=getGrid();
+        if(safeGridForPrefix(grid)){
+          sealed=makeSnapshot();
+          sealReason='C2JN_EXACT_270_PAIRED';
+        }else if(!sealPrefix('C2JN_SAFE_PREFIX_GESTURE_OR_GRID_END')){
+          return invalidate('C2JL_LIVE_GRID_UNPAIRED');
+        }
+      }
+    }catch(err){return invalidate(err?.message||'C2JN_SEAL_FAILURE');}
     return true;
   }
   const snapshot=()=>sealed||makeSnapshot();
+  function diagnostics(){
+    let grid=null,gridError=null;
+    try{grid=getGrid();}catch(err){gridError='C2JN_GRID_SNAPSHOT_ERROR';}
+    const n=ticks.length,gridN=Array.isArray(grid?.ticks)?grid.ticks.length:0;
+    const activePointer=grid?.pointerActive===true;
+    let reason='C2JN_READY';
+    if(fatal)reason=fatal;
+    else if(sealed)reason=sealReason;
+    else if(gridError)reason=gridError;
+    else if(n<60)reason='C2JN_NEED_AT_LEAST_60_TICKS';
+    else if(grid?.captureError||grid?.overflow)reason='C2JN_GRID_CAPTURE_INVALID';
+    else if(n!==gridN)reason='C2JN_GRID_TICK_COUNT_MISMATCH';
+    else if(!(grid?.completedGestures>0))reason='C2JN_NEED_TOUCH_RELEASE';
+    else if(activePointer||grid?.completedGestures!==grid?.startedGestures)
+      reason='C2JN_WAIT_TOUCH_RELEASE';
+    return Object.freeze({reasonCode:reason,ballisticTicks:n,gridTicks:gridN,
+      pointerEvents:Array.isArray(grid?.pointerEvents)?grid.pointerEvents.length:0,
+      startedGestures:Number.isInteger(grid?.startedGestures)?grid.startedGestures:0,
+      completedGestures:Number.isInteger(grid?.completedGestures)?grid.completedGestures:0,
+      pointerActive:activePointer,gridOverflow:grid?.overflow===true,
+      safePrefixTicks:lastSafeTick,exportTicks:sealed?.ticks?.length??0,
+      sealed:sealed!==null,shotCount:shotEntries.length,
+      captureError:fatal,gridCaptureError:grid?.captureError||gridError||null});
+  }
   return Object.freeze({registerShot,stepFrame,afterGridFrame,snapshot,invalidate,
+    diagnostics,
     get tick(){return clock.tick;},get error(){return fatal;},
     get sealed(){return sealed!==null;},
     get shotCount(){return shotEntries.length;},get recordedTicks(){return ticks.length;}});
@@ -117,4 +181,33 @@ export function prepareC2JKFixedBallisticJson(record,date=new Date()){
   return Object.freeze({fileName:`dungeon_taurus_c2jk_${stamp}.json`,json:compact,
     tickCount:record.ticks.length,shotCount:record.shots.length,
     evidenceStatus:'CLIENT_LIVE_SHARED_BALLISTIC_SUBSET_UNTRUSTED'});
+}
+
+/** A FAIL-only debug artifact. Never substitute this for a C2JK replay receipt.
+ * Contains counters and error codes only; no ticket, credentials, UID or raw inputs.
+ */
+export function prepareC2JNDiagnosticJson(diagnostics,reason,date=new Date()){
+  if(!(date instanceof Date)||!Number.isFinite(date.getTime()))bad('C2JN_BAD_DATE');
+  const fields=['reasonCode','ballisticTicks','gridTicks','pointerEvents',
+    'startedGestures','completedGestures','pointerActive','gridOverflow',
+    'safePrefixTicks','exportTicks','sealed','shotCount','captureError','gridCaptureError'];
+  const status={};
+  for(const key of fields){
+    const value=diagnostics?.[key];
+    if(typeof value==='number')status[key]=Number.isFinite(value)?Math.max(0,Math.min(100000,value)):0;
+    else if(typeof value==='boolean')status[key]=value;
+    else status[key]=typeof value==='string'&&/^[A-Za-z0-9_:-]{1,96}$/.test(value)?value:null;
+  }
+  const reasonCode=/^[A-Za-z0-9_:-]{1,96}$/.test(reason||'')
+    ? reason : status.reasonCode||'C2JN_EXPORT_FAILED';
+  const record={version:'c15-c2jn-qa-diagnostic-v1',
+    source:'guest-taurus-export-blocker-untrusted',
+    dungeonId:'dung_taurus',roomId:'taurus_entry',
+    qaOnly:true,diagnosticOnly:true,recordValid:false,
+    liveApkParityVerified:false,fullCombatReplayVerified:false,
+    trueApkServerParity:'NOT_VERIFIED',safeForSettlement:false,
+    rewardSettlementEnabled:false,cloudRewards:false,reasonCode,status};
+  const stamp=date.toISOString().replace(/[-:]/g,'').replace('T','_').slice(0,15);
+  return Object.freeze({fileName:`dungeon_taurus_c2jn_diag_${stamp}.json`,
+    json:JSON.stringify(record)+'\n',evidenceStatus:'C2JN_DIAGNOSTIC_ONLY_FAIL_CLOSED'});
 }
