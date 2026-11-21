@@ -39,6 +39,17 @@ test('C2D independently reprojects accepted touch delta on 30Hz grid, without co
   assert.equal(result.trueApkServerParity,'NOT_VERIFIED');
   assert.equal(result.safeForSettlement,false);
   assert.match(result.replayDigest,/^[a-f0-9]{64}$/);
+  assert.equal(result.trailingPointerUpUnobserved,false);
+  // Real Android trace: the final pointer-up is tick N+1, after sampled tick N.
+  const tail=await sample();
+  tail.pointerEvents.at(-1).tick=tail.ticks.length+1;
+  const tailResult=await auditDungeonC2DInputGridV1(resign(tail));
+  assert.equal(tailResult.subsetInputReprojectionPass,true);
+  assert.equal(tailResult.acceptedPointerEvents,3);
+  assert.equal(tailResult.replayedInputTicks,tail.ticks.length);
+  assert.equal(tailResult.trailingPointerUpUnobserved,true);
+  assert.equal(tailResult.trueApkServerParity,'NOT_VERIFIED');
+  assert.equal(tailResult.safeForSettlement,false);
 });
 test('C2D rejects accidental corruption and checksum forgery with wrong projection',async()=>{
   const r=await sample();r.pointerEvents[1].delta.deltaX=200;
@@ -57,6 +68,24 @@ test('C2D rejects injected tick, changed final pose and elevated reward claim',a
   const rewards=await sample();rewards.rewardSettlementEnabled=true;
   await assert.rejects(()=>auditDungeonC2DInputGridV1(resign(rewards)),
     {code:'C2D_RECORD_UNTRUSTED_OR_UNSAFE'});
+  const late=await sample();
+  late.pointerEvents.at(-1).tick=late.ticks.length+2;
+  await assert.rejects(()=>auditDungeonC2DInputGridV1(resign(late)),
+    {code:'C2D_UNCLOSED_OR_UNPAIRED_INPUT'});
+  const forged=await sample();
+  forged.pointerEvents.at(-1).tick=forged.ticks.length+1;
+  forged.pointerEvents.at(-1).position.x+=1;
+  await assert.rejects(()=>auditDungeonC2DInputGridV1(resign(forged)),
+    {code:'C2D_UNCLOSED_OR_UNPAIRED_INPUT'});
+  const unsampledMove=await sample();
+  unsampledMove.pointerEvents[1].tick=unsampledMove.ticks.length+1;
+  await assert.rejects(()=>auditDungeonC2DInputGridV1(resign(unsampledMove)),
+    {code:'C2D_GRID_INPUT_MISMATCH'});
+  const extraEvent=await sample();
+  extraEvent.pointerEvents.at(-1).tick=extraEvent.ticks.length+1;
+  extraEvent.pointerEvents.push({...extraEvent.pointerEvents.at(-1),seq:4,atMs:90});
+  await assert.rejects(()=>auditDungeonC2DInputGridV1(resign(extraEvent)),
+    {code:'C2D_UNCLOSED_OR_UNPAIRED_INPUT'});
 });
 test('C2D detects read-only input drift without awarding independent replay PASS',async()=>{
   const r=await sample();r.ticks[4].observedPlayer.x+=1;

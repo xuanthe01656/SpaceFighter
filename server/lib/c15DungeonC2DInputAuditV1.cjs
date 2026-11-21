@@ -119,7 +119,22 @@ async function auditDungeonC2DInputGridV1(record){
     if(!same(row.observedPlayer,row.inputPosition,.075))drift++;
     compared++;
   }
-  if(nextIndex!==record.pointerEvents.length||active!==null!==record.pointerActive||
+  // A real pointer-up may arrive after the last 30 Hz Babylon observation.
+  // Accept ONE terminal closure at tick N+1; never invent a sampled tick,
+  // accept unsampled movement, or weaken the paired gesture checks.
+  let trailingPointerUpUnobserved=false;
+  if(nextIndex<record.pointerEvents.length){
+    const e=record.pointerEvents[nextIndex];
+    if(nextIndex!==record.pointerEvents.length-1||!exact(e,UP)||e.kind!=='up'||
+      e.tick!==record.ticks.length+1||e.seq!==nextSeq||
+      !int(e.pointerId,0,2147483647)||
+      !finite(e.atMs,0,Number.MAX_SAFE_INTEGER)||e.atMs<lastAt||
+      !point(e.position)||active!==e.pointerId||!same(e.position,pose))
+      fail('C2D_UNCLOSED_OR_UNPAIRED_INPUT');
+    nextIndex++;nextSeq++;lastAt=e.atMs;active=null;closed++;
+    trailingPointerUpUnobserved=true;
+  }
+  if(nextIndex!==record.pointerEvents.length||(active!==null)!==record.pointerActive||
     closed!==record.completedGestures||gestures!==record.startedGestures)
     fail('C2D_UNCLOSED_OR_UNPAIRED_INPUT');
   const complete=record.ticks.length>=60&&gestures>0&&closed===gestures&&
@@ -129,6 +144,7 @@ async function auditDungeonC2DInputGridV1(record){
     battleId:record.battleId,sceneSeed:record.sceneSeed,
     gridHz:30,replayedInputTicks:compared,acceptedPointerEvents:nextIndex,
     completedGestures:closed,observedPoseDivergenceTicks:drift,
+    trailingPointerUpUnobserved,
     replayDigest:sha([AUDIT_VERSION,record.sceneSeed,record.battleId,
       record.ticks.map(r=>({tick:r.tick,inputPosition:r.inputPosition}))]),
     subsetInputReprojectionPass:complete,
@@ -138,6 +154,8 @@ async function auditDungeonC2DInputGridV1(record){
     rewardSettlementEnabled:false,cloudRewards:false,
     notes:[
       'Recomputed pointer delta projection and 30Hz Babylon-time observations only.',
+      ...(trailingPointerUpUnobserved ?
+        ['One final pointer-up occurred at tick N+1 after the last sampled tick; no tick was invented.'] : []),
       'Client-supplied input, frame time, HP and enemy observations are not trusted.',
       'No independent simulation of enemy AI, projectiles, damage or victory.',
       'FNV-1a checksum detects accidental corruption only, not forgery.']});
