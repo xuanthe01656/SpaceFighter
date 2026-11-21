@@ -321,9 +321,14 @@ File: ${prepared.fileName}`;
         content.value = prepared.json;
         summary.textContent = `C2JK: ${prepared.tickCount} fixed ticks | `
           + `${prepared.shotCount} shots | Error: ${record.captureError ?? 'null'}\nFile: ${prepared.fileName}`;
+        const qaReason=getC2JKDiagnostics?.()?.reasonCode || 'C2JN_READY';
+        const openTouch=record.grid?.pointerActive===true;
         status.textContent = 'C2JK client projectile simulation uses a shared pure 30Hz core. '
           + `Paired prefix: ${prepared.tickCount}/270 tick; `
-          + `${getC2JKDiagnostics?.()?.reasonCode || 'C2JN_READY'}. `
+          + `${record.grid?.pointerEvents?.length ?? 0} touch events; ${qaReason}. `
+          + (openTouch
+            ? 'C2JP OPEN GESTURE SUBSET: ngon tay CHUA nha tai tick 270; khong gia pointer-up. '
+            : 'C2JP touch gesture closed at seal. ')
           + 'NOT full combat parity; REWARDS LOCKED.';
       } catch (error) {
         // Do NOT emit an invalid replay record, but always make a small,

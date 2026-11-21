@@ -1,3 +1,4 @@
+import { DUNGEON_C2JP_GRID_VERSION } from './DungeonC2JPInputGridV1.js';
 import { C2JK_CORE_VERSION, C2JK_MAX_TICKS, createC2JKFixedClock,
   createC2JKShot, stepC2JKShots, c2jkHash } from './DungeonC2JKFixedBallisticCoreV1.js';
 
@@ -58,15 +59,26 @@ export function createC2JKFixedBallisticJournal({sceneSeed,seedSource,
     }catch(err){fatal=err?.message||'C2JK_STEP_FAILURE';}
     return {frames,error:fatal};
   }
+  // C2JP has a separate 270-tick QA observation contract: it may end at
+  // EXACTLY tick 270 with an unclosed real touch. This is an explicitly OPEN
+  // input subset; never pretend a pointer-up or full session was observed.
+  function openC2JPAt270(grid){
+    return grid?.version===DUNGEON_C2JP_GRID_VERSION &&
+      ticks.length===C2JK_MAX_TICKS && grid.finished===true &&
+      grid.pointerActive===true && grid.startedGestures>=1 &&
+      grid.completedGestures===grid.startedGestures-1;
+  }
+  function pairedGrid(grid,allowOpen=false){
+    return !!grid && Array.isArray(grid.ticks) &&
+      grid.ticks.length===ticks.length && grid.captureError===null &&
+      grid.overflow===false && grid.startedGestures>=1 &&
+      ((grid.pointerActive===false &&
+        grid.completedGestures===grid.startedGestures) ||
+       (allowOpen && openC2JPAt270(grid)));
+  }
   function makeSnapshot(){
     const grid=getGrid();
-    // C2JL: reject stale C2F completed-gesture checkpoints. Exact GRID
-    // coverage, closed input gestures and a healthy observer are mandatory.
-    if(!fatal&&(!grid||!Array.isArray(grid.ticks)||grid.ticks.length!==ticks.length||
-       grid.captureError!==null||grid.overflow!==false||
-       grid.startedGestures<1||grid.completedGestures!==grid.startedGestures||
-       grid.pointerActive!==false))
-      bad('C2JL_LIVE_GRID_UNPAIRED');
+    if(!fatal && !pairedGrid(grid,true))bad('C2JL_LIVE_GRID_UNPAIRED');
     const body={version:C2JK_JOURNAL_VERSION,coreVersion:C2JK_CORE_VERSION,
       source:'live-taurus-fixed30-hostile-projectiles-untrusted',dungeonId:'dung_taurus',
       roomId:'taurus_entry',sceneSeed,seedSource,battleId,
@@ -86,12 +98,8 @@ export function createC2JKFixedBallisticJournal({sceneSeed,seedSource,
   // paired, independently auditable prefix instead of losing ALL evidence.
   // This never extends the window, invents pointer-up or changes live physics.
   function safeGridForPrefix(grid){
-    return !fatal && grid && Array.isArray(grid.ticks) &&
-      ticks.length>=60 && ticks.length<=C2JK_MAX_TICKS &&
-      grid.ticks.length===ticks.length && grid.captureError===null &&
-      grid.overflow===false && grid.startedGestures>=1 &&
-      grid.completedGestures===grid.startedGestures &&
-      grid.pointerActive===false;
+    return !fatal && ticks.length>=60 && ticks.length<=C2JK_MAX_TICKS &&
+      pairedGrid(grid,false);
   }
   function trySavePrefix(){
     if(ticks.length<60 || ticks.length%15!==0 || ticks.length===lastProbeTick)return;
@@ -120,9 +128,11 @@ export function createC2JKFixedBallisticJournal({sceneSeed,seedSource,
       trySavePrefix();
       if(ticks.length>=C2JK_MAX_TICKS){
         const grid=getGrid();
-        if(safeGridForPrefix(grid)){
+        if(safeGridForPrefix(grid) || (!fatal && pairedGrid(grid,true))){
           sealed=makeSnapshot();
-          sealReason='C2JN_EXACT_270_PAIRED';
+          sealReason=openC2JPAt270(grid)
+            ? 'C2JP_EXACT_270_OPEN_GESTURE_SUBSET'
+            : 'C2JN_EXACT_270_PAIRED';
         }else if(!sealPrefix('C2JN_SAFE_PREFIX_GESTURE_OR_GRID_END')){
           return invalidate('C2JL_LIVE_GRID_UNPAIRED');
         }
@@ -171,12 +181,21 @@ export function prepareC2JKFixedBallisticJson(record,date=new Date()){
     !Array.isArray(record.shots)||!record.grid||
     record.grid.ticks?.length!==record.ticks.length||
     record.grid.captureError!==null||record.grid.overflow!==false||
-    record.grid.pointerActive!==false||
-    record.grid.completedGestures<1||
-    record.grid.completedGestures!==record.grid.startedGestures||
+    !record.grid?.version||
+    !(
+      (record.grid.pointerActive===false &&
+       record.grid.completedGestures>=1 &&
+       record.grid.completedGestures===record.grid.startedGestures) ||
+      (record.grid.version===DUNGEON_C2JP_GRID_VERSION &&
+       record.ticks.length===C2JK_MAX_TICKS &&
+       record.grid.finished===true && record.grid.pointerActive===true &&
+       record.grid.startedGestures>=1 &&
+       record.grid.completedGestures===record.grid.startedGestures-1)
+    )||
     !(date instanceof Date)||!Number.isFinite(date.getTime()))bad('C2JK_UNSAFE_EXPORT');
   const compact=JSON.stringify(record)+'\n';
-  if(new TextEncoder().encode(compact).length>256*1024)bad('C2JK_EXPORT_TOO_LARGE');
+  const maxBytes=record.grid.version===DUNGEON_C2JP_GRID_VERSION ? 2*1024*1024 : 256*1024;
+  if(new TextEncoder().encode(compact).length>maxBytes)bad('C2JK_EXPORT_TOO_LARGE');
   const stamp=date.toISOString().replace(/[-:]/g,'').replace('T','_').slice(0,15);
   return Object.freeze({fileName:`dungeon_taurus_c2jk_${stamp}.json`,json:compact,
     tickCount:record.ticks.length,shotCount:record.shots.length,

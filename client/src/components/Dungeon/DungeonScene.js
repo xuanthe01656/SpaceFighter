@@ -21,6 +21,7 @@ import { createDungeonDeviceTouchTraceV2B2, isDungeonV2B2LocalQaEnabledV2B2 } fr
 import { createDungeonApkCombatTraceV2C11, isDungeonV2C11ApkTraceEnabled } from '../../game/dungeon/DungeonApkCombatTraceV2C11.js';
 import { createDungeonApkInputJournalV2C14B } from '../../game/dungeon/DungeonApkInputJournalV2C14B.js';
 import { createDungeonC2CInputGridV1 } from '../../game/dungeon/DungeonC2CInputGridV1.js';
+import { createDungeonC2JPInputGridV1 } from '../../game/dungeon/DungeonC2JPInputGridV1.js';
 import { createDungeonC2ECombatWitnessV1 } from '../../game/dungeon/DungeonC2ECombatWitnessV1.js';
 import { isC2JKSupportedStraightShot } from '../../game/dungeon/DungeonC2JKFixedBallisticCoreV1.js';
 import { createC2JKFixedBallisticJournal } from '../../game/dungeon/DungeonC2JKFixedBallisticJournalV1.js';
@@ -354,17 +355,23 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         getGrid:() => dungeonC2CGrid.exportCombatEvidence(),
         getTick:() => dungeonC2CGrid.tickCount,
     }) : null;
-    // C2JK is an explicit native Guest Taurus QA path. The shared 30Hz kernel
-    // DRIVES real hostile projectile meshes/collisions below (not a shadow
-    // simulation); production, boss and signed staging combat stay unchanged.
-    const dungeonC2JK = dungeonC2CGrid && dungeonQaRunV391?.enabled === true &&
+    // C2JP is a separate, lossless high-rate QA recorder. Keep the legacy
+    // 256-pointer C2C stream and C2E/C2F checkpoints byte-for-byte unchanged.
+    // It can tolerate continuous Android dragging and explicitly label an
+    // OPEN pointer at tick 270 without inventing a pointer-up event.
+    const dungeonC2JPGrid = dungeonC2CGrid && dungeonQaRunV391?.enabled === true &&
         dungeonId === 'dung_taurus' && !dungeonC2BLocalQa && !dungeonV2B2LocalQa &&
         import.meta.env?.VITE_SF_DUNGEON_C2JK_SHARED_FIXED30 === 'true'
+        ? createDungeonC2JPInputGridV1({
+            sceneSeed:dungeonSeedV38,seedSource:'local-client-seed',
+            initialPlayer:{x:0,z:BATTLE_WORLD_HALF_HEIGHT-2.5},
+        }) : null;
+    // C2JK's shared ballistic kernel still DRIVES the actual enemy bullets.
+    // This change is input evidence only, never a new combat implementation.
+    const dungeonC2JK = dungeonC2JPGrid
         ? createC2JKFixedBallisticJournal({
             sceneSeed:dungeonSeedV38,seedSource:'local-client-seed',
-            // C2JL: C2F's completed-gesture checkpoint may be old even while
-            // the projectile clock continues. C2JK must pair with a LIVE grid.
-            getGrid:()=>dungeonC2CGrid.snapshot(),
+            getGrid:()=>dungeonC2JPGrid.snapshot(),
         }) : null;
     const recordC2E = event => {
         if (!dungeonC2EWitness || currentRoomV38?.id !== 'taurus_entry') return;
@@ -397,6 +404,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             dungeonV2C11Trace.finish();
             dungeonV2C14BJournal.finish();
             dungeonC2CGrid?.finish();
+            dungeonC2JPGrid?.finish();
             dungeonC2EWitness?.finish();
             try { data.onDungeonC15V2C11QaTrace?.(dungeonV2C11Trace.snapshot()); }
             catch (ignored) { /* never break game disposal for QA diagnostics */ }
@@ -952,6 +960,7 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             try {
                 const captured = dungeonV2C14BJournal?.capturePointer(event);
                 dungeonC2CGrid?.capturePointer(event);
+                dungeonC2JPGrid?.capturePointer(event);
                 // Freeze a genuine, same-moment TRACE + INPUT prefix after
                 // an accepted pointerup; never fix or relabel later overflow.
                 if (captured && event.kind === 'up') {
@@ -3787,16 +3796,20 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         // sample AFTER a completed combat pass; never feed values into combat.
         if (dungeonC2CGrid && currentRoomV38?.id === 'taurus_entry') {
             try {
-                const gridCapturedC2JL = dungeonC2CGrid.captureFrame({
+                const observationC2JP = {
                     deltaMs:frameDeltaMsV410,
                     player:{x:playerRoot.position.x,z:playerRoot.position.z},
                     playerHp:stats.hp,shieldHp:passives.shieldHp || 0,
                     enemyCount:enemies.length,
-                });
-                // Seal C2JK only AFTER the matching GRID observation, so
-                // extended play cannot replace the valid 270-tick pair with
-                // a stale C2F snapshot or a later overflowed GRID.
-                dungeonC2JK?.afterGridFrame(gridCapturedC2JL);
+                };
+                // The legacy C2C stream is still captured for C2E/C2F.
+                dungeonC2CGrid.captureFrame(observationC2JP);
+                // C2JK must seal against its own lossless, same-frame GRID.
+                // A C2C 256-pointer overflow cannot invalidate C2JP evidence.
+                if (dungeonC2JPGrid) {
+                    const gridCapturedC2JP = dungeonC2JPGrid.captureFrame(observationC2JP);
+                    dungeonC2JK?.afterGridFrame(gridCapturedC2JP);
+                }
             } catch (_ignored) {
                 dungeonC2JK?.invalidate('C2JL_GRID_CAPTURE_EXCEPTION');
                 // QA observation must never break real combat/rendering.

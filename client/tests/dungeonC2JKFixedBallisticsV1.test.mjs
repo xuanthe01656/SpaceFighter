@@ -209,10 +209,10 @@ test('C2JL incomplete pointer gesture at seal is not accepted as QA',()=>{
   assert.equal(last,false);
   assert.equal(recorder.error,'C2JL_LIVE_GRID_UNPAIRED');
 });
-test('C2JL scene pairs live GRID and seals after corresponding observer frame',()=>{
+test('C2JP scene pairs its own live GRID after observer frame, preserving C2E legacy',()=>{
   const scene=fs.readFileSync(new URL('../src/components/Dungeon/DungeonScene.js',import.meta.url),'utf8');
-  assert.match(scene,/getGrid:\(\)=>dungeonC2CGrid\.snapshot\(\)/);
-  assert.match(scene,/dungeonC2JK\?\.afterGridFrame\(gridCapturedC2JL\)/);
+  assert.match(scene,/getGrid:\(\)=>dungeonC2JPGrid\.snapshot\(\)/);
+  assert.match(scene,/dungeonC2JK\?\.afterGridFrame\(gridCapturedC2JP\)/);
   assert.match(scene,/dungeonC2JK\?\.invalidate\('C2JL_GRID_CAPTURE_EXCEPTION'\)/);
   assert.match(scene,/getGrid:\(\)\s*=>\s*dungeonC2CGrid\.exportCombatEvidence\(\)/);
 });

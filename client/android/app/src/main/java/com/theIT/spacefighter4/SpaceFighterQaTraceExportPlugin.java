@@ -25,6 +25,8 @@ public class SpaceFighterQaTraceExportPlugin extends Plugin {
     private static final String EXPECTED_VERSION = "c15-dungeon-apk-trace-v2c11";
     private static final String INPUT_BUNDLE_VERSION = "c15-dungeon-apk-input-bundle-v2c14b";
     private static final String C2C_GRID_VERSION = "c15-dungeon-c2c-input-grid-v1";
+    // C2JP only extends the nested GRID in Guest Taurus C2JK debug export.
+    private static final String C2JP_GRID_VERSION = "c15-dungeon-c2jp-input-grid-v1";
     private static final String NAME_REGEX = "^dungeon_taurus_v2c11_[0-9]{8}_[0-9]{6}\\.json$";
     private static final String INPUT_NAME_REGEX = "^dungeon_taurus_v2c14b_[0-9]{8}_[0-9]{6}\\.json$";
     private static final String C2E_WITNESS_VERSION = "c15-dungeon-c2e-combat-witness-v1";
@@ -145,7 +147,14 @@ public class SpaceFighterQaTraceExportPlugin extends Plugin {
                         && payload.optJSONArray("shots") != null
                         && payload.optJSONArray("ticks") != null
                         && grid != null
-                        && C2C_GRID_VERSION.equals(grid.optString("version"))
+                        && (C2C_GRID_VERSION.equals(grid.optString("version")) ||
+                            (C2JP_GRID_VERSION.equals(grid.optString("version"))
+                             && "accepted-controller-plus-babylon-observer-high-rate-untrusted"
+                                 .equals(grid.optString("source"))
+                             && grid.optJSONArray("pointerEvents") != null
+                             && grid.optJSONArray("pointerEvents").length() <= 4096
+                             && grid.optJSONArray("ticks") != null
+                             && grid.optJSONArray("ticks").length() <= 270))
                         && grid.optJSONArray("pointerEvents") != null
                         && grid.optJSONArray("ticks") != null
                         && !grid.optBoolean("safeForSettlement", true)

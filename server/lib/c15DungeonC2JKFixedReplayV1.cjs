@@ -7,6 +7,8 @@
 const path=require('node:path');
 const {pathToFileURL}=require('node:url');
 const {auditDungeonC2DInputGridV1}=require('./c15DungeonC2DInputAuditV1.cjs');
+const {auditDungeonC2JPInputGridV1}=require('./c15DungeonC2JPInputAuditV1.cjs');
+const C2JP_GRID_VERSION='c15-dungeon-c2jp-input-grid-v1';
 const VERSION='c15-c2jk-fixed-ballistic-replay-qa-v1';
 const ID=/^[A-Za-z0-9_:./@-]{1,128}$/;
 const HEX8=/^[0-9a-f]{8}$/;
@@ -52,10 +54,21 @@ async function auditC2JKFixedReplayV1(record,{pureModule}={}){
     fail('C2JK_LIMITS_OR_MISSING_TICKS');
   if(record.grid?.battleId!==null||record.grid.sceneSeed!==record.sceneSeed||
     record.grid.seedSource!==record.seedSource||record.grid.dungeonId!==record.dungeonId||
-    record.grid.roomId!==record.roomId||record.grid.ticks?.length<record.ticks.length)
+    record.grid.roomId!==record.roomId||record.grid.ticks?.length<record.ticks.length||
+    (record.grid.version===C2JP_GRID_VERSION &&
+      record.grid.ticks.length!==record.ticks.length))
     fail('C2JK_C2C_GRID_UNPAIRED');
-  const grid=await auditDungeonC2DInputGridV1(record.grid);
+  // C2JP is a separate audited format. The original 256-pointer C2D
+  // validator, staging admission and HTTP route are never broadened.
+  const isC2JP=record.grid.version===C2JP_GRID_VERSION;
+  const grid=isC2JP
+    ? await auditDungeonC2JPInputGridV1(record.grid)
+    : await auditDungeonC2DInputGridV1(record.grid);
   if(grid?.subsetInputReprojectionPass!==true)fail('C2JK_C2D_GRID_NOT_VERIFIED');
+  const openSubset=isC2JP && grid.openGestureSubsetOnly===true;
+  if(openSubset && (record.ticks.length!==pure.C2JK_MAX_TICKS ||
+    record.grid.pointerActive!==true || record.grid.finished!==true))
+    fail('C2JK_C2JP_OPEN_WINDOW_INVALID');
   const shotEntries=new Map(),ids=new Set();
   for(const row of record.shots){
     if(!exact(row,SHOT)||!ID.test(row.id||'')||!ID.test(row.sourceId||'')||
@@ -90,11 +103,15 @@ async function auditC2JKFixedReplayV1(record,{pureModule}={}){
     rowsChecked++;
   }
   return Object.freeze({version:VERSION,
-    status:'LIVE_CLIENT_AND_SERVER_SHARED_FIXED_BALLISTIC_SUBSET_REPLAYED_UNTRUSTED',
+    status:openSubset
+      ? 'LIVE_CLIENT_AND_SERVER_SHARED_FIXED_BALLISTIC_OPEN_INPUT_SUBSET_UNTRUSTED'
+      : 'LIVE_CLIENT_AND_SERVER_SHARED_FIXED_BALLISTIC_SUBSET_REPLAYED_UNTRUSTED',
     sceneSeed:record.sceneSeed,ticksReplayed:rowsChecked,
     authoredShotsObserved:record.shots.length,contactsReprojected:matchedContacts,
     expiredShotsReprojected:matchedExpiry,peakActiveProjectiles:peak,
     c2cInputGridSubsetVerified:true,clientFixedBallisticCoreReprojected:true,
+    openGestureSubsetOnly:openSubset,inputGestureClosedAtSeal:!openSubset,
+    c2jpHighRateGridReprojected:isC2JP,
     sharedCoreVersion:pure.C2JK_CORE_VERSION,
     serverSignedSameSessionVerified:false,independentEnemyAiVerified:false,
     independentShotCreationVerified:false,independentDamageVerified:false,
@@ -103,6 +120,7 @@ async function auditC2JKFixedReplayV1(record,{pureModule}={}){
     rewardSettlementEnabled:false,cloudRewards:false,
     notes:['A single pure 30Hz kernel now moves actual hostile projectiles in gated Guest Taurus QA and on Node.',
       'Untrusted client shot origins, velocities and input poses are replayed; no server-derived AI or damage authority.',
+      ...(openSubset ? ['The input gesture remains OPEN at tick 270; no fake pointer-up or session completion.'] : []),
       'FNV32 only detects accidental changes; it is not an authenticated proof or anti-cheat mechanism.']});
 }
 module.exports={VERSION,auditC2JKFixedReplayV1};

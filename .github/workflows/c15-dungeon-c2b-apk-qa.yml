@@ -204,6 +204,29 @@ jobs:
           node --check client/src/components/Dungeon/DungeonScene.js
           echo 'C2JN_SAFE_PREFIX_AND_DIAGNOSTICS_10_10=PASS'
 
+      - name: Run 12 C2JP lossless high-rate and open-gesture audit tests
+        run: |
+          set -euo pipefail
+          node --test --test-reporter=tap \
+            client/tests/dungeonC2JPHighRateAndOpenWindow.test.mjs \
+            > "$RUNNER_TEMP/c15-c2jp-12-tests.log" 2>&1 || {
+              tail -n 130 "$RUNNER_TEMP/c15-c2jp-12-tests.log"
+              exit 1
+            }
+          for entry in 'tests 12' 'pass 12' 'fail 0' 'skipped 0' 'cancelled 0' 'todo 0'; do
+            if ! grep -qx "# $entry" "$RUNNER_TEMP/c15-c2jp-12-tests.log"; then
+              echo "C2JP_CI_EXPECTED_TAP_SUMMARY_MISMATCH: $entry" >&2
+              tail -n 100 "$RUNNER_TEMP/c15-c2jp-12-tests.log" >&2
+              exit 1
+            fi
+          done
+          node --check client/src/game/dungeon/DungeonC2JPInputGridV1.js
+          node --check client/src/game/dungeon/DungeonC2JKFixedBallisticJournalV1.js
+          node --check client/src/components/Dungeon/DungeonScene.js
+          node --check server/lib/c15DungeonC2JPInputAuditV1.cjs
+          node --check server/lib/c15DungeonC2JKFixedReplayV1.cjs
+          echo 'C2JP_LOSSLESS_OPEN_GESTURE_TESTS_12_12=PASS'
+
       - name: Restore and verify existing registered Android QA signing key
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
