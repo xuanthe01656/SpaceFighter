@@ -160,23 +160,28 @@ jobs:
           done
           echo 'C2HI_EXISTING_SERVER_SUBSET_25_25=PASS'
 
-      - name: Run 30 C2J+C2K shared live 30Hz projectile, native export and replay tests
+      - name: Run 40 C2JK+C2JL shared live 30Hz projectile, GRID pairing and replay tests
         run: |
           set -euo pipefail
           node --test --test-reporter=tap \
             client/tests/dungeonC2JKFixedBallisticsV1.test.mjs \
             server/tests/c15DungeonC2JKFixedReplayV1.test.cjs \
-            > "$RUNNER_TEMP/c15-c2jk-30-tests.log" 2>&1 || {
-              tail -n 120 "$RUNNER_TEMP/c15-c2jk-30-tests.log"
+            > "$RUNNER_TEMP/c15-c2jkl-40-tests.log" 2>&1 || {
+              tail -n 120 "$RUNNER_TEMP/c15-c2jkl-40-tests.log"
               exit 1
             }
-          for entry in 'tests 30' 'pass 30' 'fail 0' 'skipped 0' 'cancelled 0'; do
-            grep -qx "# $entry" "$RUNNER_TEMP/c15-c2jk-30-tests.log"
+          for entry in 'tests 40' 'pass 40' 'fail 0' 'skipped 0' 'cancelled 0' 'todo 0'; do
+            if ! grep -qx "# $entry" "$RUNNER_TEMP/c15-c2jkl-40-tests.log"; then
+              echo "C2JM_CI_EXPECTED_TAP_SUMMARY_MISMATCH: $entry" >&2
+              tail -n 90 "$RUNNER_TEMP/c15-c2jkl-40-tests.log" >&2
+              exit 1
+            fi
           done
+          tail -n 10 "$RUNNER_TEMP/c15-c2jkl-40-tests.log"
           node --check client/src/components/Dungeon/DungeonScene.js
           node --check client/src/game/dungeon/DungeonC2JKFixedBallisticCoreV1.js
           node --check server/lib/c15DungeonC2JKFixedReplayV1.cjs
-          echo 'C2JK_SHARED_HOSTILE_BALLISTICS_30_30=PASS'
+          echo 'C2JK_C2JL_SHARED_HOSTILE_BALLISTICS_40_40=PASS'
 
       - name: Restore and verify existing registered Android QA signing key
         env:
