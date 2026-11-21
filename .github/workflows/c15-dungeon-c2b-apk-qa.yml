@@ -1,4 +1,4 @@
-name: C15 Dungeon C2E - Manual Android QA APK (No Deploy)
+name: C15 Dungeon C2F+C2G - Extended Combat Witness QA APK (No Deploy)
 
 # Deliberately independent from the existing android-native-smoke workflow.
 # An explicit manual run is required, and this job has read-only permissions.
@@ -126,6 +126,22 @@ jobs:
           node --check client/src/game/dungeon/DungeonC2ECombatWitnessV1.js
           echo 'C2E_CAUSAL_SUBSET_TESTS_26_26=PASS'
 
+      - name: Run C2F+C2G extended capture and earliest catalog spawn QA
+        run: |
+          set -euo pipefail
+          node --test --test-reporter=tap \
+            client/tests/dungeonC2FExtendedCapture.test.mjs \
+            server/tests/c15DungeonC2FSpawnTimeline.test.cjs \
+            > "$RUNNER_TEMP/c15-c2fg-new-tests.log" 2>&1 || {
+              tail -n 110 "$RUNNER_TEMP/c15-c2fg-new-tests.log"
+              exit 1
+            }
+          for entry in 'tests 12' 'pass 12' 'fail 0' 'skipped 0' 'cancelled 0'; do
+            grep -qx "# $entry" "$RUNNER_TEMP/c15-c2fg-new-tests.log"
+          done
+          tail -n 12 "$RUNNER_TEMP/c15-c2fg-new-tests.log"
+          echo 'C2F_C2G_EXTENDED_CAPTURE_TIMELINE_TESTS_12_12=PASS'
+
       - name: Restore and verify existing registered Android QA signing key
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -237,7 +253,7 @@ jobs:
       - name: Upload one APK only with minimal retention
         uses: actions/upload-artifact@v4
         with:
-          name: sf-c15-dungeon-c2e-qa-debug-apk-no-rewards
+          name: sf-c15-dungeon-c2fg-qa-debug-apk-no-rewards
           path: client/android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 1

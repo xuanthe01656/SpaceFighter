@@ -11,23 +11,37 @@ const NUMBER=x=>typeof x==='number'&&Number.isFinite(x);
 const ID=x=>typeof x==='string'&&x.length>0&&x.length<=128&&/^[A-Za-z0-9_:./@-]+$/.test(x);
 const clone=x=>JSON.parse(JSON.stringify(x));
 const round=x=>Math.round(x*10000)/10000;
+// Stop before C2E's 256-event hard-failure threshold; keep an auditable prefix.
+export const C2F_CAUSAL_EVENT_WINDOW_LIMIT=192;
 function fnv(text){let h=2166136261;
   for(let i=0;i<text.length;i++)h=Math.imul(h^text.charCodeAt(i),16777619)>>>0;
   return h.toString(16).padStart(8,'0');
 }
-export function createDungeonC2ECombatWitnessV1({sceneSeed,seedSource,battleId=null,getGrid}={}){
+export function createDungeonC2ECombatWitnessV1({sceneSeed,seedSource,battleId=null,getGrid,getTick}={}){
   if(!Number.isSafeInteger(sceneSeed)||sceneSeed<1||sceneSeed>0xffffffff||
     !['local-client-seed','server-ticket-local-unverified'].includes(seedSource)||
     (seedSource==='local-client-seed'?battleId!==null:!UUID.test(battleId||''))||
-    typeof getGrid!=='function')throw new TypeError('C2E_START_INVALID');
+    typeof getGrid!=='function'||(getTick!==undefined&&typeof getTick!=='function'))
+    throw new TypeError('C2E_START_INVALID');
   const events=[];
-  let finished=false,overflow=false,captureError=null;
+  let finished=false,overflow=false,captureError=null,sealed=null;
   function capture(entry){
-    if(finished||overflow||captureError)return false;
+    if(finished||overflow||captureError||sealed)return false;
+    const liveTick=getTick?.();
+    const grid=getGrid();
+    if(!grid||!Array.isArray(grid.ticks)){
+      captureError='C2E_INPUT_GRID_MISSING';return false;
+    }
+    // The grid may already have sealed the 9-second combat prefix. Do not
+    // continue recording events against its stale tick, or silently overflow.
+    if((getTick&&liveTick>=270)||grid.ticks.length>=270||
+       events.length>=C2F_CAUSAL_EVENT_WINDOW_LIMIT){
+      sealed=makeSnapshot(grid);return false;
+    }
     if(!entry||!KINDS.has(entry.kind)){
       captureError='C2E_EVENT_KIND_INVALID';return false;
     }
-    const tick=getGrid()?.ticks?.length+1;
+    const tick=(getTick?liveTick:grid.ticks.length)+1;
     if(!Number.isSafeInteger(tick)||tick<1||tick>361){
       overflow=true;return false;
     }
@@ -50,8 +64,7 @@ export function createDungeonC2ECombatWitnessV1({sceneSeed,seedSource,battleId=n
       velocity:entry.velocity?{x:round(entry.velocity.x),z:round(entry.velocity.z)}:null};
     events.push(Object.freeze(event));return true;
   }
-  function snapshot(){
-    const grid=getGrid();
+  function makeSnapshot(grid){
     if(!grid||grid.version!=='c15-dungeon-c2c-input-grid-v1'||
       grid.sceneSeed!==sceneSeed||grid.battleId!==battleId||grid.seedSource!==seedSource)
       throw new TypeError('C2E_INPUT_GRID_UNPAIRED');
@@ -68,6 +81,7 @@ export function createDungeonC2ECombatWitnessV1({sceneSeed,seedSource,battleId=n
       checksumAlgorithm:'fnv1a32-accidental-corruption-only'};
     return Object.freeze({...body,checksum:fnv(JSON.stringify(body))});
   }
+  function snapshot(){return sealed||makeSnapshot(getGrid());}
   return Object.freeze({capture,snapshot,finish:()=>{finished=true;return snapshot();},
     get eventCount(){return events.length;}});
 }
@@ -79,7 +93,12 @@ export function prepareDungeonC2ECombatWitnessJsonV1(record,date=new Date()){
     record.grid?.version!=='c15-dungeon-c2c-input-grid-v1'||
     !(date instanceof Date)||!Number.isFinite(date.getTime()))
     throw new TypeError('C2E_EXPORT_UNSAFE');
-  const json=JSON.stringify(record,null,2)+'\n';
+  // C2F: heavily sampled pointer sequences can make pretty JSON exceed the
+  // 256 KiB QA upload cap. Use the *same* authenticated-by-nothing evidence
+  // payload, compactly serialized, rather than silently drop any input events.
+  const pretty=JSON.stringify(record,null,2)+'\n';
+  const json=new TextEncoder().encode(pretty).length>240*1024
+    ? JSON.stringify(record)+'\n' : pretty;
   if(new TextEncoder().encode(json).length>256*1024)throw new TypeError('C2E_EXPORT_SIZE_LIMIT');
   const stamp=date.toISOString().replace(/[-:]/g,'').replace('T','_').slice(0,15);
   return Object.freeze({fileName:`dungeon_taurus_c2e_${stamp}.json`,json,

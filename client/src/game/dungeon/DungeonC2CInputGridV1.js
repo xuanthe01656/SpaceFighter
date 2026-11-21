@@ -6,6 +6,9 @@
  */
 export const DUNGEON_C2C_GRID_V1='c15-dungeon-c2c-input-grid-v1';
 export const DUNGEON_C2C_GRID_HZ=30;
+// C2F: only the causal-combat witness uses this later, bounded QA prefix.
+// Legacy C2C's first valid post-pointer-up export remains unchanged.
+export const DUNGEON_C2F_COMBAT_WINDOW_TICKS=270;
 export const DUNGEON_C2C_GRID_LIMITS=Object.freeze({ticks:360,pointers:256,frameDeltaMs:100});
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const plain=x=>x!==null&&typeof x==='object'&&!Array.isArray(x);
@@ -31,6 +34,7 @@ export function createDungeonC2CInputGridV1({sceneSeed,seedSource,battleId=null,
   let lastPointerAt=-1,active=null,completedGestures=0,startedGestures=0;
   let acc=0,frameSeq=0,overflow=false,error=null,finished=false;
   let acceptedPosition=point(initialPlayer),checkpoint=null;
+  let combatWindow=null,combatWindowSealed=false;
   const fail=message=>{error ||= message;return false;};
   function capturePointer(e){
     if(finished||error||overflow)return false;
@@ -85,10 +89,20 @@ export function createDungeonC2CInputGridV1({sceneSeed,seedSource,battleId=null,
         observedEnemyCount:enemyCount}));
       acc-=step;
     }
-    if(!checkpoint&&ticks.length>=60&&completedGestures>0&&
-       completedGestures===startedGestures&&active===null&&!overflow&&!error){
+    const safeGesture=completedGestures>0&&completedGestures===startedGestures&&
+      active===null&&!overflow&&!error;
+    if(!checkpoint&&ticks.length>=60&&safeGesture){
       checkpoint=snapshotNow(false);
     }
+    // C2F: keep a recent *completed-gesture* input+observation prefix.
+    // Snapshot only once per 15 ticks, so no per-frame O(n) deep copy.
+    // Freeze after 270 ticks before the legacy 360-tick frame cap overflows.
+    if(!combatWindowSealed&&safeGesture&&ticks.length>=60&&
+      (!combatWindow||ticks.length-combatWindow.ticks.length>=15||
+       ticks.length>=DUNGEON_C2F_COMBAT_WINDOW_TICKS)){
+      combatWindow=snapshotNow(false);
+    }
+    if(ticks.length>=DUNGEON_C2F_COMBAT_WINDOW_TICKS)combatWindowSealed=true;
     return true;
   }
   function snapshotNow(isFinished){
@@ -109,6 +123,8 @@ export function createDungeonC2CInputGridV1({sceneSeed,seedSource,battleId=null,
   function finish(){finished=true;return snapshot();}
   return Object.freeze({capturePointer,captureFrame,snapshot,finish,
     exportEvidence:()=>checkpoint||snapshot(),
+    // C2F diagnostic witness only; cannot change C2C's legacy checkpoint.
+    exportCombatEvidence:()=>combatWindow||checkpoint||snapshot(),
     get tickCount(){return ticks.length;},get acceptedPointerCount(){return pointerEvents.length;}});
 }
 

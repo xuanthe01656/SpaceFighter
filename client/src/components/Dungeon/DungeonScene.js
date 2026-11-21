@@ -349,7 +349,8 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         sceneSeed:dungeonSeedV38,
         seedSource:dungeonC2BLocalQa ? 'server-ticket-local-unverified' : 'local-client-seed',
         battleId:dungeonC2BLocalQa ? dungeonC2BQaTicket.battleId : null,
-        getGrid:() => dungeonC2CGrid.exportEvidence(),
+        getGrid:() => dungeonC2CGrid.exportCombatEvidence(),
+        getTick:() => dungeonC2CGrid.tickCount,
     }) : null;
     const recordC2E = event => {
         if (!dungeonC2EWitness || currentRoomV38?.id !== 'taurus_entry') return;

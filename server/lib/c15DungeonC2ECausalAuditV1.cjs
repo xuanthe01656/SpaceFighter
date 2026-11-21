@@ -80,7 +80,10 @@ async function auditDungeonC2ECombatWitnessV1(record,{catalog}={}){
     id:e.id,roleId:e.roleId,laneNorm:e.laneNorm,
     spawnAtMs:e.spawnAtMs,threatCost:e.threatCost})));
   const spawned=new Map(),shots=new Map();
-  let roomStarted=false,spawns=0,fires=0,hits=0,deaths=0,contacts=0,lastTick=0;
+  let roomStarted=false,roomStartTick=null,spawns=0,fires=0,hits=0,deaths=0,contacts=0,lastTick=0;
+  // 30Hz is *observational*, not a fixed engine clock; permit ~10 observed ticks
+  // of Babylon/room scheduling jitter before alleging a premature spawn.
+  const spawnEarliestSlackMs=350;
   const replayCounts=new Map();
   // The live scene mutates combat before the observation grid samples that frame;
   // each emitted causal event is anchored to the following C2C sample tick.
@@ -100,13 +103,19 @@ async function auditDungeonC2ECombatWitnessV1(record,{catalog}={}){
     if(e.kind==='room_start'){
       if(roomStarted||i!==0||!none(e.enemyId,e.roleId,e.bulletId,e.amount,e.hp,e.origin,e.velocity))
         fail('C2E_ROOM_START_INVALID');
-      roomStarted=true;
+      roomStarted=true;roomStartTick=e.tick;
     }else if(e.kind==='enemy_spawn'){
       if(!roomStarted||e.enemyId!==plan.entries[spawns]?.id||
         e.roleId!==byId.get(e.enemyId)?.roleId||
         !num(e.hp,.0001,1e9)||!close(e.hp,specById.get(e.enemyId)?.hp)||
         !none(e.bulletId,e.amount,e.origin,e.velocity))fail('C2E_SPAWN_CATALOG_DIVERGENCE');
       if(spawned.has(e.enemyId))fail('C2E_DUPLICATE_SPAWN');
+      // C2F: independently project the *earliest possible* catalog spawn time.
+      // Late spawns are allowed (active cap/scene stalls); time is still client
+      // reported, so this is QA anomaly detection, not authoritative replay.
+      const elapsedLowerBoundMs=(e.tick-roomStartTick)*(1000/30);
+      if(elapsedLowerBoundMs+spawnEarliestSlackMs<byId.get(e.enemyId).spawnAtMs)
+        fail('C2F_PREMATURE_CATALOG_SPAWN');
       spawned.set(e.enemyId,{hp:e.hp,alive:true,roleId:e.roleId});spawns++;
     }else if(e.kind==='enemy_fire'){
       const s=spawned.get(e.enemyId),spec=specById.get(e.enemyId);
@@ -157,13 +166,16 @@ async function auditDungeonC2ECombatWitnessV1(record,{catalog}={}){
     observedSpawnPrefix:spawns,observedFires:fires,observedEnemyHits:hits,
     observedEnemyResolutions:deaths,observedProjectileContacts:contacts,
     observedEnemyCountDivergenceTicks:divergent,
+    earliestSpawnScheduleSlackMs:spawnEarliestSlackMs,
+    extendedCaptureWindowTicks:record.grid.ticks.length,
+    extendedCaptureAtLeastFiveSeconds:record.grid.ticks.length>=150,
     causalSubsetPass:coherent,serverQaTicketVerified:false,serverSelectedLoadoutVerified:false,
     independentlyReplayedAi:false,independentlyReplayedProjectileDynamics:false,
     independentlyReplayedDamage:false,fixedTickCombatSimulationVerified:false,
     fullCombatReplayVerified:false,trueApkServerParity:'NOT_VERIFIED',
     safeForSettlement:false,rewardSettlementEnabled:false,cloudRewards:false,
     notes:['Server independently rebuilt the authored Taurus entry spawn catalog.',
-      'Spawn prefix, live shot/contact references and observed HP arithmetic were checked.',
+      'Spawn prefix, earliest catalog spawn timing, live shot/contact references and HP arithmetic were checked.',
       'Client-reported combat events, Babylon elapsed time and HP are untrusted.',
       'No independent AI, ballistic collision, damage formula, boss or victory replay.',
       'FNV checksum detects accidental corruption only, not forgery.']});

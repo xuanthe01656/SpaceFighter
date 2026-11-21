@@ -279,7 +279,7 @@ File: ${prepared.fileName}`;
     }
   }
   if (typeof getC2EWitness === 'function') {
-    actions.appendChild(makeButton(doc, 'Xem C2E COMBAT', () => {
+    actions.appendChild(makeButton(doc, 'Xem C2F COMBAT (mo rong)', () => {
       try {
         const record=getC2EWitness();
         prepared=prepareDungeonC2ECombatWitnessJsonV1(record);
@@ -287,7 +287,8 @@ File: ${prepared.fileName}`;
         summary.textContent=`C2E causal · Ticks: ${prepared.gridTicks} | `
           + `Combat events: ${prepared.combatEvents} | `
           + `Error: ${record.captureError ?? 'null'}\nFile: ${prepared.fileName}`;
-        status.textContent='Su kien combat that, nhung chua tai mo phong AI/dan/sat thuong. REWARDS LOCKED.';
+        status.textContent='C2F: cua so combat QA toi da 9 giay; ban ghi phai co gesture va spawn. ' +
+          'Day la causal witness, CHUA co independent AI/ballistics/damage. REWARDS LOCKED.';
       } catch(error){
         prepared=null;content.value='';
         status.textContent=`C2E EXPORT FAIL: ${error?.message || 'UNKNOWN'}`;
