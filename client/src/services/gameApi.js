@@ -137,3 +137,8 @@ export async function fetchC15ResourceManifest(){
   }catch(error){if(error.name==='AbortError')throw new GameApiError('TIMEOUT','Resource manifest timed out');throw error;}
   finally{clearTimeout(timeout);}
 }
+
+// C15 V2C.14-C2B: read-only staging QA bootstrap. Never retry a new issue
+// automatically; no economy, replay or settlement route is exposed.
+export const issueDungeonC2BTicket=(uid,body)=>callApi(
+  '/c15/dungeon/qa-c2b/ticket',body,{expectedUid:uid});

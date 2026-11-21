@@ -1,0 +1,212 @@
+name: C15 Dungeon C2B - Manual Android QA APK (No Deploy)
+
+# Deliberately independent from the existing android-native-smoke workflow.
+# An explicit manual run is required, and this job has read-only permissions.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: c15-dungeon-c2b-manual-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  android-c2b-qa:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 85
+    env:
+      VITE_FIREBASE_API_KEY: ${{ vars.SF_FIREBASE_API_KEY }}
+      VITE_FIREBASE_AUTH_DOMAIN: distributed-inn-482605-c6.firebaseapp.com
+      VITE_FIREBASE_PROJECT_ID: distributed-inn-482605-c6
+      VITE_FIREBASE_STORAGE_BUCKET: distributed-inn-482605-c6.firebasestorage.app
+      VITE_FIREBASE_MESSAGING_SENDER_ID: '528039759292'
+      VITE_FIREBASE_APP_ID: '1:528039759292:web:4aab5ad9ac2bddd9362fb9'
+      VITE_FIREBASE_MEASUREMENT_ID: G-Y5CS812JKF
+      VITE_GAME_API_URL: https://spacefighter-api-staging-528039759292.asia-southeast1.run.app/api/v1
+      # The C2B ticket uses an explicit gameApi.js call. Do not enable all
+      # legacy game API features merely to allow this QA-only ticket call.
+      VITE_GAME_API_ENABLED: 'false'
+      VITE_SF_DUNGEON_QA: 'true'
+      VITE_SF_DUNGEON_V2C11_APK_TRACE: 'true'
+      VITE_SF_DUNGEON_C2B_APK_QA: 'true'
+      VITE_SF_DUNGEON_QA_REWARDS: 'false'
+      VITE_SF_DUNGEON_PARITY_V38: 'true'
+      VITE_SF_BUILD_CHANNEL: staging-qa
+
+    steps:
+      - name: Checkout reviewed main source without write credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Node 22 with lockfile cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Audit C2B workflow source and fail-closed policies
+        run: |
+          set -euo pipefail
+          node tools/qa_c15_c2b_ci_contract.mjs
+          test -s client/package-lock.json
+          test -s client/android/gradlew
+          [[ -n "${VITE_FIREBASE_API_KEY:-}" ]] || {
+            echo 'SF_FIREBASE_API_KEY (public client config) is missing from repository variables' >&2
+            exit 1
+          }
+
+      - name: Run 175 Dungeon input and ticket regression tests
+        run: |
+          set -euo pipefail
+          node --test \
+            client/tests/dungeonApkTraceScreenExportV2C13.test.mjs \
+            client/tests/dungeonApkInputJournalV2C14B.test.mjs \
+            client/tests/dungeonApkInputCheckpointV2C14B1.test.mjs \
+            client/tests/dungeonC2BStagingQaContract.test.mjs \
+            server/tests/c15DungeonApkInputBundleV2C14B.test.cjs \
+            server/tests/c15DungeonIntegratedCombatV2C10.test.cjs \
+            server/tests/c15DungeonApkTraceParityV2C11.test.cjs \
+            server/tests/c15DungeonSameRunPreflightV2C14C2A.test.cjs \
+            server/tests/c15DungeonStagingTicketV2C14C2B.test.cjs \
+            server/tests/c15DungeonC2BHttpGate.test.cjs > "$RUNNER_TEMP/c15-c2b-175-tests.log" 2>&1 || {
+              tail -n 100 "$RUNNER_TEMP/c15-c2b-175-tests.log"
+              exit 1
+            }
+          grep -qx '# tests 175' "$RUNNER_TEMP/c15-c2b-175-tests.log"
+          grep -qx '# pass 175' "$RUNNER_TEMP/c15-c2b-175-tests.log"
+          grep -qx '# fail 0' "$RUNNER_TEMP/c15-c2b-175-tests.log"
+          tail -n 12 "$RUNNER_TEMP/c15-c2b-175-tests.log"
+          echo 'C2B_CI_SOURCE_REGRESSION_175_175=PASS'
+
+      - name: Restore and verify existing registered Android QA signing key
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for key in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            [[ -n "${!key:-}" ]] || { echo "Missing existing GitHub Actions secret: $key" >&2; exit 1; }
+          done
+          python3 - <<'PY'
+          import base64, os, pathlib, re, subprocess, sys
+          p = pathlib.Path(os.environ['RUNNER_TEMP']) / 'sf-c2b-qa-signing.jks'
+          try:
+              data = base64.b64decode(''.join(os.environ['ANDROID_KEYSTORE_BASE64'].split()), validate=True)
+          except (ValueError, base64.binascii.Error):
+              sys.exit('Invalid QA keystore Base64 secret')
+          if not (128 <= len(data) <= 1024 * 1024):
+              sys.exit('Invalid QA keystore size')
+          p.write_bytes(data)
+          p.chmod(0o600)
+          cmd = ['keytool', '-list', '-v', '-keystore', str(p), '-alias', os.environ['ANDROID_KEY_ALIAS'],
+                 '-storepass:env', 'ANDROID_KEYSTORE_PASSWORD']
+          r = subprocess.run(cmd, capture_output=True, text=True)
+          if r.returncode or 'PrivateKeyEntry' not in r.stdout:
+              sys.exit('Existing QA keystore credentials invalid')
+          expected = {
+              'SHA1': 'D667B762E0A5EA09BB43B0730EF7CFDA1707F55A',
+              'SHA256': '60B1E4349BA776EBD0138E7713AE2E78E292EB048A52FBBE187699F2CE09D8C4',
+          }
+          for label, want in expected.items():
+              m = re.search(r'^\s*' + label + r':\s*([0-9a-fA-F:]+)\s*$', r.stdout, re.M)
+              if not m or m.group(1).replace(':', '').upper() != want:
+                  sys.exit('QA key does not match registered ' + label)
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
+              f.write('SF_ANDROID_QA_KEYSTORE_PATH=' + str(p) + '\n')
+          print('C2B_REGISTERED_QA_KEY=PASS (no private key logged)')
+          PY
+
+      - name: Android SDK 36
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Gradle toolchain
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+
+      - name: Install Android 36 packages
+        run: |
+          set -euo pipefail
+          sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0'
+
+      - name: Build exact client lockfile and Capacitor Android
+        run: |
+          set -euo pipefail
+          cd client
+          npm ci --no-audit --no-fund
+          npm run build:mobile
+          npx --no-install cap sync android
+          test -s dist/index.html
+          grep -q 'registerPlugin(SpaceFighterQaTraceExportPlugin.class)' \
+            android/app/src/main/java/com/theIT/spacefighter4/MainActivity.java
+          grep -q 'getDebugBuildGate' \
+            android/app/src/main/java/com/theIT/spacefighter4/SpaceFighterQaTraceExportPlugin.java
+          echo 'C2B_CI_MOBILE_PAYLOAD=PASS'
+
+      - name: Build registered-key DEBUG APK (never release)
+        env:
+          SF_ANDROID_QA_SIGNING_ENABLED: 'true'
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -s "$SF_ANDROID_QA_KEYSTORE_PATH"
+          cd client/android
+          bash ./gradlew :app:assembleDebug --no-daemon --max-workers=2
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          echo 'C2B_CI_ANDROID_DEBUG_BUILD=PASS'
+
+      - name: Verify APK signature and record checksum
+        run: |
+          set -euo pipefail
+          APK=client/android/app/build/outputs/apk/debug/app-debug.apk
+          SIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          test -x "$SIGNER"
+          "$SIGNER" verify --verbose --print-certs "$APK" > "$RUNNER_TEMP/c2b-apk-certs.txt"
+          python3 - <<'PY'
+          import os, pathlib, re, sys
+          p = pathlib.Path(os.environ['RUNNER_TEMP']) / 'c2b-apk-certs.txt'
+          data = p.read_text(encoding='utf-8')
+          if re.search(r'^\s*Signer #2 certificate', data, re.M):
+              sys.exit('Multiple signers are not permitted')
+          expected = {'SHA-1': 'D667B762E0A5EA09BB43B0730EF7CFDA1707F55A',
+                      'SHA-256': '60B1E4349BA776EBD0138E7713AE2E78E292EB048A52FBBE187699F2CE09D8C4'}
+          for label, digest in expected.items():
+              m = re.search(r'^\s*Signer #1 certificate '+label+r' digest:\s*([0-9a-fA-F:]+)\s*$', data, re.M)
+              if not m or m.group(1).replace(':', '').upper() != digest:
+                  sys.exit('APK signature mismatch for ' + label)
+          print('C2B_CI_SIGNED_APK_SHA_MATCH=PASS')
+          PY
+          sha256sum "$APK"
+          echo 'TRUE_APK_SERVER_PARITY=NOT_VERIFIED'
+          echo 'DUNGEON_REWARDS=LOCKED'
+
+      - name: Upload one APK only with minimal retention
+        uses: actions/upload-artifact@v4
+        with:
+          name: sf-c15-dungeon-c2b-qa-debug-apk-no-rewards
+          path: client/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Remove ephemeral QA signing key
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/sf-c2b-qa-signing.jks"

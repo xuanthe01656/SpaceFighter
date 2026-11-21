@@ -27,6 +27,20 @@ public class SpaceFighterQaTraceExportPlugin extends Plugin {
     private static final String NAME_REGEX = "^dungeon_taurus_v2c11_[0-9]{8}_[0-9]{6}\\.json$";
     private static final String INPUT_NAME_REGEX = "^dungeon_taurus_v2c14b_[0-9]{8}_[0-9]{6}\\.json$";
 
+    // C2B: the native plugin is only registered for BuildConfig.DEBUG in MainActivity.
+    // This check is QA UX gating, not remote attestation or API authorization.
+    @PluginMethod
+    public void getDebugBuildGate(PluginCall call) {
+        if (!BuildConfig.DEBUG) {
+            call.reject("QA_ONLY_DEBUG_APK");
+            return;
+        }
+        JSObject result = new JSObject();
+        result.put("debug", true);
+        result.put("c2bQaPlugin", true);
+        call.resolve(result);
+    }
+
     @PluginMethod
     public void shareJson(PluginCall call) {
         if (!BuildConfig.DEBUG) {

@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { DUNGEON_CONFIG } from '../../constants';
 import styles from './DungeonSelect.module.css';
 import toast from 'react-hot-toast';
+import {auth} from '../../firebase';
 import { dungeonDayUTC, isDungeonOpenUTC } from '../../utils/dungeonSchedule';
 import {
   createDungeonQaRunV391,
@@ -55,6 +56,10 @@ export default function DungeonSelect({ gsRef, setScreen, lang, getRealTime }) {
   const currentDay = dungeonDayUTC(getRealTime());
   const dungeonQaAccess = resolveDungeonQaRuntimeAccessV391();
   const qaLoadoutPresets = listDungeonQaLoadoutPresetsV397();
+  const [c2bStagingOptIn, setC2bStagingOptIn] = useState(false);
+  const c2bCompiled = dungeonQaAccess.enabled &&
+    import.meta.env?.VITE_SF_DUNGEON_C2B_APK_QA === 'true' &&
+    import.meta.env?.VITE_SF_DUNGEON_V2C11_APK_TRACE === 'true';
   const [qaRoomSelections, setQaRoomSelections] = useState(() => Object.fromEntries(
     DUNGEON_CONFIG.map(dungeon => [
       dungeon.id,
@@ -86,6 +91,14 @@ export default function DungeonSelect({ gsRef, setScreen, lang, getRealTime }) {
         toast.error(lang === 'vi' ? 'Dungeon này chưa có hồ sơ QA hợp lệ.' : 'No valid QA profile for this dungeon.');
         return;
       }
+      if (c2bCompiled && c2bStagingOptIn && dungeon.id === 'dung_taurus') {
+        if (dungeonQaRun.directRoomId && dungeonQaRun.directRoomId !== 'taurus_entry') {
+          toast.error('C2B hien tai chi ho tro Taurus entry');return;
+        }
+        if (!auth.currentUser) {
+          toast.error('C2B yeu cau dang nhap Firebase bang tai khoan QA duoc phep');return;
+        }
+      }
     } else {
       if (!isDungeonOpenUTC(dungeon,getRealTime())) {
         toast.error(lang==='vi'?'Phó bản hiện chưa mở (lịch UTC).':'Dungeon is closed (UTC schedule).');
@@ -96,6 +109,8 @@ export default function DungeonSelect({ gsRef, setScreen, lang, getRealTime }) {
         return;
       }
     }
+    gsRef.current.dungeonC2BRequested = Boolean(c2bCompiled &&
+      c2bStagingOptIn && dungeon.id === 'dung_taurus' && dungeonQaRun);
     gsRef.current.dungeonQa = dungeonQaRun;
     gsRef.current.selectedDungeonId = dungeon.id;
     gsRef.current.pendingEnergyCost = dungeonQaRun ? 0 : dungeon.energyCost;
@@ -242,6 +257,14 @@ export default function DungeonSelect({ gsRef, setScreen, lang, getRealTime }) {
                             </select>
                           </label>
                         </div>
+                        {c2bCompiled && dungeon.id === 'dung_taurus' && (
+                          <label style={{display:'flex',gap:8,alignItems:'center',
+                            color:'#cff3ff',fontSize:12,padding:'8px 2px'}}>
+                            <input type="checkbox" checked={c2bStagingOptIn}
+                              onChange={event=>setC2bStagingOptIn(event.target.checked)} />
+                            <span>C2B STAGING QA (APK DEBUG) - Server ticket, 0 rewards</span>
+                          </label>
+                        )}
                         <div className={styles.qaLoadoutSummary}>
                           <strong>{selectedQaLoadout.label?.[lang] || selectedQaLoadout.label?.vi}</strong>
                           <span>{selectedQaLoadout.summary?.[lang] || selectedQaLoadout.summary?.vi}</span>

@@ -16,6 +16,7 @@ import { resolveAssetVisual } from '../../game/assets/AssetRegistry.js';
 import { createShipEngineFx } from '../../game/rendering/ShipEngineFx';
 import { createShipInputController } from '../../game/combat/ShipInputController';
 import { dungeonSceneStableSeedV2B1 as stableSeed } from '../../game/dungeon/DungeonSeedTouchContractV2B1.js';
+import {isDungeonC2BSeedAllowed} from '../../game/dungeon/DungeonC2BStagingQaContract.js';
 import { createDungeonDeviceTouchTraceV2B2, isDungeonV2B2LocalQaEnabledV2B2 } from '../../game/dungeon/DungeonDeviceTouchTraceV2B2.js';
 import { createDungeonApkCombatTraceV2C11, isDungeonV2C11ApkTraceEnabled } from '../../game/dungeon/DungeonApkCombatTraceV2C11.js';
 import { createDungeonApkInputJournalV2C14B } from '../../game/dungeon/DungeonApkInputJournalV2C14B.js';
@@ -296,6 +297,13 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
             profileId: gsRef.current?.campaignData?.profileId,
             activeBattleId: gsRef.current?.activeBattleId,
         });
+    const dungeonC2BQaTicket = data.dungeonC2BQaTicket;
+    const dungeonC2BLocalQa = dungeonC2BQaTicket != null && isDungeonC2BSeedAllowed({
+        env:import.meta.env,qaRun:dungeonQaRunV391,ticket:dungeonC2BQaTicket,
+        nowMs:Date.now(),
+    });
+    if (dungeonC2BQaTicket != null && (!dungeonC2BLocalQa || dungeonV2B2LocalQa))
+        throw new Error('C2B_QA_TICKET_INVALID_NO_LOCAL_FALLBACK');
     const dungeonSceneLegacySeedV38 = stableSeed(
         dungeonId,
         gsRef.current?.campaignData?.profileId || 'guest',
@@ -304,8 +312,9 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
     // QA ONLY: use server-read admission seed when an explicit Vite DEV gate
     // and a matching battle ticket are supplied. Client cannot verify MAC.
     // Default Dungeon seed and gameplay remain identical when gate is OFF.
-    const dungeonSeedV38 = dungeonV2B2LocalQa
-        ? dungeonV2B2QaTicket.sceneSeed : dungeonSceneLegacySeedV38;
+    const dungeonSeedV38 = dungeonC2BLocalQa ? dungeonC2BQaTicket.sceneSeed
+        : dungeonV2B2LocalQa ? dungeonV2B2QaTicket.sceneSeed
+        : dungeonSceneLegacySeedV38;
     // V2C.11: passive APK/WebView QA evidence. The compile-time flag and
     // explicit Dungeon QA run are both mandatory; production default is OFF.
     // Do not export profile/UID, ticket/MAC, account or economic data.
@@ -313,14 +322,14 @@ export const createDungeonScene = (scene, canvas, engine, data) => {
         env: import.meta.env, qaRun: dungeonQaRunV391, dungeonId,
     }) ? createDungeonApkCombatTraceV2C11({
         sceneSeed: dungeonSeedV38,
-        seedSource: dungeonV2B2LocalQa
+        seedSource: (dungeonV2B2LocalQa || dungeonC2BLocalQa)
             ? 'server-ticket-local-unverified' : 'local-client-seed',
     }) : null;
     // Separate passive pointer QA observer; never changes input or settlement.
     const dungeonV2C14BJournal = dungeonV2C11Trace
         ? createDungeonApkInputJournalV2C14B({
             sceneSeed: dungeonSeedV38,
-            seedSource: dungeonV2B2LocalQa
+            seedSource: (dungeonV2B2LocalQa || dungeonC2BLocalQa)
                 ? 'server-ticket-local-unverified' : 'local-client-seed',
         }) : null;
     const dungeonV2C14B1Checkpoint = dungeonV2C14BJournal

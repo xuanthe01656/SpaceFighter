@@ -127,6 +127,17 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
     res.setHeader('Content-Length',String(end-start+1));
     return require('fs').createReadStream(found.absolute,{start,end}).pipe(res.status(status));
   });
+  // C15 V2C.14-C2B: staging-only, non-economic, authenticated QA bootstrap.
+  // Distinct from V1 emulator admission; never turns on Dungeon settlement.
+  const c2bReady=options.c15DungeonC2BEnabled===true&&
+    options.c15DungeonC2BService?.enabled===true&&
+    options.c15DungeonC2BService?.stagingOnly===true&&
+    options.c15DungeonC2BService?.rewardSettlementEnabled===false;
+  app.post('/api/v1/c15/dungeon/qa-c2b/ticket',(req,res,next)=>{
+    if(!c2bReady)return res.status(503).json({ok:false,code:'C15_DUNGEON_C2B_DISABLED'});
+    return withAuth((r,user)=>options.c15DungeonC2BService.issue({
+      uid:user.uid,sessionId:r.get('x-game-session'),body:r.body}))(req,res,next);
+  });
   // C15-RC1B: local deterministic gameplay with background journal upload and
   // independent replay. This staging lane is allowlisted and NON-ECONOMIC.
   const c15Ready=options.c15Rc1bEnabled===true&&Boolean(options.c15Rc1bService?.enabled);
@@ -263,7 +274,7 @@ function createApp(clientPath=path.join(__dirname,'..','client','dist'), options
 async function start() {
   const port=Number(process.env.PORT||3000);
   if(!Number.isInteger(port)||port<1||port>65535) throw new Error('Invalid PORT');
-  let service=null,auth=null,admin=null,accountDeletionService=null,qaBattleService=null,qaVerifierService=null,candidateService=null,c15Rc1bService=null,c15Rc3SettlementService=null,c15Rc4ReleaseGate=null,c15ResourceCatalog=null,c15DungeonV1Service=null;
+  let service=null,auth=null,admin=null,accountDeletionService=null,qaBattleService=null,qaVerifierService=null,candidateService=null,c15Rc1bService=null,c15Rc3SettlementService=null,c15Rc4ReleaseGate=null,c15ResourceCatalog=null,c15DungeonV1Service=null,c15DungeonC2BService=null;
   if(process.env.GAME_API_ENABLED==='true') {
     admin=require('firebase-admin');
     if(!admin.apps.length) {
@@ -346,6 +357,17 @@ async function start() {
         console.error('C15 Dungeon V1 emulator-only QA disabled: invalid configuration');
       }
     }
+    // Separate staging QA path: fail closed if any flag/allowlist/secret is wrong.
+    if(process.env.GAME_C15_DUNGEON_C2B_ENABLED==='true'){
+      try{
+        const {createC15DungeonStagingTicketV2C14C2B}=
+          require('./lib/c15DungeonStagingTicketV2C14C2B.cjs');
+        c15DungeonC2BService=await createC15DungeonStagingTicketV2C14C2B({
+          db:admin.firestore(),env:process.env});
+      }catch(_error){
+        console.error('Dungeon C2B staging QA disabled: invalid approved configuration');
+      }
+    }
     if(process.env.GAME_C15_RC4_RELEASE_GATE_ENABLED==='true'){
       try{
         const {parseC15Rc4ReleaseGateConfig,createC15Rc4ReleaseGate}=require('./lib/c15Rc4ReleaseGateV1.cjs');
@@ -369,6 +391,7 @@ async function start() {
     c15Rc1bService,c15Rc1bEnabled:Boolean(c15Rc1bService),c15ResourceCatalog,
     c15Rc3SettlementService,c15Rc3SettlementEnabled:Boolean(c15Rc3SettlementService),c15Rc4ReleaseGate,
     c15DungeonV1Service,c15DungeonV1Enabled:Boolean(c15DungeonV1Service?.enabled),
+    c15DungeonC2BService,c15DungeonC2BEnabled:Boolean(c15DungeonC2BService?.enabled),
     allowLocalOrigin:process.env.NODE_ENV!=='production'});
   app.listen(port,'0.0.0.0',()=>console.log(`Space Fighter Phase 1 listening on ${port}; API ${service?'enabled':'disabled'}`));
 }

@@ -11,6 +11,9 @@ import { createDungeonRuntimeMonitorV450, DUNGEON_RUNTIME_LIMITS_V450 } from '..
 import DungeonHudV396, { EMPTY_DUNGEON_HUD_STATE_V396 } from '../../ui-system/DungeonHudV396.jsx';
 import DungeonQaEvidencePanelV400 from '../../ui-system/DungeonQaEvidencePanelV400.jsx';
 import DungeonShipSkillButtonV410 from '../../ui-system/DungeonShipSkillButtonV410.jsx';
+import {issueDungeonC2BTicket} from '../../services/gameApi.js';
+import {isDungeonC2BOptIn,validateDungeonC2BTicket} from '../../game/dungeon/DungeonC2BStagingQaContract.js';
+import {assertDungeonC2BDebugApkGate} from '../../game/dungeon/DungeonC2BDebugGate.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -80,9 +83,50 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
   const [dungeonAbilityState, setDungeonAbilityState] = React.useState(null);
   const [dungeonAbilityFeedback, setDungeonAbilityFeedback] = React.useState(null);
   const [dungeonRuntimeAlert, setDungeonRuntimeAlert] = React.useState(null);
+  // Explicit debug APK QA opt-in only. Normal Guest Dungeon starts unchanged.
+  const c2bQaRun = isDungeonQaRunV391(gsRef.current?.dungeonQa,
+    gsRef.current?.selectedDungeonId) ? gsRef.current.dungeonQa : null;
+  const c2bOptIn = isDungeonC2BOptIn({
+    env:import.meta.env,qaRun:c2bQaRun,search:globalThis.location?.search || '',requested:gsRef.current?.dungeonC2BRequested===true,
+  });
+  const [c2bBoot, setC2bBoot] = React.useState(() => ({
+    status:c2bOptIn ? 'pending' : 'legacy',ticket:null,error:null,
+  }));
+  useEffect(() => {
+    if (!c2bOptIn) return;
+    let mounted = true;
+    (async () => {
+      try {
+        const uid = auth.currentUser?.uid;
+        if (!uid) throw new Error('C2B requires a signed-in, allowlisted Firebase account');
+        // Native MainActivity only registers this plugin in Android DEBUG.
+        await assertDungeonC2BDebugApkGate();
+        const response = await issueDungeonC2BTicket(uid,{
+          dungeonId:'dung_taurus',roomId:'taurus_entry',
+        });
+        if (response.sameSessionParity!=='NOT_VERIFIED'||
+            response.rewardSettlementEnabled!==false)
+          throw new Error('C2B server response asserted unsupported authority');
+        const ticket = validateDungeonC2BTicket({
+          ticket:response.ticket,qaRun:c2bQaRun,nowMs:Date.now(),
+        });
+        if (mounted) setC2bBoot({status:'ready',ticket,error:null});
+      } catch (error) {
+        // Fail closed. A requested C2B session may never fall back to local seed.
+        if (mounted) setC2bBoot({status:'rejected',ticket:null,
+          error:error?.code || error?.message || 'C2B_QA_BOOTSTRAP_REJECTED'});
+      }
+    })();
+    return () => { mounted = false; };
+  }, [c2bOptIn, gsRef]);
 
   useEffect(() => {
-    if (!canvasRef.current) return;
+    if (!canvasRef.current || (c2bOptIn && c2bBoot.status !== 'ready')) return;
+    if (c2bOptIn) {
+      // Do not start an expired/changed QA ticket, even after a React delay.
+      try {validateDungeonC2BTicket({ticket:c2bBoot.ticket,qaRun:c2bQaRun,nowMs:Date.now()});}
+      catch (_error) {setC2bBoot({status:'rejected',ticket:null,error:'C2B_TICKET_EXPIRED_BEFORE_SCENE'});return;}
+    }
 
     const qualityProfile = choosePerformancePreset({
       userAgent: navigator.userAgent,
@@ -125,6 +169,7 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
       gsRef,
       lang,
       getRealTime,
+      dungeonC2BQaTicket:c2bOptIn ? c2bBoot.ticket : null,
       // QA runs suppress guest progress mutation as well as Cloud settlement.
       isCloud: Boolean(auth.currentUser) || Boolean(dungeonQaRun),
       onAnnouncement: notice => setDungeonNotice({
@@ -287,7 +332,7 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
   // so retaining the initial function is safe; including it here tears down
   // Babylon during unrelated account/UI refreshes and can interrupt a run.
   // gameAction belongs to the retreat handler, not this scene-owning effect.
-  }, [gsRef, lang, setScreen]);
+  }, [gsRef, lang, setScreen, c2bOptIn, c2bBoot.status]);
 
   const retreat = async () => {
     if (retreatLockRef.current) return;
@@ -320,6 +365,19 @@ export default function DungeonEngine({ gsRef, setScreen, lang, saveUserProfile,
         ref={canvasRef}
         style={{ display: 'block', width: '100%', height: '100%', touchAction: 'none', outline: 'none' }}
       />
+      {c2bOptIn && c2bBoot.status !== 'ready' && <div role="alert"
+        data-dungeon-c2b-gate="true" style={{position:'absolute',zIndex:90,
+          inset:0,display:'flex',flexDirection:'column',alignItems:'center',
+          justifyContent:'center',gap:14,padding:24,color:'#e3f5ff',
+          background:'rgba(2,10,24,0.97)',textAlign:'center'}}>
+        <strong>{c2bBoot.status==='pending' ? 'C2B - Dang xac minh ticket QA staging'
+          : 'C2B - Khong the mo Dungeon QA staging'}</strong>
+        <div style={{fontSize:12,opacity:.8}}>{c2bBoot.status==='rejected'
+          ? c2bBoot.error : 'Firebase Auth + Android DEBUG + server QA allowlist'}</div>
+        <button type="button" onClick={()=>setScreen('dungeon_select')}
+          style={{padding:'10px 18px',borderRadius:8}}>Quay lai phan chon phien ban</button>
+      </div>}
+
 
       {dungeonRuntimeAlert && <div role="alert" data-dungeon-runtime-v450="true" style={{
         position: 'absolute', top: '18%', left: '10%', right: '10%', zIndex: 60,
